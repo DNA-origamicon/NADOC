@@ -1,0 +1,44 @@
+{
+  "source": {
+    "local_file": "assets/sources/acs-expansion-20261104/10560103-nn7b08345_si_001.zip",
+    "sha256": "0d40929ce9717f92d94ef01b09c27b0935e24436475a95f20cb273c105bf6333",
+    "url": "https://ndownloader.figshare.com/files/10560103",
+    "locator": "All5archive members inventoried; JSON parsed for metadata only, YAML header inspected, no molecular construction"
+  },
+  "members": [
+    {
+      "name": "Flat Large.json",
+      "bytes": 4315629,
+      "sha256": "a3c952ebcb915146f70fa344046f902fa1fbe91b06b3d903879113752a1a2d3b",
+      "internal_name": "Sun Dec 18 2016 16:58:11 GMT+0100",
+      "vstrand_records": 64
+    },
+    {
+      "name": "Flat Small.json",
+      "bytes": 7480789,
+      "sha256": "e469ea1062747f3bf1ee4d9e3d2b745c81b3e40c0b2d4e1ad98d48edadea1958",
+      "internal_name": "recolored_flat.json",
+      "vstrand_records": 111
+    },
+    {
+      "name": "sequences.yaml",
+      "bytes": 29775,
+      "sha256": "81e5311e289fe48c5a56185a466aaea6c5c5c5112f15ea907bcf85cd130171b6"
+    },
+    {
+      "name": "Tube Large Filled.json",
+      "bytes": 4318969,
+      "sha256": "43e0f3f853e021ee09c5fd936ba3cb7e5902aa7b22ee9eb456127c1349c08d93",
+      "internal_name": "Wed Jun 14 2017 11:53:32 GMT+0200",
+      "vstrand_records": 64
+    },
+    {
+      "name": "Tube Small Filled.json",
+      "bytes": 7483894,
+      "sha256": "1d337fcd3c488f922eb75b392549ecb9500d90dbd90d0c43040857bc33b86aef",
+      "internal_name": "Wed Jun 14 2017 11:12:01 GMT+0200",
+      "vstrand_records": 111
+    }
+  ],
+  "limitation": "Presence/metadata only; no topology, sequence compatibility or full recipe validation."
+}

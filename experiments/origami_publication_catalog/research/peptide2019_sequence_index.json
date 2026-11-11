@@ -1,0 +1,1077 @@
+{
+  "evidence": {
+    "local_file": "assets/sources/acs-expansion-20261104/17012882-nn9b04251_si_001.pdf",
+    "sha256": "7fe7b1a813678cdc9253c04890c3d0fe0f659168b1b61a06d6f4ed742f3b5a9f",
+    "url": "https://ndownloader.figshare.com/files/17012882",
+    "locator": "SI scaffold/folding methods pp4\u20135; FigsS9/S10 PDF/printedpp21\u201323 visually inspected; TableS6-1 pp41\u201342 andS6-2 pp43\u201344; supporting refs p45"
+  },
+  "objects": [
+    {
+      "object": "A",
+      "base_staple_entries": 69,
+      "replacement_entries": 3,
+      "rows": [
+        {
+          "name": "A MID-1",
+          "sequence": "AAAAGCGTTAACCTGAGCGGATACATATTACTTTCTCATCAT",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-2",
+          "sequence": "CCAACGAGGTGAAATTTTCAATATTATTAAATGCCTACGGGA",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-3",
+          "sequence": "ACGCGCTTGTCAGCAGATATACGAGTTATCCGCTCACAAGCGTAATGTC",
+          "base_count": 49,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-4",
+          "sequence": "TAATTGTGTGGCCTCAGTTACCTTCGGAGATTATCCTTGGTC",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-5",
+          "sequence": "AGATGCTAAAGTGCACCAGCGTTTCTGGGTCTCATATAAAAA",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-6",
+          "sequence": "TGAGAATGCGTCAAGCAAAAAAGGGAATTCTTCCTACCTCTG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-7",
+          "sequence": "TACGGGATTGGTATGGCTTCACAGCTCCTTGAATA",
+          "base_count": 35,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-8",
+          "sequence": "ATACCTATTTCTACGGGGCAGAATCGGCGAGCGGTATCAGCTCGGTTGC",
+          "base_count": 49,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-9",
+          "sequence": "AGATTGTTGCGTTCGGTACGAACCCCCCGTT",
+          "base_count": 31,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-10",
+          "sequence": "CGGGCACCTAGAACGAAAACTCACTCCGGCAAGGTATG",
+          "base_count": 38,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-11",
+          "sequence": "AGGGCCGGAGTAAAAAAAAGGATCTTCACTGAAGCAACTACG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-12",
+          "sequence": "TGGAAAATCATGCCCCTTCGGTCCTCCGGAAACCATATTTAG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-13",
+          "sequence": "TAATACCCAACCAAGAGTTACATGATCCATCACGATTATCAG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-14",
+          "sequence": "TGACAGTACCAGCCAAGCTAGAGTAAGTTGCTACATTGGTAG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-15",
+          "sequence": "CATCTTTTTGAATGTTATTATCATGACAGTTAGCTATCCGTA",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-16",
+          "sequence": "GAAGGCAGAAGCATGGCCCTTTCGTCACTCAAGGCGTCATTC",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-17",
+          "sequence": "TTCGTTCATCGCGTTGCCTCAAGTCATCTTCGCTATTAGCGATTA",
+          "base_count": 45,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-18",
+          "sequence": "ACGGGTAGCGGGTAACACTTATCGCTTATCCGGTAACTTGTGTGCGTAG",
+          "base_count": 49,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-19",
+          "sequence": "GTCATGAAAAAGAGGAGTTCTTGAAGTGTGCCGGGAGCCGGA",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-20",
+          "sequence": "AAAAATACAACTGACGGGGCGAAAACTCCACTGCATCAGAAG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-21",
+          "sequence": "GGTTATTGTGAGCAATAGCAGAACTTTATTTCTGTTGTGCAA",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-22",
+          "sequence": "CTCATACAAGGGCGGTTGCTCTTGCCCGAGTGTATCCGGTTC",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-23",
+          "sequence": "CTCTTGAGTTAAGGGCTTAATCAGTGAGCTCCAGACAGTTAA",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-24",
+          "sequence": "CGTCTAAATCGTTGTAATTCTCTTACTGCGTTCTTTCTTCAG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-25",
+          "sequence": "TAGGCGTCCCATGTGACTGGTGAGTACTGCGCCACAAAACAG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-26",
+          "sequence": "ACACATGTTCAGCTGCGGCGACCTACGA",
+          "base_count": 28,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-27",
+          "sequence": "GGATGGCACAGGCATGCTGCATCCTGTTGGTGGCGAAACCCGATCGACGTGGC",
+          "base_count": 53,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-28",
+          "sequence": "ACTGTGGTTTGGCGGTTCGTTCGGCTTGTGT",
+          "base_count": 31,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-29",
+          "sequence": "TAGGCGGAGTTCGCTTTATCAGCAATAATACCAATGATTTTG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-30",
+          "sequence": "CCGCACATTAGGGGTGCCTAATGAACACAACTACGCGCAGAAATGCGGAGAC",
+          "base_count": 52,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-31",
+          "sequence": "CGAGGATTAGCGCAACGCCCACGCTGGAAGCTATAAAGATACCAGGC",
+          "base_count": 47,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-32",
+          "sequence": "CCAACCCGGTAAAAACCTGTCGTG",
+          "base_count": 24,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-33",
+          "sequence": "GTCAGCGGGCGGCATCAGAGC",
+          "base_count": 21,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-34",
+          "sequence": "GGCGACCGCTGCGCCCACTGGACTGCCCGCGCGGGGAAGTGT",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-35",
+          "sequence": "CAGCCGGCGGTAGGTATCTCACATTGCTAGCC",
+          "base_count": 32,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-36",
+          "sequence": "AAGCTGGGCATCGTCTTGAGT",
+          "base_count": 21,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-37*",
+          "sequence": "AGATTGTACTGAAGATGCGTAAGG",
+          "base_count": 24,
+          "role": "base_staple",
+          "fluorophore": "5prime Cy3"
+        },
+        {
+          "name": "A MID-38",
+          "sequence": "GTCCGTGGCGTGTCCGCCTTTCTCTTCCCCCTCAC",
+          "base_count": 35,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-39",
+          "sequence": "ACGCTGTCCCTGCCGCTTACCTGCGCTCATG",
+          "base_count": 31,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-40",
+          "sequence": "TTCGGGAAGGTTCGCTTAGTTTGCAGAGCGAACAAACTCTTCCGCTTCC",
+          "base_count": 49,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-41",
+          "sequence": "AGAAAATACCGCATCAGGCGCCATGAGTGAAATACCGCACGAGTGCAGTC",
+          "base_count": 50,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-42",
+          "sequence": "ATTCAGGCCATCTGGCCTGACAGAAGATCTCTAGACATGGTCATAGCTG",
+          "base_count": 49,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-43",
+          "sequence": "CTCGGGATACCCTTTCTCATAGCTC",
+          "base_count": 25,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-44",
+          "sequence": "TGGGAAGGGCGATCGGTGCGGGCCGACCTCGCC",
+          "base_count": 33,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-45",
+          "sequence": "CCTGACGAGCATCACAAAAACAGGACTCC",
+          "base_count": 29,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-46",
+          "sequence": "AGTTGCCCATAGTTGCCCCAGTCGTGGTCCATATGCTGGCTTAACTATGTGTTGGCAAGC",
+          "base_count": 60,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-47",
+          "sequence": "GTTAGGAACCGATAACGCAGGAAATTATCCATCTG",
+          "base_count": 35,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-48",
+          "sequence": "AAAAGGCCAGCAAAAGGCCTTTCCATGATCTGTCGCG",
+          "base_count": 37,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-49",
+          "sequence": "TGCAGGCAAAAAAGGATCTCATCCCCGTCTGCAAGCGCCAGCTGGCGAAAG",
+          "base_count": 51,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-50",
+          "sequence": "GACCACGACGGGTTTTCCCAGTCACGGATGTGCGTGTAGATAACGAACACGGA",
+          "base_count": 53,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-51",
+          "sequence": "GCGGTAATACGGGAACATGTGAGC",
+          "base_count": 24,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-52",
+          "sequence": "TTTTTTGCAAGCTTG",
+          "base_count": 15,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-53",
+          "sequence": "TTTCCGCAGTACCCGGGGATCCCTTTGATGCAAGCTGTAAGC",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-54",
+          "sequence": "GAAATTGCCGGAAGCATAAGATTTTGTTTCTT",
+          "base_count": 32,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-55",
+          "sequence": "TCGCTCACTGACTCGCTGCGCTCACTCAAAG",
+          "base_count": 31,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-56",
+          "sequence": "GTATGGCCAACGCTTTCCAGTCGGGGACA",
+          "base_count": 29,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-57",
+          "sequence": "AAAGCCTATTGCGTTGCGCTCCACCGGGAGCAGACGGGTGTC",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-58",
+          "sequence": "CCAGCTGCATTAATGAATCTGGGCGCCACCGCTCTCAGTGTCTCAGCAGGCTCCGCCCC",
+          "base_count": 59,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A MID-59",
+          "sequence": "GAGCTAACTTCAGGGCGGTCACATCGTCGTGGGCTTACTGCGCAACTGT",
+          "base_count": 49,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A LEFT-0 handle",
+          "sequence": "TAAGTTGGCCGCAGTGTTAGAATCTGACGACCACCACTACTC",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A LEFT-1",
+          "sequence": "TTTTTCACTCATGGTTATGGCAG",
+          "base_count": 23,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A LEFT-2 handle",
+          "sequence": "TCAAGGATCTTACCGCTGTTGAGGAATCTGACGACCACCACTACTC",
+          "base_count": 46,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A LEFT-3",
+          "sequence": "TTTTATCCAGTTCGATGTAACCCACTC",
+          "base_count": 27,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A LEFT-4 handle",
+          "sequence": "GTGCACCAACAAATAGGGGTTCCGCGCACAGAATCTGACGACCACCACTACTC",
+          "base_count": 53,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A LEFT-5",
+          "sequence": "TTTTTTTCCCCGAAAAGTGCCACCTGA",
+          "base_count": 27,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A RIG-1",
+          "sequence": "TTTTTTATCCGCCTAGAAGAACAGTTTTT",
+          "base_count": 29,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A RIG-2",
+          "sequence": "TTTTTTTGAAGTTTT",
+          "base_count": 15,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A RIG-3",
+          "sequence": "TTTTATTTGGTATCTGCGCTCTGCCTAGATTCTAAAGTATATATAGCGCAGAGTCTAT",
+          "base_count": 58,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A RIG-4",
+          "sequence": "GCTACACTCCATCCAAGTGGTCCTGCAAAAATCAACCTTTTAAATTAAAAATTTT",
+          "base_count": 55,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "A LEFT-0 ctrl",
+          "sequence": "TAAGTTGGCCGCAGTGTTACGTTTTGACTACCTTCCTCCCCG",
+          "base_count": 42,
+          "role": "replacement_control",
+          "fluorophore": null
+        },
+        {
+          "name": "A LEFT-2 ctrl",
+          "sequence": "TCAAGGATCTTACCGCTGTTGAGCGTTTTGACTACCTTCCTCCCCG",
+          "base_count": 46,
+          "role": "replacement_control",
+          "fluorophore": null
+        },
+        {
+          "name": "A LEFT-4 ctrl",
+          "sequence": "GTGCACCAACAAATAGGGGTTCCGCGCACACGTTTTGACTACCTTCCTCCCCG",
+          "base_count": 53,
+          "role": "replacement_control",
+          "fluorophore": null
+        }
+      ]
+    },
+    {
+      "object": "B",
+      "base_staple_entries": 67,
+      "replacement_entries": 3,
+      "rows": [
+        {
+          "name": "B MID-1",
+          "sequence": "ACAGCCAGCCGATGCGTAACCCAACTGATCTTGAT",
+          "base_count": 35,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-2",
+          "sequence": "TTCTGGCAGCCTGACGTATAAAAATAACATGCAGCTCCCGGAG",
+          "base_count": 43,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-3",
+          "sequence": "ATTTATGAGTGACCCACGCTCACCTTACGCCCACCGCTGGAAGATGCTTTTCGGGCCTC",
+          "base_count": 59,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-4",
+          "sequence": "TCTAGTTACCAGTGCTGTCATGGTGGGGATCCTCTAGAAATT",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-5",
+          "sequence": "ATTAAAAAGGTCAAGTCCAAAAGGCCCTCCGCCCCCCTGACGA",
+          "base_count": 43,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-6",
+          "sequence": "TCAGAGGCACGAGGGCTGCCTTATAGACACGACTTATC",
+          "base_count": 38,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-7",
+          "sequence": "TCCGTTAAAGTTTTAAGTCGTTTGGTATTTACTGTCATGCCA",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-8",
+          "sequence": "GCAATACGGTAACATGTGAGCAAAAGGCCAGAGTCAAAGGCGGTAGATT",
+          "base_count": 49,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-9",
+          "sequence": "ACGTTGGTAGCTGCAAGGCGATACTGGCCCCAATGCTTAAAGTGTCACTGCCCGTGTCC",
+          "base_count": 59,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-10",
+          "sequence": "CAACAGTTACTTGAAGTGTATGTACTGGTAACAGGATTAG",
+          "base_count": 40,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-11",
+          "sequence": "CGACCGATTGGCCGATGATCCCCCATGTAGTAGTTTCCGCCT",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-12",
+          "sequence": "TTCTGAGATGGTTACCAACGACGGGTGTGTATTTAGAAAAATAA",
+          "base_count": 44,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-13",
+          "sequence": "TCCGGCAGTTTGCAGATCCTTAACGCGCTGCCAGCTGCATTAAT",
+          "base_count": 44,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-14",
+          "sequence": "AAAAGAGCGCAGAAATCAAAATGCGTATTTCCAGTCGGGAAATTGCGCTAAAG",
+          "base_count": 53,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-15",
+          "sequence": "CAGAACTAACTTTACGCCAGTTAATAGTGAGTTACCAGTGTT",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-16",
+          "sequence": "AGGGCGAAAACCAGGCATCGTCGGAAATTTATTGTCTGCAGATT",
+          "base_count": 44,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-17",
+          "sequence": "TTCGCTAGGCTCCACAATCTAAAGTATAAAAAATGGCGGTGG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-18",
+          "sequence": "GGCTGCGCAACTGTTCCCCACTCGTCCATTCA",
+          "base_count": 32,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-19",
+          "sequence": "CAGAGCGAGGGTGGCCGATACGGCTATCTCTCATAGCTCCCTTCGGGAAGCGT",
+          "base_count": 53,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-20",
+          "sequence": "CGCTGTTGAGATCCAGTTCCAGCATCTTTTA",
+          "base_count": 31,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-21",
+          "sequence": "GTAAGGGGCGAAAACTCTCATTGGACGAGCGCACGTTGTCTCTTCCTTTTT",
+          "base_count": 51,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-22",
+          "sequence": "TGTAAAACGACGGCCAGTGGTCGACCTGCAG",
+          "base_count": 31,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-23",
+          "sequence": "CGACGCCAGGGTTTTCCGAAAGGGACCGCGAAAACTTGCTAATGAGTGAG",
+          "base_count": 50,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-24",
+          "sequence": "TCAGGCGCCATTCGGCAGGAGAAGTGTGAATAAGGGCGAGAGTGCA",
+          "base_count": 46,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-25",
+          "sequence": "GCCACCCCACCCGACCGCTGCTACCATCAGAGTTCCTTCGGA",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-26",
+          "sequence": "TGAGTCCAACCCGGTACCGGTAAGCTG",
+          "base_count": 27,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-27",
+          "sequence": "CTTTCACCAGCGTTTCTAGGAAGGGCAAACGTTCAAGTCA",
+          "base_count": 40,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-28",
+          "sequence": "GCATGCAAGCTTGAAATTGTTATC",
+          "base_count": 24,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-29",
+          "sequence": "CCATATGCGAATACCGCAGCAATTCGGTGCTGTGACT",
+          "base_count": 37,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-30",
+          "sequence": "TTCAGTAGCCGGAAGCTATCTCAGTTCGGCACGAACCCCCCG",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-31",
+          "sequence": "TGTGTGTAGGTCGTTCGCGCTTTCAGCGATCCACGTTACTTTGAT",
+          "base_count": 45,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-32",
+          "sequence": "CCAAGCTGGCTATCGTTAACTACTAACTACCGCTCTG",
+          "base_count": 37,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-33",
+          "sequence": "AAGGCAAAATGCCGCAAAAACTCATATGCCATTCCGG",
+          "base_count": 37,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-34",
+          "sequence": "CGCTCACAATTCCACACAAGGGGTGCGTCTGACTCACCTAAGCA",
+          "base_count": 44,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-35",
+          "sequence": "AATAAGGGAAATACCGCACGGGTGAGCAAAAACAGG",
+          "base_count": 36,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-36",
+          "sequence": "GTACTGACAGGTGTCACGCTCATGATTTAT",
+          "base_count": 30,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-37",
+          "sequence": "CCTCATACGAGCTGTTTCCTGTGTGGCGTAACAATGATGGATGTGCTCTTGA",
+          "base_count": 52,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-38",
+          "sequence": "CAATATTATTGAAGCATTTTTTGAATCGG",
+          "base_count": 29,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-39",
+          "sequence": "CTAACTCACATTAATTGCGCCTGTCGGGGGAGACTCGCTCGCGAGCG",
+          "base_count": 47,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-40",
+          "sequence": "GCCTTTCTCACGCTGTAGGATAATCAGTTGAG",
+          "base_count": 32,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-41*",
+          "sequence": "AGACATGAGCGGATACATAATCAGGGGTTG",
+          "base_count": 30,
+          "role": "base_staple",
+          "fluorophore": "5prime Cy5"
+        },
+        {
+          "name": "B MID-42",
+          "sequence": "CGACCCTGCCGCTTACCGGATACCCTTGGCTCCCTCGTGCTTGG",
+          "base_count": 44,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-43",
+          "sequence": "ACAAATAGGTCAAGGCTTGCGCAAGAAGTGGTCCTGCTTAAAAGTATGCGG",
+          "base_count": 51,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-44",
+          "sequence": "GGCTCGCGTCAAAAAGTGCCGTAAGCGGATGCCGGGA",
+          "base_count": 37,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-45",
+          "sequence": "GCAGACAAGCCCGTCAGGGGGCTTAATTCAGCTGCT",
+          "base_count": 36,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-46",
+          "sequence": "GATACCAGGCGTTTCCCCCTGGAAGGGTGGCGAAACCCGATCGACGCATCT",
+          "base_count": 51,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-47",
+          "sequence": "CGCGCACATACCATTAATCACTCAATAGTGTGCTCATCAAGGATCTTAC",
+          "base_count": 49,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-48",
+          "sequence": "CGGTCGTTCAGAATCATTTTTTTAACAAACAGCTGGCCAGTCACGACGT",
+          "base_count": 49,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-49",
+          "sequence": "GTATCAGCTCACAGCGCTCTTCCGCTTCGGCGGTTAGGA",
+          "base_count": 39,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-50",
+          "sequence": "ACGGTCACAGCTTGTCTACACTGCATACTCAACCTTGGGA",
+          "base_count": 40,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-51",
+          "sequence": "GCATCACAAAAACAGGACTATAAA",
+          "base_count": 24,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-52",
+          "sequence": "ATCATGACATTAACCTCTAAGAATTCCCCGGCGGGTGTTGGGGTTC",
+          "base_count": 46,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-53",
+          "sequence": "GGATAACGCAGGAAAGTATCCACGGCTGCGACTGACTCGCTGCGATCGGCCTTAA",
+          "base_count": 55,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-54",
+          "sequence": "TGAAAACCTCTGACGGCGTAT",
+          "base_count": 21,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-55",
+          "sequence": "CGTTTTTCCATAGGAGGAACC",
+          "base_count": 21,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-56",
+          "sequence": "CACGAGGCCCTTTCGTCACGGTGAGTAATTCTCGGCTTCACTATGCGGCATC",
+          "base_count": 52,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B MID-57",
+          "sequence": "GTAAAAAGGCCGCGTTGCTCTGAAGCGAAGATCAGGGATTGCTCTCCTGTTC",
+          "base_count": 52,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B LEFT-0 handle",
+          "sequence": "CCATCCAGTCTATTAATTGGACACACCTCACACTCCACCTAC",
+          "base_count": 42,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B LEFT-1",
+          "sequence": "TTTTTTGCCGGGAAGCTAGAGTA",
+          "base_count": 23,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B LEFT-2 handle",
+          "sequence": "TGTGCAAAAAAGCGGTTAGCTCCGACACACCTCACACTCCACCTAC",
+          "base_count": 46,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B LEFT-3",
+          "sequence": "TTTTTTCGGTCCTCCGATCGTTGTCAG",
+          "base_count": 27,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B LEFT-4 handle",
+          "sequence": "AAGTAAGGTTGCTCTTGCCCGGCGTCAATAGACACACCTCACACTCCACCTAC",
+          "base_count": 53,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B LEFT-5",
+          "sequence": "TTTTCGGGATAATACCGCGCCACATAG",
+          "base_count": 27,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B RIG-1",
+          "sequence": "TTTTTGCCTGACTCCCCGTCTTCGTTCATCCATAGTTTTT",
+          "base_count": 40,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B RIG-2",
+          "sequence": "TTTTGCTCAGTGGAACGAAAACTTGTCTATGTGTAGA",
+          "base_count": 37,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B RIG-3",
+          "sequence": "CTTTTCTGTATCTGGGCTACACTAGAAGAATTTT",
+          "base_count": 34,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B RIG-4",
+          "sequence": "TTTTCAGTATTTGACGGGGTCTGACTTTT",
+          "base_count": 29,
+          "role": "base_staple",
+          "fluorophore": null
+        },
+        {
+          "name": "B LEFT-0 ctrl",
+          "sequence": "CCATCCAGTCTATTAATTGGACCCATCTCTTCTCTCCTCTTC",
+          "base_count": 42,
+          "role": "replacement_control",
+          "fluorophore": null
+        },
+        {
+          "name": "B LEFT-2 ctrl",
+          "sequence": "TGTGCAAAAAAGCGGTTAGCTCCGACCCATCTCTTCTCTCCTCTTC",
+          "base_count": 46,
+          "role": "replacement_control",
+          "fluorophore": null
+        },
+        {
+          "name": "B LEFT-4 ctrl",
+          "sequence": "AAGTAAGGTTGCTCTTGCCCGGCGTCAATAGACCCATCTCTTCTCTCCTCTTC",
+          "base_count": 53,
+          "role": "replacement_control",
+          "fluorophore": null
+        }
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "tag \u03b1 ctrl",
+      "sequence": "TTTTTTTTCGGGGAGGAAGGTAGTCAAAACG",
+      "role": "separate_tag_not_base_staple"
+    },
+    {
+      "name": "tag \u03b1",
+      "sequence": "TTTTTTTTGAGTAGTGGTGGTCGTCAGATTC",
+      "role": "separate_tag_not_base_staple"
+    },
+    {
+      "name": "tag \u03b2 ctrl",
+      "sequence": "TTTTTTTTGAAGAGGAGAGAAGAGATGGGTC",
+      "role": "separate_tag_not_base_staple"
+    },
+    {
+      "name": "tag \u03b2",
+      "sequence": "TTTTTTTTGTAGGTGGAGTGTGAGGTGTGTC",
+      "role": "separate_tag_not_base_staple"
+    }
+  ],
+  "valency_composition_for_each_object": {
+    "0": {
+      "active_handle_helices": [],
+      "control_replacement_helices": [
+        0,
+        2,
+        4
+      ]
+    },
+    "1": {
+      "active_handle_helices": [
+        2
+      ],
+      "control_replacement_helices": [
+        0,
+        4
+      ]
+    },
+    "2": {
+      "active_handle_helices": [
+        0,
+        2
+      ],
+      "control_replacement_helices": [
+        4
+      ]
+    },
+    "3": {
+      "active_handle_helices": [
+        0,
+        2,
+        4
+      ],
+      "control_replacement_helices": []
+    }
+  },
+  "limitations": "PDF-extracted rows with printed IDs and fluorophore annotations; author-reported base counts agree. Not a certified synthesis set or sequence-to-route validation. Tag and peptide chemistry remain separate components; no molecular authoring."
+}

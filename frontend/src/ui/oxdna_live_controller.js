@@ -22,10 +22,11 @@
  * run; only a field requires ≥1 anchor.
  *
  * Factory: initOxdnaLive({ oxdnaDisplay, getSelectedJob, getRunElements }) →
- *   { isOn, toggle, stop, onFieldChanged, refreshButton }.  getRunElements() →
+ *   { isOn, toggle, stop, onFieldChanged, refreshButton, getDiagnostics }.  getRunElements() →
  *   { field:{enabled,field_pN,dir}, surface:{enabled,dir,offsetNm,stiff}, anchors[] }.
  */
 
+import { initLivePlayback, initLivePlaybackPopup } from './oxdna_live_playback.js'
 import { showToast } from './toast.js'
 import { shouldStopLiveSession } from './display_tab_policy.js'
 import * as api from '../api/client.js'
@@ -131,6 +132,12 @@ export function initOxdnaLive({
   const statusEl  = document.getElementById('oxdna-jobs-live-status')
   if (!liveBtn) return { isOn: () => false, toggle: () => {}, stop: () => {}, onFieldChanged: () => {}, refreshButton: () => {} }
 
+  const playback = initLivePlayback({ draw: positions => oxdnaDisplay?.displayLiveFrame?.(positions), interval: POLL_MS })
+  const popup = initLivePlaybackPopup({ onSmooth: value => playback.setSmooth(value) })
+  let _sessionGeneration = 0
+  let _requestMs = 0, _maxRequestMs = 0, _backendTiming = null, _backendMax = {}
+  const getDiagnostics = () => ({ ...playback.diagnostics(), requestMs: _requestMs, maxRequestMs: _maxRequestMs, backend: _backendTiming, backendMax: { ..._backendMax } })
+
   let _available  = false
   let _availReason = 'checking…'
   let _pegAvailable = false, _pegReason = ''
@@ -232,6 +239,10 @@ export function initOxdnaLive({
       _setButton()
       return
     }
+    ++_sessionGeneration
+    playback.reset()
+    _maxRequestMs = 0; _backendMax = {}
+    popup.show(true)
     _sid = r.session_id
     _on = true
     _backend = r.backend || null
@@ -257,8 +268,17 @@ export function initOxdnaLive({
 
   async function _poll() {
     if (!_on || !_sid) return
+    const generation = _sessionGeneration
+    const pollStarted = performance.now()
     const f = await api.getOxdnaLiveFrame(_sid)
-    if (!_on || !_sid) return                 // stopped while the request was in flight
+    // A stop/restart may have replaced this session while the request was in flight.
+    if (!_on || !_sid || generation !== _sessionGeneration) return
+    _requestMs = performance.now() - pollStarted
+    _maxRequestMs = Math.max(_maxRequestMs, _requestMs)
+    _backendTiming = f?.timing || null
+    for (const key of ['step_ms', 'capture_ms', 'age_ms']) {
+      if (Number.isFinite(_backendTiming?.[key])) _backendMax[key] = Math.max(_backendMax[key] || 0, _backendTiming[key])
+    }
     if (!f) {                                  // 404 / session gone → tear down
       _setStatus('Live session ended.', _C.dim)
       _teardownLocal()
@@ -277,13 +297,16 @@ export function initOxdnaLive({
     }
     if (f.backend) _backend = f.backend
     if (f.ready && Array.isArray(f.positions) && f.positions.length) {
-      oxdnaDisplay?.displayLiveFrame?.(f.positions)
+      playback.push(f.positions, f.frame_id ?? f.n_bursts)
       _setStatus(liveStatusLine({ ready: true, nPositions: f.n_positions,
                                   nBursts: f.n_bursts, backend: _backend, peg: getSelectedJob?.()?.run_config?.surface_strands?.material === 'PEG' }), _C.ok)
     } else {
       _setStatus('Live session warming up…', _C.accent)
     }
-    _schedulePoll()
+    popup.update(getDiagnostics())
+    // Start-to-start cadence: request, JSON parsing and display preparation must
+    // not add another full interval. Requests remain strictly single-flight.
+    _schedulePoll(Math.max(0, POLL_MS - (performance.now() - pollStarted)))
   }
 
   // A run-card changed while Live is running (field/floor/anchors). If the
@@ -348,6 +371,9 @@ export function initOxdnaLive({
   // Clear local state + restore the model overlay (no stop POST — used when the
   // backend already reports the session gone).
   function _teardownLocal() {
+    ++_sessionGeneration
+    playback.reset()
+    popup.show(false)
     if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
     if (_pushTimer) { clearTimeout(_pushTimer); _pushTimer = null }
     if (_reconfigTimer) { clearTimeout(_reconfigTimer); _reconfigTimer = null }
@@ -392,5 +418,5 @@ export function initOxdnaLive({
   _checkAvailable()
   _setButton()
 
-  return { isOn: () => _on, toggle, stop, onElementsChanged, onFieldChanged, refreshButton }
+  return { isOn: () => _on, toggle, stop, onElementsChanged, onFieldChanged, refreshButton, getDiagnostics }
 }

@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-05",
+  "batch_id": "DISC0003",
+  "new_program_leads": 77,
+  "all_new_program_leads_uncertain": true,
+  "candidate_existing_journal_papers_inspected": 2,
+  "tentative_counterpart_edges": 2,
+  "new_correction_records": 1,
+  "newly_eligible_canonical_works": 0,
+  "interpretation": "Discovery leads and source review, not a yield of confirmed new eligible works.",
+  "reinitialize_byte_identical": true,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5063,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 7815
+  },
+  "counts": {
+    "publication_versions": 5063,
+    "provisional_work_keys_not_reconciled": 5063,
+    "review_stages": {
+      "metadata_screened": 151,
+      "unreviewed": 4833,
+      "fulltext_reviewed": 18,
+      "design_sources_reviewed": 61
+    },
+    "relevance": {
+      "uncertain": 4984,
+      "background_or_review": 3,
+      "design_bearing": 76
+    },
+    "catalog_eligibility": {
+      "unresolved": 5058,
+      "excluded": 4,
+      "eligible": 1
+    },
+    "design_groups": 105,
+    "design_source_reviews": 19,
+    "discovery_runs": 25
+  }
+}

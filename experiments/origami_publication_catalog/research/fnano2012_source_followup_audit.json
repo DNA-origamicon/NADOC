@@ -1,0 +1,65 @@
+{
+  "before": {
+    "publication_versions": 5873,
+    "canonical_work_keys": 5872,
+    "provisional_work_keys_not_reconciled": 5871,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 994,
+      "unreviewed": 4649,
+      "fulltext_reviewed": 54,
+      "design_sources_reviewed": 176
+    },
+    "relevance": {
+      "uncertain": 5635,
+      "background_or_review": 19,
+      "design_bearing": 214,
+      "not_origami": 5
+    },
+    "catalog_eligibility": {
+      "unresolved": 5863,
+      "excluded": 9,
+      "eligible": 1
+    },
+    "design_groups": 138,
+    "design_source_reviews": 61,
+    "discovery_runs": 47
+  },
+  "after": {
+    "publication_versions": 5873,
+    "canonical_work_keys": 5872,
+    "provisional_work_keys_not_reconciled": 5871,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 994,
+      "unreviewed": 4649,
+      "fulltext_reviewed": 54,
+      "design_sources_reviewed": 176
+    },
+    "relevance": {
+      "uncertain": 5635,
+      "background_or_review": 19,
+      "design_bearing": 214,
+      "not_origami": 5
+    },
+    "catalog_eligibility": {
+      "unresolved": 5863,
+      "excluded": 9,
+      "eligible": 1
+    },
+    "design_groups": 138,
+    "design_source_reviews": 61,
+    "discovery_runs": 47
+  },
+  "existing_source_followups": 1,
+  "reference_edges": 4,
+  "complete_source_certifications": 0,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5873,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11207
+  },
+  "new_records_this_execution": 0,
+  "records_introduced_by_recipe": 2
+}

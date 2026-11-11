@@ -1,0 +1,117 @@
+{
+  "date": "2026-11-05",
+  "named_entries_retained": 116,
+  "source_row_counts": [
+    {
+      "page": 1,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 1,
+        "Invited": 0,
+        "Contributed": 0,
+        "Poster": 12
+      }
+    },
+    {
+      "page": 2,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 1,
+        "Invited": 3,
+        "Contributed": 3,
+        "Poster": 9
+      }
+    },
+    {
+      "page": 3,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 1,
+        "Invited": 3,
+        "Contributed": 0,
+        "Poster": 1
+      }
+    },
+    {
+      "page": 4,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 2,
+        "Invited": 2,
+        "Contributed": 2,
+        "Poster": 9
+      }
+    },
+    {
+      "page": 5,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 1,
+        "Invited": 1,
+        "Contributed": 2,
+        "Poster": 10
+      }
+    },
+    {
+      "page": 6,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 1,
+        "Invited": 1,
+        "Contributed": 1,
+        "Poster": 0
+      }
+    },
+    {
+      "page": 7,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 2,
+        "Invited": 4,
+        "Contributed": 1,
+        "Poster": 9
+      }
+    },
+    {
+      "page": 8,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 0,
+        "Invited": 2,
+        "Contributed": 2,
+        "Poster": 13
+      }
+    },
+    {
+      "page": 9,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 0,
+        "Invited": 1,
+        "Contributed": 1,
+        "Poster": 0
+      }
+    },
+    {
+      "page": 10,
+      "source_and_transcribed_type_counts": {
+        "Keynote": 2,
+        "Invited": 4,
+        "Contributed": 1,
+        "Poster": 8
+      }
+    }
+  ],
+  "unnamed_scientific_sessions": [
+    {
+      "label": "Robert Dirks Prize Presentation",
+      "page": 6,
+      "status": "speaker/title unresolved"
+    },
+    {
+      "label": "ISNSCE Award Address",
+      "page": 9,
+      "status": "speaker/title unresolved"
+    }
+  ],
+  "newly_eligible_works": 0,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5179,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 8217
+  },
+  "all_page_type_counts_match": true,
+  "method": "Second count of original PDF text row labels compared with manual transcriptions; verifies counts, not title spelling or author completeness."
+}

@@ -1,0 +1,54 @@
+{
+  "batch_id": "B0009",
+  "reviewed_first_passes": [
+    "10.1091/mbc.e13-03-0155",
+    "10.1093/nar/gkt592",
+    "10.1101/gad.226837.113",
+    "10.1083/jcb.2002pi",
+    "10.1093/nar/gkt1269"
+  ],
+  "reviewed_count": 5,
+  "input_count": 25,
+  "remaining_count": 20,
+  "reference_edges": 249,
+  "unique_provisional_targets": 245,
+  "reference_counts_by_source": {
+    "10.1093/nar/gkt592": 63,
+    "10.1093/nar/gkt1269": 64,
+    "10.1091/mbc.e13-03-0155": 22,
+    "10.1101/gad.226837.113": 95,
+    "10.1083/jcb.2002pi": 5
+  },
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5458,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 9591
+  },
+  "counts": {
+    "publication_versions": 5458,
+    "canonical_work_keys": 5457,
+    "provisional_work_keys_not_reconciled": 5456,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 573,
+      "unreviewed": 4720,
+      "fulltext_reviewed": 38,
+      "design_sources_reviewed": 127
+    },
+    "relevance": {
+      "uncertain": 5290,
+      "background_or_review": 11,
+      "design_bearing": 156,
+      "not_origami": 1
+    },
+    "catalog_eligibility": {
+      "unresolved": 5452,
+      "excluded": 5,
+      "eligible": 1
+    },
+    "design_groups": 127,
+    "design_source_reviews": 50,
+    "discovery_runs": 38
+  }
+}

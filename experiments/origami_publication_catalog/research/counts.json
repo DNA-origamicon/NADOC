@@ -1,0 +1,26 @@
+{
+  "publication_versions": 6158,
+  "canonical_work_keys": 6155,
+  "provisional_work_keys_not_reconciled": 6152,
+  "versions_with_explicit_version_relation": 6,
+  "review_stages": {
+    "metadata_screened": 1331,
+    "design_sources_reviewed": 270,
+    "fulltext_reviewed": 92,
+    "unreviewed": 4465
+  },
+  "relevance": {
+    "uncertain": 5768,
+    "design_bearing": 322,
+    "background_or_review": 39,
+    "not_origami": 29
+  },
+  "catalog_eligibility": {
+    "unresolved": 6113,
+    "excluded": 44,
+    "eligible": 1
+  },
+  "design_groups": 188,
+  "design_source_reviews": 122,
+  "discovery_runs": 62
+}

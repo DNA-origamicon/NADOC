@@ -1,0 +1,3480 @@
+{
+  "evidence": {
+    "local_file": "assets/research-20261105/yin-publications.html",
+    "sha256": "99411172a20d3dba7c71b9f9f49015bb496b13937bba5a17f71faebfcfc69696",
+    "url": "https://yin.hms.harvard.edu/publications.html",
+    "locator": "Named anchors; pre2020 printed entries68\u20131;2020-anchor entries retained for boundary checks. Core citation links exclude nested media lists."
+  },
+  "entries": [
+    {
+      "anchor": "2020.litho",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 77,
+      "title": "Three-dimensional nanolithography guided by DNA modular epitaxy",
+      "citation": "[77] J. Shen, W. Sun, D. Liu, T. Schaus and P. Yin* Three-dimensional nanolithography guided by DNA modular epitaxy Nature Materials 20, 683-690 (2021), Published: 10 April 2021 DOI:10.1038/s41563-021-00930-7 [ PDF ] [ Supplementary materials ]",
+      "links": [
+        "https://www.nature.com/articles/s41563-021-00930-7",
+        "https://yin.hms.harvard.edu/publications/2020.litho.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.litho.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41563-021-00930-7"
+      ],
+      "source_offset": 17501,
+      "target_key": "10.1038/s41563-021-00930-7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.barrel",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 75,
+      "title": "Complex multicomponent patterns rendered on a 3D DNA-barrel pegboard",
+      "citation": "[75] S. F. J. Wickham, A. Auer, J. Min, N. Ponnuswamy, J. B. Woehrstein, F. Schueder, M. T. Strauss, J. Schnitzbauer, B. Nathwani, Z. Zhao, S. D. Perrault, J. Hahn, S. Lee, M. M. Bastings, S. W. Helmig, A. L. Kodal, P. Yin, R. Jungmann* & W. M. Shih* Complex multicomponent patterns rendered on a 3D DNA-barrel pegboard Nature Communications , 11, Article number: 5768 (2020) DOI: 10.1038/s41467-020-18910-x [ PDF ] [ Supplementary Information ] [ Supplementary Software ] [ Supplementary Data ] [ Supplementary Movies ] [ Reporting Summary ] [ Description of Supplementary Files ]",
+      "links": [
+        "https://www.nature.com/articles/s41467-020-18910-x",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.software.zip",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.data.zip",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.movies.zip",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.report.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.desc.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41467-020-18910-x"
+      ],
+      "source_offset": 18881,
+      "target_key": "10.1038/s41467-020-18910-x",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.cnt",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 74,
+      "title": "Super-resolution spatial proximity detection with proximity-PAINT",
+      "citation": "[74] F. Schueder, J. Lara-Gutierrez, D. Haas, K. S. Beckwith, P. Yin, J. Ellenberg and R. Jungmann* Super-resolution spatial proximity detection with proximity-PAINT Angewandte Chemie , Published: 16 September 2020 DOI:10.1002/anie.202009031 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/anie.202009031",
+        "https://yin.hms.harvard.edu/publications/2020.pPAINT.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.pPAINT.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/anie.202009031"
+      ],
+      "source_offset": 20474,
+      "target_key": "10.1002/anie.202009031",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.nanoscope",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 73,
+      "title": "A DNA nanoscope that identifies and precisely localizes over a hundred unique molecular features with nanometer accuracy",
+      "citation": "[73] N. Gopalkrishnan, S. Punthambaker, T. E. Schaus, G. M. Church and P. Yin* A DNA nanoscope that identifies and precisely localizes over a hundred unique molecular features with nanometer accuracy bioRxiv , DOI: 10.1101/2020.08.27.271072. Posted August 28, 2020. [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.biorxiv.org/content/10.1101/2020.08.27.271072v1",
+        "https://yin.hms.harvard.edu/publications/2020.nanoscope.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.nanoscope.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1101/2020.08.27.271072"
+      ],
+      "source_offset": 21031,
+      "target_key": "10.1101/2020.08.27.271072",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.cnt",
+      "occurrence": 2,
+      "listed_year": 2020,
+      "number": 72,
+      "title": "Precise pitch-scaling of carbon nanotube arrays within three-dimensional DNA nanotrenches",
+      "citation": "[72] W. Sun* \u2020 , J. Shen \u2020 , Z. Zhao \u2020 , N. Arellano, C. Rettner, J. Tang, T. Cao, Z. Zhou, T. Ta, J. K. Streit, J. A. Fagan, T. Schaus, M. Zheng, S. Han, W. M. Shih, H. T. Maune and P. Yin* Precise pitch-scaling of carbon nanotube arrays within three-dimensional DNA nanotrenches Science , Vol. 368, Issue 6493, pp. 874-877 (2020) DOI: 10.1126/science.aaz7440 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://science.sciencemag.org/content/368/6493/874",
+        "https://yin.hms.harvard.edu/publications/2020.cnt.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.cnt.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1126/science.aaz7440"
+      ],
+      "source_offset": 21622,
+      "target_key": "10.1126/science.aaz7440",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.inspr",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 71,
+      "title": "Three-dimensional nanoscopy of whole cells and tissues with in situ point spread function retrieval",
+      "citation": "[71] F. Xu, D. Ma, K. P. MacPherson, S. Liu, Y. Bu, Y. Wang, Y. Tang, C. Bi, T. Kwok, A. A. Chubykin, P. Yin, S. Calve, G. E. Landreth and F. Huang Three-dimensional nanoscopy of whole cells and tissues with in situ point spread function retrieval Nature Methods , 17, pages531-540(2020) DOI: 10.1038/s41592-020-0816-x [ PDF ] [ Supplementary Information ] [ Supplementary Video1 ] [ Supplementary Video2 ] [ Supplementary Video3 ] [ Supplementary Video4 ] [ Supplementary Video5 ] [ Supplementary Video6 ] [ Supplementary Video7 ] [ Supplementary Video8 ] [ Supplementary Video9 ] [ Supplementary Software1 ] [ Supplementary Software2 ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-020-0816-x",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid1.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid2.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid3.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid4.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid5.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid6.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid7.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid8.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid9.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.sw1.zip",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.sw2.zip"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-020-0816-x"
+      ],
+      "source_offset": 22332,
+      "target_key": "10.1038/s41592-020-0816-x",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.freestanding",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 70,
+      "title": "3D freestanding DNA nanostructure hybrid as a low-density high-strength material",
+      "citation": "[70] F. Zhou, W. Sun, C. Zhang, J. Shen, P. Yin* and H. Liu* 3D freestanding DNA nanostructure hybrid as a low-density high-strength material ACS Nano , Publication Date: 1 May 2020 DOI: 10.1021/acsnano.0c00178 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsnano.0c00178",
+        "https://yin.hms.harvard.edu/publications/2020.freestanding.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.freestanding.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.0c00178"
+      ],
+      "source_offset": 23782,
+      "target_key": "10.1021/acsnano.0c00178",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.axial",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 69,
+      "title": "Axial plane single-molecule super-resolution microscopy of whole cells",
+      "citation": "[69] S. An, K. F. Ziegler, P. Zhang, Y. Wang, T. Kwok, F. Xu, C. Bi, S. Matosevic, P. Yin, T. Li, and F. Huang Axial plane single-molecule super-resolution microscopy of whole cells Biomedical Optics Express , Vol. 11, Issue 1, pp. 461-479 (2020) DOI: 10.1364/BOE.377890 [ PDF ]",
+      "links": [
+        "https://www.osapublishing.org/boe/abstract.cfm?uri=boe-11-1-461",
+        "https://yin.hms.harvard.edu/publications/2020.axial.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1364/boe.377890"
+      ],
+      "source_offset": 24321,
+      "target_key": "10.1364/boe.377890",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.ssDNA",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 68,
+      "title": "Rapid in vitro production of single-stranded DNA",
+      "citation": "[68] D. Minev \u2020 , R. Guerra \u2020 , J. Y. Kishi \u2021 , C. Smith \u2021 , E. Krieg, K. Said, A. Hornick, H. M Sasaki, G. Filsinger, B. J. Beliveau, P. Yin, G. M. Church, W. M. Shih Rapid in vitro production of single-stranded DNA Nucleic Acids Research , gkz998, Published: 12 November 2019 DOI: 10.1093/nar/gkz998 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://academic.oup.com/nar/advance-article/doi/10.1093/nar/gkz998/5622713",
+        "https://yin.hms.harvard.edu/publications/2019.ssDNA.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.ssDNA.sup.zip"
+      ],
+      "explicit_doi_candidates": [
+        "10.1093/nar/gkz998"
+      ],
+      "source_offset": 24945,
+      "target_key": "10.1093/nar/gkz998",
+      "identity_status": "primary_title_authors_doi_date_verified",
+      "design_review_status": "main_SI_protocol_workbook_and_FigS7_inspected; full_sources_unverified",
+      "first_online": "2019-11-12",
+      "identity_evidence": {
+        "local_file": "research/yin_merpy_primary_date.json",
+        "sha256": "54408643047d548871a5681b7a21a0548abe117cea29fe798d96259f6f67eafc",
+        "url": "https://academic.oup.com/nar/article/47/22/11956/5622713",
+        "locator": "Publisher article history: Published12November2019; issue47(22),16December2019; full author list"
+      }
+    },
+    {
+      "anchor": "2019.ribo",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 67,
+      "title": "De novo-designed translation-repressing riboregulators for multi-input cellular logic",
+      "citation": "[67] J. Kim \u2020 , Y. Zhou \u2020 , P. D. Carlson, M. Teichmann, S. Chaudhary, F. C. Simmel, P. A. Silver, J. J. Collins, J. B. Lucks, P. Yin* & A. A. Green* De novo-designed translation-repressing riboregulators for multi-input cellular logic Nature Chemical Biology , Published 04 November 2019 DOI: 10.1038/s41589-019-0388-1 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://www.nature.com/articles/s41589-019-0388-1",
+        "https://yin.hms.harvard.edu/publications/2019.ribo.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.ribo.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41589-019-0388-1"
+      ],
+      "source_offset": 25649,
+      "target_key": "10.1038/s41589-019-0388-1",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.biocompatible",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 66,
+      "title": "Enhancing biocompatible stability of DNA nanostructures using dendritic oligonucleotides and brick motifs",
+      "citation": "[66] Y. Kim & P. Yin Enhancing biocompatible stability of DNA nanostructures using dendritic oligonucleotides and brick motifs Angewandte Chemie , Accepted Articles, First published: 09 October 2019 DOI: 10.1002/anie.201911664 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/anie.201911664",
+        "https://yin.hms.harvard.edu/publications/2019.biocompatible.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.biocompatible.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/anie.201911664"
+      ],
+      "source_offset": 27656,
+      "target_key": "10.1002/anie.201911664",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.HuBMAP",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 65,
+      "title": "The human body at cellular resolution: the NIH Human Biomolecular Atlas Program",
+      "citation": "[65] HuBMAP Consortium The human body at cellular resolution: the NIH Human Biomolecular Atlas Program Nature , volume 574, pages 187-192 (2019) DOI: 10.1038/s41586-019-1629-x [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s41586-019-1629-x",
+        "https://yin.hms.harvard.edu/publications/2019.HuBMAP.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41586-019-1629-x"
+      ],
+      "source_offset": 28228,
+      "target_key": "10.1038/s41586-019-1629-x",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.nmethfeature",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 64,
+      "title": "Voices in methods development",
+      "citation": "[64] P. Anikeeva, E. Boyden, [...], P Yin, [...], X. Zhuang Voices in methods development Nature Methods , volume 16, pages 945-951 (2019) DOI: 10.1038/s41592-019-0585-6 [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-019-0585-6",
+        "https://yin.hms.harvard.edu/publications/2019.nmethfeature.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-019-0585-6"
+      ],
+      "source_offset": 28641,
+      "target_key": "10.1038/s41592-019-0585-6",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.a!p",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 63,
+      "title": "Super-resolution labelling with Action-PAINT",
+      "citation": "[63] Ninning Liu \u2020 , Mingjie Dai \u2020,* , Sinem K. Saka & Peng Yin* Super-resolution labelling with Action-PAINT Nature Chemistry , Published: 16 September 2019. DOI: 10.1038/s41557-019-0325-7 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://www.nature.com/articles/s41557-019-0325-7",
+        "https://yin.hms.harvard.edu/publications/2019.a!p.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.a!p.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41557-019-0325-7"
+      ],
+      "source_offset": 29558,
+      "target_key": "10.1038/s41557-019-0325-7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.immuno-saber",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 62,
+      "title": "Immuno-SABER enables highly multiplexed and amplified protein imaging in tissues",
+      "citation": "[62] S. K. Saka \u2020,* , Y. Wang \u2020,* , J. Y. Kishi, A. Zhu, Y. Zeng, W. Xie, K. Kirli, C. Yapp, M. Cicconet, B. J. Beliveau, S. W. Lapan, S. Yin, M. Lin, E. S. Boyden, P. S. Kaeser, G. Pihan, G. M. Church, and P. Yin* Immuno-SABER enables highly multiplexed and amplified protein imaging in tissues Nature Biotechnology , published 19 August 2019. DOI: 10.1038/s41587-019-0207-y [ PDF ] [ Website: http://immuno-saber.net/ ] [ Supplementary Information ] [ Supplementary Protocols ]",
+      "links": [
+        "https://www.nature.com/articles/s41587-019-0207-y",
+        "https://yin.hms.harvard.edu/publications/2019.immuno-saber.pdf",
+        "http://immuno-saber.net/",
+        "https://yin.hms.harvard.edu/publications/2019.immuno-saber.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.immuno-saber.sup2.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41587-019-0207-y"
+      ],
+      "source_offset": 30884,
+      "target_key": "10.1038/s41587-019-0207-y",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.orbit",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 61,
+      "title": "Rotation tracking of genome-processing enzymes using DNA origami rotors",
+      "citation": "[61] P. Kosuri, B. D. Altheimer, M. Dai, P. Yin, X. Zhuang* Rotation tracking of genome-processing enzymes using DNA origami rotors Nature , published 17 July 2019. DOI: 10.1038/s41586-019-1397-7 [ PDF ] [ Supplementary Information ] [ Reporting Summary ] [ Supplementary Table1 ] [ Supplementary Table2 ] [ Supplementary Video1 ] [ Supplementary Video2 ]",
+      "links": [
+        "https://www.nature.com/articles/s41586-019-1397-7",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.sum.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.data1.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.data2.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.video1.mov",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.video2.mov"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41586-019-1397-7"
+      ],
+      "source_offset": 33088,
+      "target_key": "10.1038/s41586-019-1397-7",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.cgRNA",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 60,
+      "title": "Programmable CRISPR-Cas repression, activation, and computation with sequence-independent targets and triggers",
+      "citation": "[60] M. Jin \u2020 , N. Garreau de Loubresse \u2020 , Y. Kim, J. Kim*, P. Yin* Programmable CRISPR-Cas repression, activation, and computation with sequence-independent targets and triggers ACS Synth. Biol. , 2019, 8, 7, 1583-1589 published 10 July 2019. DOI: 10.1021/acssynbio.9b00141 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/acssynbio.9b00141",
+        "https://yin.hms.harvard.edu/publications/2019.cgRNA.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.cgRNA.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acssynbio.9b00141"
+      ],
+      "source_offset": 34734,
+      "target_key": "10.1021/acssynbio.9b00141",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.saber",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 59,
+      "title": "SABER amplifies FISH: enhanced multiplexed imaging of RNA and DNA in cells and tissues",
+      "citation": "[59] J. Y. Kishi \u2020 , S. W. Lapan \u2020 , B. J. Beliveau \u2020 *, E. R. West \u2020 , A. Zhu, H. M. Sasaki, S. K. Saka, Y. Wang, C. L. Cepko*, P. Yin* SABER amplifies FISH: enhanced multiplexed imaging of RNA and DNA in cells and tissues Nature Methods , published 20 May 2019. DOI: 10.1038/s41592-019-0404-0 [ PDF ] [ Website: http://saber.fish ] [ Supplementary Information ] [ Reporting Summary ] [ Supplementary Protocols ] [ Supplementary Table1: SABER sequences ] [ Supplementary Table2: SABER simulated parameters ] [ Supplementary Table3: SABER experimental conditions ] [ Supplementary Table4: SABER puncta counts ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-019-0404-0",
+        "https://yin.hms.harvard.edu/publications/2019.saber.pdf",
+        "http://saber.fish",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.sum.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.prot.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.data1.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.data2.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.data3.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.data4.xlsx"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-019-0404-0"
+      ],
+      "source_offset": 35356,
+      "target_key": "10.1038/s41592-019-0404-0",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.algorithms",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 58,
+      "title": "Diverse and robust molecular algorithms using reprogrammable DNA self-assembly",
+      "citation": "[58] D. Woods \u2020,* , D. Doty \u2020,* , C. Myhrvold, J. Hui, F. Zhou, P. Yin, and E. Winfree* Diverse and robust molecular algorithms using reprogrammable DNA self-assembly Nature , 567, 366-372 (2019) DOI: 10.1038/s41586-019-1014-9 [ PDF ] [ Supplementary Information ] [ Supplementary Data ] [ Supplementary Figure ]",
+      "links": [
+        "https://www.nature.com/articles/s41586-019-1014-9",
+        "https://yin.hms.harvard.edu/publications/2019.algorithms.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.algorithms.supA.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.algorithms.supB.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.algorithms.supC.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41586-019-1014-9"
+      ],
+      "source_offset": 38284,
+      "target_key": "10.1038/s41586-019-1014-9",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.124colorblinking",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 57,
+      "title": "124-color super-resolution imaging by engineering DNA-PAINT blinking kinetics",
+      "citation": "[57] O.K. Wade \u2020 , J.B. Woehrstein \u2020 , P. C. Nockels \u2020 , S. Strauss \u2020 , F. Stehr, J. Stein, F. Schueder, M.T. Strauss, M. Ganji, J. Schnitzbauer, H. Grabmayr, P. Yin, P. Schwille, R. Jungmann* 124-color super-resolution imaging by engineering DNA-PAINT blinking kinetics Nano Lett. , Article ASAP DOI: 10.1021/acs.nanolett.9b00508 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acs.nanolett.9b00508",
+        "https://yin.hms.harvard.edu/publications/2019.124color.blinking.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.124color.blinking.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.9b00508"
+      ],
+      "source_offset": 40845,
+      "target_key": "10.1021/acs.nanolett.9b00508",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.chromo",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 56,
+      "title": "Walking along chromosomes with super-resolution imaging, contact maps, and integrative modeling",
+      "citation": "[56] G. Nir \u2020 , I. Farabella \u2020 , C. Perez Estrada \u2020 , C.G. Ebeling \u2020 , B.J. Beliveau, H.M. Sasaki, S.H. Lee, S. Nguyen, R.B. McCole, S. Chattoraj, J. Erceg, J. AlHaj Abed, N.C. Martins, H.Q. Nguyen, M.A. Hannan, S. Russell, N.C. Durand, S.P. Rao, J.Y. Kishi, P. Soler-Vila, M. Di Pierro, J.N. Onuchic, S. Callahan, J. Schreiner, J. Stuckey*, P. Yin*, E. Lieberman Aiden*, M.A. Marti-Renom*, C.T. Wu* Walking along chromosomes with super-resolution imaging, contact maps, and integrative modeling PLoS Genet , 14(12): e1007872 DOI: 10.1371/journal.pgen.1007872, PMID: 30586358 [ PDF ] [ Supplementary Movie1 ] [ Supplementary Movie2 ]",
+      "links": [
+        "https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1007872",
+        "https://www.ncbi.nlm.nih.gov/pubmed/30586358",
+        "https://yin.hms.harvard.edu/publications/2018.chromo.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.chromo.sup.movie1.mp4",
+        "https://yin.hms.harvard.edu/publications/2018.chromo.sup.movie2.mov"
+      ],
+      "explicit_doi_candidates": [
+        "10.1371/journal.pgen.1007872"
+      ],
+      "source_offset": 41921,
+      "target_key": "10.1371/journal.pgen.1007872",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.topo",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 55,
+      "title": "Programming molecular topologies from single-stranded nucleic acids",
+      "citation": "[55] X. Qi, F. Zhang, Z. Su, S. Jiang, D. Han, B. Ding, Y. Liu, W. Chiu, P. Yin, H. Yan Programming molecular topologies from single-stranded nucleic acids Nature Communications , 9, Article number: 4579 (2018) DOI: 10.1038/s41467-018-07039-7, PMID: 30389935 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://www.nature.com/articles/s41467-018-07039-7",
+        "https://www.ncbi.nlm.nih.gov/pubmed/30389935",
+        "https://yin.hms.harvard.edu/publications/2018.topo.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.topo.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41467-018-07039-7"
+      ],
+      "source_offset": 43517,
+      "target_key": "10.1038/s41467-018-07039-7",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.miRNA",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 54,
+      "title": "Super-resolution geometric barcoding for multiplexed miRNA profiling",
+      "citation": "[54] W. Xu, P. Yin*, M. Dai* Super-resolution geometric barcoding for multiplexed miRNA profiling Angewandte Chemie , Accepted Article, September 5, 2018. DOI: 10.1002/ange.201807956 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/anie.201807956",
+        "https://yin.hms.harvard.edu/publications/2018.miRNA.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.miRNA.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/ange.201807956"
+      ],
+      "source_offset": 44162,
+      "target_key": "10.1002/ange.201807956",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.fourway",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 53,
+      "title": "Hierarchical assembly of DNA nanostructures based on four-way toehold-mediated strand displacement",
+      "citation": "[53] T. Lin, J. Yan, L. L. Ong, J. Robaszewski, H. D. Lu, Y. Mi, P. Yin*, and B. Wei* Hierarchical assembly of DNA nanostructures based on four-way toehold-mediated strand displacement Nano Lett. , 2018, 18 (8), pp 4791-4795 DOI: 10.1021/acs.nanolett.8b01355 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://pubs.acs.org/doi/abs/10.1021/acs.nanolett.8b01355",
+        "https://yin.hms.harvard.edu/publications/2018.fourway.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.fourway.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.8b01355"
+      ],
+      "source_offset": 44671,
+      "target_key": "10.1021/acs.nanolett.8b01355",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.biomanu",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 52,
+      "title": "Advanced Cell and Tissue Biomanufacturing",
+      "citation": "[52] K. Ye*, D. L. Kaplan, G. Bao, C. Bettinger, G. Forgacs, C. Dong, A. Khademhosseini, Y. Ke , K. Leong, A. Sambanis, W. Sun, and P. Yin Advanced Cell and Tissue Biomanufacturing ACS Biomater. Sci. Eng. , 2018, 4, 7, 2292-2307 DOI: 10.1021/acsbiomaterials.8b00650 [ PDF ]",
+      "links": [
+        "https://pubs.acs.org/doi/pdf/10.1021/acsbiomaterials.8b00650",
+        "https://yin.hms.harvard.edu/publications/2018.biomanu.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acsbiomaterials.8b00650"
+      ],
+      "source_offset": 45254,
+      "target_key": "10.1021/acsbiomaterials.8b00650",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.rnascaf",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 51,
+      "title": "Synthetic RNA scaffolds for spatial engineering in cells",
+      "citation": "[51] G. Sachdeva, C. Myhrvold, P. Yin and P. A. Silver Synthetic RNA scaffolds for spatial engineering in cells Synthetic Biology: Parts, Devices and Applications (Book Chapter), Editor(s): C. Smolke, S. Y. Lee, J. Nielsen, G. Stephanopoulos First published: 30 March 2018, Print ISBN:9783527330751 | Online ISBN:9783527688104 DOI: 10.1002/9783527688104 [ PDF ]",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/9783527688104.ch13",
+        "https://yin.hms.harvard.edu/publications/2018.rnascaf.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/9783527688104"
+      ],
+      "source_offset": 45770,
+      "target_key": "10.1002/9783527688104",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.oligominer",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 50,
+      "title": "OligoMiner provides a rapid, flexible environment for the design of genome-scale oligonucleotide in situ hybridization probes",
+      "citation": "[50] B. J. Beliveau*, J. Y. Kishi, G. Nir, H. M. Sasaki, S. K. Saka, S. C. Nguyen, C.-t. Wu, and P. Yin* OligoMiner provides a rapid, flexible environment for the design of genome-scale oligonucleotide in situ hybridization probes Proc Natl Acad Sci USA , March 6, 2018. 115 (10) E2183-E2192 DOI: 10.1073/pnas.1714530115, PMID: 29463736 [ PDF ] [ Supplementary Information ] [ Supplementary Dataset1 ] [ Supplementary Dataset2 ]",
+      "links": [
+        "http://www.pnas.org/content/115/10/E2183",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29463736",
+        "https://yin.hms.harvard.edu/publications/2018.oligominer.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.oligominer.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.oligominer.data1.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.oligominer.data2.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1073/pnas.1714530115"
+      ],
+      "source_offset": 46383,
+      "target_key": "10.1073/pnas.1714530115",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.ribocom2",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 49,
+      "title": "Ribocomputing: Cellular Logic Computation Using RNA Devices",
+      "citation": "[49] J. Kim, P. Yin*, and A. A. Green* Ribocomputing: Cellular Logic Computation Using RNA Devices Biochemistry , 2018, 57 (6), pp 883-885 DOI: 10.1021/acs.biochem.7b01072, PMID: 29256603 [ PDF ]",
+      "links": [
+        "https://pubs.acs.org/doi/abs/10.1021/acs.biochem.7b01072",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29256603",
+        "https://yin.hms.harvard.edu/publications/2018.ribocom2.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acs.biochem.7b01072"
+      ],
+      "source_offset": 47273,
+      "target_key": "10.1021/acs.biochem.7b01072",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.ssO",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 48,
+      "title": "Single-stranded DNA and RNA origami",
+      "citation": "[48] D. Han \u2020 , X. Qi \u2020 , C. Myhrvold, B. Wang, M. Dai, S. Jiang, M. Bates, Y. Liu, B. An * , F. Zhang * , H. Yan * and P. Yin * Single-stranded DNA and RNA origami Science Vol. 358, Issue 6369, eaao2648 (2017) DOI: 10.1126/science.aao2648 [ PDF ] [ Supplementary Materials ] [ Supplementary Movies ]",
+      "links": [
+        "http://science.sciencemag.org/content/358/6369/eaao2648",
+        "https://yin.hms.harvard.edu/publications/2017.ssO.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.ssO.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.ssO.movies.zip"
+      ],
+      "explicit_doi_candidates": [
+        "10.1126/science.aao2648"
+      ],
+      "source_offset": 47891,
+      "target_key": "10.1126/science.aao2648",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.gDa",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 47,
+      "title": "Programmable self-assembly of three-dimensional nanostructures from 10,000 unique components",
+      "citation": "[47] L. L. Ong, N. Hanikel, O. K. Yaghi, C. Grun, M. T. Strauss, P. Bron, J. Lai-Kee-Him, F. Schueder, B. Wang, P. Wang, J. Y. Kishi, C.A. Myhrvold, A. Zhu, R. Jungmann, G. Bellot * , Y. Ke * , and P. Yin * Programmable self-assembly of three-dimensional nanostructures from 10,000 unique components Nature 552, 72 (2017) doi: 10.1038/nature24648, PMID: 29219968 [ PDF ] [ Supplementary Materials ] [ Supplementary Data ] [Supplementary Movies: SV1 , SV2 , SV3 ] [Software: info page , software link ] [PhD Thesis: Luvena Ong, 2016 ]",
+      "links": [
+        "https://www.nature.com/articles/nature24648",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29219968",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sup.xlsx",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sv1.avi",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sv2.avi",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sv3.avi",
+        "https://yin.hms.harvard.edu/bricks/Nanobricks.html",
+        "http://nanobricks.software",
+        "https://dspace.mit.edu/bitstream/handle/1721.1/106741/969345357-MIT.pdf?sequence=1"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nature24648"
+      ],
+      "source_offset": 51449,
+      "target_key": "10.1038/nature24648",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.sdc",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 46,
+      "title": "Multiplexed 3D super-resolution imaging of whole cells using spinning disk confocal microscopy and DNA-PAINT",
+      "citation": "[46] F. Schueder, J. Lara-Guiterrez, B. Beliveau, S. Saka, H. Sasaki, J. Woehrstein, M. Strauss, H. Grabmayr, P. Yin * , and R. Jungmann * Multiplexed 3D super-resolution imaging of whole cells using spinning disk confocal microscopy and DNA-PAINT Nature Communications 8, Article number: 2090 (2017) doi: 10.1038/s41467-017-02028-8, PMID: 29233999 [ PDF ] [ Supplementary Materials ] [ Peer Review File ] [ Description of Additional Supplementary Files ] [Supplementary Movies: 1 , 2 , 3 ] [Supplementary Data: 1 , 2 , 3 , 4 ]",
+      "links": [
+        "https://www.nature.com/articles/s41467-017-02028-8",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29233999",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.rev.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.desc.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.mov1.mp4",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.mov2.mp4",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.mov3.avi",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.data1.xlsx",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.data2.xlsx",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.data3.xlsx",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.data4.xlsx"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41467-017-02028-8"
+      ],
+      "source_offset": 57912,
+      "target_key": "10.1038/s41467-017-02028-8",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.per",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 45,
+      "title": "Programmable autonomous synthesis of single-stranded DNA",
+      "citation": "[45] J. Kishi, T. Schaus, N. Gopalkrishnan, F. Xuan, and P. Yin Programmable autonomous synthesis of single-stranded DNA Nature Chemistry Advanced Online Publication (2017) doi: 10.1038/nchem.2872, PMID: 29359755 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.nature.com/nchem/journal/vaop/ncurrent/full/nchem.2872.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29359755",
+        "https://yin.hms.harvard.edu/publications/2017.per.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.per.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nchem.2872"
+      ],
+      "source_offset": 60312,
+      "target_key": "10.1038/nchem.2872",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.apr",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 44,
+      "title": "A DNA nanoscope via auto-cycling proximity recording",
+      "citation": "[44] T. E. Schaus, S. Woo, F. Xuan, X. Chen and P. Yin A DNA nanoscope via auto-cycling proximity recording Nature Communications 8, Article number: 696 (2017) doi: 10.1038/s41467-017-00542-3, PMID: 28947733 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.nature.com/articles/s41467-017-00542-3",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28947733",
+        "https://yin.hms.harvard.edu/publications/2017.apr.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.apr.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41467-017-00542-3"
+      ],
+      "source_offset": 62499,
+      "target_key": "10.1038/s41467-017-00542-3",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.oligodnapaint",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 43,
+      "title": "In situ super-resolution imaging of genomic DNA with OligoSTORM and OligoDNA-PAINT",
+      "citation": "[43] B. J. Beliveau, A. N. Boettiger, G. Nir, B. Bintu, P. Yin * , X. Zhuang * , C.-t Wu * In situ super-resolution imaging of genomic DNA with OligoSTORM and OligoDNA-PAINT In: Erfle H. (eds) Super-Resolution Microscopy. Methods in Molecular Biology , vol 1663. Humana Press, New York, NY doi: 10.1007/978-1-4939-7265-4_19, PMID: 28924672 [ PDF ]",
+      "links": [
+        "https://link.springer.com/protocol/10.1007%2F978-1-4939-7265-4_19",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28924672",
+        "https://yin.hms.harvard.edu/publications/2017.oligodnapaint.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1007/978-1-4939-7265-4_19"
+      ],
+      "source_offset": 65397,
+      "target_key": "10.1007/978-1-4939-7265-4_19",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.egfr",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 42,
+      "title": "Multiplexed Exchange-PAINT imaging reveals ligand-dependent EGFR and Met interactions in the plasma membrane",
+      "citation": "[42] J. L. Werbin, M. S. Avendano, V. Becker, R. Jungmann, P. Yin * , G. Danuser * and P. K. Sorger * Multiplexed Exchange-PAINT imaging reveals ligand-dependent EGFR and Met interactions in the plasma membrane Scientific Reports 7, Article number: 12150 (2017) doi: 10.1038/s41598-017-12257-y, PMID: 28939861 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.nature.com/articles/s41598-017-12257-y",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28939861",
+        "https://yin.hms.harvard.edu/publications/2017.egfr.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.egfr.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41598-017-12257-y"
+      ],
+      "source_offset": 66109,
+      "target_key": "10.1038/s41598-017-12257-y",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.ribocomputer",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 41,
+      "title": "Complex cellular logic computation using ribocomputing devices",
+      "citation": "[41] A. A. Green \u2020 , J. Kim \u2020 , D. Ma, P. A. Silver, J. J. Collins and P. Yin Complex cellular logic computation using ribocomputing devices Nature (2017) doi: 10.1038/nature23271, PMID: 28746304 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/nature/journal/vaop/ncurrent/full/nature23271.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28746304",
+        "https://yin.hms.harvard.edu/publications/2017.ribocomputer.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.ribocomputer.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nature23271"
+      ],
+      "source_offset": 66826,
+      "target_key": "10.1038/nature23271",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.metafluor",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 40,
+      "title": "Sub-100-nm metafluorophores with digitally tunable optical properties self-assembled from DNA",
+      "citation": "[40] J. B. Woehrstein, M. T. Strauss, L. L. Ong, B. Wei, D. Y. Zhang, R. Jungmann * and P. Yin * Sub-100-nm metafluorophores with digitally tunable optical properties self-assembled from DNA Science Advances Vol. 3, no. 6, e1602128, doi: 10.1126/sciadv.1602128, PMID: 28691083 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://advances.sciencemag.org/content/3/6/e1602128",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28691083",
+        "https://yin.hms.harvard.edu/publications/2017.metafluor.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.metafluor.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1126/sciadv.1602128"
+      ],
+      "source_offset": 72218,
+      "target_key": "10.1126/sciadv.1602128",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.dei",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 39,
+      "title": "Rapid sequential in situ multiplexing with DNA-Exchange-Imaging in Neuronal Cells and Tissues",
+      "citation": "[39] Y. Wang, J. B. Woehrstein, N. Donoghue, M. Dai, M. S. Avendano, R. C.J. Schackmann, J. Zoeller, S. S. H. Wang, P. W. Tillberg, D. Park, S. W. Lapan, E. S. Boyden, J. S. Brugge, P. S. Kaeser, G. M. Church, S. S. Agasti * , R. Jungmann * , P. Yin * Rapid sequential in situ multiplexing with DNA-Exchange-Imaging in Neuronal Cells and Tissues Nano Letters Article ASAP, DOI: 10.1021/acs.nanolett.7b02716, PMID: 28933153 [ PDF ] [ bioRxiv ] [ Supplementary Materials ] [ Supplementary Movie ] [ Supplementary Movie Caption ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acs.nanolett.7b02716",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28933153",
+        "https://yin.hms.harvard.edu/publications/2017.dei.pdf",
+        "http://biorxiv.org/content/early/2017/03/20/112227",
+        "https://yin.hms.harvard.edu/publications/2017.dei.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.dei.sup.mov.mov",
+        "https://yin.hms.harvard.edu/publications/2017.dei.sup.mov.cap.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.7b02716"
+      ],
+      "source_offset": 75320,
+      "target_key": "10.1021/acs.nanolett.7b02716",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.universal",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 38,
+      "title": "Universal super-resolution multiplexing by DNA exchange",
+      "citation": "[38] F. Schueder, M. T. Strauss, D. Hoerl, J. Schnitzbauer, T. Schlichthaerle, S. Strauss, P. Yin, H. Harz, H. Leonhardt and R. Jungmann Universal super-resolution multiplexing by DNA exchange Angewandte Chemie 2017, Early View, doi: 10.1002/anie.201611729, PMID: 28256790 [ PDF ] [ Supplementary Materials ] [ Supplementary Movie ]",
+      "links": [
+        "http://onlinelibrary.wiley.com/wol1/doi/10.1002/anie.201611729/abstract",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28256790",
+        "https://yin.hms.harvard.edu/publications/2017.universal.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.universal.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.universal.sup.vid.avi"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/anie.201611729"
+      ],
+      "source_offset": 76761,
+      "target_key": "10.1002/anie.201611729",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.multiplex",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 37,
+      "title": "DNA-barcoded labeling probes for highly multiplexed Exchange-PAINT imaging",
+      "citation": "[37] S. S. Agasti, Y. Wang, F. Schueder, A. Sukumar, R. Jungmann * and P. Yin * DNA-barcoded labeling probes for highly multiplexed Exchange-PAINT imaging Chem. Sci. 2017, Advance Article, doi: 10.1039/c6sc05420j, PMID: 28451377 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.rsc.org/en/Content/ArticleLanding/2017/SC/C6SC05420J#!divAbstract",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28451377",
+        "https://yin.hms.harvard.edu/publications/2017.multiplex.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.multiplex.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1039/c6sc05420j"
+      ],
+      "source_offset": 77524,
+      "target_key": "10.1039/c6sc05420j",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.bears",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 36,
+      "title": "Barcode extension for analysis and reconstruction of structures",
+      "citation": "[36] C. Myhrvold, M. Baym, N. Hanikel, L. L. Ong, J. S. Gootenberg and P. Yin Barcode extension for analysis and reconstruction of structures Nature Communications 8, Article number: 14698 (2017) doi: 10.1038/ncomms14698, PMID: 28287117 [ PDF ] [ Supplementary Materials ] [ Supplementary Data ]",
+      "links": [
+        "http://www.nature.com/articles/ncomms14698",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28287117",
+        "https://yin.hms.harvard.edu/publications/2017.bears.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.bears.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.bears.sup.data.xlsx"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/ncomms14698"
+      ],
+      "source_offset": 78192,
+      "target_key": "10.1038/ncomms14698",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.nanorod",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 35,
+      "title": "Reconfigurable three-dimensional gold nanorod plasmonic nanostructures organized on DNA origami tripod",
+      "citation": "[35] P. Zhan, P. K. Dutta, P. Wang, G. Song, M. Dai, S-X Zhao, Z-G Wang, P. Yin, W. Zhang, B. Ding, and Y. Ke Reconfigurable three-dimensional gold nanorod plasmonic nanostructures organized on DNA origami tripod ACS Nano 2017, 11 (2), pp 1172-1179 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acsnano.6b06861",
+        "https://yin.hms.harvard.edu/publications/2017.nanorod.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.nanorod.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 78874,
+      "target_key": "authorlead:yin:2129a700c49cb9a9",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.imprinting",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 34,
+      "title": "DNA nanostructures-mediated molecular imprinting lithography",
+      "citation": "[34] C. Tian, H. Kim, W. Sun, Y. Kim, P. Yin, and H. Liu DNA nanostructures-mediated molecular imprinting lithography ACS Nano 2017, 11 (1), pp 227-238. [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acsnano.6b04777",
+        "https://yin.hms.harvard.edu/publications/2017.imprinting.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.imprinting.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 79436,
+      "target_key": "authorlead:yin:cd84e4261f1d881f",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2016.dmi",
+      "occurrence": 1,
+      "listed_year": 2016,
+      "number": 33,
+      "title": "Optical imaging of individual biomolecules in densely packed clusters",
+      "citation": "[33] M. Dai, R. Jungmann and P. Yin Optical imaging of individual biomolecules in densely packed clusters Nature Nanotechnology , 11, 798-807 (2016), doi: 10.1038/nnano.2016.95, PMID: 27376244 [ PDF ] [Supplementary Information: S1 , Supplementary Table: S2 ]",
+      "links": [
+        "http://www.nature.com/nnano/journal/v11/n9/full/nnano.2016.95.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/27376244",
+        "https://yin.hms.harvard.edu/publications/2016.dmi.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.dmi.s1.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.dmi.s2.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nnano.2016.95"
+      ],
+      "source_offset": 80017,
+      "target_key": "10.1038/nnano.2016.95",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2016.qPAINT",
+      "occurrence": 1,
+      "listed_year": 2016,
+      "number": 32,
+      "title": "Quantitative super-resolution imaging with qPAINT",
+      "citation": "[32] R. Jungmann \u2020 , M. S. Avendano \u2020 , M. Dai, J. B. Woehrstein, S. S. Agasti, Z. Feiger, A. Rodal and P. Yin Quantitative super-resolution imaging with qPAINT Nature Methods , 13, 439-442 (2016), doi: 10.1038/nmeth.3804, PMID: 27018580 [ PDF ] [Supplementary Materials: S1 , Supplementary Videos: V1 , V2 ]",
+      "links": [
+        "http://www.nature.com/nmeth/journal/vaop/ncurrent/full/nmeth.3804.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/27018580",
+        "https://yin.hms.harvard.edu/publications/2016.qPAINT.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.qPAINT.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.qPAINT.sup.vid1.mp4",
+        "https://yin.hms.harvard.edu/publications/2016.qPAINT.sup.vid2.mp4"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nmeth.3804"
+      ],
+      "source_offset": 85585,
+      "target_key": "10.1038/nmeth.3804",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2016.bacteria",
+      "occurrence": 1,
+      "listed_year": 2016,
+      "number": 31,
+      "title": "Genetic encoding of DNA nanostructures and their self-assembly in living bacteria",
+      "citation": "[31] J. Elbaz, P. Yin, and C. Voigt Genetic encoding of DNA nanostructures and their self-assembly in living bacteria Nature Communications , 7, Article number: 11179 doi: 10.1038/ncomms11179, PMID: 27091073 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/ncomms/2016/160419/ncomms11179/full/ncomms11179.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/27091073",
+        "https://yin.hms.harvard.edu/publications/2016.bacteria.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.bacteria.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/ncomms11179"
+      ],
+      "source_offset": 88133,
+      "target_key": "10.1038/ncomms11179",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2016.carbonization",
+      "occurrence": 1,
+      "listed_year": 2016,
+      "number": 30,
+      "title": "Programmably-shaped carbon nanostructure from shape-conserving carbonization of DNA",
+      "citation": "[30] F. Zhou, W. Sun, K. B. Ricardo, D. Wang, J. Shen, P. Yin, and H. Liu Programmably-shaped carbon nanostructure from shape-conserving carbonization of DNA ACS Nano , 2016, 10 (3), pp 3069-3077, DOI: 10.1021/acsnano.5b05159. [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acsnano.5b05159?journalCode=ancac3",
+        "https://yin.hms.harvard.edu/publications/2016.carbonization.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.carbonization.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.5b05159"
+      ],
+      "source_offset": 88750,
+      "target_key": "10.1021/acsnano.5b05159",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.polymer",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 29,
+      "title": "Routing of individual polymers in designed patterns",
+      "citation": "[29] J. B. Knudsen, L. Liu, A. L. B. Kodal, M. Madsen, Q. Li, J. Song, J. B. Woehrstein, S. F. Wickham, M. T. Strauss, F. Schueder, J. Vinther, A. Krissanaprasit, D. Gudnason, A. A. A. Smith, R. Ogaki, A. N. Zelikin, F. Besenbacher, V. Birkedal, P. Yin, W. M. Shih, R. Jungmann, M. Dong and K. V. Gothelf Routing of individual polymers in designed patterns Nature Nanotechnology 10, 892-898 (2015). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/nnano/journal/vaop/ncurrent/full/nnano.2015.190.html",
+        "https://yin.hms.harvard.edu/publications/2015.polymer.pdf",
+        "https://yin.hms.harvard.edu/publications/2015.polymer.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 89427,
+      "target_key": "authorlead:yin:08ada918f0be7c68",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.compact",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 28,
+      "title": "A compact DNA cube with side length 10 nm",
+      "citation": "[28] M. B. Scheible, L. L. Ong, J. B. Woehrstein, R. Jungmann, P. Yin and F. C. Simmel A compact DNA cube with side length 10 nm Small 11: 5200-5205 (2015). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/smll.201501370/abstract",
+        "https://yin.hms.harvard.edu/publications/2015.compact.pdf",
+        "https://yin.hms.harvard.edu/publications/2015.compact.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 90159,
+      "target_key": "authorlead:yin:b5e46c37eb16d55b",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.dynamic",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 27,
+      "title": "DyNAMiC Workbench: an integrated development environment for dynamic DNA nanotechnology",
+      "citation": "[27] C. Grun, J. Werfel, D. Y. Zhang, and P. Yin DyNAMiC Workbench: an integrated development environment for dynamic DNA nanotechnology J. R. Soc. Interface 12: 20150580 (2015). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://rsif.royalsocietypublishing.org/content/12/111/20150580",
+        "https://yin.hms.harvard.edu/publications/2015.dynamic.pdf",
+        "https://yin.hms.harvard.edu/publications/2015.dynamic.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 90642,
+      "target_key": "authorlead:yin:bae795961d7a49c2",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.oligopaint",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 26,
+      "title": "Single-molecule super-resolution imaging of chromosomes and in situ haplotype visualization using Oligopaint FISH probes",
+      "citation": "[26] B. J. Beliveau, A. N. Boettiger, M. S. Avendano, R. Jungmann, R. B. McCole, E. F. Joyce, C. Kim-Kiselak, F. Bantignies, C. Y. Fonseka, J. Erceg, M. A. Hannan, H. G. Hoang, D. Colognori, J. T. Lee, W. M. Shih, P. Yin, X. Zhuang & C. Wu Single-molecule super-resolution imaging of chromosomes and in situ haplotype visualization using Oligopaint FISH probes Nature Communications 6, 7147 (2015). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/ncomms/2015/150512/ncomms8147/full/ncomms8147.html",
+        "https://yin.hms.harvard.edu/publications/2015.oligopaint.pdf",
+        "https://yin.hms.harvard.edu/publications/2015.oligopaint.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 91143,
+      "target_key": "authorlead:yin:bac9dc65c98d1b38",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.SST.jove",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 25,
+      "title": "Self-assembly of complex two-dimensional shapes from single-stranded DNA tiles",
+      "citation": "[25] B. Wei, M. K. Vhudzijena, J. Robaszewski, P. Yin Self-assembly of complex two-dimensional shapes from single-stranded DNA tiles J. Vis. Exp. 99, e52486, doi: 10.3791/52486, PMID: 25993048 (2015). [ link ] [ Materials List ]",
+      "links": [
+        "http://www.jove.com/video/52486/self-assembly-complex-two-dimensional-shapes-from-single-stranded-dna",
+        "https://www.ncbi.nlm.nih.gov/pubmed/25993048",
+        "http://www.jove.com/video/52486/self-assembly-complex-two-dimensional-shapes-from-single-stranded-dna",
+        "https://yin.hms.harvard.edu/publications/2015.SST.jove.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.3791/52486"
+      ],
+      "source_offset": 91894,
+      "target_key": "10.3791/52486",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.casting",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 24,
+      "title": "Casting inorganic structures with DNA molds",
+      "citation": "[24] W. Sun, E. Boulais, Y. Hakobyan, W. Wang, A. Guan, M. Bathe * ,\u0003 P. Yin * Casting inorganic structures with DNA molds Science 346:1258361 (2014). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.sciencemag.org/content/early/2014/10/08/science.1258361.short",
+        "https://yin.hms.harvard.edu/publications/2014.casting.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.casting.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 92722,
+      "target_key": "authorlead:yin:64df80d7056763f2",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.tswitch2",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 23,
+      "title": "Paper-based synthetic gene networks",
+      "citation": "[23] K. Pardee, A.A. Green, T. Ferrante, E. Cameron, A. DaleyKeyser, P. Yin, and J.J. Collins Paper-based synthetic gene networks Cell 159:940-954 (2014). [ PDF ], [Supplementary Materials: S1 , Supplementary Data: S1 , S2 ]",
+      "links": [
+        "http://www.cell.com/cell/abstract/S0092-8674(14)01291-4",
+        "https://yin.hms.harvard.edu/publications/2014.paper.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch2.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch2.data.s1.zip",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch2.data.s2.xlsx"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 94609,
+      "target_key": "authorlead:yin:6415d57cbdf491b3",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.tswitch1",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 22,
+      "title": "Toehold switches: de-novo-designed regulators of gene expression",
+      "citation": "[22] A.A. Green, P.A. Silver, J.J. Collins, P. Yin Toehold switches: de-novo-designed regulators of gene expression Cell 159: 925-939 (2014). [ PDF ], [Supplementary Materials: S1 , S2 , Supplementary Tables: S1 , S2 , S3 , S4 , S5 , S6 , S7 ]",
+      "links": [
+        "http://www.cell.com/cell/abstract/S0092-8674(14)01289-6",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.sup2.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s1.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s2.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s3.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s4.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s5.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s6.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s7.xlsx"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 95242,
+      "target_key": "authorlead:yin:855e3cc3ded789d8",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.crystal",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 21,
+      "title": "DNA brick crystals with prescribed depths",
+      "citation": "[21] Y. Ke \u2020 , L.L. Ong \u2020 , W. Sun \u2020 , J. Song, M. Dong, W.M. Shih, P. Yin DNA brick crystals with prescribed depths Nature Chemistry 6:994-1002 (2014). [ PDF ], [Supplementary Materials: S1 , S2 , S3 ]",
+      "links": [
+        "http://www.nature.com/nchem/journal/vaop/ncurrent/full/nchem.2083.html",
+        "https://yin.hms.harvard.edu/publications/2014.crystals.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.crystals.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.crystals.sup2.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.crystals.sup3.xls"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 101066,
+      "target_key": "authorlead:yin:b0205a01981bb18a",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.graphene-protocol",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 20,
+      "title": "Nanolithography based on metalized DNA templates for graphene patterning",
+      "citation": "[20] Z. Jin, W. Sun, P. Yin, M. Strano Nanolithography based on metalized DNA templates for graphene patterning Current Protocols in Chemical Biology 6:53-64 (2014).",
+      "links": [],
+      "explicit_doi_candidates": [],
+      "source_offset": 103364,
+      "target_key": "authorlead:yin:fa0cb31557685fb7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.carving",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 19,
+      "title": "Complex reconfiguration of DNA nanostructures",
+      "citation": "[19] B. Wei, L.L. Ong, J. Chen, A. Jaffe, P. Yin Complex reconfiguration of DNA nanostructures Angewandte Chemie 126:7605-7609 (2014). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://yin.hms.harvard.edu/publications/2014.carving.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.carving.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 103673,
+      "target_key": "authorlead:yin:c8f20b7549629a46",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.polyhedra",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 18,
+      "title": "Polyhedra self-assembled from DNA tripods and characterized with 3D DNA-PAINT",
+      "citation": "[18] R. Iinuma \u2020 , Y. Ke \u2020 , R. Jungmann \u2020 , T. Schlichthaerle, J.B. Woehrstein, P. Yin Polyhedra self-assembled from DNA tripods and characterized with 3D DNA-PAINT Science 344:65-69 (2014). [ PDF ] [ Supplementary Materials ] [ Movie 1 ] [ Movie 2 ]",
+      "links": [
+        "http://www.sciencemag.org/content/early/2014/03/12/science.1250944",
+        "https://yin.hms.harvard.edu/publications/2014.cage.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.cage.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.cage.movie1.mp4",
+        "https://yin.hms.harvard.edu/publications/2014.cage.movie2.mp4"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 104067,
+      "target_key": "authorlead:yin:3dbef58b670b4c2e",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.tet",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 17,
+      "title": "Developmental self-assembly of a DNA tetrahedron",
+      "citation": "[17] J. Sadowski, C.R. Calvert, D.Y. Zhang, N.A. Pierce, P. Yin Developmental self-assembly of a DNA tetrahedron ACS Nano DOI: 10.1021/nn4038223, PMID: 24720462 (2014). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/nn4038223",
+        "https://www.ncbi.nlm.nih.gov/pubmed/24720462",
+        "https://yin.hms.harvard.edu/publications/2014.tet.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tet.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/nn4038223"
+      ],
+      "source_offset": 108184,
+      "target_key": "10.1021/nn4038223",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.wgm",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 16,
+      "title": "Ultraspecific and highly sensitive nucleic acid detection by integrating a DNA catalytic network with a label-free microcavity",
+      "citation": "[16] J. Wu, D. Zhang, P. Yin, F. Vollmer Ultraspecific and highly sensitive nucleic acid detection by integrating a DNA catalytic network with a label-free microcavity Small DOI: 10.1002/smll.201303558, PMID: 24585636 (2014).[ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/smll.201303558/full",
+        "https://www.ncbi.nlm.nih.gov/pubmed/24585636",
+        "https://yin.hms.harvard.edu/publications/2014.wgm.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.wgm.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/smll.201303558"
+      ],
+      "source_offset": 108720,
+      "target_key": "10.1002/smll.201303558",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.epaint",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 15,
+      "title": "Multiplexed 3D cellular super-resolution imaging with DNA-PAINT and Exchange-PAINT",
+      "citation": "[15] R. Jungmann \u2020 , M.S. Avendano \u2020 , J.B. Woehrstein \u2020 , M. Dai, W.M. Shih, P. Yin Multiplexed 3D cellular super-resolution imaging with DNA-PAINT and Exchange-PAINT Nature Methods 11(3):313-318 (2014). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/nmeth/journal/vaop/ncurrent/full/nmeth.2835.html",
+        "https://yin.hms.harvard.edu/publications/2014.dpep.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.dpep.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 109329,
+      "target_key": "authorlead:yin:f5aabf047a03d260",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.motifs",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 14,
+      "title": "Design space for complex DNA structures",
+      "citation": "[14] B. Wei, M. Dai, C. Myhrvold, Y. Ke, R. Jungmann, P. Yin Design space for complex DNA structures J. Am. Chem. Soc. 135 (48):18080-8 (2013). [ PDF ], [Supplementary Materials: S1 , S2 ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/ja4062294",
+        "https://yin.hms.harvard.edu/publications/2013.motif.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.motif.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.motif.sup2.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 113973,
+      "target_key": "authorlead:yin:d6857f84e7fea451",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.dicers",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 13,
+      "title": "Conditional Dicer substrate formation via shape and sequence transduction with small conditional RNAs",
+      "citation": "[13] L. Hochrein, M. Schwarzkopf, M. Shahgholi, P. Yin, N. Pierce Conditional Dicer substrate formation via shape and sequence transduction with small conditional RNAs J. Am. Chem. Soc. 135 (46):17322-30, (2013). [ PDF ], [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/ja404676x",
+        "https://yin.hms.harvard.edu/publications/2013.rnai.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.rnai.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 114484,
+      "target_key": "authorlead:yin:85ef7895ef6b30c7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.gel.bricks",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 12,
+      "title": "DNA-directed self-assembly of shape-controlled hydrogels",
+      "citation": "[12] H. Qi, M. Ghodousi, Y. Du, C. Grun, H. Bae, P. Yin * , A. Khademhosseini * . DNA-directed self-assembly of shape-controlled hydrogels Nature Communications 4, 2275 (2013). [ PDF ], [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/ncomms/2013/130909/ncomms3275/full/ncomms3275.html",
+        "https://yin.hms.harvard.edu/publications/2013.dnagel.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.dnagel.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 115001,
+      "target_key": "authorlead:yin:0b193556525b3be7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.isoSST",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 11,
+      "title": "Isothermal self-assembly of complex DNA structures under diverse and biocompatible conditions",
+      "citation": "[11] C. Myhrvold, M. Dai, P.A. Silver, P. Yin. Isothermal self-assembly of complex DNA structures under diverse and biocompatible conditions Nano Letters 13(9): 4242-8 (2013). [ PDF ], [Supplementary Materials: S1 , S2 ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/nl4019512",
+        "https://yin.hms.harvard.edu/publications/2013.isosst.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.isosst.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.isosst.sup2.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 117136,
+      "target_key": "authorlead:yin:6ea4f2d7d0bacfe0",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.nnano.nv",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 10,
+      "title": "Molecular computing: In situ computation of cell identity",
+      "citation": "[10] T.E. Schaus, P. Yin. Molecular computing: In situ computation of cell identity (News and Views) Nature Nanotechnolgy 155, 546-8 (2013). [ PDF ]",
+      "links": [
+        "http://www.nature.com/nnano/journal/v8/n8/full/nnano.2013.155.html",
+        "https://yin.hms.harvard.edu/publications/2013.computing.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 117784,
+      "target_key": "authorlead:yin:67955c6d46dc9807",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.coating",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 9,
+      "title": "Nanoscale growth and patterning of inorganic oxides using DNA nanostructure templates",
+      "citation": "[9] S. Surwade, F. Zhou, B. Wei, W. Sun, A. Powell, C. O'Donnell, P. Yin * , H. Liu * Nanoscale growth and patterning of inorganic oxides using DNA nanostructure templates J. Am. Chem. Soc. 135, 6778-6781 (2013). [ PDF ] [ Supporting Material ]",
+      "links": [
+        "http://pubs.acs.org/doi/full/10.1021/ja401785h",
+        "https://yin.hms.harvard.edu/publications/2013.coating.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.coating.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 118323,
+      "target_key": "authorlead:yin:eccadf6f2e1a1f51",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.etching",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 8,
+      "title": "Metalized DNA nanolithography for encoding and transferring spatial information for graphene patterning",
+      "citation": "[8] Z. Jin, W. Sun, Y. Ke, C.-J. Shih, G. L.C. Paulus, Q. H. Wang, B. Mu, P. Yin * , M. S. Strano * Metalized DNA nanolithography for encoding and transferring spatial information for graphene patterning Nature Communications 4, 1663 (2013). [ PDF ] [ Supporting Material ]",
+      "links": [
+        "http://www.nature.com/ncomms/journal/v4/n4/full/ncomms2690.html",
+        "https://yin.hms.harvard.edu/publications/2013.graphene.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.graphene.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 118965,
+      "target_key": "authorlead:yin:671f60912a56caf7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.nubot",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 7,
+      "title": "Active self-assembly of algorithmic shapes and patterns in polylogarithmic time",
+      "citation": "[7] D. Woods, H.L. Chen, S. Goodfriend, N. Dabby, E. Winfree, P. Yin Active self-assembly of algorithmic shapes and patterns in polylogarithmic time Proceedings of the 4th conference on Innovations in Theoretical Computer Science (ITCS) 353-354 (2013). [ PDF ]. Full article preprint on arXiv arXiv:1301.2626v1. [ PDF ]",
+      "links": [
+        "http://dl.acm.org/citation.cfm?doid=2422436.2422476",
+        "https://yin.hms.harvard.edu/publications/2013.nubots.itcs.pdf",
+        "http://arxiv.org/abs/1301.2626",
+        "https://yin.hms.harvard.edu/publications/2013.nubots.axiv.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 120711,
+      "target_key": "authorlead:yin:6190df68c81dfeb6",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2012.bricks",
+      "occurrence": 1,
+      "listed_year": 2012,
+      "number": 6,
+      "title": "Three-dimensional structures self-assembled from DNA bricks",
+      "citation": "[6] Y. Ke, L. Ong, W. Shih, P. Yin Three-dimensional structures self-assembled from DNA bricks Science 338, 1177-1183 (2012). [ PDF ] [ Supporting Material ]",
+      "links": [
+        "http://www.sciencemag.org/content/338/6111/1177.short",
+        "https://yin.hms.harvard.edu/publications/2012.bricks.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.bricks.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 121612,
+      "target_key": "authorlead:yin:6b54ede7ed5656ac",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2012.barcodes",
+      "occurrence": 1,
+      "listed_year": 2012,
+      "number": 5,
+      "title": "Sub-micrometer geometrically encoded fluorescent barcodes self-assembled from DNA",
+      "citation": "[5] C. Lin, R. Jungmann, A.M. Leifer, C. Li, D. Levner, G.M. Church, W. Shih * , P. Yin * Sub-micrometer geometrically encoded fluorescent barcodes self-assembled from DNA Nature Chemistry 4, 832-839 (2012). [ PDF ] [ Supporting Material ]",
+      "links": [
+        "http://www.nature.com/nchem/journal/v4/n10/full/nchem.1451.html",
+        "https://yin.hms.harvard.edu/publications/2012.barcodes.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.barcodes.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 127170,
+      "target_key": "authorlead:yin:8f68ca11025311d4",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2012.sst",
+      "occurrence": 1,
+      "listed_year": 2012,
+      "number": 4,
+      "title": "Complex shapes self-assembled from single-stranded DNA tiles",
+      "citation": "[4] B. Wei, M. Dai and P. Yin Complex shapes self-assembled from single-stranded DNA tiles Nature 485, 623-626 (2012). [ PDF ] [Supporting material: S1-5 , S6 , S7 , S8 ]",
+      "links": [
+        "http://www.nature.com/nature/journal/v485/n7400/full/nature11075.html",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.supl.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.supl.s6.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.supl.s7.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.supl.s8.xls"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 129047,
+      "target_key": "authorlead:yin:398bff3220248214",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2012.probes",
+      "occurrence": 1,
+      "listed_year": 2012,
+      "number": 3,
+      "title": "Optimizing the specificity of nucleic acid hybridization",
+      "citation": "[3] D.Y. Zhang, S.X. Chen, and P. Yin Optimizing the specificity of nucleic acid hybridization Nature Chemistry 4, 208-14 (2012). [ PDF ] [ Supporting material ]",
+      "links": [
+        "http://www.nature.com/nchem/journal/v4/n3/abs/nchem.1246.html",
+        "https://yin.hms.harvard.edu/publications/2012.specificity.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.specificity.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 133746,
+      "target_key": "authorlead:yin:77ab67dd7f8f6438",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2008.tubes",
+      "occurrence": 1,
+      "listed_year": 2008,
+      "number": 2,
+      "title": "Programming DNA tube circumferences",
+      "citation": "[2] P. Yin, R.F. Hariadi, S. Sahu, H.M.T. Choi, S.H. Park, T.H. LaBean, J.H. Reif Programming DNA tube circumferences Science 321, 824-826 (2008). [ PDF ] [ Supporting material ]",
+      "links": [
+        "http://www.sciencemag.org/content/321/5890/824.short",
+        "https://yin.hms.harvard.edu/publications/2008.tube.pdf",
+        "https://yin.hms.harvard.edu/publications/2008.tube.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 134690,
+      "target_key": "authorlead:yin:b713cea21022ee0e",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2008.pathways",
+      "occurrence": 1,
+      "listed_year": 2008,
+      "number": 1,
+      "title": "Programming biomolecular self-assembly pathways",
+      "citation": "[1] P. Yin, H.M.T. Choi, C.R. Calvert, N.A. Pierce Programming biomolecular self-assembly pathways Nature 451, 318-322 (2008). [ PDF ] [ Supporting material ]",
+      "links": [
+        "http://www.nature.com/nature/journal/v451/n7176/full/nature06451.html",
+        "https://yin.hms.harvard.edu/publications/2008.pathway.pdf",
+        "https://yin.hms.harvard.edu/publications/2008.pathway.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 135507,
+      "target_key": "authorlead:yin:86cc398b2c3620b4",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    }
+  ],
+  "all_anchor_inventory": [
+    {
+      "anchor": "2025.cryosection",
+      "occurrence": 1,
+      "listed_year": 2025,
+      "number": 96,
+      "title": "Cryosectioning-enhanced super-resolution microscopy for single-protein imaging across cells and tissues.",
+      "citation": "[96] Johannes Stein*, Maria Ericsson, Michel Nofal, Lorenzo Magni, Sarah Aufmkolk, Ryan B McMillan, Laura Breimann, Conor P Herlihy, S Dean Lee, Andr\u00e9a Willemin, Jens Wohlmann, Laura Arguedas-Jimenez, Peng Yin, Ana Pombo, George M Church*, Chao-ting Wu* Cryosectioning-enhanced super-resolution microscopy for single-protein imaging across cells and tissues. PNAS (2025), Published: August 7 2025 DOI: 10.1073/pnas.2504578122, [ PDF ]",
+      "links": [
+        "https://www.pnas.org/doi/10.1073/pnas.2504578122",
+        "https://yin.hms.harvard.edu/publications/2025.cryosection.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1073/pnas.2504578122"
+      ],
+      "source_offset": 4689
+    },
+    {
+      "anchor": "2025.embed",
+      "occurrence": 1,
+      "listed_year": 2025,
+      "number": 95,
+      "title": "Generative Distribution Embeddings.",
+      "citation": "[95] Nic Fishman*, Gokul Gowri*, Peng Yin, Jonathan Gootenberg \u2020 , Omar Abudayyeh \u2020 Generative Distribution Embeddings. arXiv (2025), Published: May 23 2025 DOI: arXiv.2505.18150, [ PDF ] Accepted for NIPS '25: Proceedings of the 39th International Conference on Neural Information Processing Systems .",
+      "links": [
+        "https://arxiv.org/abs/2505.18150",
+        "https://yin.hms.harvard.edu/publications/2025.embed.pdf",
+        "https://neurips.cc/virtual/2025/poster/119134"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 5371
+    },
+    {
+      "anchor": "2025.NeurIPS",
+      "occurrence": 1,
+      "listed_year": 2025,
+      "number": 94,
+      "title": "Approximating mutual information of high-dimensional variables using learned representations.",
+      "citation": "[94] Gokul Gowri, Xiaokang Lun, Allon M Klein*, Peng Yin* Approximating mutual information of high-dimensional variables using learned representations. NIPS '24: Proceedings of the 38th International Conference on Neural Information Processing Systems 4223, 132843-132875 (2025), Published: June 5 2025 DOI: 10.5555/3737916.3742139, [ PDF ]",
+      "links": [
+        "https://dl.acm.org/doi/10.5555/3737916.3742139",
+        "https://yin.hms.harvard.edu/publications/2025.NeurIPS.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.5555/3737916.3742139"
+      ],
+      "source_offset": 6052
+    },
+    {
+      "anchor": "2025.spectral3d",
+      "occurrence": 1,
+      "listed_year": 2025,
+      "number": 93,
+      "title": "A parallelly distributed microscope and software system for scalable high-throughput multispectral 3D imaging.",
+      "citation": "[93] Hehai Jiang*, Logan A Walker*, Ye Li*, Bin Duan, Xiaoman Niu, Jung-Chien Hsieh, Mou-Chi Cheng, Hanquan Su, Kuanwei Sheng, Jessica P Tang, Kenneth Athukorala, Stacey Greene, Ruby Pan, Arya Parlapalli, Peng Yin, Meng Cui # , Dawen Cai # A parallelly distributed microscope and software system for scalable high-throughput multispectral 3D imaging. bioRxiv (2025), Published: June 3 2025 DOI: 10.1101/2025.05.31.657163, [ PDF ]",
+      "links": [
+        "https://www.biorxiv.org/content/10.1101/2025.05.31.657163v1.abstract",
+        "https://yin.hms.harvard.edu/publications/2025.spectral3d.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1101/2025.05.31.657163"
+      ],
+      "source_offset": 6622
+    },
+    {
+      "anchor": "2025.cellrep",
+      "occurrence": 1,
+      "listed_year": 2025,
+      "number": 92,
+      "title": "Measurement noise scaling laws for cellular representation learning.",
+      "citation": "[92] Gokul Gowri, Peng Yin, Allon M Klein Measurement noise scaling laws for cellular representation learning. arXiv (2025), Published: March 3 2025 DOI: 10.48550/arXiv.2503.02726, [ PDF ]",
+      "links": [
+        "https://arxiv.org/abs/2503.02726",
+        "https://yin.hms.harvard.edu/publications/2025.cellrep.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.48550/arxiv.2503.02726"
+      ],
+      "source_offset": 7328
+    },
+    {
+      "anchor": "2024.accurate-rna",
+      "occurrence": 1,
+      "listed_year": 2024,
+      "number": 91,
+      "title": "Accurate RNA 3D structure prediction using a language model-based deep learning approach.",
+      "citation": "[91] Shen T*, Hu Z*, Sun S*, Liu D*, Wong F, Wang J, Chen J, Wang Y, Hong L, Xiao J, Zheng L, Krishnamoorthi T, King I, Wang S*, Yin P*, Collins JJ*, Li Y* Accurate RNA 3D structure prediction using a language model-based deep learning approach. Nature Methods (2024), Published: 21 November 2024 DOI: 10.1038/s41592-024-02487-0, [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-024-02487-0",
+        "https://yin.hms.harvard.edu/publications/2024.accurate-rna.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-024-02487-0"
+      ],
+      "source_offset": 7947
+    },
+    {
+      "anchor": "2024.single-shot",
+      "occurrence": 1,
+      "listed_year": 2024,
+      "number": 90,
+      "title": "Single-shot 20-fold expansion microscopy.",
+      "citation": "[90] Wang S, Shin TW, Yoder HB 2nd, McMillan RB, Su H, Liu Y, Zhang C, Leung KS, Yin P, Kiessling LL*, Boyden ES* Single-shot 20-fold expansion microscopy. Nature Methods (2024), Published: 11 October 2024 DOI: 10.1038/s41592-024-02454-9, [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-024-02454-9",
+        "https://yin.hms.harvard.edu/publications/2024.single-shot.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-024-02454-9"
+      ],
+      "source_offset": 8529
+    },
+    {
+      "anchor": "2024.dna-barcodes",
+      "occurrence": 1,
+      "listed_year": 2024,
+      "number": 89,
+      "title": "Multiplexed in situ protein imaging using DNA-barcoded antibodies with extended hybridization chain reactions.",
+      "citation": "[89] Wang Y*, Liu X, Zeng Y, Saka SK, Xie W, Goldaracena I, Kohman RE, Yin P, Church GM* Multiplexed in situ protein imaging using DNA-barcoded antibodies with extended hybridization chain reactions. Nucleic Acids Research (2024), Published: 22 August 2024 DOI: 10.1093/nar/gkae592, [ PDF ]",
+      "links": [
+        "https://academic.oup.com/nar/article/52/15/e71/7706473",
+        "https://yin.hms.harvard.edu/publications/2024.dna-barcodes.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1093/nar/gkae592"
+      ],
+      "source_offset": 9018
+    },
+    {
+      "anchor": "2024.sig-amp",
+      "occurrence": 1,
+      "listed_year": 2024,
+      "number": 88,
+      "title": "Signal amplification by cyclic extension enables high-sensitivity single-cell mass cytometry.",
+      "citation": "[88] Lun XK, Sheng K, Yu X, Lam CY, Gowri G, Serrata M, Zhai Y, Su H, Luan J, Kim Y, Ingber DE, Jackson HW, Yaffe MB, Yin P* Signal amplification by cyclic extension enables high-sensitivity single-cell mass cytometry. Nature Biotechnology (2024), Published: 29 July 2024 DOI: 10.1038/s41587-024-02316-x, [ PDF ] See media coverage: Wyss Press Release See an illustration:",
+      "links": [
+        "https://www.nature.com/articles/s41587-024-02316-x",
+        "https://yin.hms.harvard.edu/publications/2024.sig-amp.pdf",
+        "https://wyss.harvard.edu/news/ace-ing-protein-detection-in-single-cells/"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41587-024-02316-x"
+      ],
+      "source_offset": 9557
+    },
+    {
+      "anchor": "2024.rna-switches",
+      "occurrence": 1,
+      "listed_year": 2024,
+      "number": 87,
+      "title": "Rapid, Multiplexed, and Enzyme-Free Nucleic Acid Detection Using Programmable Aptamer-Based RNA Switches.",
+      "citation": "[87] Yan Z, Eshed A, Tang AA, Arevalos NR, Ticktin ZM, Chaudhary S, Ma D, McCutcheon G, Li Y, Wu K, Saha S, Alcantar-Fernandez J, Moreno-Camacho JL, Campos-Romero A, Collins JJ, Yin P, Green AA* Rapid, Multiplexed, and Enzyme-Free Nucleic Acid Detection Using Programmable Aptamer-Based RNA Switches. Chem (2024), Published: 11 July 2024 DOI: 10.1016/j.chempr.2024.03.015, [ PDF ]",
+      "links": [
+        "https://www.cell.com/chem/abstract/S2451-9294(24)00124-4?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS2451929424001244%3Fshowall%3Dtrue",
+        "https://yin.hms.harvard.edu/publications/2024.rna-switches.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1016/j.chempr.2024.03.015"
+      ],
+      "source_offset": 10443
+    },
+    {
+      "anchor": "2024.dna-lib",
+      "occurrence": 1,
+      "listed_year": 2024,
+      "number": 86,
+      "title": "Scalable design of orthogonal DNA barcode libraries.",
+      "citation": "[86] Gowri G*, Sheng K, Yin P* Scalable design of orthogonal DNA barcode libraries. Nature Computational Science (2024), Published: 7 June 2024 DOI: 10.1038/s43588-024-00646-z, [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s43588-024-00646-z",
+        "https://yin.hms.harvard.edu/publications/2024.dna-lib.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s43588-024-00646-z"
+      ],
+      "source_offset": 11177
+    },
+    {
+      "anchor": "2024.robots",
+      "occurrence": 1,
+      "listed_year": 2024,
+      "number": 85,
+      "title": "Molecular robotic agents that survey molecular landscapes for information retrieval.",
+      "citation": "[85] Woo S, Saka SK, Xuan F, Yin P Molecular robotic agents that survey molecular landscapes for information retrieval. Nature Communications (2024), Published: 17 April 2024 DOI: 10.1038/s41467-024-46978-2, [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s41467-024-46978-2",
+        "https://yin.hms.harvard.edu/publications/2024.robots.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41467-024-46978-2"
+      ],
+      "source_offset": 11596
+    },
+    {
+      "anchor": "2023.thermal-plex",
+      "occurrence": 1,
+      "listed_year": 2023,
+      "number": 84,
+      "title": "Thermal-plex: fluidic-free, rapid sequential multiplexed imaging with DNA-encoded thermal channels",
+      "citation": "[84] F. Hong, J. Y. Kishi, R. N. Delgado, J. Jeong, S. K. Saka, H. Su, C. L. Cepko & P. Yin* Thermal-plex: fluidic-free, rapid sequential multiplexed imaging with DNA-encoded thermal channels Nature Methods 21, 331\u2013341 (2024), Published: 27 December 2023 DOI: 10.1038/s41592-023-02115-3, [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-023-02115-3",
+        "https://yin.hms.harvard.edu/publications/2023.tplex.pdf",
+        "https://yin.hms.harvard.edu/publications/2023.tplex.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-023-02115-3"
+      ],
+      "source_offset": 12259
+    },
+    {
+      "anchor": "2022.crisscross",
+      "occurrence": 1,
+      "listed_year": 2022,
+      "number": 83,
+      "title": "Multi-micron crisscross structures grown from DNA-origami slats",
+      "citation": "[83] C. M. Wintersinger, D. Minev, A. Ershova, H. M. Sasaki, G. Gowri, J. F. Berengut, F. E. Corea-Dilbert, P. Yin, W. M. Shih Multi-micron crisscross structures grown from DNA-origami slats Nature Nanotechnology (2022), Published: 21 December 2022 DOI: 10.1038/s41565-022-01283-1 [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s41565-022-01283-1",
+        "https://yin.hms.harvard.edu/publications/2022.crisscross.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41565-022-01283-1"
+      ],
+      "source_offset": 13077
+    },
+    {
+      "anchor": "2022.light-seq",
+      "occurrence": 1,
+      "listed_year": 2022,
+      "number": 82,
+      "title": "Light-Seq: Light-directed in situ barcoding of biomolecules in fixed cells and tissues for spatially indexed sequencing",
+      "citation": "[82] J. Y. Kishi \u2020 *, N. Liu \u2020 , E. R. West \u2020 , K. Sheng, J. J. Jordanides, M. Serrata, C. L. Cepko*, S. K. Saka* & P. Yin* Light-Seq: Light-directed in situ barcoding of biomolecules in fixed cells and tissues for spatially indexed sequencing Nature Methods 19, 1393-1402 (2022), Published: 10 October 2022 DOI: 10.1038/s41592-022-01604-1 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-022-01604-1",
+        "https://yin.hms.harvard.edu/publications/2022.light-seq.pdf",
+        "https://yin.hms.harvard.edu/publications/2022.light-seq.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-022-01604-1"
+      ],
+      "source_offset": 13605
+    },
+    {
+      "anchor": "2022.cdk2",
+      "occurrence": 1,
+      "listed_year": 2022,
+      "number": 81,
+      "title": "Concurrent inhibition of CDK2 adds to the anti-tumour activity of CDK4/6 inhibition in GIST",
+      "citation": "[81] I. M. Schaefer, M. L. Hemming, M. Z. Lundberg, M. P. Serrata, I. Goldaracena, N. Liu, P. Yin, J. A. Paulo, S. P. Gygi, S. George, J. A. Morgan, M. M. Bertagnolli, E. T. Sicinska, C. Chu, S. Zheng, A. Mari \u00f1 o-Enr \u00ed quez, J. L. Hornick, C.P. Raut, W. B. Ou, G. D. Demetri, S. K. Saka, J. A. Fletcher Concurrent inhibition of CDK2 adds to the anti-tumour activity of CDK4/6 inhibition in GIST British Journal of Cancer 127, 2072-2085 (2022), Published: 29 September 2022 DOI: 10.1038/s41416-022-01990-5 [ PDF ]",
+      "links": [
+        "https://www.nature.com/bjc/",
+        "https://yin.hms.harvard.edu/publications/2022.cdk2.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41416-022-01990-5"
+      ],
+      "source_offset": 14311
+    },
+    {
+      "anchor": "2022.decode-paint",
+      "occurrence": 1,
+      "listed_year": 2022,
+      "number": 80,
+      "title": "Quantitative multiplexed imaging of chromatin ultrastructure with Decode-PAINT",
+      "citation": "[80] Hiroshi M. Sasaki, Jocelyn Y. Kishi, Chao-ting Wu, Brian J. Beliveau*, Peng Yin* Quantitative multiplexed imaging of chromatin ultrastructure with Decode-PAINT bioRxiv 2022.08.01.502089, Published: 03 August 2022 DOI: 10.1101/2022.08.01.502089 [ PDF ]",
+      "links": [
+        "https://www.biorxiv.org/content/10.1101/2022.08.01.502089v2",
+        "https://yin.hms.harvard.edu/publications/2022.decode-paint.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1101/2022.08.01.502089"
+      ],
+      "source_offset": 15061
+    },
+    {
+      "anchor": "2021.rock",
+      "occurrence": 1,
+      "listed_year": 2021,
+      "number": 79,
+      "title": "Sub-3 \u00c5 cryo-EM structure of RNA enabled by engineered homomeric self-assembly",
+      "citation": "[79] D. Liu \u2020 , F. A. Th\u00e9lot \u2020 , J. A. Piccirilli, M. Liao* & P. Yin* Sub-3 \u00c5 cryo-EM structure of RNA enabled by engineered homomeric self-assembly Nature Methods 19, 576-585 (2022), Published: 02 May 2022 DOI: 10.1038/s41592-022-01455-w [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-022-01455-w",
+        "https://yin.hms.harvard.edu/publications/2022.rock.pdf",
+        "https://yin.hms.harvard.edu/publications/2022.rock.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-022-01455-w"
+      ],
+      "source_offset": 15569
+    },
+    {
+      "anchor": "2021.proteinsequence",
+      "occurrence": 1,
+      "listed_year": 2021,
+      "number": 78,
+      "title": "The emerging landscape of single-molecule protein sequencing technologies",
+      "citation": "[78] J. A. Alfaro* \u2020 , P. Bohl\u00e4nder \u2020 , M. Dai \u2020 , M. Filius \u2020 , C. J. Howard \u2020 , X. F. van Kooten \u2020 , S. Ohayon \u2020 , A. Pomorski \u2020 , S. Schmid \u2020 , A. Aksimentiev, E. V. Anslyn, G. Bedran, C. Cao, M. Chinappi, E. Coyaud, C. Dekker, G. Dittmar, N. Drachman, R. Eelkema, D. Goodlett, S. Hentz, U. Kalathiya, N. L. Kelleher, R. T. Kelly, Z. Kelman, S. Hyun Kim, B. Kuster, D. Rodriguez-Larrea, S. Lindsay, G. Maglia, E. M. Marcotte, J. P. Marino, C. Masselon, M. Mayer, P. Samaras, K. Sarthak, L. Sepiashvili, D. Stein, M. Wanunu, M. Wilhelm, P. Yin, A. Meller* & C. Joo* The emerging landscape of single-molecule protein sequencing technologies Nature Methods 18, 604-617 (2021), Published: 7 June 2021 DOI: 10.1038/s41592-021-01143-1 [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-021-01143-1",
+        "https://yin.hms.harvard.edu/publications/2021.proteinsequence.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-021-01143-1"
+      ],
+      "source_offset": 16373
+    },
+    {
+      "anchor": "2020.litho",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 77,
+      "title": "Three-dimensional nanolithography guided by DNA modular epitaxy",
+      "citation": "[77] J. Shen, W. Sun, D. Liu, T. Schaus and P. Yin* Three-dimensional nanolithography guided by DNA modular epitaxy Nature Materials 20, 683-690 (2021), Published: 10 April 2021 DOI:10.1038/s41563-021-00930-7 [ PDF ] [ Supplementary materials ]",
+      "links": [
+        "https://www.nature.com/articles/s41563-021-00930-7",
+        "https://yin.hms.harvard.edu/publications/2020.litho.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.litho.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41563-021-00930-7"
+      ],
+      "source_offset": 17501,
+      "target_key": "10.1038/s41563-021-00930-7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2021.science",
+      "occurrence": 1,
+      "listed_year": 2021,
+      "number": 76,
+      "title": "Anomalous COVID-19 tests hinder researchers",
+      "citation": "[76] L. R. Robinson-Mccarrthy, A. J. Mijalis, G. T. Filsinger, H. de Puig, N. M. Donghia, T. E. Schaus, R. A. Rasmussen, L. Raphael, J. E. Lunshof, G. Chao, D. Ter-Ovanesyan, O. Dodd, E. Kuru, A. M. Sesay, J. Rainbow, A. C. Pawlowski, T. M. Wannier, P. Yin, J. J. Collins, D. E. Ingber, G. M. Church & J. M. Tam Anomalous COVID-19 tests hinder researchers Science 371:6526, 244-245 (2021), Published: 15 January 2021 DOI: 10.1126/science.abf8873 [ PDF ]",
+      "links": [
+        "https://science.sciencemag.org/content/371/6526/244",
+        "https://yin.hms.harvard.edu/publications/2021.science.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1126/science.abf8873"
+      ],
+      "source_offset": 18017
+    },
+    {
+      "anchor": "2020.barrel",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 75,
+      "title": "Complex multicomponent patterns rendered on a 3D DNA-barrel pegboard",
+      "citation": "[75] S. F. J. Wickham, A. Auer, J. Min, N. Ponnuswamy, J. B. Woehrstein, F. Schueder, M. T. Strauss, J. Schnitzbauer, B. Nathwani, Z. Zhao, S. D. Perrault, J. Hahn, S. Lee, M. M. Bastings, S. W. Helmig, A. L. Kodal, P. Yin, R. Jungmann* & W. M. Shih* Complex multicomponent patterns rendered on a 3D DNA-barrel pegboard Nature Communications , 11, Article number: 5768 (2020) DOI: 10.1038/s41467-020-18910-x [ PDF ] [ Supplementary Information ] [ Supplementary Software ] [ Supplementary Data ] [ Supplementary Movies ] [ Reporting Summary ] [ Description of Supplementary Files ]",
+      "links": [
+        "https://www.nature.com/articles/s41467-020-18910-x",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.software.zip",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.data.zip",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.movies.zip",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.report.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.barrel.sup.desc.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41467-020-18910-x"
+      ],
+      "source_offset": 18881,
+      "target_key": "10.1038/s41467-020-18910-x",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2025.sars",
+      "occurrence": 1,
+      "listed_year": 2025,
+      "number": 75,
+      "title": "Single-strand RPA for rapid and sensitive detection of SARS-CoV-2 RNA",
+      "citation": "[75] Kim Y, Yaseen AB, Kishi JY, Hong F, Saka SK, Sheng K, Gopalkrishnan N, Schaus TE*, Yin P* Single-strand RPA for rapid and sensitive detection of SARS-CoV-2 RNA medRxiv , Published: 25 October 2020 DOI:10.1101/2020.08.17.20177006 [ PDF ]",
+      "links": [
+        "https://www.medrxiv.org/content/10.1101/2020.08.17.20177006v2",
+        "https://yin.hms.harvard.edu/publications/2025.sars.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1101/2020.08.17.20177006"
+      ],
+      "source_offset": 19998
+    },
+    {
+      "anchor": "2020.cnt",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 74,
+      "title": "Super-resolution spatial proximity detection with proximity-PAINT",
+      "citation": "[74] F. Schueder, J. Lara-Gutierrez, D. Haas, K. S. Beckwith, P. Yin, J. Ellenberg and R. Jungmann* Super-resolution spatial proximity detection with proximity-PAINT Angewandte Chemie , Published: 16 September 2020 DOI:10.1002/anie.202009031 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/anie.202009031",
+        "https://yin.hms.harvard.edu/publications/2020.pPAINT.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.pPAINT.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/anie.202009031"
+      ],
+      "source_offset": 20474,
+      "target_key": "10.1002/anie.202009031",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.nanoscope",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 73,
+      "title": "A DNA nanoscope that identifies and precisely localizes over a hundred unique molecular features with nanometer accuracy",
+      "citation": "[73] N. Gopalkrishnan, S. Punthambaker, T. E. Schaus, G. M. Church and P. Yin* A DNA nanoscope that identifies and precisely localizes over a hundred unique molecular features with nanometer accuracy bioRxiv , DOI: 10.1101/2020.08.27.271072. Posted August 28, 2020. [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.biorxiv.org/content/10.1101/2020.08.27.271072v1",
+        "https://yin.hms.harvard.edu/publications/2020.nanoscope.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.nanoscope.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1101/2020.08.27.271072"
+      ],
+      "source_offset": 21031,
+      "target_key": "10.1101/2020.08.27.271072",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.cnt",
+      "occurrence": 2,
+      "listed_year": 2020,
+      "number": 72,
+      "title": "Precise pitch-scaling of carbon nanotube arrays within three-dimensional DNA nanotrenches",
+      "citation": "[72] W. Sun* \u2020 , J. Shen \u2020 , Z. Zhao \u2020 , N. Arellano, C. Rettner, J. Tang, T. Cao, Z. Zhou, T. Ta, J. K. Streit, J. A. Fagan, T. Schaus, M. Zheng, S. Han, W. M. Shih, H. T. Maune and P. Yin* Precise pitch-scaling of carbon nanotube arrays within three-dimensional DNA nanotrenches Science , Vol. 368, Issue 6493, pp. 874-877 (2020) DOI: 10.1126/science.aaz7440 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://science.sciencemag.org/content/368/6493/874",
+        "https://yin.hms.harvard.edu/publications/2020.cnt.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.cnt.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1126/science.aaz7440"
+      ],
+      "source_offset": 21622,
+      "target_key": "10.1126/science.aaz7440",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.inspr",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 71,
+      "title": "Three-dimensional nanoscopy of whole cells and tissues with in situ point spread function retrieval",
+      "citation": "[71] F. Xu, D. Ma, K. P. MacPherson, S. Liu, Y. Bu, Y. Wang, Y. Tang, C. Bi, T. Kwok, A. A. Chubykin, P. Yin, S. Calve, G. E. Landreth and F. Huang Three-dimensional nanoscopy of whole cells and tissues with in situ point spread function retrieval Nature Methods , 17, pages531-540(2020) DOI: 10.1038/s41592-020-0816-x [ PDF ] [ Supplementary Information ] [ Supplementary Video1 ] [ Supplementary Video2 ] [ Supplementary Video3 ] [ Supplementary Video4 ] [ Supplementary Video5 ] [ Supplementary Video6 ] [ Supplementary Video7 ] [ Supplementary Video8 ] [ Supplementary Video9 ] [ Supplementary Software1 ] [ Supplementary Software2 ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-020-0816-x",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid1.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid2.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid3.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid4.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid5.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid6.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid7.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid8.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.vid9.mp4",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.sw1.zip",
+        "https://yin.hms.harvard.edu/publications/2020.inspr.sup.sw2.zip"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-020-0816-x"
+      ],
+      "source_offset": 22332,
+      "target_key": "10.1038/s41592-020-0816-x",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.freestanding",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 70,
+      "title": "3D freestanding DNA nanostructure hybrid as a low-density high-strength material",
+      "citation": "[70] F. Zhou, W. Sun, C. Zhang, J. Shen, P. Yin* and H. Liu* 3D freestanding DNA nanostructure hybrid as a low-density high-strength material ACS Nano , Publication Date: 1 May 2020 DOI: 10.1021/acsnano.0c00178 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsnano.0c00178",
+        "https://yin.hms.harvard.edu/publications/2020.freestanding.pdf",
+        "https://yin.hms.harvard.edu/publications/2020.freestanding.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.0c00178"
+      ],
+      "source_offset": 23782,
+      "target_key": "10.1021/acsnano.0c00178",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2020.axial",
+      "occurrence": 1,
+      "listed_year": 2020,
+      "number": 69,
+      "title": "Axial plane single-molecule super-resolution microscopy of whole cells",
+      "citation": "[69] S. An, K. F. Ziegler, P. Zhang, Y. Wang, T. Kwok, F. Xu, C. Bi, S. Matosevic, P. Yin, T. Li, and F. Huang Axial plane single-molecule super-resolution microscopy of whole cells Biomedical Optics Express , Vol. 11, Issue 1, pp. 461-479 (2020) DOI: 10.1364/BOE.377890 [ PDF ]",
+      "links": [
+        "https://www.osapublishing.org/boe/abstract.cfm?uri=boe-11-1-461",
+        "https://yin.hms.harvard.edu/publications/2020.axial.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1364/boe.377890"
+      ],
+      "source_offset": 24321,
+      "target_key": "10.1364/boe.377890",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.ssDNA",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 68,
+      "title": "Rapid in vitro production of single-stranded DNA",
+      "citation": "[68] D. Minev \u2020 , R. Guerra \u2020 , J. Y. Kishi \u2021 , C. Smith \u2021 , E. Krieg, K. Said, A. Hornick, H. M Sasaki, G. Filsinger, B. J. Beliveau, P. Yin, G. M. Church, W. M. Shih Rapid in vitro production of single-stranded DNA Nucleic Acids Research , gkz998, Published: 12 November 2019 DOI: 10.1093/nar/gkz998 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://academic.oup.com/nar/advance-article/doi/10.1093/nar/gkz998/5622713",
+        "https://yin.hms.harvard.edu/publications/2019.ssDNA.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.ssDNA.sup.zip"
+      ],
+      "explicit_doi_candidates": [
+        "10.1093/nar/gkz998"
+      ],
+      "source_offset": 24945,
+      "target_key": "10.1093/nar/gkz998",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.ribo",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 67,
+      "title": "De novo-designed translation-repressing riboregulators for multi-input cellular logic",
+      "citation": "[67] J. Kim \u2020 , Y. Zhou \u2020 , P. D. Carlson, M. Teichmann, S. Chaudhary, F. C. Simmel, P. A. Silver, J. J. Collins, J. B. Lucks, P. Yin* & A. A. Green* De novo-designed translation-repressing riboregulators for multi-input cellular logic Nature Chemical Biology , Published 04 November 2019 DOI: 10.1038/s41589-019-0388-1 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://www.nature.com/articles/s41589-019-0388-1",
+        "https://yin.hms.harvard.edu/publications/2019.ribo.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.ribo.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41589-019-0388-1"
+      ],
+      "source_offset": 25649,
+      "target_key": "10.1038/s41589-019-0388-1",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.biocompatible",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 66,
+      "title": "Enhancing biocompatible stability of DNA nanostructures using dendritic oligonucleotides and brick motifs",
+      "citation": "[66] Y. Kim & P. Yin Enhancing biocompatible stability of DNA nanostructures using dendritic oligonucleotides and brick motifs Angewandte Chemie , Accepted Articles, First published: 09 October 2019 DOI: 10.1002/anie.201911664 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/anie.201911664",
+        "https://yin.hms.harvard.edu/publications/2019.biocompatible.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.biocompatible.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/anie.201911664"
+      ],
+      "source_offset": 27656,
+      "target_key": "10.1002/anie.201911664",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.HuBMAP",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 65,
+      "title": "The human body at cellular resolution: the NIH Human Biomolecular Atlas Program",
+      "citation": "[65] HuBMAP Consortium The human body at cellular resolution: the NIH Human Biomolecular Atlas Program Nature , volume 574, pages 187-192 (2019) DOI: 10.1038/s41586-019-1629-x [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s41586-019-1629-x",
+        "https://yin.hms.harvard.edu/publications/2019.HuBMAP.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41586-019-1629-x"
+      ],
+      "source_offset": 28228,
+      "target_key": "10.1038/s41586-019-1629-x",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.nmethfeature",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 64,
+      "title": "Voices in methods development",
+      "citation": "[64] P. Anikeeva, E. Boyden, [...], P Yin, [...], X. Zhuang Voices in methods development Nature Methods , volume 16, pages 945-951 (2019) DOI: 10.1038/s41592-019-0585-6 [ PDF ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-019-0585-6",
+        "https://yin.hms.harvard.edu/publications/2019.nmethfeature.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-019-0585-6"
+      ],
+      "source_offset": 28641,
+      "target_key": "10.1038/s41592-019-0585-6",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.a!p",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 63,
+      "title": "Super-resolution labelling with Action-PAINT",
+      "citation": "[63] Ninning Liu \u2020 , Mingjie Dai \u2020,* , Sinem K. Saka & Peng Yin* Super-resolution labelling with Action-PAINT Nature Chemistry , Published: 16 September 2019. DOI: 10.1038/s41557-019-0325-7 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://www.nature.com/articles/s41557-019-0325-7",
+        "https://yin.hms.harvard.edu/publications/2019.a!p.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.a!p.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41557-019-0325-7"
+      ],
+      "source_offset": 29558,
+      "target_key": "10.1038/s41557-019-0325-7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.immuno-saber",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 62,
+      "title": "Immuno-SABER enables highly multiplexed and amplified protein imaging in tissues",
+      "citation": "[62] S. K. Saka \u2020,* , Y. Wang \u2020,* , J. Y. Kishi, A. Zhu, Y. Zeng, W. Xie, K. Kirli, C. Yapp, M. Cicconet, B. J. Beliveau, S. W. Lapan, S. Yin, M. Lin, E. S. Boyden, P. S. Kaeser, G. Pihan, G. M. Church, and P. Yin* Immuno-SABER enables highly multiplexed and amplified protein imaging in tissues Nature Biotechnology , published 19 August 2019. DOI: 10.1038/s41587-019-0207-y [ PDF ] [ Website: http://immuno-saber.net/ ] [ Supplementary Information ] [ Supplementary Protocols ]",
+      "links": [
+        "https://www.nature.com/articles/s41587-019-0207-y",
+        "https://yin.hms.harvard.edu/publications/2019.immuno-saber.pdf",
+        "http://immuno-saber.net/",
+        "https://yin.hms.harvard.edu/publications/2019.immuno-saber.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.immuno-saber.sup2.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41587-019-0207-y"
+      ],
+      "source_offset": 30884,
+      "target_key": "10.1038/s41587-019-0207-y",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.orbit",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 61,
+      "title": "Rotation tracking of genome-processing enzymes using DNA origami rotors",
+      "citation": "[61] P. Kosuri, B. D. Altheimer, M. Dai, P. Yin, X. Zhuang* Rotation tracking of genome-processing enzymes using DNA origami rotors Nature , published 17 July 2019. DOI: 10.1038/s41586-019-1397-7 [ PDF ] [ Supplementary Information ] [ Reporting Summary ] [ Supplementary Table1 ] [ Supplementary Table2 ] [ Supplementary Video1 ] [ Supplementary Video2 ]",
+      "links": [
+        "https://www.nature.com/articles/s41586-019-1397-7",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.sum.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.data1.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.data2.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.video1.mov",
+        "https://yin.hms.harvard.edu/publications/2019.orbit.sup.video2.mov"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41586-019-1397-7"
+      ],
+      "source_offset": 33088,
+      "target_key": "10.1038/s41586-019-1397-7",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.cgRNA",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 60,
+      "title": "Programmable CRISPR-Cas repression, activation, and computation with sequence-independent targets and triggers",
+      "citation": "[60] M. Jin \u2020 , N. Garreau de Loubresse \u2020 , Y. Kim, J. Kim*, P. Yin* Programmable CRISPR-Cas repression, activation, and computation with sequence-independent targets and triggers ACS Synth. Biol. , 2019, 8, 7, 1583-1589 published 10 July 2019. DOI: 10.1021/acssynbio.9b00141 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/acssynbio.9b00141",
+        "https://yin.hms.harvard.edu/publications/2019.cgRNA.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.cgRNA.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acssynbio.9b00141"
+      ],
+      "source_offset": 34734,
+      "target_key": "10.1021/acssynbio.9b00141",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.saber",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 59,
+      "title": "SABER amplifies FISH: enhanced multiplexed imaging of RNA and DNA in cells and tissues",
+      "citation": "[59] J. Y. Kishi \u2020 , S. W. Lapan \u2020 , B. J. Beliveau \u2020 *, E. R. West \u2020 , A. Zhu, H. M. Sasaki, S. K. Saka, Y. Wang, C. L. Cepko*, P. Yin* SABER amplifies FISH: enhanced multiplexed imaging of RNA and DNA in cells and tissues Nature Methods , published 20 May 2019. DOI: 10.1038/s41592-019-0404-0 [ PDF ] [ Website: http://saber.fish ] [ Supplementary Information ] [ Reporting Summary ] [ Supplementary Protocols ] [ Supplementary Table1: SABER sequences ] [ Supplementary Table2: SABER simulated parameters ] [ Supplementary Table3: SABER experimental conditions ] [ Supplementary Table4: SABER puncta counts ]",
+      "links": [
+        "https://www.nature.com/articles/s41592-019-0404-0",
+        "https://yin.hms.harvard.edu/publications/2019.saber.pdf",
+        "http://saber.fish",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.sum.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.prot.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.data1.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.data2.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.data3.xlsx",
+        "https://yin.hms.harvard.edu/publications/2019.saber.sup.data4.xlsx"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41592-019-0404-0"
+      ],
+      "source_offset": 35356,
+      "target_key": "10.1038/s41592-019-0404-0",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.algorithms",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 58,
+      "title": "Diverse and robust molecular algorithms using reprogrammable DNA self-assembly",
+      "citation": "[58] D. Woods \u2020,* , D. Doty \u2020,* , C. Myhrvold, J. Hui, F. Zhou, P. Yin, and E. Winfree* Diverse and robust molecular algorithms using reprogrammable DNA self-assembly Nature , 567, 366-372 (2019) DOI: 10.1038/s41586-019-1014-9 [ PDF ] [ Supplementary Information ] [ Supplementary Data ] [ Supplementary Figure ]",
+      "links": [
+        "https://www.nature.com/articles/s41586-019-1014-9",
+        "https://yin.hms.harvard.edu/publications/2019.algorithms.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.algorithms.supA.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.algorithms.supB.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.algorithms.supC.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41586-019-1014-9"
+      ],
+      "source_offset": 38284,
+      "target_key": "10.1038/s41586-019-1014-9",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2019.124colorblinking",
+      "occurrence": 1,
+      "listed_year": 2019,
+      "number": 57,
+      "title": "124-color super-resolution imaging by engineering DNA-PAINT blinking kinetics",
+      "citation": "[57] O.K. Wade \u2020 , J.B. Woehrstein \u2020 , P. C. Nockels \u2020 , S. Strauss \u2020 , F. Stehr, J. Stein, F. Schueder, M.T. Strauss, M. Ganji, J. Schnitzbauer, H. Grabmayr, P. Yin, P. Schwille, R. Jungmann* 124-color super-resolution imaging by engineering DNA-PAINT blinking kinetics Nano Lett. , Article ASAP DOI: 10.1021/acs.nanolett.9b00508 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acs.nanolett.9b00508",
+        "https://yin.hms.harvard.edu/publications/2019.124color.blinking.pdf",
+        "https://yin.hms.harvard.edu/publications/2019.124color.blinking.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.9b00508"
+      ],
+      "source_offset": 40845,
+      "target_key": "10.1021/acs.nanolett.9b00508",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.chromo",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 56,
+      "title": "Walking along chromosomes with super-resolution imaging, contact maps, and integrative modeling",
+      "citation": "[56] G. Nir \u2020 , I. Farabella \u2020 , C. Perez Estrada \u2020 , C.G. Ebeling \u2020 , B.J. Beliveau, H.M. Sasaki, S.H. Lee, S. Nguyen, R.B. McCole, S. Chattoraj, J. Erceg, J. AlHaj Abed, N.C. Martins, H.Q. Nguyen, M.A. Hannan, S. Russell, N.C. Durand, S.P. Rao, J.Y. Kishi, P. Soler-Vila, M. Di Pierro, J.N. Onuchic, S. Callahan, J. Schreiner, J. Stuckey*, P. Yin*, E. Lieberman Aiden*, M.A. Marti-Renom*, C.T. Wu* Walking along chromosomes with super-resolution imaging, contact maps, and integrative modeling PLoS Genet , 14(12): e1007872 DOI: 10.1371/journal.pgen.1007872, PMID: 30586358 [ PDF ] [ Supplementary Movie1 ] [ Supplementary Movie2 ]",
+      "links": [
+        "https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1007872",
+        "https://www.ncbi.nlm.nih.gov/pubmed/30586358",
+        "https://yin.hms.harvard.edu/publications/2018.chromo.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.chromo.sup.movie1.mp4",
+        "https://yin.hms.harvard.edu/publications/2018.chromo.sup.movie2.mov"
+      ],
+      "explicit_doi_candidates": [
+        "10.1371/journal.pgen.1007872"
+      ],
+      "source_offset": 41921,
+      "target_key": "10.1371/journal.pgen.1007872",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.topo",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 55,
+      "title": "Programming molecular topologies from single-stranded nucleic acids",
+      "citation": "[55] X. Qi, F. Zhang, Z. Su, S. Jiang, D. Han, B. Ding, Y. Liu, W. Chiu, P. Yin, H. Yan Programming molecular topologies from single-stranded nucleic acids Nature Communications , 9, Article number: 4579 (2018) DOI: 10.1038/s41467-018-07039-7, PMID: 30389935 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://www.nature.com/articles/s41467-018-07039-7",
+        "https://www.ncbi.nlm.nih.gov/pubmed/30389935",
+        "https://yin.hms.harvard.edu/publications/2018.topo.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.topo.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41467-018-07039-7"
+      ],
+      "source_offset": 43517,
+      "target_key": "10.1038/s41467-018-07039-7",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.miRNA",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 54,
+      "title": "Super-resolution geometric barcoding for multiplexed miRNA profiling",
+      "citation": "[54] W. Xu, P. Yin*, M. Dai* Super-resolution geometric barcoding for multiplexed miRNA profiling Angewandte Chemie , Accepted Article, September 5, 2018. DOI: 10.1002/ange.201807956 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/anie.201807956",
+        "https://yin.hms.harvard.edu/publications/2018.miRNA.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.miRNA.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/ange.201807956"
+      ],
+      "source_offset": 44162,
+      "target_key": "10.1002/ange.201807956",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.fourway",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 53,
+      "title": "Hierarchical assembly of DNA nanostructures based on four-way toehold-mediated strand displacement",
+      "citation": "[53] T. Lin, J. Yan, L. L. Ong, J. Robaszewski, H. D. Lu, Y. Mi, P. Yin*, and B. Wei* Hierarchical assembly of DNA nanostructures based on four-way toehold-mediated strand displacement Nano Lett. , 2018, 18 (8), pp 4791-4795 DOI: 10.1021/acs.nanolett.8b01355 [ PDF ] [ Supplementary Information ]",
+      "links": [
+        "https://pubs.acs.org/doi/abs/10.1021/acs.nanolett.8b01355",
+        "https://yin.hms.harvard.edu/publications/2018.fourway.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.fourway.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.8b01355"
+      ],
+      "source_offset": 44671,
+      "target_key": "10.1021/acs.nanolett.8b01355",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.biomanu",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 52,
+      "title": "Advanced Cell and Tissue Biomanufacturing",
+      "citation": "[52] K. Ye*, D. L. Kaplan, G. Bao, C. Bettinger, G. Forgacs, C. Dong, A. Khademhosseini, Y. Ke , K. Leong, A. Sambanis, W. Sun, and P. Yin Advanced Cell and Tissue Biomanufacturing ACS Biomater. Sci. Eng. , 2018, 4, 7, 2292-2307 DOI: 10.1021/acsbiomaterials.8b00650 [ PDF ]",
+      "links": [
+        "https://pubs.acs.org/doi/pdf/10.1021/acsbiomaterials.8b00650",
+        "https://yin.hms.harvard.edu/publications/2018.biomanu.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acsbiomaterials.8b00650"
+      ],
+      "source_offset": 45254,
+      "target_key": "10.1021/acsbiomaterials.8b00650",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.rnascaf",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 51,
+      "title": "Synthetic RNA scaffolds for spatial engineering in cells",
+      "citation": "[51] G. Sachdeva, C. Myhrvold, P. Yin and P. A. Silver Synthetic RNA scaffolds for spatial engineering in cells Synthetic Biology: Parts, Devices and Applications (Book Chapter), Editor(s): C. Smolke, S. Y. Lee, J. Nielsen, G. Stephanopoulos First published: 30 March 2018, Print ISBN:9783527330751 | Online ISBN:9783527688104 DOI: 10.1002/9783527688104 [ PDF ]",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/9783527688104.ch13",
+        "https://yin.hms.harvard.edu/publications/2018.rnascaf.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/9783527688104"
+      ],
+      "source_offset": 45770,
+      "target_key": "10.1002/9783527688104",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.oligominer",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 50,
+      "title": "OligoMiner provides a rapid, flexible environment for the design of genome-scale oligonucleotide in situ hybridization probes",
+      "citation": "[50] B. J. Beliveau*, J. Y. Kishi, G. Nir, H. M. Sasaki, S. K. Saka, S. C. Nguyen, C.-t. Wu, and P. Yin* OligoMiner provides a rapid, flexible environment for the design of genome-scale oligonucleotide in situ hybridization probes Proc Natl Acad Sci USA , March 6, 2018. 115 (10) E2183-E2192 DOI: 10.1073/pnas.1714530115, PMID: 29463736 [ PDF ] [ Supplementary Information ] [ Supplementary Dataset1 ] [ Supplementary Dataset2 ]",
+      "links": [
+        "http://www.pnas.org/content/115/10/E2183",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29463736",
+        "https://yin.hms.harvard.edu/publications/2018.oligominer.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.oligominer.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.oligominer.data1.pdf",
+        "https://yin.hms.harvard.edu/publications/2018.oligominer.data2.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1073/pnas.1714530115"
+      ],
+      "source_offset": 46383,
+      "target_key": "10.1073/pnas.1714530115",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2018.ribocom2",
+      "occurrence": 1,
+      "listed_year": 2018,
+      "number": 49,
+      "title": "Ribocomputing: Cellular Logic Computation Using RNA Devices",
+      "citation": "[49] J. Kim, P. Yin*, and A. A. Green* Ribocomputing: Cellular Logic Computation Using RNA Devices Biochemistry , 2018, 57 (6), pp 883-885 DOI: 10.1021/acs.biochem.7b01072, PMID: 29256603 [ PDF ]",
+      "links": [
+        "https://pubs.acs.org/doi/abs/10.1021/acs.biochem.7b01072",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29256603",
+        "https://yin.hms.harvard.edu/publications/2018.ribocom2.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acs.biochem.7b01072"
+      ],
+      "source_offset": 47273,
+      "target_key": "10.1021/acs.biochem.7b01072",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.ssO",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 48,
+      "title": "Single-stranded DNA and RNA origami",
+      "citation": "[48] D. Han \u2020 , X. Qi \u2020 , C. Myhrvold, B. Wang, M. Dai, S. Jiang, M. Bates, Y. Liu, B. An * , F. Zhang * , H. Yan * and P. Yin * Single-stranded DNA and RNA origami Science Vol. 358, Issue 6369, eaao2648 (2017) DOI: 10.1126/science.aao2648 [ PDF ] [ Supplementary Materials ] [ Supplementary Movies ]",
+      "links": [
+        "http://science.sciencemag.org/content/358/6369/eaao2648",
+        "https://yin.hms.harvard.edu/publications/2017.ssO.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.ssO.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.ssO.movies.zip"
+      ],
+      "explicit_doi_candidates": [
+        "10.1126/science.aao2648"
+      ],
+      "source_offset": 47891,
+      "target_key": "10.1126/science.aao2648",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.gDa",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 47,
+      "title": "Programmable self-assembly of three-dimensional nanostructures from 10,000 unique components",
+      "citation": "[47] L. L. Ong, N. Hanikel, O. K. Yaghi, C. Grun, M. T. Strauss, P. Bron, J. Lai-Kee-Him, F. Schueder, B. Wang, P. Wang, J. Y. Kishi, C.A. Myhrvold, A. Zhu, R. Jungmann, G. Bellot * , Y. Ke * , and P. Yin * Programmable self-assembly of three-dimensional nanostructures from 10,000 unique components Nature 552, 72 (2017) doi: 10.1038/nature24648, PMID: 29219968 [ PDF ] [ Supplementary Materials ] [ Supplementary Data ] [Supplementary Movies: SV1 , SV2 , SV3 ] [Software: info page , software link ] [PhD Thesis: Luvena Ong, 2016 ]",
+      "links": [
+        "https://www.nature.com/articles/nature24648",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29219968",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sup.xlsx",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sv1.avi",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sv2.avi",
+        "https://yin.hms.harvard.edu/publications/2017.gDa.sv3.avi",
+        "https://yin.hms.harvard.edu/bricks/Nanobricks.html",
+        "http://nanobricks.software",
+        "https://dspace.mit.edu/bitstream/handle/1721.1/106741/969345357-MIT.pdf?sequence=1"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nature24648"
+      ],
+      "source_offset": 51449,
+      "target_key": "10.1038/nature24648",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.sdc",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 46,
+      "title": "Multiplexed 3D super-resolution imaging of whole cells using spinning disk confocal microscopy and DNA-PAINT",
+      "citation": "[46] F. Schueder, J. Lara-Guiterrez, B. Beliveau, S. Saka, H. Sasaki, J. Woehrstein, M. Strauss, H. Grabmayr, P. Yin * , and R. Jungmann * Multiplexed 3D super-resolution imaging of whole cells using spinning disk confocal microscopy and DNA-PAINT Nature Communications 8, Article number: 2090 (2017) doi: 10.1038/s41467-017-02028-8, PMID: 29233999 [ PDF ] [ Supplementary Materials ] [ Peer Review File ] [ Description of Additional Supplementary Files ] [Supplementary Movies: 1 , 2 , 3 ] [Supplementary Data: 1 , 2 , 3 , 4 ]",
+      "links": [
+        "https://www.nature.com/articles/s41467-017-02028-8",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29233999",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.rev.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.desc.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.mov1.mp4",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.mov2.mp4",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.mov3.avi",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.data1.xlsx",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.data2.xlsx",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.data3.xlsx",
+        "https://yin.hms.harvard.edu/publications/2017.sdc.data4.xlsx"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41467-017-02028-8"
+      ],
+      "source_offset": 57912,
+      "target_key": "10.1038/s41467-017-02028-8",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.per",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 45,
+      "title": "Programmable autonomous synthesis of single-stranded DNA",
+      "citation": "[45] J. Kishi, T. Schaus, N. Gopalkrishnan, F. Xuan, and P. Yin Programmable autonomous synthesis of single-stranded DNA Nature Chemistry Advanced Online Publication (2017) doi: 10.1038/nchem.2872, PMID: 29359755 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.nature.com/nchem/journal/vaop/ncurrent/full/nchem.2872.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/29359755",
+        "https://yin.hms.harvard.edu/publications/2017.per.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.per.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nchem.2872"
+      ],
+      "source_offset": 60312,
+      "target_key": "10.1038/nchem.2872",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.apr",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 44,
+      "title": "A DNA nanoscope via auto-cycling proximity recording",
+      "citation": "[44] T. E. Schaus, S. Woo, F. Xuan, X. Chen and P. Yin A DNA nanoscope via auto-cycling proximity recording Nature Communications 8, Article number: 696 (2017) doi: 10.1038/s41467-017-00542-3, PMID: 28947733 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.nature.com/articles/s41467-017-00542-3",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28947733",
+        "https://yin.hms.harvard.edu/publications/2017.apr.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.apr.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41467-017-00542-3"
+      ],
+      "source_offset": 62499,
+      "target_key": "10.1038/s41467-017-00542-3",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.oligodnapaint",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 43,
+      "title": "In situ super-resolution imaging of genomic DNA with OligoSTORM and OligoDNA-PAINT",
+      "citation": "[43] B. J. Beliveau, A. N. Boettiger, G. Nir, B. Bintu, P. Yin * , X. Zhuang * , C.-t Wu * In situ super-resolution imaging of genomic DNA with OligoSTORM and OligoDNA-PAINT In: Erfle H. (eds) Super-Resolution Microscopy. Methods in Molecular Biology , vol 1663. Humana Press, New York, NY doi: 10.1007/978-1-4939-7265-4_19, PMID: 28924672 [ PDF ]",
+      "links": [
+        "https://link.springer.com/protocol/10.1007%2F978-1-4939-7265-4_19",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28924672",
+        "https://yin.hms.harvard.edu/publications/2017.oligodnapaint.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1007/978-1-4939-7265-4_19"
+      ],
+      "source_offset": 65397,
+      "target_key": "10.1007/978-1-4939-7265-4_19",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.egfr",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 42,
+      "title": "Multiplexed Exchange-PAINT imaging reveals ligand-dependent EGFR and Met interactions in the plasma membrane",
+      "citation": "[42] J. L. Werbin, M. S. Avendano, V. Becker, R. Jungmann, P. Yin * , G. Danuser * and P. K. Sorger * Multiplexed Exchange-PAINT imaging reveals ligand-dependent EGFR and Met interactions in the plasma membrane Scientific Reports 7, Article number: 12150 (2017) doi: 10.1038/s41598-017-12257-y, PMID: 28939861 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://www.nature.com/articles/s41598-017-12257-y",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28939861",
+        "https://yin.hms.harvard.edu/publications/2017.egfr.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.egfr.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/s41598-017-12257-y"
+      ],
+      "source_offset": 66109,
+      "target_key": "10.1038/s41598-017-12257-y",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.ribocomputer",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 41,
+      "title": "Complex cellular logic computation using ribocomputing devices",
+      "citation": "[41] A. A. Green \u2020 , J. Kim \u2020 , D. Ma, P. A. Silver, J. J. Collins and P. Yin Complex cellular logic computation using ribocomputing devices Nature (2017) doi: 10.1038/nature23271, PMID: 28746304 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/nature/journal/vaop/ncurrent/full/nature23271.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28746304",
+        "https://yin.hms.harvard.edu/publications/2017.ribocomputer.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.ribocomputer.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nature23271"
+      ],
+      "source_offset": 66826,
+      "target_key": "10.1038/nature23271",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.metafluor",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 40,
+      "title": "Sub-100-nm metafluorophores with digitally tunable optical properties self-assembled from DNA",
+      "citation": "[40] J. B. Woehrstein, M. T. Strauss, L. L. Ong, B. Wei, D. Y. Zhang, R. Jungmann * and P. Yin * Sub-100-nm metafluorophores with digitally tunable optical properties self-assembled from DNA Science Advances Vol. 3, no. 6, e1602128, doi: 10.1126/sciadv.1602128, PMID: 28691083 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://advances.sciencemag.org/content/3/6/e1602128",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28691083",
+        "https://yin.hms.harvard.edu/publications/2017.metafluor.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.metafluor.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1126/sciadv.1602128"
+      ],
+      "source_offset": 72218,
+      "target_key": "10.1126/sciadv.1602128",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.dei",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 39,
+      "title": "Rapid sequential in situ multiplexing with DNA-Exchange-Imaging in Neuronal Cells and Tissues",
+      "citation": "[39] Y. Wang, J. B. Woehrstein, N. Donoghue, M. Dai, M. S. Avendano, R. C.J. Schackmann, J. Zoeller, S. S. H. Wang, P. W. Tillberg, D. Park, S. W. Lapan, E. S. Boyden, J. S. Brugge, P. S. Kaeser, G. M. Church, S. S. Agasti * , R. Jungmann * , P. Yin * Rapid sequential in situ multiplexing with DNA-Exchange-Imaging in Neuronal Cells and Tissues Nano Letters Article ASAP, DOI: 10.1021/acs.nanolett.7b02716, PMID: 28933153 [ PDF ] [ bioRxiv ] [ Supplementary Materials ] [ Supplementary Movie ] [ Supplementary Movie Caption ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acs.nanolett.7b02716",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28933153",
+        "https://yin.hms.harvard.edu/publications/2017.dei.pdf",
+        "http://biorxiv.org/content/early/2017/03/20/112227",
+        "https://yin.hms.harvard.edu/publications/2017.dei.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.dei.sup.mov.mov",
+        "https://yin.hms.harvard.edu/publications/2017.dei.sup.mov.cap.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.7b02716"
+      ],
+      "source_offset": 75320,
+      "target_key": "10.1021/acs.nanolett.7b02716",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.universal",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 38,
+      "title": "Universal super-resolution multiplexing by DNA exchange",
+      "citation": "[38] F. Schueder, M. T. Strauss, D. Hoerl, J. Schnitzbauer, T. Schlichthaerle, S. Strauss, P. Yin, H. Harz, H. Leonhardt and R. Jungmann Universal super-resolution multiplexing by DNA exchange Angewandte Chemie 2017, Early View, doi: 10.1002/anie.201611729, PMID: 28256790 [ PDF ] [ Supplementary Materials ] [ Supplementary Movie ]",
+      "links": [
+        "http://onlinelibrary.wiley.com/wol1/doi/10.1002/anie.201611729/abstract",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28256790",
+        "https://yin.hms.harvard.edu/publications/2017.universal.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.universal.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.universal.sup.vid.avi"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/anie.201611729"
+      ],
+      "source_offset": 76761,
+      "target_key": "10.1002/anie.201611729",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.multiplex",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 37,
+      "title": "DNA-barcoded labeling probes for highly multiplexed Exchange-PAINT imaging",
+      "citation": "[37] S. S. Agasti, Y. Wang, F. Schueder, A. Sukumar, R. Jungmann * and P. Yin * DNA-barcoded labeling probes for highly multiplexed Exchange-PAINT imaging Chem. Sci. 2017, Advance Article, doi: 10.1039/c6sc05420j, PMID: 28451377 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.rsc.org/en/Content/ArticleLanding/2017/SC/C6SC05420J#!divAbstract",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28451377",
+        "https://yin.hms.harvard.edu/publications/2017.multiplex.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.multiplex.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1039/c6sc05420j"
+      ],
+      "source_offset": 77524,
+      "target_key": "10.1039/c6sc05420j",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.bears",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 36,
+      "title": "Barcode extension for analysis and reconstruction of structures",
+      "citation": "[36] C. Myhrvold, M. Baym, N. Hanikel, L. L. Ong, J. S. Gootenberg and P. Yin Barcode extension for analysis and reconstruction of structures Nature Communications 8, Article number: 14698 (2017) doi: 10.1038/ncomms14698, PMID: 28287117 [ PDF ] [ Supplementary Materials ] [ Supplementary Data ]",
+      "links": [
+        "http://www.nature.com/articles/ncomms14698",
+        "https://www.ncbi.nlm.nih.gov/pubmed/28287117",
+        "https://yin.hms.harvard.edu/publications/2017.bears.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.bears.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.bears.sup.data.xlsx"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/ncomms14698"
+      ],
+      "source_offset": 78192,
+      "target_key": "10.1038/ncomms14698",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.nanorod",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 35,
+      "title": "Reconfigurable three-dimensional gold nanorod plasmonic nanostructures organized on DNA origami tripod",
+      "citation": "[35] P. Zhan, P. K. Dutta, P. Wang, G. Song, M. Dai, S-X Zhao, Z-G Wang, P. Yin, W. Zhang, B. Ding, and Y. Ke Reconfigurable three-dimensional gold nanorod plasmonic nanostructures organized on DNA origami tripod ACS Nano 2017, 11 (2), pp 1172-1179 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acsnano.6b06861",
+        "https://yin.hms.harvard.edu/publications/2017.nanorod.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.nanorod.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 78874,
+      "target_key": "authorlead:yin:2129a700c49cb9a9",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2017.imprinting",
+      "occurrence": 1,
+      "listed_year": 2017,
+      "number": 34,
+      "title": "DNA nanostructures-mediated molecular imprinting lithography",
+      "citation": "[34] C. Tian, H. Kim, W. Sun, Y. Kim, P. Yin, and H. Liu DNA nanostructures-mediated molecular imprinting lithography ACS Nano 2017, 11 (1), pp 227-238. [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acsnano.6b04777",
+        "https://yin.hms.harvard.edu/publications/2017.imprinting.pdf",
+        "https://yin.hms.harvard.edu/publications/2017.imprinting.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 79436,
+      "target_key": "authorlead:yin:cd84e4261f1d881f",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2016.dmi",
+      "occurrence": 1,
+      "listed_year": 2016,
+      "number": 33,
+      "title": "Optical imaging of individual biomolecules in densely packed clusters",
+      "citation": "[33] M. Dai, R. Jungmann and P. Yin Optical imaging of individual biomolecules in densely packed clusters Nature Nanotechnology , 11, 798-807 (2016), doi: 10.1038/nnano.2016.95, PMID: 27376244 [ PDF ] [Supplementary Information: S1 , Supplementary Table: S2 ]",
+      "links": [
+        "http://www.nature.com/nnano/journal/v11/n9/full/nnano.2016.95.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/27376244",
+        "https://yin.hms.harvard.edu/publications/2016.dmi.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.dmi.s1.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.dmi.s2.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nnano.2016.95"
+      ],
+      "source_offset": 80017,
+      "target_key": "10.1038/nnano.2016.95",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2016.qPAINT",
+      "occurrence": 1,
+      "listed_year": 2016,
+      "number": 32,
+      "title": "Quantitative super-resolution imaging with qPAINT",
+      "citation": "[32] R. Jungmann \u2020 , M. S. Avendano \u2020 , M. Dai, J. B. Woehrstein, S. S. Agasti, Z. Feiger, A. Rodal and P. Yin Quantitative super-resolution imaging with qPAINT Nature Methods , 13, 439-442 (2016), doi: 10.1038/nmeth.3804, PMID: 27018580 [ PDF ] [Supplementary Materials: S1 , Supplementary Videos: V1 , V2 ]",
+      "links": [
+        "http://www.nature.com/nmeth/journal/vaop/ncurrent/full/nmeth.3804.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/27018580",
+        "https://yin.hms.harvard.edu/publications/2016.qPAINT.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.qPAINT.sup.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.qPAINT.sup.vid1.mp4",
+        "https://yin.hms.harvard.edu/publications/2016.qPAINT.sup.vid2.mp4"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/nmeth.3804"
+      ],
+      "source_offset": 85585,
+      "target_key": "10.1038/nmeth.3804",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2016.bacteria",
+      "occurrence": 1,
+      "listed_year": 2016,
+      "number": 31,
+      "title": "Genetic encoding of DNA nanostructures and their self-assembly in living bacteria",
+      "citation": "[31] J. Elbaz, P. Yin, and C. Voigt Genetic encoding of DNA nanostructures and their self-assembly in living bacteria Nature Communications , 7, Article number: 11179 doi: 10.1038/ncomms11179, PMID: 27091073 [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/ncomms/2016/160419/ncomms11179/full/ncomms11179.html",
+        "https://www.ncbi.nlm.nih.gov/pubmed/27091073",
+        "https://yin.hms.harvard.edu/publications/2016.bacteria.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.bacteria.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1038/ncomms11179"
+      ],
+      "source_offset": 88133,
+      "target_key": "10.1038/ncomms11179",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2016.carbonization",
+      "occurrence": 1,
+      "listed_year": 2016,
+      "number": 30,
+      "title": "Programmably-shaped carbon nanostructure from shape-conserving carbonization of DNA",
+      "citation": "[30] F. Zhou, W. Sun, K. B. Ricardo, D. Wang, J. Shen, P. Yin, and H. Liu Programmably-shaped carbon nanostructure from shape-conserving carbonization of DNA ACS Nano , 2016, 10 (3), pp 3069-3077, DOI: 10.1021/acsnano.5b05159. [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acsnano.5b05159?journalCode=ancac3",
+        "https://yin.hms.harvard.edu/publications/2016.carbonization.pdf",
+        "https://yin.hms.harvard.edu/publications/2016.carbonization.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.5b05159"
+      ],
+      "source_offset": 88750,
+      "target_key": "10.1021/acsnano.5b05159",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.polymer",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 29,
+      "title": "Routing of individual polymers in designed patterns",
+      "citation": "[29] J. B. Knudsen, L. Liu, A. L. B. Kodal, M. Madsen, Q. Li, J. Song, J. B. Woehrstein, S. F. Wickham, M. T. Strauss, F. Schueder, J. Vinther, A. Krissanaprasit, D. Gudnason, A. A. A. Smith, R. Ogaki, A. N. Zelikin, F. Besenbacher, V. Birkedal, P. Yin, W. M. Shih, R. Jungmann, M. Dong and K. V. Gothelf Routing of individual polymers in designed patterns Nature Nanotechnology 10, 892-898 (2015). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/nnano/journal/vaop/ncurrent/full/nnano.2015.190.html",
+        "https://yin.hms.harvard.edu/publications/2015.polymer.pdf",
+        "https://yin.hms.harvard.edu/publications/2015.polymer.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 89427,
+      "target_key": "authorlead:yin:08ada918f0be7c68",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.compact",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 28,
+      "title": "A compact DNA cube with side length 10 nm",
+      "citation": "[28] M. B. Scheible, L. L. Ong, J. B. Woehrstein, R. Jungmann, P. Yin and F. C. Simmel A compact DNA cube with side length 10 nm Small 11: 5200-5205 (2015). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/smll.201501370/abstract",
+        "https://yin.hms.harvard.edu/publications/2015.compact.pdf",
+        "https://yin.hms.harvard.edu/publications/2015.compact.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 90159,
+      "target_key": "authorlead:yin:b5e46c37eb16d55b",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.dynamic",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 27,
+      "title": "DyNAMiC Workbench: an integrated development environment for dynamic DNA nanotechnology",
+      "citation": "[27] C. Grun, J. Werfel, D. Y. Zhang, and P. Yin DyNAMiC Workbench: an integrated development environment for dynamic DNA nanotechnology J. R. Soc. Interface 12: 20150580 (2015). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://rsif.royalsocietypublishing.org/content/12/111/20150580",
+        "https://yin.hms.harvard.edu/publications/2015.dynamic.pdf",
+        "https://yin.hms.harvard.edu/publications/2015.dynamic.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 90642,
+      "target_key": "authorlead:yin:bae795961d7a49c2",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.oligopaint",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 26,
+      "title": "Single-molecule super-resolution imaging of chromosomes and in situ haplotype visualization using Oligopaint FISH probes",
+      "citation": "[26] B. J. Beliveau, A. N. Boettiger, M. S. Avendano, R. Jungmann, R. B. McCole, E. F. Joyce, C. Kim-Kiselak, F. Bantignies, C. Y. Fonseka, J. Erceg, M. A. Hannan, H. G. Hoang, D. Colognori, J. T. Lee, W. M. Shih, P. Yin, X. Zhuang & C. Wu Single-molecule super-resolution imaging of chromosomes and in situ haplotype visualization using Oligopaint FISH probes Nature Communications 6, 7147 (2015). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/ncomms/2015/150512/ncomms8147/full/ncomms8147.html",
+        "https://yin.hms.harvard.edu/publications/2015.oligopaint.pdf",
+        "https://yin.hms.harvard.edu/publications/2015.oligopaint.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 91143,
+      "target_key": "authorlead:yin:bac9dc65c98d1b38",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2015.SST.jove",
+      "occurrence": 1,
+      "listed_year": 2015,
+      "number": 25,
+      "title": "Self-assembly of complex two-dimensional shapes from single-stranded DNA tiles",
+      "citation": "[25] B. Wei, M. K. Vhudzijena, J. Robaszewski, P. Yin Self-assembly of complex two-dimensional shapes from single-stranded DNA tiles J. Vis. Exp. 99, e52486, doi: 10.3791/52486, PMID: 25993048 (2015). [ link ] [ Materials List ]",
+      "links": [
+        "http://www.jove.com/video/52486/self-assembly-complex-two-dimensional-shapes-from-single-stranded-dna",
+        "https://www.ncbi.nlm.nih.gov/pubmed/25993048",
+        "http://www.jove.com/video/52486/self-assembly-complex-two-dimensional-shapes-from-single-stranded-dna",
+        "https://yin.hms.harvard.edu/publications/2015.SST.jove.sup.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.3791/52486"
+      ],
+      "source_offset": 91894,
+      "target_key": "10.3791/52486",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.casting",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 24,
+      "title": "Casting inorganic structures with DNA molds",
+      "citation": "[24] W. Sun, E. Boulais, Y. Hakobyan, W. Wang, A. Guan, M. Bathe * ,\u0003 P. Yin * Casting inorganic structures with DNA molds Science 346:1258361 (2014). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.sciencemag.org/content/early/2014/10/08/science.1258361.short",
+        "https://yin.hms.harvard.edu/publications/2014.casting.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.casting.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 92722,
+      "target_key": "authorlead:yin:64df80d7056763f2",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.tswitch2",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 23,
+      "title": "Paper-based synthetic gene networks",
+      "citation": "[23] K. Pardee, A.A. Green, T. Ferrante, E. Cameron, A. DaleyKeyser, P. Yin, and J.J. Collins Paper-based synthetic gene networks Cell 159:940-954 (2014). [ PDF ], [Supplementary Materials: S1 , Supplementary Data: S1 , S2 ]",
+      "links": [
+        "http://www.cell.com/cell/abstract/S0092-8674(14)01291-4",
+        "https://yin.hms.harvard.edu/publications/2014.paper.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch2.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch2.data.s1.zip",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch2.data.s2.xlsx"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 94609,
+      "target_key": "authorlead:yin:6415d57cbdf491b3",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.tswitch1",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 22,
+      "title": "Toehold switches: de-novo-designed regulators of gene expression",
+      "citation": "[22] A.A. Green, P.A. Silver, J.J. Collins, P. Yin Toehold switches: de-novo-designed regulators of gene expression Cell 159: 925-939 (2014). [ PDF ], [Supplementary Materials: S1 , S2 , Supplementary Tables: S1 , S2 , S3 , S4 , S5 , S6 , S7 ]",
+      "links": [
+        "http://www.cell.com/cell/abstract/S0092-8674(14)01289-6",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.sup2.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s1.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s2.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s3.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s4.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s5.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s6.xlsx",
+        "https://yin.hms.harvard.edu/publications/2014.tswitch1.table.s7.xlsx"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 95242,
+      "target_key": "authorlead:yin:855e3cc3ded789d8",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.crystal",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 21,
+      "title": "DNA brick crystals with prescribed depths",
+      "citation": "[21] Y. Ke \u2020 , L.L. Ong \u2020 , W. Sun \u2020 , J. Song, M. Dong, W.M. Shih, P. Yin DNA brick crystals with prescribed depths Nature Chemistry 6:994-1002 (2014). [ PDF ], [Supplementary Materials: S1 , S2 , S3 ]",
+      "links": [
+        "http://www.nature.com/nchem/journal/vaop/ncurrent/full/nchem.2083.html",
+        "https://yin.hms.harvard.edu/publications/2014.crystals.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.crystals.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.crystals.sup2.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.crystals.sup3.xls"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 101066,
+      "target_key": "authorlead:yin:b0205a01981bb18a",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.graphene-protocol",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 20,
+      "title": "Nanolithography based on metalized DNA templates for graphene patterning",
+      "citation": "[20] Z. Jin, W. Sun, P. Yin, M. Strano Nanolithography based on metalized DNA templates for graphene patterning Current Protocols in Chemical Biology 6:53-64 (2014).",
+      "links": [],
+      "explicit_doi_candidates": [],
+      "source_offset": 103364,
+      "target_key": "authorlead:yin:fa0cb31557685fb7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.carving",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 19,
+      "title": "Complex reconfiguration of DNA nanostructures",
+      "citation": "[19] B. Wei, L.L. Ong, J. Chen, A. Jaffe, P. Yin Complex reconfiguration of DNA nanostructures Angewandte Chemie 126:7605-7609 (2014). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "https://yin.hms.harvard.edu/publications/2014.carving.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.carving.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 103673,
+      "target_key": "authorlead:yin:c8f20b7549629a46",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.polyhedra",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 18,
+      "title": "Polyhedra self-assembled from DNA tripods and characterized with 3D DNA-PAINT",
+      "citation": "[18] R. Iinuma \u2020 , Y. Ke \u2020 , R. Jungmann \u2020 , T. Schlichthaerle, J.B. Woehrstein, P. Yin Polyhedra self-assembled from DNA tripods and characterized with 3D DNA-PAINT Science 344:65-69 (2014). [ PDF ] [ Supplementary Materials ] [ Movie 1 ] [ Movie 2 ]",
+      "links": [
+        "http://www.sciencemag.org/content/early/2014/03/12/science.1250944",
+        "https://yin.hms.harvard.edu/publications/2014.cage.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.cage.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.cage.movie1.mp4",
+        "https://yin.hms.harvard.edu/publications/2014.cage.movie2.mp4"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 104067,
+      "target_key": "authorlead:yin:3dbef58b670b4c2e",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.tet",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 17,
+      "title": "Developmental self-assembly of a DNA tetrahedron",
+      "citation": "[17] J. Sadowski, C.R. Calvert, D.Y. Zhang, N.A. Pierce, P. Yin Developmental self-assembly of a DNA tetrahedron ACS Nano DOI: 10.1021/nn4038223, PMID: 24720462 (2014). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/nn4038223",
+        "https://www.ncbi.nlm.nih.gov/pubmed/24720462",
+        "https://yin.hms.harvard.edu/publications/2014.tet.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.tet.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1021/nn4038223"
+      ],
+      "source_offset": 108184,
+      "target_key": "10.1021/nn4038223",
+      "identity_status": "matched_registry_explicit_doi",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.wgm",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 16,
+      "title": "Ultraspecific and highly sensitive nucleic acid detection by integrating a DNA catalytic network with a label-free microcavity",
+      "citation": "[16] J. Wu, D. Zhang, P. Yin, F. Vollmer Ultraspecific and highly sensitive nucleic acid detection by integrating a DNA catalytic network with a label-free microcavity Small DOI: 10.1002/smll.201303558, PMID: 24585636 (2014).[ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/smll.201303558/full",
+        "https://www.ncbi.nlm.nih.gov/pubmed/24585636",
+        "https://yin.hms.harvard.edu/publications/2014.wgm.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.wgm.supp.pdf"
+      ],
+      "explicit_doi_candidates": [
+        "10.1002/smll.201303558"
+      ],
+      "source_offset": 108720,
+      "target_key": "10.1002/smll.201303558",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2014.epaint",
+      "occurrence": 1,
+      "listed_year": 2014,
+      "number": 15,
+      "title": "Multiplexed 3D cellular super-resolution imaging with DNA-PAINT and Exchange-PAINT",
+      "citation": "[15] R. Jungmann \u2020 , M.S. Avendano \u2020 , J.B. Woehrstein \u2020 , M. Dai, W.M. Shih, P. Yin Multiplexed 3D cellular super-resolution imaging with DNA-PAINT and Exchange-PAINT Nature Methods 11(3):313-318 (2014). [ PDF ] [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/nmeth/journal/vaop/ncurrent/full/nmeth.2835.html",
+        "https://yin.hms.harvard.edu/publications/2014.dpep.pdf",
+        "https://yin.hms.harvard.edu/publications/2014.dpep.sup1.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 109329,
+      "target_key": "authorlead:yin:f5aabf047a03d260",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.motifs",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 14,
+      "title": "Design space for complex DNA structures",
+      "citation": "[14] B. Wei, M. Dai, C. Myhrvold, Y. Ke, R. Jungmann, P. Yin Design space for complex DNA structures J. Am. Chem. Soc. 135 (48):18080-8 (2013). [ PDF ], [Supplementary Materials: S1 , S2 ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/ja4062294",
+        "https://yin.hms.harvard.edu/publications/2013.motif.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.motif.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.motif.sup2.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 113973,
+      "target_key": "authorlead:yin:d6857f84e7fea451",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.dicers",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 13,
+      "title": "Conditional Dicer substrate formation via shape and sequence transduction with small conditional RNAs",
+      "citation": "[13] L. Hochrein, M. Schwarzkopf, M. Shahgholi, P. Yin, N. Pierce Conditional Dicer substrate formation via shape and sequence transduction with small conditional RNAs J. Am. Chem. Soc. 135 (46):17322-30, (2013). [ PDF ], [ Supplementary Materials ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/ja404676x",
+        "https://yin.hms.harvard.edu/publications/2013.rnai.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.rnai.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 114484,
+      "target_key": "authorlead:yin:85ef7895ef6b30c7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.gel.bricks",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 12,
+      "title": "DNA-directed self-assembly of shape-controlled hydrogels",
+      "citation": "[12] H. Qi, M. Ghodousi, Y. Du, C. Grun, H. Bae, P. Yin * , A. Khademhosseini * . DNA-directed self-assembly of shape-controlled hydrogels Nature Communications 4, 2275 (2013). [ PDF ], [ Supplementary Materials ]",
+      "links": [
+        "http://www.nature.com/ncomms/2013/130909/ncomms3275/full/ncomms3275.html",
+        "https://yin.hms.harvard.edu/publications/2013.dnagel.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.dnagel.sup.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 115001,
+      "target_key": "authorlead:yin:0b193556525b3be7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.isoSST",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 11,
+      "title": "Isothermal self-assembly of complex DNA structures under diverse and biocompatible conditions",
+      "citation": "[11] C. Myhrvold, M. Dai, P.A. Silver, P. Yin. Isothermal self-assembly of complex DNA structures under diverse and biocompatible conditions Nano Letters 13(9): 4242-8 (2013). [ PDF ], [Supplementary Materials: S1 , S2 ]",
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/nl4019512",
+        "https://yin.hms.harvard.edu/publications/2013.isosst.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.isosst.sup1.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.isosst.sup2.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 117136,
+      "target_key": "authorlead:yin:6ea4f2d7d0bacfe0",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.nnano.nv",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 10,
+      "title": "Molecular computing: In situ computation of cell identity",
+      "citation": "[10] T.E. Schaus, P. Yin. Molecular computing: In situ computation of cell identity (News and Views) Nature Nanotechnolgy 155, 546-8 (2013). [ PDF ]",
+      "links": [
+        "http://www.nature.com/nnano/journal/v8/n8/full/nnano.2013.155.html",
+        "https://yin.hms.harvard.edu/publications/2013.computing.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 117784,
+      "target_key": "authorlead:yin:67955c6d46dc9807",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.coating",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 9,
+      "title": "Nanoscale growth and patterning of inorganic oxides using DNA nanostructure templates",
+      "citation": "[9] S. Surwade, F. Zhou, B. Wei, W. Sun, A. Powell, C. O'Donnell, P. Yin * , H. Liu * Nanoscale growth and patterning of inorganic oxides using DNA nanostructure templates J. Am. Chem. Soc. 135, 6778-6781 (2013). [ PDF ] [ Supporting Material ]",
+      "links": [
+        "http://pubs.acs.org/doi/full/10.1021/ja401785h",
+        "https://yin.hms.harvard.edu/publications/2013.coating.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.coating.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 118323,
+      "target_key": "authorlead:yin:eccadf6f2e1a1f51",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.etching",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 8,
+      "title": "Metalized DNA nanolithography for encoding and transferring spatial information for graphene patterning",
+      "citation": "[8] Z. Jin, W. Sun, Y. Ke, C.-J. Shih, G. L.C. Paulus, Q. H. Wang, B. Mu, P. Yin * , M. S. Strano * Metalized DNA nanolithography for encoding and transferring spatial information for graphene patterning Nature Communications 4, 1663 (2013). [ PDF ] [ Supporting Material ]",
+      "links": [
+        "http://www.nature.com/ncomms/journal/v4/n4/full/ncomms2690.html",
+        "https://yin.hms.harvard.edu/publications/2013.graphene.pdf",
+        "https://yin.hms.harvard.edu/publications/2013.graphene.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 118965,
+      "target_key": "authorlead:yin:671f60912a56caf7",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2013.nubot",
+      "occurrence": 1,
+      "listed_year": 2013,
+      "number": 7,
+      "title": "Active self-assembly of algorithmic shapes and patterns in polylogarithmic time",
+      "citation": "[7] D. Woods, H.L. Chen, S. Goodfriend, N. Dabby, E. Winfree, P. Yin Active self-assembly of algorithmic shapes and patterns in polylogarithmic time Proceedings of the 4th conference on Innovations in Theoretical Computer Science (ITCS) 353-354 (2013). [ PDF ]. Full article preprint on arXiv arXiv:1301.2626v1. [ PDF ]",
+      "links": [
+        "http://dl.acm.org/citation.cfm?doid=2422436.2422476",
+        "https://yin.hms.harvard.edu/publications/2013.nubots.itcs.pdf",
+        "http://arxiv.org/abs/1301.2626",
+        "https://yin.hms.harvard.edu/publications/2013.nubots.axiv.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 120711,
+      "target_key": "authorlead:yin:6190df68c81dfeb6",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2012.bricks",
+      "occurrence": 1,
+      "listed_year": 2012,
+      "number": 6,
+      "title": "Three-dimensional structures self-assembled from DNA bricks",
+      "citation": "[6] Y. Ke, L. Ong, W. Shih, P. Yin Three-dimensional structures self-assembled from DNA bricks Science 338, 1177-1183 (2012). [ PDF ] [ Supporting Material ]",
+      "links": [
+        "http://www.sciencemag.org/content/338/6111/1177.short",
+        "https://yin.hms.harvard.edu/publications/2012.bricks.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.bricks.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 121612,
+      "target_key": "authorlead:yin:6b54ede7ed5656ac",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2012.barcodes",
+      "occurrence": 1,
+      "listed_year": 2012,
+      "number": 5,
+      "title": "Sub-micrometer geometrically encoded fluorescent barcodes self-assembled from DNA",
+      "citation": "[5] C. Lin, R. Jungmann, A.M. Leifer, C. Li, D. Levner, G.M. Church, W. Shih * , P. Yin * Sub-micrometer geometrically encoded fluorescent barcodes self-assembled from DNA Nature Chemistry 4, 832-839 (2012). [ PDF ] [ Supporting Material ]",
+      "links": [
+        "http://www.nature.com/nchem/journal/v4/n10/full/nchem.1451.html",
+        "https://yin.hms.harvard.edu/publications/2012.barcodes.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.barcodes.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 127170,
+      "target_key": "authorlead:yin:8f68ca11025311d4",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2012.sst",
+      "occurrence": 1,
+      "listed_year": 2012,
+      "number": 4,
+      "title": "Complex shapes self-assembled from single-stranded DNA tiles",
+      "citation": "[4] B. Wei, M. Dai and P. Yin Complex shapes self-assembled from single-stranded DNA tiles Nature 485, 623-626 (2012). [ PDF ] [Supporting material: S1-5 , S6 , S7 , S8 ]",
+      "links": [
+        "http://www.nature.com/nature/journal/v485/n7400/full/nature11075.html",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.supl.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.supl.s6.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.supl.s7.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.complexshapes.supl.s8.xls"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 129047,
+      "target_key": "authorlead:yin:398bff3220248214",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2012.probes",
+      "occurrence": 1,
+      "listed_year": 2012,
+      "number": 3,
+      "title": "Optimizing the specificity of nucleic acid hybridization",
+      "citation": "[3] D.Y. Zhang, S.X. Chen, and P. Yin Optimizing the specificity of nucleic acid hybridization Nature Chemistry 4, 208-14 (2012). [ PDF ] [ Supporting material ]",
+      "links": [
+        "http://www.nature.com/nchem/journal/v4/n3/abs/nchem.1246.html",
+        "https://yin.hms.harvard.edu/publications/2012.specificity.pdf",
+        "https://yin.hms.harvard.edu/publications/2012.specificity.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 133746,
+      "target_key": "authorlead:yin:77ab67dd7f8f6438",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2008.tubes",
+      "occurrence": 1,
+      "listed_year": 2008,
+      "number": 2,
+      "title": "Programming DNA tube circumferences",
+      "citation": "[2] P. Yin, R.F. Hariadi, S. Sahu, H.M.T. Choi, S.H. Park, T.H. LaBean, J.H. Reif Programming DNA tube circumferences Science 321, 824-826 (2008). [ PDF ] [ Supporting material ]",
+      "links": [
+        "http://www.sciencemag.org/content/321/5890/824.short",
+        "https://yin.hms.harvard.edu/publications/2008.tube.pdf",
+        "https://yin.hms.harvard.edu/publications/2008.tube.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 134690,
+      "target_key": "authorlead:yin:b713cea21022ee0e",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    },
+    {
+      "anchor": "2008.pathways",
+      "occurrence": 1,
+      "listed_year": 2008,
+      "number": 1,
+      "title": "Programming biomolecular self-assembly pathways",
+      "citation": "[1] P. Yin, H.M.T. Choi, C.R. Calvert, N.A. Pierce Programming biomolecular self-assembly pathways Nature 451, 318-322 (2008). [ PDF ] [ Supporting material ]",
+      "links": [
+        "http://www.nature.com/nature/journal/v451/n7176/full/nature06451.html",
+        "https://yin.hms.harvard.edu/publications/2008.pathway.pdf",
+        "https://yin.hms.harvard.edu/publications/2008.pathway.supl.pdf"
+      ],
+      "explicit_doi_candidates": [],
+      "source_offset": 135507,
+      "target_key": "authorlead:yin:86cc398b2c3620b4",
+      "identity_status": "pending",
+      "design_review_status": "not_inferred_from_bibliography"
+    }
+  ],
+  "audit": {
+    "all_named_anchors": 97,
+    "pre2020_entries": 68,
+    "boundary2020_entries": 8,
+    "explicit_doi_registry_matches": 20,
+    "other_rows_pending": 56,
+    "duplicate_anchors": [
+      "2020.cnt"
+    ],
+    "validation": {
+      "status": "passed",
+      "publication_keys": 6149,
+      "stable_legacy_design_ids": 100,
+      "hashed_evidence_references": 12641
+    }
+  }
+}

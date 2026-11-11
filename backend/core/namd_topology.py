@@ -378,6 +378,11 @@ def _tagged_segid_resids(
             if key not in seen:
                 seen.add(key)
                 seg_res.append(key)
+    submodel = Path(psf_path).parent / "submodel.json"
+    if submodel.exists():
+        source = json.loads(submodel.read_text())["source_residues"]
+        retained = set(seg_res)
+        return {tuple(source[o]) for o in tagged_ordinals if o < len(source) and tuple(source[o]) in retained}
     return {seg_res[o] for o in tagged_ordinals if o < len(seg_res)}
 
 

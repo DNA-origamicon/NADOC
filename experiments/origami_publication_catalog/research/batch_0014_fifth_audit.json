@@ -1,0 +1,43 @@
+{
+  "reviewed_keys": [
+    "10.1021/acsami.8b18611",
+    "10.1021/acsnano.8b04631",
+    "10.1021/acsomega.8b03136",
+    "10.1021/acs.nanolett.8b04355",
+    "10.1021/acsnano.8b08671"
+  ],
+  "first_pass_count": 15,
+  "input_count": 25,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11946
+  },
+  "counts": {
+    "publication_versions": 6041,
+    "canonical_work_keys": 6040,
+    "provisional_work_keys_not_reconciled": 6039,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 1174,
+      "unreviewed": 4584,
+      "fulltext_reviewed": 63,
+      "design_sources_reviewed": 220
+    },
+    "relevance": {
+      "uncertain": 5739,
+      "background_or_review": 27,
+      "design_bearing": 263,
+      "not_origami": 12
+    },
+    "catalog_eligibility": {
+      "unresolved": 6023,
+      "excluded": 17,
+      "eligible": 1
+    },
+    "design_groups": 141,
+    "design_source_reviews": 64,
+    "discovery_runs": 50
+  }
+}

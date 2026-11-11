@@ -17,6 +17,7 @@
  * pre-flight, disk forecast, concurrency confirms). The wizard hands the panel a payload;
  * the panel runs the gates it already runs.
  */
+import { showWizardJobId } from './job_wizard_identity.js'
 import { createButton, createInput, createSelect, createModal, el } from './primitives/index.js'
 import { initWizardTargetStep } from './md_job_wizard_target.js'
 import { renderSlurmDetails } from './md_job_wizard_target_model.js'
@@ -2012,8 +2013,8 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   }
 
   /** Name a job the way the user can actually match it: the part it ran on plus when it
-   *  was created. Job ids are hex and appear nowhere they could be recognised, and part +
-   *  minute is not always unique — hence the seconds. */
+   *  was created. The full job ID is also shown below the title; part + minute alone
+   *  is not always unique — hence the seconds. */
   function viewJobLabel(job) {
     const part = job?.design_name || 'this job'
     if (job?.created_at == null) return part
@@ -2342,6 +2343,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     if (modal.header) {
       const t = modal.header.querySelector('.modal__title')
       if (t) t.textContent = modalTitle()
+      showWizardJobId(modal, (viewJob || editJob)?.job_id || state.draftId)
     }
     if (createBtn) {
       const lbl = createBtn.querySelector('span') || createBtn

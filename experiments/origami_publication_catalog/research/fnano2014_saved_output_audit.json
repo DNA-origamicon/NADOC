@@ -1,0 +1,39 @@
+{
+  "program_records": 140,
+  "program_edges": 140,
+  "withdrawn": 1,
+  "new_journal_key": "10.1038/nmat4031",
+  "canonical_merges": 0,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5599,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 10035
+  },
+  "counts": {
+    "publication_versions": 5599,
+    "canonical_work_keys": 5598,
+    "provisional_work_keys_not_reconciled": 5597,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 716,
+      "unreviewed": 4700,
+      "fulltext_reviewed": 40,
+      "design_sources_reviewed": 143
+    },
+    "relevance": {
+      "uncertain": 5411,
+      "background_or_review": 12,
+      "design_bearing": 174,
+      "not_origami": 2
+    },
+    "catalog_eligibility": {
+      "unresolved": 5592,
+      "excluded": 6,
+      "eligible": 1
+    },
+    "design_groups": 134,
+    "design_source_reviews": 57,
+    "discovery_runs": 40
+  }
+}

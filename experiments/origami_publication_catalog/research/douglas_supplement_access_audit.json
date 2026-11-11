@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-05",
+  "failed_non_pdf_responses": [
+    "douglas-2007-si-5.pdf",
+    "douglas-2007-si-6.pdf",
+    "douglas-2007-si-1.pdf",
+    "douglas-2007-si-2.pdf",
+    "douglas-2007-si-3.pdf",
+    "douglas-2007-si-4.pdf"
+  ],
+  "scope": "All available PDF-named responses in research acquisition manifest; actual bytes checked",
+  "main_article_available": true,
+  "protocol_filename_correction": "douglas-2011-protocol-pmc.html contains the2013 paper10.1038/nprot.2013.037; filename year is not evidence."
+}

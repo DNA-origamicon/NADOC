@@ -1,0 +1,3075 @@
+{
+  "audit": {
+    "all_occurrences": 142,
+    "selected_occurrences": 87,
+    "year_headings": [
+      2026,
+      2025,
+      2024,
+      2023,
+      2022,
+      2021,
+      2020,
+      2019,
+      2018,
+      2017,
+      2016,
+      2015,
+      2014,
+      2013,
+      2012,
+      2011,
+      2010,
+      2009,
+      2008
+    ],
+    "per_year": {
+      "2026": 11,
+      "2025": 6,
+      "2024": 5,
+      "2023": 12,
+      "2022": 15,
+      "2021": 6,
+      "2020": 4,
+      "2019": 16,
+      "2018": 9,
+      "2017": 3,
+      "2016": 8,
+      "2015": 7,
+      "2014": 7,
+      "2013": 6,
+      "2012": 8,
+      "2011": 6,
+      "2010": 6,
+      "2009": 3,
+      "2008": 4
+    },
+    "explicit_doi_registry_matches": 8,
+    "missing_coverage": "Before2008 absent from this page; independent histories not enumerated",
+    "counts_are_not_unique_works": true
+  },
+  "entries": [
+    {
+      "heading_year": 2026,
+      "ordinal": 1,
+      "citation": "L. J. K. Weiss, L. Daubner, N. Tedeschi, P. \u0160ulc, & F. C. Simmel, Experimental umbrella sampling of a rotary nanomachine. (2026). bioRxiv 2026.10.15.758702; doi: doi.org/10.64898/2026.10.15.758702",
+      "links": [
+        "https://doi.org/10.64898/2026.10.15.758702"
+      ],
+      "doi_links": [
+        "10.64898/2026.10.15.758702"
+      ],
+      "citation_year_candidates": [
+        "2026",
+        "2026",
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 2,
+      "citation": "R. Y. Loke, L. J. K. Wei\u00df, E. Kopperger, F. C. Simmel, DNA Origami Nanomechanical Amplifiers for Resolving Single-Molecule Binding Events, bioRxiv 2026.08.11.743830; doi: doi.org/10.64898/2026.08.11.743830",
+      "links": [
+        "https://doi.org/10.64898/2026.08.11.743830"
+      ],
+      "doi_links": [
+        "10.64898/2026.08.11.743830"
+      ],
+      "citation_year_candidates": [
+        "2026",
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 3,
+      "citation": "F. Rothfischer, L. J. K. Wei\u00df, S. K. Schinko, N. Tedeschi, R. Y. Loke, M. Matthies, M. Vogt, C. Karfusehr, A. Hebel, P. \u0160ulc, T. Liedl, E. Kopperger, F. C. Simmel, A high-endurance DNA origami snap-through switch for functional nanoscale control, Science Robotics 11 (115), eaec7796, 2026. DOI: 10.1126/scirobotics.aec7796",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 4,
+      "citation": "S. Seo, A. A. Swett, M. R. Kesama, A. S. Madhvacharyula, R. Li, Y. Du, M. Eder, F. C. Simmel, J. H. Choi, A nanoscale Jitterbug transformer from DNA, Nature Communications 17 (1), 7244, 2026. DOI: 10.1038/s41467-026-74070-4",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 5,
+      "citation": "L. J. K. Wei\u00df, F. Rothfischer, Y. Wang, C. Pauer, X. Yin, K. Lang, R. Amin, T. Tsalos, S. Kempter, J. Lipfert, T. Liedl, F. C. Simmel, J. Tavacoli, A. Lak, Magnetic DNA Origami Nanorotors, Advanced Materials, 2026. DOI: 10.1002/adma.74245",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 6,
+      "citation": "H. Y. Yang, C. Karfusehr, F. C. Simmel, Vesicle-Templated Self-Assembly of Programmable Freestanding Multi-\u00b5m DNA Shells, Nano Letters, 2026. DOI: 10.1021/acs.nanolett.6c00402",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 7,
+      "citation": "H. Hellmer, T. Mayer, L. Bauersachs, F. C. Simmel, Operating CRISPR/Cas12a in a complex nucleic acid sequence background, Nucleic Acids Research 54 (8), gkag390, 2026.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 8,
+      "citation": "L. Givelet, S. von Sch\u00f6nberg, F. Katzmeier, F. C. Simmel, Quantifying phage-host dynamics using droplet microfluidics, Nature Communications 17 (1), 3857, 2026.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 9,
+      "citation": "C. Kimna, T. Mayer, D. Zhang, M. Marczynski, C. A. Rickert, F. Henkel, L. J. K. Weiss, F. C. Simmel, Y. Luan, O. Lieleg, Mucin Glycoprotein Nanoparticles Enable a Selective Antisense Therapy for Oncogenic MicroRNAs, Advanced NanoBiomed Research 6 (4), e202500210, 2026.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 10,
+      "citation": "C. Karfusehr, M. Eder, H. Y. Yang, B. Beinsteiner, M. Jasnin, F. C. Simmel, Self-assembled cell-scale containers made from DNA origami membranes, Nature Materials 25 (3), 502\u2013510, 2026.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2026,
+      "ordinal": 11,
+      "citation": "V. Dobretzberger, A. Hebel, M. Ponetsm\u00fcller, F. Ohner, T. R. Umrekar, M. Beeby, F. C. Simmel, I. Bari\u0161i\u0107, Bacterial Expression of Gene-Encoding DNA Origami Structures, Small Structures 7 (2), e202500864, 2026.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2026"
+      ]
+    },
+    {
+      "heading_year": 2025,
+      "ordinal": 1,
+      "citation": "T. J. Kennedy, T. Mayer, F. C. Simmel, C. Thachuk, Systematic non\u2011natural base\u2011pairs for strand displacement circuits in complex environments , bioRxiv , 2025.06.28.662084, 2025.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2025",
+        "2025"
+      ]
+    },
+    {
+      "heading_year": 2025,
+      "ordinal": 2,
+      "citation": "A. C. J\u00e4kel, D. J. J. Truong, F. C. Simmel, Genetic Manipulation of Mammalian Cells in Microphysiological Hydrogels , Advanced Science, e05474, 2025. https://doi.org/10.1002/advs.202505474",
+      "links": [
+        "https://doi.org/10.1002/advs.202505474"
+      ],
+      "doi_links": [
+        "10.1002/advs.202505474"
+      ],
+      "citation_year_candidates": [
+        "2025"
+      ]
+    },
+    {
+      "heading_year": 2025,
+      "ordinal": 3,
+      "citation": "A. S. Madhvacharyula, R. Li, A. A. Swett, Y. Du, S. Seo, F. C. Simmel, J. H. Choi, Realizing mechanical frustration at the nanoscale using DNA origami , Nature Communications 16 (1), 5164, 2025.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2025"
+      ]
+    },
+    {
+      "heading_year": 2025,
+      "ordinal": 4,
+      "citation": "F. Mirzapour\u2011Shafiyi, E. Huber, L. Karr, J. Tong, A. R. Bausch, F. C. Simmel, K. Alim, Flow\u2011Induced Vascular Remodeling On\u2011Chip: Implications for Anti\u2011VEGF Therapy , Advanced Functional Materials , 2501416, 2025",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2025"
+      ]
+    },
+    {
+      "heading_year": 2025,
+      "ordinal": 5,
+      "citation": "L. Koehler, M. Eder, C. Karfusehr, V. Ouazan\u2011Reboul, P. Ronceray, F. C. Simmel, M. Lenz, Topological defect engineering enables size and shape control in self\u2011assembly , arXiv preprint arXiv:2504.13073, 2025.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2025"
+      ]
+    },
+    {
+      "heading_year": 2025,
+      "ordinal": 6,
+      "citation": "J. Herzog, A. C. J\u00e4kel, F. C. Simmel, D. Weuster\u2011Botz, Immobilization and Monitoring of Clostridium carboxidivorans and Clostridium kluyveri in Synthetic Biofilms , Microorganisms 13 (2), 387, 2025.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2025"
+      ]
+    },
+    {
+      "heading_year": 2024,
+      "ordinal": 1,
+      "citation": "Walbrun, A., Wang, T., Matthies, M., \u0160ulc, P., Simmel, F. C. & Rief, M. Single-molecule force spectroscopy of toehold-mediated strand displacement. Nat. Commun. 15, 7564 (2024). Bienau, A., Ja\u0308kel, A. C. & Simmel, F. C. Cell-Free Gene Expression in Bioprinted Fluidic Networks. ACS Synth. Biol. 13, 2447\u20132456 (2024).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2024",
+        "2024"
+      ]
+    },
+    {
+      "heading_year": 2024,
+      "ordinal": 2,
+      "citation": "Tian, Z., Shao, D., Tang, L., Li, Z., Chen, Q., Song, Y., Li, T., Simmel, F. C. & Song, J. Circular single-stranded DNA as a programmable vector for gene regulation in cell-free protein expression systems. Nat. Commun. 15, 4635 (2024).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2024"
+      ]
+    },
+    {
+      "heading_year": 2024,
+      "ordinal": 3,
+      "citation": "Rothfischer, F., Vogt, M., Kopperger, E., Gerland, U. & Simmel, F. C. From Brownian to Deterministic Motor Movement in a DNA-Based Molecular Rotor. Nano Lett. 24, 5224\u20135230 (2024).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2024"
+      ]
+    },
+    {
+      "heading_year": 2024,
+      "ordinal": 4,
+      "citation": "Karfusehr, C., Eder, M. & Simmel, F. C. Self-assembled cell-scale containers made from DNA origami membranes. bioRxiv 2024.02.09.579479 (2024). doi:10.1101/2024.02.09.579479",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2024",
+        "2024",
+        "2024"
+      ]
+    },
+    {
+      "heading_year": 2024,
+      "ordinal": 5,
+      "citation": "Katzmeier, F. & Simmel, F. C. Reversible Self\u2010Assembly of Nucleic Acids in a Diffusiophoretic Trap. Angew. Chem. Int. Ed. e202317118 (2024). doi:10.1002/anie.202317118",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2024"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 1,
+      "citation": "L. Tang, Z. Tian, J. Cheng, Y. Zhang, Y. Song, Y. Liu, J. Wang, P. Zhang, Y. Ke, F.C. Simmel, J. Song, Circular single-stranded DNA as switchable vector for gene expression in mammalian cells , Nat. Commun. 14, 6665 (2023).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 2,
+      "citation": "G. Rilievo, A. Cecconello, N.F. Ghareshiran, M. Magro, F.C. Simmel, F. Vianello, Integration of DNA\u2013RNA\u2010triplex\u2010based regulation of transcription into molecular logic gates . FEBS Lett. 597, 2461\u20132472 (2023).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 3,
+      "citation": "F. Katzmeier, F.C. Simmel, Microrobots powered by concentration polarization electrophoresis (CPEP) , Nat. Commun. 14, 6247 (2023).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 4,
+      "citation": "T. Geisberger, P. Diederich, C. J. O. Kaiser, K. Vogele, A. Ruf, C. Seitz, F. Simmel, W. Eisenreich, P. Schmitt-Kopplin, C. Huber, Formation of vesicular structures from fatty acids formed under simulated volcanic hydrothermal conditions, Sci. Rep. 13 , 15227 (2023).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 5,
+      "citation": "T. Mayer, L. Givelet, F. C. Simmel, Micro-compartmentalized strand displacement reactions with a random pool background, Interface Focus 13 : 20230011. https://doi.org/10.1098/rsfs.2023.0011",
+      "links": [
+        "https://doi.org/10.1098/rsfs.2023.0011"
+      ],
+      "doi_links": [
+        "10.1098/rsfs.2023.0011"
+      ],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 6,
+      "citation": "T. Wang, F. C. Simmel, Switchable fluorescent light-up aptamers based on riboswitch architectures , Angew. Chem. Int. Ed. e202302858 (2023). https://doi.org/10.1002/anie.202302858",
+      "links": [
+        "https://doi.org/10.1002/anie.202302858"
+      ],
+      "doi_links": [
+        "10.1002/anie.202302858"
+      ],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 7,
+      "citation": "F. C. Simmel, Nucleic acid strand displacement\u2013from DNA nanotechnology to translational regulation . RNA biology 20 , 154-163 (2023).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 8,
+      "citation": "L. Givelet, A. Bienau, F. C. Simmel, A Massively Parallel Double\u2010Selection Workflow for the Evolution of Molecular Switches Based on Surface\u2010Display in Escherichia coli. Chem. Eur. J., e202300845 (2023).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 9,
+      "citation": "M. Vogt, M. Langecker, M. Gouder, E. Kopperger, F. Rothfischer, F. C. Simmel#, J. List#, Storage of mechanical energy in DNA nanorobotics using molecular torsion springs . Nat. Phys. 1\u201311 (2023). doi:10.1038/s41567-023-01938-3",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 10,
+      "citation": "T. Mayer, L. Oesinghaus, F. C. Simmel, Toehold-Mediated Strand Displacement in Random Sequence Pools . J. Am. Chem. Soc. 145 , 634-644 (2023).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 11,
+      "citation": "A. C. J\u00e4kel, M. Heymann, F. C. Simmel, Multiscale Biofabrication: Integrating Additive Manufacturing with DNA-Programmable Self-Assembly , Adv. Biol. 7 , 2200195 (2023).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2023,
+      "ordinal": 12,
+      "citation": "T. Wang, H. Hellmer, F. C. Simmel, Genetic switches based on nucleic acid strand displacement, Curr. Op. Biotechnol. 79 , 102867 (2023).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2023"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 1,
+      "citation": "A. Cecconello, M. Magro, F. Vianello, F. C. Simmel, Rational design of hybrid DNA\u2013RNA triplex structures as modulators of transcriptional activity in vitro, Nucl. Acids. Res. 50 , 13172\u201313182 (2022). https://doi.org/10.1093/nar/gkac1131",
+      "links": [
+        "https://doi.org/10.1093/nar/gkac1131"
+      ],
+      "doi_links": [
+        "10.1093/nar/gkac1131"
+      ],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 2,
+      "citation": "Y. Bogawat, S. Krishnan, F. C. Simmel, I. Santiago, Tunable 2D diffusion of DNA nanostructures on lipid membranes , Biophys. J. 121 , 4810-4818 (2022).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 3,
+      "citation": "A. Elonen, A. K. Natarajan, I. Kawamata, L. Oesinghaus, A. Mohammed, J. Seitsonen, Y. Suzuki, F. C. Simmel, A. Kuzyk and P. Orponen, Algorithmic Design of 3D Wireframe RNA Polyhedra , ACS Nano 16 , 16608-16616 (2022). DOI: https://doi.org/10.1021/acsnano.2c06035",
+      "links": [
+        "https://doi.org/10.1021/acsnano.2c06035"
+      ],
+      "doi_links": [
+        "10.1021/acsnano.2c06035"
+      ],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 4,
+      "citation": "A.C. J\u00e4kel, L. Aufinger, F.C. Simmel, Steady-State Operation of a Cell-Free Genetic Band-Detection Circuit , ACS Synth Biol. 11 , 3273-3284 (2022). DOI: 10.1021/acssynbio.2c00195",
+      "links": [
+        "https://doi.org/10.1021/acssynbio.2c00195"
+      ],
+      "doi_links": [
+        "10.1021/acssynbio.2c00195"
+      ],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 5,
+      "citation": "A. B\u00fcchl, E. Kopperger, M. Vogt, M. Langecker, F. C. Simmel, J. List, Energy landscapes of rotary DNA origami devices determined by fluorescence particle tracking , Biophysical Journal 11 , 3273-3284 (2022). https://doi.org/10.1016/j.bpj.2022.08.046",
+      "links": [
+        "https://doi.org/10.1016/j.bpj.2022.08.046"
+      ],
+      "doi_links": [
+        "10.1016/j.bpj.2022.08.046"
+      ],
+      "citation_year_candidates": [
+        "2022",
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 6,
+      "citation": "A.-K. Pumm, W. Engelen, E. Kopperger, J. Isensee, M. Vogt, V. Kozina, M. Kube, M. N. Honemann, E. Bertosin, M. Langecker, R. Golestanian#, F. C. Simmel#, H. Dietz#, A DNA origami rotary ratchet motor, Nature 607, 492\u2013498 (2022). https://doi.org/10.1038/s41586-022-04910-y",
+      "links": [
+        "https://doi.org/10.1038/s41586-022-04910-y"
+      ],
+      "doi_links": [
+        "10.1038/s41586-022-04910-y"
+      ],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 7,
+      "citation": "Q. Emslander, K. Vogele, P. Braun, J. Stender, C. Willy, M. Joppich, J.A. Hammerl, M. Abele, C. Meng, A. Pichlmair, C. Ludwig, J.J. Bugert, F.C. Simmel, G.G. Westmeyer, Cell-free production of personalized therapeutic phages targeting multidrug-resistant bacteria , Cell Chem. Biol. 29 , 1434-1445 (2022). https://doi.org/10.1016/j.chembiol.2022.06.003",
+      "links": [
+        "https://doi.org/10.1016/j.chembiol.2022.06.003"
+      ],
+      "doi_links": [
+        "10.1016/j.chembiol.2022.06.003"
+      ],
+      "citation_year_candidates": [
+        "2022",
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 8,
+      "citation": "L. Aufinger, J. Brenner, and F.C. Simmel, Complex dynamics in a synchronized cell-free genetic clock , Nat. Commun. 13 , 2852 (2022). https://doi.org/10.1038/s41467-022-30478-2",
+      "links": [
+        "https://doi.org/10.1038/s41467-022-30478-2"
+      ],
+      "doi_links": [
+        "10.1038/s41467-022-30478-2"
+      ],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 9,
+      "citation": "T. Wang and F.C. Simmel, Riboswitch-inspired toehold riboregulators for gene regulation in Escherichia coli , Nucl. Acids Res. 50 , 4784-4798 (2022).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 10,
+      "citation": "E. Falgenhauer, A. M\u00fcckl, M. Schwarz-Schilling, and F. C. Simmel, Transcriptional interference in toehold switch-based RNA circuits, ACS Synth. Biol. 11 , 1735-1745 (2022) doi:10.1021/acssynbio.1c00486.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 11,
+      "citation": "A. Dupin*, L. Aufinger*, I. Styazhkin, F. Rothfischer, B. Kaufmann, S. Schwarz, N. Galensowske, H. Clausen-Schaumann, and F. C. Simmel, Synthetic cell-based materials extract positional information from morphogen gradients , Sci. Adv. 8 , eabl9228 (2022)",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 12,
+      "citation": "J. M\u00fcller, A. J\u00e4kel, J. Richter, M. Eder, E. Falgenhauer, and F.C. Simmel, Bacterial growth, communication and guided chemotaxis in 3D bioprinted hydrogel environments, ACS Appl. Mater. Interf., DOI: 10.1021/acsami.1c20836 (2022).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 13,
+      "citation": "F. Katzmeier, B. Altaner, J. List, U. Gerland, and F.C. Simmel, Emergence of Colloidal Patterns in ac Electric Fields , Phys. Rev. Lett. 128 , 058002 (2022).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 14,
+      "citation": "E. Pensa, Y. Bogawat, F.C. Simmel, I. Santiago, Single DNA Origami Detection by Nanoimpact Electrochemistry , ChemElectroChem 9 , e202101696 (2022); doi.org/10.1002/celc.202101696",
+      "links": [
+        "https://doi.org/10.1002/celc.202101696"
+      ],
+      "doi_links": [
+        "10.1002/celc.202101696"
+      ],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2022,
+      "ordinal": 15,
+      "citation": "B. Mazzolai, F. Carpi, K. Suzumori, M. Cianchetti, T. Speck, S.K. Smoukov, I. Burgert, T. Keplinger, G. De Freitas Siqueira, F. Vanneste, O. Goury, C. Duriez, T. Nanayakkara, B. Vanderborght, J. Brancart, S. Terryn, S. Rich, R. Liu, K. Fukuda, T. Someya, M. Calisti, C. Laschi, W. Sun, G. Wang, Li Wen, R. Baines, S. Patiballa, R. Kramer-Bottiglio, D. Rus, P. Fischer, F.C. Simmel and A. Lendlein, Roadmap on Soft Robotics: multifunctionality, adaptability and growth without borders , Multifunct. Mater., in press (2022); https://doi.org/10.1088/2399-7532/ac4c95",
+      "links": [
+        "https://doi.org/10.1088/2399-7532/ac4c95"
+      ],
+      "doi_links": [
+        "10.1088/2399-7532/ac4c95"
+      ],
+      "citation_year_candidates": [
+        "2022"
+      ]
+    },
+    {
+      "heading_year": 2021,
+      "ordinal": 1,
+      "citation": "M. Umar, N. Krause, A. Hawe, F. Simmel, T. Menzen, Towards quantification and differentiation of protein aggregates and silicone oil droplets in the low micrometer and submicrometer size range by using oil-immersion flow imaging microscopy and convolutional neural networks , Eur. J. Pharm. Biopharm. 169, 97-102 (2021).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2021"
+      ]
+    },
+    {
+      "heading_year": 2021,
+      "ordinal": 2,
+      "citation": "L. Oesinghaus and F.C. Simmel, Controlling Gene Expression in Mammalian Cells Using Multiplexed Conditional Guide RNAs for Cas12a , Angew. Chem. Int. Ed. 60, 23894-23902 (2021). https://doi.org/10.1002/anie.202107258",
+      "links": [
+        "https://doi.org/10.1002/anie.202107258"
+      ],
+      "doi_links": [
+        "10.1002/anie.202107258"
+      ],
+      "citation_year_candidates": [
+        "2021"
+      ]
+    },
+    {
+      "heading_year": 2021,
+      "ordinal": 3,
+      "citation": "P. St\u00f6mmer, H. Kiefer, E. Kopperger, M.N. Honemann, M. Kube, F.C. Simmel, R.R. Netz, H. Dietz, A synthetic tubular molecular transport system, Nat. Commun. 12, 4393 (2021) doi: 10.1038/s41467-021-24675-8.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2021"
+      ]
+    },
+    {
+      "heading_year": 2021,
+      "ordinal": 4,
+      "citation": "E. Falgenhauer, S. v. Sch\u00f6nberg, C. Meng, A. M\u00fcckl, K. Vogele, Q. Emslander, C. Ludwig, and F.C. Simmel, Evaluation of an E. coli cell extract prepared by lysozyme-assisted sonication via gene expression, phage assembly and proteomics . ChemBioChem. 22, 2805-2813 (2021). https://doi.org/10.1002/cbic.202100257",
+      "links": [
+        "https://doi.org/10.1002/cbic.202100257"
+      ],
+      "doi_links": [
+        "10.1002/cbic.202100257"
+      ],
+      "citation_year_candidates": [
+        "2021"
+      ]
+    },
+    {
+      "heading_year": 2021,
+      "ordinal": 5,
+      "citation": "K. Vogele, E. Falgenhauer, S. v. Sch\u00f6nberg, F. C. Simmel, and Tobias Pirzer, Small Antisense DNA-Based Gene Silencing Enables Cell-Free Bacteriophage Manipulation and Genome Replication . ACS Synth. Biol., 10, 459\u2013465 (2021). DOI:10.1021/acssynbio.0c00402",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2021"
+      ]
+    },
+    {
+      "heading_year": 2021,
+      "ordinal": 6,
+      "citation": "S. Dey, C. Fan, K. V. Gothelf, J. Li, C. Lin, L. Liu, N. Liu, M. A. D. Nijenhuis, B. Sacca, F. C. Simmel, H. Yan, and P. Zhan, DNA origami , Nat. Rev. Methods Primers 1:13 (2021). DOI:10.1038/s43586-020-00009-8",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2021"
+      ]
+    },
+    {
+      "heading_year": 2020,
+      "ordinal": 1,
+      "citation": "J. Henningsen*, M. Schwarz-Schilling*, A. Leibl, J. Gutierrez, S. Sagredo & F. C. Simmel, Single cell characterization of a synthetic bacterial clock with a hybrid feedback loop containing dCas9-sgRNA , ACS Synth. Biol. 9 , 3377\u20133387(2020). doi:10.1021/acssynbio.0c00438",
+      "links": [
+        "https://dx.doi.org/10.1021/acssynbio.0c00438"
+      ],
+      "doi_links": [
+        "10.1021/acssynbio.0c00438"
+      ],
+      "citation_year_candidates": [
+        "2020"
+      ],
+      "target_key": "authorlead:simmel:2020:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2020,
+      "ordinal": 2,
+      "citation": "T. Frank, K. Vogele, A. Dupin, F. C. Simmel & T. Pirzer, Growth of giant peptide vesicles driven by compartmentalized transcription\u2010translation activity , Chem. Eur. J. 26 , 17356-17360 (2020). doi:10.1002/chem.202003366",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2020"
+      ],
+      "target_key": "authorlead:simmel:2020:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2020,
+      "ordinal": 3,
+      "citation": "A. Aghebat Rafat*, S. Sagredo*, M. Thalhammer & F. C. Simmel, Barcoded DNA origami structures for multiplexed optimization and enrichment of DNA-based protein-binding cavities , Nature Chemistry 12 , 852-859 (2020). doi:10.1038/s41557-020-0504-6",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2020"
+      ],
+      "target_key": "authorlead:simmel:2020:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2020,
+      "ordinal": 4,
+      "citation": "J. M\u00fcller, A.C. J\u00e4kel, D. Schwarz, L. Aufinger, F.C. Simmel, Programming Diffusion and Localization of DNA Signals in 3D-Printed DNA-Functionalized Hydrogels , Small 347 , 2001815\u201310 (2020).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2020"
+      ],
+      "target_key": "authorlead:simmel:2020:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 1,
+      "citation": "R. P. Thomsen, M. G. Malle, A. H. Okholm, S. Krishnan, S. S.-R. Bohr, R. S. S\u00f8rensen, O. Ries, S. Vogel, F. C. Simmel, N. S. Hatzakis & J. Kjems, A large size-selective DNA nanopore with sensing applications . Nature Communications, 10 (1), 5655 (2019). https://doi.org/10.1038/s41467-019-13284-1",
+      "links": [
+        "https://doi.org/10.1038/s41467-019-13284-1"
+      ],
+      "doi_links": [
+        "10.1038/s41467-019-13284-1"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "10.1038/s41467-019-13284-1",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 2,
+      "citation": "F. Katzmeier, L. Aufinger, A. Dupin, J. Quintero, M. Lenz, L. Bauer, S. Klumpe, D. Sherpa, B. D\u00fcrr, M. Honemann, I. Styazhkin, F. C. Simmel, and M. Heymann, A low-cost fluorescence reader for in vitro transcription and nucleic acid detection with Cas13a , PLoS ONE 14 (12):e0220091 (2019). https://doi.org/10.1371/journal.pone.0220091",
+      "links": [
+        "https://doi.org/10.1371/journal.pone.0220091"
+      ],
+      "doi_links": [
+        "10.1371/journal.pone.0220091"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 3,
+      "citation": "Y. Zhang, F. Wang, J. Chao, M. Xie, H. Liu, M. Pan, E. Kopperger, X. Liu, Q. Li, J. Shi, Lihua Wang, J. Hu, Lianhui Wang, F. C. Simmel, and C. Fan, DNA origami cryptography for secure communication , Nature Communications 10 , 5469 (2019). https://doi.org/10.1038/s41467-019-13517-3",
+      "links": [
+        "https://doi.org/10.1038/s41467-019-13517-3"
+      ],
+      "doi_links": [
+        "10.1038/s41467-019-13517-3"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "10.1038/s41467-019-13517-3",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 4,
+      "citation": "I. Santiago, F. C. Simmel, Self-Propulsion Strategies for Artificial Cell-Like Compartments , Nanomaterials 9 , 1680 (2019). https://doi.org/10.3390/nano9121680",
+      "links": [
+        "https://doi.org/10.3390/nano9121680"
+      ],
+      "doi_links": [
+        "10.3390/nano9121680"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 5,
+      "citation": "J. Kim, Y. Zhou, P. D. Carlson, M. Teichmann, S. Chaudhary, F. C. Simmel, P. A. Silver, J. J. Collins, J. B. Lucks, P. Yin, and A. A. Green, De novo-designed translation-repressing riboregulators for multi-input cellular logic , Nature Chemical Biology 14 , 135 (2019). https://doi.org/10.1038/s41589-019-0388-1",
+      "links": [
+        "https://doi.org/10.1038/s41589-019-0388-1"
+      ],
+      "doi_links": [
+        "10.1038/s41589-019-0388-1"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 6,
+      "citation": "M. A. Goetzfried, K. Vogele, A. Mu\u0308ckl, M. Kaiser, N. B. Holland, F. C. Simmel, T. Pirzer , Periodic Operation of a Dynamic DNA Origami Structure Utilizing the Hydrophilic\u2013Hydrophobic Phase-Transition of Stimulus-Sensitive Polypeptides , Small 15 , 1903541 (2019). https://doi.org/10.1002/smll.201903541",
+      "links": [
+        "https://doi.org/10.1002/smll.201903541"
+      ],
+      "doi_links": [
+        "10.1002/smll.201903541"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "10.1002/smll.201903541",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 7,
+      "citation": "F. C. Simmel, Synthetic organelles , Emerg. Top. Life Sci., ETLS20190056 (2019). https://doi.org/10.1042/ETLS20190056",
+      "links": [
+        "https://doi.org/10.1042/ETLS20190056"
+      ],
+      "doi_links": [
+        "10.1042/etls20190056"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 8,
+      "citation": "K. Vogele, T. Pirzer, F. C. Simmel, Genetically encoded membranes for bottom-up biology, ChemSystemsChem 1 , e1900016 (2019). https://onlinelibrary.wiley.com/doi/full/10.1002/syst.201900016",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/full/10.1002/syst.201900016"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:8",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 9,
+      "citation": "L. Aufinger, F. C. Simmel, Establishing communication between artificial cells , Chem. Eur. J. 25 , 12659-12670 (2019). https://doi.org/10.1002/chem.201901726",
+      "links": [
+        "https://doi.org/10.1002/chem.201901726"
+      ],
+      "doi_links": [
+        "10.1002/chem.201901726"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:9",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 10,
+      "citation": "K. Vogele,T. Frank, L. Gasser, M. A. G\u00f6tzfried, M.W. Hackl, S. A. Sieber, F. C. Simmel, T. Pirzer, In Vesiculo Synthesis of Peptide Membrane Precursors for Autonomous Vesicle Growth , J. Vis. Exp. (148), e59831, doi:10.3791/59831 (2019).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:10",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 11,
+      "citation": "L. Oesinghaus, F. C. Simmel, Switching the activity of Cas12a using guide RNA strand displacement circuits, Nature Communications 10 , 2092 (2019). DOI: 10.1038/s41467-019-09953-w",
+      "links": [
+        "https://doi.org/10.1038/s41467-019-09953-w"
+      ],
+      "doi_links": [
+        "10.1038/s41467-019-09953-w"
+      ],
+      "citation_year_candidates": [
+        "2092",
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:11",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 12,
+      "citation": "A. Chopra, S. Sagredo, G. Grossi, E. S. Andersen, F. C. Simmel, Out-of-plane aptamer functionalization of RNA three-helix tiles , Nanomaterials 9 , 507 (2019). DOI: 10.3390/nano9040507",
+      "links": [
+        "https://doi.org/10.3390/nano9040507"
+      ],
+      "doi_links": [
+        "10.3390/nano9040507"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "10.3390/nano9040507",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 13,
+      "citation": "A. Cecconello, F. C. Simmel, Controlling chirality across length scales using DNA , Small 15 , e1805419 (2019). DOI: 10.1002/smll.201805419",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/epdf/10.1002/smll.201805419"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:13",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 14,
+      "citation": "F. C. Simmel#, B. Yurke#, H. Singh, Principles and applications of nucleic acid strand displacement reactions , Chemical Reviews 119 , 6326-6369 (2019). DOI: 10.1021/acs.chemrev.8b00580",
+      "links": [
+        "https://doi.org/10.1021/acs.chemrev.8b00580"
+      ],
+      "doi_links": [
+        "10.1021/acs.chemrev.8b00580"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:14",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 15,
+      "citation": "J. Chao, J. Wang, F. Wang, X. Ouyang, E. Kopperger, H. Liu#, Q. Li, J. Shi, L. Wang, J. Hu, L. Wang, W. Huang, F. C. Simmel#, C. Fan#, Solving mazes with single-molecule DNA navigators , Nature Materials 18 , 273-279 (2019). DOI: 10.1038/s41563-018-0205-3",
+      "links": [
+        "https://www.nature.com/articles/s41563-018-0205-3"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:15",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 16,
+      "citation": "A. Dupin, F. C. Simmel, Signalling and differentiation in emulsion-based multi-compartmentalized in vitro gene circuits, Nature Chemistry 11 , 32\u201339 (2019). DOI: 10.1038/s41557-018-0174-9",
+      "links": [
+        "https://doi.org/10.1038/s41557-018-0174-9"
+      ],
+      "doi_links": [
+        "10.1038/s41557-018-0174-9"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:16",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 1,
+      "citation": "K. Vogele, J. List, F. C. Simmel, T. Pirzer, Enhanced Efficiency of an Enzyme Cascade on DNA-Activated Silica Surfaces , Langmuir 34, 14780\u201314786 (2018). DOI: 10.1021/acs.langmuir.8b01770",
+      "links": [
+        "https://doi.org/10.1021/acs.langmuir.8b01770"
+      ],
+      "doi_links": [
+        "10.1021/acs.langmuir.8b01770"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "10.1021/acs.langmuir.8b01770",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 2,
+      "citation": "L. Aufinger, F. C. Simmel, Artificial Gel-based Organelles for Spatial Organization of Cell-free Gene Expression Reactions , Angew. Chem. Int. Ed. 57 , 17245-17248 (2018). DOI: 10.1002/anie.201809374",
+      "links": [
+        "https://doi.org/10.1002/anie.201809374"
+      ],
+      "doi_links": [
+        "10.1002/anie.201809374"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 3,
+      "citation": "G. Pardatscher*, M. Schwarz-Schilling*, S. Sagredo, F. C. Simmel, Functional Surface-immobilization of Genes Using Multistep Strand Displacement Lithography. J. Vis. Exp. (140), e58634, (2018). DOI: 10.3791/58634",
+      "links": [
+        "https://doi.org/10.3791/58634"
+      ],
+      "doi_links": [
+        "10.3791/58634"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 4,
+      "citation": "K. Vogele, T. Frank, L. Gasser, M. A. Goetzfried, M. W. Hackl, S. A. Sieber, F. C. Simmel, and Tobias Pirzer, Towards synthetic cells using peptide-based reaction compartments , Nature Communications 9 , 3862:1\u20137 (2018). DOI: 10.1038/s41467-018-06379-8",
+      "links": [
+        "http://doi.org/10.1038/s41467-018-06379-8"
+      ],
+      "doi_links": [
+        "10.1038/s41467-018-06379-8"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 5,
+      "citation": "A. M\u00fcckl*, M. Schwarz-Schilling*, K. Fischer, and F. C. Simmel, Filamentation and restoration of normal growth in Escherichia coli using a combined CRISPRi sgRNA/antisense RNA approach , PLOS ONE 13 , e0198058 (2018). DOI: 10.1371/journal.pone.0198058",
+      "links": [
+        "https://doi.org/10.1371/journal.pone.0198058"
+      ],
+      "doi_links": [
+        "10.1371/journal.pone.0198058"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 6,
+      "citation": "H. Singh, E. Kopperger, and F. C. Simmel, A DNA Nanorobot Uprises against Cancer , Trends Mol Med (2018). DOI: 10.1016/j.molmed.2018.05.001",
+      "links": [
+        "https://doi.org/10.1016/j.molmed.2018.05.001"
+      ],
+      "doi_links": [
+        "10.1016/j.molmed.2018.05.001"
+      ],
+      "citation_year_candidates": [
+        "2018",
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 7,
+      "citation": "M. Schwarz-Schilling, A. Dupin, F. Chizzolini, S. Krishnan, S. S. Mansy, and F. C. Simmel, Optimized Assembly of a Multifunctional RNA-Protein Nanostructure in a Cell-Free Gene Expression System , Nano Letters 18 , 2650\u20132657 (2018). DOI: 10.1021/acs.nanolett.8b00526",
+      "links": [
+        "https://doi.org/10.1021/acs.nanolett.8b00526"
+      ],
+      "doi_links": [
+        "10.1021/acs.nanolett.8b00526"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 8,
+      "citation": "G. Pardatscher, M.Schwarz-Schilling, S. S. Daube, R. H Bar-Ziv, and F. C. Simmel, Gene Expression on DNA Biochips Patterned with Strand Displacement Lithography, Angewandte Chemie Int. Ed. 57 , 4783-4786 (2018). DOI: 10.1002/anie.201800281",
+      "links": [
+        "https://doi.org/10.1002/anie.201800281"
+      ],
+      "doi_links": [
+        "10.1002/anie.201800281"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:8",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 9,
+      "citation": "E. Kopperger*, J. List*, S. Madhira, F. Rothfischer, D. C. Lamb, and F. C. Simmel, A self-assembled nanoscale robotic arm controlled by electric fields , Science 359 , 296\u2013301 (2018). DOI: 10.1126/science.aao4284",
+      "links": [
+        "https://doi.org/10.1126/science.aao4284"
+      ],
+      "doi_links": [
+        "10.1126/science.aao4284"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:9",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2017,
+      "ordinal": 1,
+      "citation": "F. C. Simmel and R. Schulman, Self-organizing materials built with DNA , MRS Bulletin 42 , 913-919 (2017).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2017"
+      ],
+      "target_key": "authorlead:simmel:2017:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2017,
+      "ordinal": 2,
+      "citation": "F. C. Simmel, Nanostructure Evolution (News & Views article), Nature Materials 16 , 974-976 (2017).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2017"
+      ],
+      "target_key": "authorlead:simmel:2017:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2017,
+      "ordinal": 3,
+      "citation": "T. S. Schwarzer, M. Hermann, S. Krishnan, F. C. Simmel and K. Castiglione, Preparative refolding of small monomeric outer membrane proteins , Protein Expression and Purification 132 , 171-181 (2017).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2017"
+      ],
+      "target_key": "authorlead:simmel:2017:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 1,
+      "citation": "K. Vogele, J. List, G. Pardatscher, N. B. Holland, F. C. Simmel, and T. Pirzer, A Self-Assembled Active Plasmonic Waveguide with a Peptide-Based Thermo-Mechanical Switch , ACS Nano 10 , 11377-11384 (2016) DOI: 10.1021/acsnano.6b06635",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 2,
+      "citation": "S. Krishnan, D. Ziegler, V. Arnaut, T. G. Martin, K. Kapsner, K. Henneberg, A. R. Bausch, H. Dietz, F. C. Simmel, Molecular transport through large-diameter DNA nanopores , Nature Communications 7 :12787 (2016). DOI: 10.1038/ncomms12787",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 3,
+      "citation": "A. Chopra, S. Krishnan, F. C. Simmel, Electrotransfection of polyamine folded DNA origami structures , Nano Letters 16 (10), 6683\u20136690 (2016). DOI: 10.1021/acs.nanolett.6b03586",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 4,
+      "citation": "G. Pardatscher*, D. Bracha, O. Vonshak*, S. S. Daube, F. C. Simmel # , R. H. Bar-Ziv # , DNA condensation in one dimension , Nature Nanotechnology 11 ,1076\u20131081 (2016). DOI: 10.1038/nnano.2016.142",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016",
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 5,
+      "citation": "J. List, E. Falgenhauer, E. Kopperger, G. Pardatscher, F. C. Simmel, Long-Range Movement of Large Mechanically Interlocked DNA Nanostructures , Nature Communications 7 :12414 (2016). DOI: 10.1038/ncomms12414",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 6,
+      "citation": "S. Sagredo, T. Pirzer, A. Aghebat Rafat, M. A. G\u00f6tzfried, G. Moncalian, F. C. Simmel, F. de la Cruz, Orthogonal protein assembly on DNA nanostructures using relaxases , Angewandte Chemie Int. Ed. 55 , 4348-4352 (2016), DOI: 10.1002/anie.201510313",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 7,
+      "citation": "M. Schwarz-Schilling, L. Aufinger, A. M\u00fcckl, F. C. Simmel, Chemical communication between bacteria and cell-free gene expression systems within linear chains of emulsion droplets, Integrative Biology 8 , 564-570 (2016), DOI: 10.1039/C5IB00301F",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 8,
+      "citation": "T. Ramalho*, A. Meyer*, A. M\u00fcckl, K. Kapsner, U. Gerland, F. C. Simmel, Single cell analysis of a bacterial sender-receiver system , PLOS ONE, e0145829 (2016), DOI:10.1371/journal.pone.0145829",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:8",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 1,
+      "citation": "M. B. Scheible, L. Ong, J. Woehrstein, R. Jungmann, P. Yin, F. C. Simmel, A compact DNA cube with side length 10 nm , Small 11 , 5200\u20135205 (2015). DOI: 10.1002/smll.201501370",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 2,
+      "citation": "M. Amos, I. M. Axmann, N. Bl\u00fcthgen, F. de la Cruz, A. Jaramillo, A. Rodriguez-Paton, F. Simmel, Bacterial computing with engineered populations , Philosophical Transactions of the Royal Society of London A 373 (2015). DOI: 10.1098/rsta.2014.0218.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015",
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2015:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 3,
+      "citation": "K.Kapsner and F. C. Simmel, Partitioning variability of a compartmentalized in vitro transcriptional thresholding circuit , ACS Synthetic Biology 4, 1136-1143(2015). DOI: 10.1021/acssynbio.5b00051.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 4,
+      "citation": "E. Kopperger, T. Pirzer, F. C. Simmel, Diffusive transport of molecular cargo tethered to a DNA origami platform , Nano Letters 15 , 2693\u20132699 (2015). DOI: 10.1021/acs.nanolett.5b00351.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 5,
+      "citation": "S. Kocabey, S. Kempter, J. List, Y. Xing, W. Bae, D. Schiffels, W. Shih, F. C. Simmel, and T. Liedl, Membrane-Assisted Growth of DNA Origami Nanostructure Arrays , ACS Nano 9 , 3530\u20133539 (2015). DOI: 10.1021/acsnano.5b00161.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 6,
+      "citation": "M. Langecker, A. Ivankin, S. Carson, S. R. M. Kinney, F. C. Simmel, M. Wanunu, Nanopores Suggest a Negligible Influence of CpG Methylation on Nucleosome Packaging and Stability , Nano Letters 15 , 783-790 (2015). DOI: 10.1021/nl504522n.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 7,
+      "citation": "S. Krishnan, F. C. Simmel, Deadly DNA (N & V article) , Nature Chemistry 7 , 17-18 (2015).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 1,
+      "citation": "M. Teichmann, E. Kopperger, F. C. Simmel, Robustness of Localized DNA Strand Displacement Cascades , ACS Nano 8 , 8487-8496 (2014). DOI: 10.1021/nn503073p",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 2,
+      "citation": "A. Aghebat Rafat, T. Pirzer, M. Scheible, A. Kostina, F. C. Simmel, Surface-Assisted Large-Scale Ordering of DNA Origami Tiles , Angewandte Chemie Int. Ed. 53 , 7665-7668 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 3,
+      "citation": "M. Langecker, V. Arnaut, J. List, and F. C. Simmel, DNA nanostructures interacting with lipid bilayer membranes , Accounts of Chemical Research 47 , 1807-1815 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 4,
+      "citation": "J. List, M. Weber, F. C. Simmel, Hydrophobic Actuation of a DNA Origami Bilayer Structure , Angewandte Chemie Int. Ed. 53 , 4236-4239 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 5,
+      "citation": "M. Weitz, J. Kim, K. Kapsner, E. Winfree, E. Franco, F. C. Simmel, Diversity in the dynamical behaviour of a compartmentalized programmable biochemical oscillator , Nature Chemistry 6 , 295-302 (2014). http://dx.doi.org/10.1038/nchem.1869",
+      "links": [
+        "http://dx.doi.org/10.1038/nchem.1869"
+      ],
+      "doi_links": [
+        "10.1038/nchem.1869"
+      ],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 6,
+      "citation": "M. Scheible, G. Pardatscher, A. Kuzyk, F. C. Simmel, Single Molecule Characterization of DNA Binding and Strand Displacement Reactions on Lithographic DNA Origami Microarrays , Nano Letters 14 , 1627-1633 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 7,
+      "citation": "M. Weitz, A. M\u00fcckl, K. Kapsner, R. Berg, A. Meyer, F. C. Simmel, Communication and computation by bacteria compartmentalized within microemulsion droplets , Journal of the American Chemical Society 136 , 72-75 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 1,
+      "citation": "V. Arnaut, M. Langecker, F. C. Simmel, Nanopore force spectroscopy of aptamer-ligand complexes , Biophysical Journal 105 , 1199-1207 (2013).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 2,
+      "citation": "F. C. Simmel, Artificial cells: Crowded genes perform differently (News & Views article), Nature Nanotechnology 8 , 545-546 (2013).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 3,
+      "citation": "F. C. Simmel, DNA-Nanotechnologie (in German), Chemie in unserer Zeit 47 , 164-173 (2013).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 4,
+      "citation": "C. Troiber, J. C. Kasper, S. Milani, M. Scheible, I. Martin, F. Schaubhut, S. K\u00fcchler, J. R\u00e4dler, F. C. Simmel, W. Friess, and E. Wagner, Comparison of four different particle sizing methods for siRNA polyplex characterization , European Journal of Pharmaceutics and Biopharmaceutics 84 (2), 255 (2013).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 5,
+      "citation": "F. C. Simmel, DNA origami \u2013 art, science, and engineering , Frontiers in Life Science (2013). http://dx.doi.org/10.1080/21553769.2012.745453",
+      "links": [
+        "http://dx.doi.org/10.1080/21553769.2012.745453"
+      ],
+      "doi_links": [
+        "10.1080/21553769.2012.745453"
+      ],
+      "citation_year_candidates": [
+        "2013",
+        "2012"
+      ],
+      "target_key": "10.1080/21553769.2012.745453",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 6,
+      "citation": "F. C. Simmel, Programming the dynamics of biochemical reaction networks , ACS Nano 7, 6-10 (2013). http://dx.doi.org/10.1021/nn305811d",
+      "links": [
+        "http://dx.doi.org/10.1021/nn305811d"
+      ],
+      "doi_links": [
+        "10.1021/nn305811d"
+      ],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 1,
+      "citation": "M. Langecker, V. Arnaut, T. G. Martin, J.List, S. Renner, M. Mayer, H. Dietz, F. C. Simmel, Synthetic lipid membrane channels formed by designed DNA nanostructures , Science 338 , 932-936 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 2,
+      "citation": "F. C. Simmel, DNA-based assembly lines and nanofactories , Curr. Op. Biotechnology 23 , 516-521 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 3,
+      "citation": "G. P. Acuna, M. Bucher, I. Stein, C. Steinhauer, A. Kuzyk, P. Holzmeister, R. Schreiber, A. Moroz, F. D. Stefani, T. Liedl, F. C. Simmel, and P. Tinnefeld, Distance dependence of single-fluorophore quenching by gold nanoparticles studied on DNA origami , ACS Nano 6 , 3189 - 3195 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 4,
+      "citation": "A. Bessonov, J. Takemoto, F. C. Simmel, Probing DNA-lipid membrane interactions with a lipopeptide nanopore , ACS Nano 6 , 3356-3363 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 5,
+      "citation": "M. Weitz, F. C. Simmel, Synthetic in vitro transcription circuits , Transcription 3 , 87-91(2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 6,
+      "citation": "A. Kuzyk, R. Schreiber, Z. Fan, G. Pardatscher, E. Roller, A. H\u00f6gele, F. C. Simmel, A. Govorov, T. Liedl, DNA-based self-assembly of chiral plasmonic nanostructures with tailored optical response , Nature 483 , 311-314 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 7,
+      "citation": "S. Schink, S. Renner, K. Alim, V. Arnaut, F. C. Simmel, U. Gerland, A versatile first passage framework for the translocation dynamics of structured polynucleotides , Biophysical Journal 102 , 85-95 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 8,
+      "citation": "R. Jungmann, M. Scheible, F. C. Simmel, Nanoscale imaging in DNA nanotechnology , WIREs Nanomedicine & Nanobiotechnology 4 , 66-81 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:8",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 1,
+      "citation": "M. Langecker, D. Pedone, F. C. Simmel, U. Rant, Electrophoretic time-of-flight measurements of single DNA molecules with two stacked nanopores , Nano Letters 11 , 5002-5007 (2011). http://dx.doi.org/10.1021/nl2030079",
+      "links": [
+        "http://dx.doi.org/10.1021/nl2030079"
+      ],
+      "doi_links": [
+        "10.1021/nl2030079"
+      ],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 2,
+      "citation": "E. Franco, E. Friedrichs, J. Kim, R. Jungmann, R. Murray, E. Winfree, F. C. Simmel, Timing molecular production and motion with a synthetic transcriptional clock , Proc. Natl. Acad. Sci. U.S.A. 108 , E784-E793 (2011). DOI: 10.1073/pnas.1100060108",
+      "links": [
+        "http://www.pnas.org/cgi/doi/10.1073/pnas.1100060108"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 3,
+      "citation": "A. Kuzyk, Dielectrophoresis at the nanoscale , Electrophoresis, 32 , 2307, (2011). http://dx.doi.org/10.1002/elps.201100038",
+      "links": [
+        "http://dx.doi.org/10.1002/elps.201100038"
+      ],
+      "doi_links": [
+        "10.1002/elps.201100038"
+      ],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 4,
+      "citation": "R. Jungmann, M. Scheible, A. Kuzyk, G. Pardatscher, C. E. Castro, F. C. Simmel, DNA origami-based nanoribbons: assembly, length distribution, and twist, Nanotechnology, 22, 275301 (2011). http://iopscience.iop.org/0957-4484/22/27/275301",
+      "links": [
+        "http://iopscience.iop.org/0957-4484/22/27/275301/"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 5,
+      "citation": "Y. Krishnan and F. C. Simmel, Nucleic acid based molecular devices, Angewandte Chemie Int. Ed. 50 , 3124-3156 (2011). http://dx.doi.org/10.1002/anie.200907223",
+      "links": [
+        "http://dx.doi.org/10.1002/anie.200907223"
+      ],
+      "doi_links": [
+        "10.1002/anie.200907223"
+      ],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 6,
+      "citation": "S. Renner, A. Bessonov, F. C. Simmel, Voltage-controlled insertion of single \u03b1-hemolysin and MspA nanopores into lipid bilayer membranes, Appl. Phys. Lett. 98 , 083701 (2011). http://dx.doi.org/10.1063/1.3558902",
+      "links": [
+        "http://dx.doi.org/10.1063/1.3558902"
+      ],
+      "doi_links": [
+        "10.1063/1.3558902"
+      ],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 1,
+      "citation": "S. Renner, A. Bessonov, U. Gerland, F. C. Simmel, Sequence-dependent unfolding kinetics of DNA hairpins studied by nanopore force spectroscopy , J. Phys. Cond. Mat. 22 , 454119 (2010).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 2,
+      "citation": "R. Jungmann, C. Steinhauer, M. Scheible, A. Kuzyk, P. Tinnefeld, F. C. Simmel, Single-Molecule Kinetics and Super-Resolution Microscopy by Fluorescence Imaging of Transient Binding on DNA Origami , Nano Letters 10, 4756-4761 (2010) http://dx.doi.org/10.1021/nl103427w",
+      "links": [
+        "http://dx.doi.org/10.1021/nl103427w"
+      ],
+      "doi_links": [
+        "10.1021/nl103427w"
+      ],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "10.1021/nl103427w",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 3,
+      "citation": "S. Modi, D. Bhatia, F. C. Simmel, and Y. Krishnan, Structural DNA Nanotechnology: From bases to bricks, from structure to function , Journal of Physical Chemistry Letters 1 , 1994-2005 (2010). http://dx.doi.org/10.1021/jz1004957",
+      "links": [
+        "http://dx.doi.org/10.1021/jz1004957"
+      ],
+      "doi_links": [
+        "10.1021/jz1004957"
+      ],
+      "citation_year_candidates": [
+        "1994",
+        "2005",
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 4,
+      "citation": "V. Tejedor, O. Benichou, R. Voituriez, R. Jungmann, F. C. Simmel, C. Selhuber, L. Oddershede, and R. Metzler, Quantitative analysis of single particle trajectories , Biophysical Journal 98 , 1364-1372 (2010).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 5,
+      "citation": "S. Kaniber, M. Brandstetter, F. C. Simmel, I. Carmeli, A. Holleitner, On-Chip Functionalization of Carbon Nanotubes with Photosystem I , Journal of the American Chemical Society 132 , 2872-2873 (2010).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 6,
+      "citation": "S. Renner, S. Geltinger, F. C. Simmel, Nanopore Translocation and Force Spectroscopy Experiments in Microemulsion Droplets , Small, 6 , 190-194 (2010). http://dx.doi.org/10.1002/smll.200901435",
+      "links": [
+        "http://dx.doi.org/10.1002/smll.200901435"
+      ],
+      "doi_links": [
+        "10.1002/smll.200901435"
+      ],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2009,
+      "ordinal": 1,
+      "citation": "F. C. Simmel, N & V: Wiring up ion channels , Nature Physics 5 , 783 - 784 (2009).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2009"
+      ],
+      "target_key": "authorlead:simmel:2009:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2009,
+      "ordinal": 2,
+      "citation": "C. Steinhauer, R. Jungmann, T. Sobey, F. C. Simmel, P. Tinnefeld, DNA Origami as a Nanoscopic Ruler for Super-Resolution Microscopy , Angewandte Chemie Int. Ed. 48 , 8870-8873(2009).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2009"
+      ],
+      "target_key": "authorlead:simmel:2009:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2009,
+      "ordinal": 3,
+      "citation": "F. C. Simmel, Processive motion of bipedal DNA walkers , ChemPhysChem 10 , 2593-2597 (2009). S. Kaniber, F. C. Simmel, A. W. Holleitner, I. Carmeli, The optoelectronic properties of a photosystem I - carbon nanotube hybrid system , Nanotechnology 20 , art. 345701 (2009).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2009",
+        "2009"
+      ],
+      "target_key": "authorlead:simmel:2009:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2008,
+      "ordinal": 1,
+      "citation": "R. Jungmann, T. Liedl, T. L. Sobey, W. Shih, and F. C. Simmel, Isothermal assembly of DNA origami structures using denaturing agents, Journal of the American Chemical Society, 130 , 10062-10063 (2008). http://dx.doi.org/ 10.1021/ja8030196",
+      "links": [
+        "http://dx.doi.org/10.1021/ja8030196"
+      ],
+      "doi_links": [
+        "10.1021/ja8030196"
+      ],
+      "citation_year_candidates": [
+        "2008"
+      ],
+      "target_key": "10.1021/ja8030196",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2008,
+      "ordinal": 2,
+      "citation": "F. C. Simmel, Three-dimensional nanoconstruction with DNA, Angewandte Chemie Int. Ed. 47 , 5884-5887 (2008).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2008"
+      ],
+      "target_key": "authorlead:simmel:2008:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2008,
+      "ordinal": 3,
+      "citation": "R. Jungmann, S. Renner, F. C. Simmel, From DNA nanotechnology to synthetic biology , HFSP Journal 2 , 99-109 (2008).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2008"
+      ],
+      "target_key": "authorlead:simmel:2008:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2008,
+      "ordinal": 4,
+      "citation": "M. Olapinski, S. Manus, N. Fertig, F. C. Simmel, Probing whole cell currents in high-frequency fields: Identification of thermal effects , Biosensors and Bioelectronics 23 , 872-878 (2008).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2008"
+      ],
+      "target_key": "authorlead:simmel:2008:4",
+      "identity_status": "pending_identity"
+    }
+  ],
+  "selected": [
+    {
+      "heading_year": 2020,
+      "ordinal": 1,
+      "citation": "J. Henningsen*, M. Schwarz-Schilling*, A. Leibl, J. Gutierrez, S. Sagredo & F. C. Simmel, Single cell characterization of a synthetic bacterial clock with a hybrid feedback loop containing dCas9-sgRNA , ACS Synth. Biol. 9 , 3377\u20133387(2020). doi:10.1021/acssynbio.0c00438",
+      "links": [
+        "https://dx.doi.org/10.1021/acssynbio.0c00438"
+      ],
+      "doi_links": [
+        "10.1021/acssynbio.0c00438"
+      ],
+      "citation_year_candidates": [
+        "2020"
+      ],
+      "target_key": "authorlead:simmel:2020:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2020,
+      "ordinal": 2,
+      "citation": "T. Frank, K. Vogele, A. Dupin, F. C. Simmel & T. Pirzer, Growth of giant peptide vesicles driven by compartmentalized transcription\u2010translation activity , Chem. Eur. J. 26 , 17356-17360 (2020). doi:10.1002/chem.202003366",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2020"
+      ],
+      "target_key": "authorlead:simmel:2020:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2020,
+      "ordinal": 3,
+      "citation": "A. Aghebat Rafat*, S. Sagredo*, M. Thalhammer & F. C. Simmel, Barcoded DNA origami structures for multiplexed optimization and enrichment of DNA-based protein-binding cavities , Nature Chemistry 12 , 852-859 (2020). doi:10.1038/s41557-020-0504-6",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2020"
+      ],
+      "target_key": "authorlead:simmel:2020:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2020,
+      "ordinal": 4,
+      "citation": "J. M\u00fcller, A.C. J\u00e4kel, D. Schwarz, L. Aufinger, F.C. Simmel, Programming Diffusion and Localization of DNA Signals in 3D-Printed DNA-Functionalized Hydrogels , Small 347 , 2001815\u201310 (2020).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2020"
+      ],
+      "target_key": "authorlead:simmel:2020:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 1,
+      "citation": "R. P. Thomsen, M. G. Malle, A. H. Okholm, S. Krishnan, S. S.-R. Bohr, R. S. S\u00f8rensen, O. Ries, S. Vogel, F. C. Simmel, N. S. Hatzakis & J. Kjems, A large size-selective DNA nanopore with sensing applications . Nature Communications, 10 (1), 5655 (2019). https://doi.org/10.1038/s41467-019-13284-1",
+      "links": [
+        "https://doi.org/10.1038/s41467-019-13284-1"
+      ],
+      "doi_links": [
+        "10.1038/s41467-019-13284-1"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "10.1038/s41467-019-13284-1",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 2,
+      "citation": "F. Katzmeier, L. Aufinger, A. Dupin, J. Quintero, M. Lenz, L. Bauer, S. Klumpe, D. Sherpa, B. D\u00fcrr, M. Honemann, I. Styazhkin, F. C. Simmel, and M. Heymann, A low-cost fluorescence reader for in vitro transcription and nucleic acid detection with Cas13a , PLoS ONE 14 (12):e0220091 (2019). https://doi.org/10.1371/journal.pone.0220091",
+      "links": [
+        "https://doi.org/10.1371/journal.pone.0220091"
+      ],
+      "doi_links": [
+        "10.1371/journal.pone.0220091"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 3,
+      "citation": "Y. Zhang, F. Wang, J. Chao, M. Xie, H. Liu, M. Pan, E. Kopperger, X. Liu, Q. Li, J. Shi, Lihua Wang, J. Hu, Lianhui Wang, F. C. Simmel, and C. Fan, DNA origami cryptography for secure communication , Nature Communications 10 , 5469 (2019). https://doi.org/10.1038/s41467-019-13517-3",
+      "links": [
+        "https://doi.org/10.1038/s41467-019-13517-3"
+      ],
+      "doi_links": [
+        "10.1038/s41467-019-13517-3"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "10.1038/s41467-019-13517-3",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 4,
+      "citation": "I. Santiago, F. C. Simmel, Self-Propulsion Strategies for Artificial Cell-Like Compartments , Nanomaterials 9 , 1680 (2019). https://doi.org/10.3390/nano9121680",
+      "links": [
+        "https://doi.org/10.3390/nano9121680"
+      ],
+      "doi_links": [
+        "10.3390/nano9121680"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 5,
+      "citation": "J. Kim, Y. Zhou, P. D. Carlson, M. Teichmann, S. Chaudhary, F. C. Simmel, P. A. Silver, J. J. Collins, J. B. Lucks, P. Yin, and A. A. Green, De novo-designed translation-repressing riboregulators for multi-input cellular logic , Nature Chemical Biology 14 , 135 (2019). https://doi.org/10.1038/s41589-019-0388-1",
+      "links": [
+        "https://doi.org/10.1038/s41589-019-0388-1"
+      ],
+      "doi_links": [
+        "10.1038/s41589-019-0388-1"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 6,
+      "citation": "M. A. Goetzfried, K. Vogele, A. Mu\u0308ckl, M. Kaiser, N. B. Holland, F. C. Simmel, T. Pirzer , Periodic Operation of a Dynamic DNA Origami Structure Utilizing the Hydrophilic\u2013Hydrophobic Phase-Transition of Stimulus-Sensitive Polypeptides , Small 15 , 1903541 (2019). https://doi.org/10.1002/smll.201903541",
+      "links": [
+        "https://doi.org/10.1002/smll.201903541"
+      ],
+      "doi_links": [
+        "10.1002/smll.201903541"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "10.1002/smll.201903541",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 7,
+      "citation": "F. C. Simmel, Synthetic organelles , Emerg. Top. Life Sci., ETLS20190056 (2019). https://doi.org/10.1042/ETLS20190056",
+      "links": [
+        "https://doi.org/10.1042/ETLS20190056"
+      ],
+      "doi_links": [
+        "10.1042/etls20190056"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 8,
+      "citation": "K. Vogele, T. Pirzer, F. C. Simmel, Genetically encoded membranes for bottom-up biology, ChemSystemsChem 1 , e1900016 (2019). https://onlinelibrary.wiley.com/doi/full/10.1002/syst.201900016",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/full/10.1002/syst.201900016"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:8",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 9,
+      "citation": "L. Aufinger, F. C. Simmel, Establishing communication between artificial cells , Chem. Eur. J. 25 , 12659-12670 (2019). https://doi.org/10.1002/chem.201901726",
+      "links": [
+        "https://doi.org/10.1002/chem.201901726"
+      ],
+      "doi_links": [
+        "10.1002/chem.201901726"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:9",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 10,
+      "citation": "K. Vogele,T. Frank, L. Gasser, M. A. G\u00f6tzfried, M.W. Hackl, S. A. Sieber, F. C. Simmel, T. Pirzer, In Vesiculo Synthesis of Peptide Membrane Precursors for Autonomous Vesicle Growth , J. Vis. Exp. (148), e59831, doi:10.3791/59831 (2019).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:10",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 11,
+      "citation": "L. Oesinghaus, F. C. Simmel, Switching the activity of Cas12a using guide RNA strand displacement circuits, Nature Communications 10 , 2092 (2019). DOI: 10.1038/s41467-019-09953-w",
+      "links": [
+        "https://doi.org/10.1038/s41467-019-09953-w"
+      ],
+      "doi_links": [
+        "10.1038/s41467-019-09953-w"
+      ],
+      "citation_year_candidates": [
+        "2092",
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:11",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 12,
+      "citation": "A. Chopra, S. Sagredo, G. Grossi, E. S. Andersen, F. C. Simmel, Out-of-plane aptamer functionalization of RNA three-helix tiles , Nanomaterials 9 , 507 (2019). DOI: 10.3390/nano9040507",
+      "links": [
+        "https://doi.org/10.3390/nano9040507"
+      ],
+      "doi_links": [
+        "10.3390/nano9040507"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "10.3390/nano9040507",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 13,
+      "citation": "A. Cecconello, F. C. Simmel, Controlling chirality across length scales using DNA , Small 15 , e1805419 (2019). DOI: 10.1002/smll.201805419",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/epdf/10.1002/smll.201805419"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:13",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 14,
+      "citation": "F. C. Simmel#, B. Yurke#, H. Singh, Principles and applications of nucleic acid strand displacement reactions , Chemical Reviews 119 , 6326-6369 (2019). DOI: 10.1021/acs.chemrev.8b00580",
+      "links": [
+        "https://doi.org/10.1021/acs.chemrev.8b00580"
+      ],
+      "doi_links": [
+        "10.1021/acs.chemrev.8b00580"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:14",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 15,
+      "citation": "J. Chao, J. Wang, F. Wang, X. Ouyang, E. Kopperger, H. Liu#, Q. Li, J. Shi, L. Wang, J. Hu, L. Wang, W. Huang, F. C. Simmel#, C. Fan#, Solving mazes with single-molecule DNA navigators , Nature Materials 18 , 273-279 (2019). DOI: 10.1038/s41563-018-0205-3",
+      "links": [
+        "https://www.nature.com/articles/s41563-018-0205-3"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:15",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2019,
+      "ordinal": 16,
+      "citation": "A. Dupin, F. C. Simmel, Signalling and differentiation in emulsion-based multi-compartmentalized in vitro gene circuits, Nature Chemistry 11 , 32\u201339 (2019). DOI: 10.1038/s41557-018-0174-9",
+      "links": [
+        "https://doi.org/10.1038/s41557-018-0174-9"
+      ],
+      "doi_links": [
+        "10.1038/s41557-018-0174-9"
+      ],
+      "citation_year_candidates": [
+        "2019"
+      ],
+      "target_key": "authorlead:simmel:2019:16",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 1,
+      "citation": "K. Vogele, J. List, F. C. Simmel, T. Pirzer, Enhanced Efficiency of an Enzyme Cascade on DNA-Activated Silica Surfaces , Langmuir 34, 14780\u201314786 (2018). DOI: 10.1021/acs.langmuir.8b01770",
+      "links": [
+        "https://doi.org/10.1021/acs.langmuir.8b01770"
+      ],
+      "doi_links": [
+        "10.1021/acs.langmuir.8b01770"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "10.1021/acs.langmuir.8b01770",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 2,
+      "citation": "L. Aufinger, F. C. Simmel, Artificial Gel-based Organelles for Spatial Organization of Cell-free Gene Expression Reactions , Angew. Chem. Int. Ed. 57 , 17245-17248 (2018). DOI: 10.1002/anie.201809374",
+      "links": [
+        "https://doi.org/10.1002/anie.201809374"
+      ],
+      "doi_links": [
+        "10.1002/anie.201809374"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 3,
+      "citation": "G. Pardatscher*, M. Schwarz-Schilling*, S. Sagredo, F. C. Simmel, Functional Surface-immobilization of Genes Using Multistep Strand Displacement Lithography. J. Vis. Exp. (140), e58634, (2018). DOI: 10.3791/58634",
+      "links": [
+        "https://doi.org/10.3791/58634"
+      ],
+      "doi_links": [
+        "10.3791/58634"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 4,
+      "citation": "K. Vogele, T. Frank, L. Gasser, M. A. Goetzfried, M. W. Hackl, S. A. Sieber, F. C. Simmel, and Tobias Pirzer, Towards synthetic cells using peptide-based reaction compartments , Nature Communications 9 , 3862:1\u20137 (2018). DOI: 10.1038/s41467-018-06379-8",
+      "links": [
+        "http://doi.org/10.1038/s41467-018-06379-8"
+      ],
+      "doi_links": [
+        "10.1038/s41467-018-06379-8"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 5,
+      "citation": "A. M\u00fcckl*, M. Schwarz-Schilling*, K. Fischer, and F. C. Simmel, Filamentation and restoration of normal growth in Escherichia coli using a combined CRISPRi sgRNA/antisense RNA approach , PLOS ONE 13 , e0198058 (2018). DOI: 10.1371/journal.pone.0198058",
+      "links": [
+        "https://doi.org/10.1371/journal.pone.0198058"
+      ],
+      "doi_links": [
+        "10.1371/journal.pone.0198058"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 6,
+      "citation": "H. Singh, E. Kopperger, and F. C. Simmel, A DNA Nanorobot Uprises against Cancer , Trends Mol Med (2018). DOI: 10.1016/j.molmed.2018.05.001",
+      "links": [
+        "https://doi.org/10.1016/j.molmed.2018.05.001"
+      ],
+      "doi_links": [
+        "10.1016/j.molmed.2018.05.001"
+      ],
+      "citation_year_candidates": [
+        "2018",
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 7,
+      "citation": "M. Schwarz-Schilling, A. Dupin, F. Chizzolini, S. Krishnan, S. S. Mansy, and F. C. Simmel, Optimized Assembly of a Multifunctional RNA-Protein Nanostructure in a Cell-Free Gene Expression System , Nano Letters 18 , 2650\u20132657 (2018). DOI: 10.1021/acs.nanolett.8b00526",
+      "links": [
+        "https://doi.org/10.1021/acs.nanolett.8b00526"
+      ],
+      "doi_links": [
+        "10.1021/acs.nanolett.8b00526"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 8,
+      "citation": "G. Pardatscher, M.Schwarz-Schilling, S. S. Daube, R. H Bar-Ziv, and F. C. Simmel, Gene Expression on DNA Biochips Patterned with Strand Displacement Lithography, Angewandte Chemie Int. Ed. 57 , 4783-4786 (2018). DOI: 10.1002/anie.201800281",
+      "links": [
+        "https://doi.org/10.1002/anie.201800281"
+      ],
+      "doi_links": [
+        "10.1002/anie.201800281"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:8",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2018,
+      "ordinal": 9,
+      "citation": "E. Kopperger*, J. List*, S. Madhira, F. Rothfischer, D. C. Lamb, and F. C. Simmel, A self-assembled nanoscale robotic arm controlled by electric fields , Science 359 , 296\u2013301 (2018). DOI: 10.1126/science.aao4284",
+      "links": [
+        "https://doi.org/10.1126/science.aao4284"
+      ],
+      "doi_links": [
+        "10.1126/science.aao4284"
+      ],
+      "citation_year_candidates": [
+        "2018"
+      ],
+      "target_key": "authorlead:simmel:2018:9",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2017,
+      "ordinal": 1,
+      "citation": "F. C. Simmel and R. Schulman, Self-organizing materials built with DNA , MRS Bulletin 42 , 913-919 (2017).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2017"
+      ],
+      "target_key": "authorlead:simmel:2017:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2017,
+      "ordinal": 2,
+      "citation": "F. C. Simmel, Nanostructure Evolution (News & Views article), Nature Materials 16 , 974-976 (2017).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2017"
+      ],
+      "target_key": "authorlead:simmel:2017:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2017,
+      "ordinal": 3,
+      "citation": "T. S. Schwarzer, M. Hermann, S. Krishnan, F. C. Simmel and K. Castiglione, Preparative refolding of small monomeric outer membrane proteins , Protein Expression and Purification 132 , 171-181 (2017).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2017"
+      ],
+      "target_key": "authorlead:simmel:2017:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 1,
+      "citation": "K. Vogele, J. List, G. Pardatscher, N. B. Holland, F. C. Simmel, and T. Pirzer, A Self-Assembled Active Plasmonic Waveguide with a Peptide-Based Thermo-Mechanical Switch , ACS Nano 10 , 11377-11384 (2016) DOI: 10.1021/acsnano.6b06635",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 2,
+      "citation": "S. Krishnan, D. Ziegler, V. Arnaut, T. G. Martin, K. Kapsner, K. Henneberg, A. R. Bausch, H. Dietz, F. C. Simmel, Molecular transport through large-diameter DNA nanopores , Nature Communications 7 :12787 (2016). DOI: 10.1038/ncomms12787",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 3,
+      "citation": "A. Chopra, S. Krishnan, F. C. Simmel, Electrotransfection of polyamine folded DNA origami structures , Nano Letters 16 (10), 6683\u20136690 (2016). DOI: 10.1021/acs.nanolett.6b03586",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 4,
+      "citation": "G. Pardatscher*, D. Bracha, O. Vonshak*, S. S. Daube, F. C. Simmel # , R. H. Bar-Ziv # , DNA condensation in one dimension , Nature Nanotechnology 11 ,1076\u20131081 (2016). DOI: 10.1038/nnano.2016.142",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016",
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 5,
+      "citation": "J. List, E. Falgenhauer, E. Kopperger, G. Pardatscher, F. C. Simmel, Long-Range Movement of Large Mechanically Interlocked DNA Nanostructures , Nature Communications 7 :12414 (2016). DOI: 10.1038/ncomms12414",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 6,
+      "citation": "S. Sagredo, T. Pirzer, A. Aghebat Rafat, M. A. G\u00f6tzfried, G. Moncalian, F. C. Simmel, F. de la Cruz, Orthogonal protein assembly on DNA nanostructures using relaxases , Angewandte Chemie Int. Ed. 55 , 4348-4352 (2016), DOI: 10.1002/anie.201510313",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 7,
+      "citation": "M. Schwarz-Schilling, L. Aufinger, A. M\u00fcckl, F. C. Simmel, Chemical communication between bacteria and cell-free gene expression systems within linear chains of emulsion droplets, Integrative Biology 8 , 564-570 (2016), DOI: 10.1039/C5IB00301F",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2016,
+      "ordinal": 8,
+      "citation": "T. Ramalho*, A. Meyer*, A. M\u00fcckl, K. Kapsner, U. Gerland, F. C. Simmel, Single cell analysis of a bacterial sender-receiver system , PLOS ONE, e0145829 (2016), DOI:10.1371/journal.pone.0145829",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2016"
+      ],
+      "target_key": "authorlead:simmel:2016:8",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 1,
+      "citation": "M. B. Scheible, L. Ong, J. Woehrstein, R. Jungmann, P. Yin, F. C. Simmel, A compact DNA cube with side length 10 nm , Small 11 , 5200\u20135205 (2015). DOI: 10.1002/smll.201501370",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 2,
+      "citation": "M. Amos, I. M. Axmann, N. Bl\u00fcthgen, F. de la Cruz, A. Jaramillo, A. Rodriguez-Paton, F. Simmel, Bacterial computing with engineered populations , Philosophical Transactions of the Royal Society of London A 373 (2015). DOI: 10.1098/rsta.2014.0218.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015",
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2015:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 3,
+      "citation": "K.Kapsner and F. C. Simmel, Partitioning variability of a compartmentalized in vitro transcriptional thresholding circuit , ACS Synthetic Biology 4, 1136-1143(2015). DOI: 10.1021/acssynbio.5b00051.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 4,
+      "citation": "E. Kopperger, T. Pirzer, F. C. Simmel, Diffusive transport of molecular cargo tethered to a DNA origami platform , Nano Letters 15 , 2693\u20132699 (2015). DOI: 10.1021/acs.nanolett.5b00351.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 5,
+      "citation": "S. Kocabey, S. Kempter, J. List, Y. Xing, W. Bae, D. Schiffels, W. Shih, F. C. Simmel, and T. Liedl, Membrane-Assisted Growth of DNA Origami Nanostructure Arrays , ACS Nano 9 , 3530\u20133539 (2015). DOI: 10.1021/acsnano.5b00161.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 6,
+      "citation": "M. Langecker, A. Ivankin, S. Carson, S. R. M. Kinney, F. C. Simmel, M. Wanunu, Nanopores Suggest a Negligible Influence of CpG Methylation on Nucleosome Packaging and Stability , Nano Letters 15 , 783-790 (2015). DOI: 10.1021/nl504522n.",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2015,
+      "ordinal": 7,
+      "citation": "S. Krishnan, F. C. Simmel, Deadly DNA (N & V article) , Nature Chemistry 7 , 17-18 (2015).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2015"
+      ],
+      "target_key": "authorlead:simmel:2015:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 1,
+      "citation": "M. Teichmann, E. Kopperger, F. C. Simmel, Robustness of Localized DNA Strand Displacement Cascades , ACS Nano 8 , 8487-8496 (2014). DOI: 10.1021/nn503073p",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 2,
+      "citation": "A. Aghebat Rafat, T. Pirzer, M. Scheible, A. Kostina, F. C. Simmel, Surface-Assisted Large-Scale Ordering of DNA Origami Tiles , Angewandte Chemie Int. Ed. 53 , 7665-7668 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 3,
+      "citation": "M. Langecker, V. Arnaut, J. List, and F. C. Simmel, DNA nanostructures interacting with lipid bilayer membranes , Accounts of Chemical Research 47 , 1807-1815 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 4,
+      "citation": "J. List, M. Weber, F. C. Simmel, Hydrophobic Actuation of a DNA Origami Bilayer Structure , Angewandte Chemie Int. Ed. 53 , 4236-4239 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 5,
+      "citation": "M. Weitz, J. Kim, K. Kapsner, E. Winfree, E. Franco, F. C. Simmel, Diversity in the dynamical behaviour of a compartmentalized programmable biochemical oscillator , Nature Chemistry 6 , 295-302 (2014). http://dx.doi.org/10.1038/nchem.1869",
+      "links": [
+        "http://dx.doi.org/10.1038/nchem.1869"
+      ],
+      "doi_links": [
+        "10.1038/nchem.1869"
+      ],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 6,
+      "citation": "M. Scheible, G. Pardatscher, A. Kuzyk, F. C. Simmel, Single Molecule Characterization of DNA Binding and Strand Displacement Reactions on Lithographic DNA Origami Microarrays , Nano Letters 14 , 1627-1633 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2014,
+      "ordinal": 7,
+      "citation": "M. Weitz, A. M\u00fcckl, K. Kapsner, R. Berg, A. Meyer, F. C. Simmel, Communication and computation by bacteria compartmentalized within microemulsion droplets , Journal of the American Chemical Society 136 , 72-75 (2014).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2014"
+      ],
+      "target_key": "authorlead:simmel:2014:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 1,
+      "citation": "V. Arnaut, M. Langecker, F. C. Simmel, Nanopore force spectroscopy of aptamer-ligand complexes , Biophysical Journal 105 , 1199-1207 (2013).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 2,
+      "citation": "F. C. Simmel, Artificial cells: Crowded genes perform differently (News & Views article), Nature Nanotechnology 8 , 545-546 (2013).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 3,
+      "citation": "F. C. Simmel, DNA-Nanotechnologie (in German), Chemie in unserer Zeit 47 , 164-173 (2013).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 4,
+      "citation": "C. Troiber, J. C. Kasper, S. Milani, M. Scheible, I. Martin, F. Schaubhut, S. K\u00fcchler, J. R\u00e4dler, F. C. Simmel, W. Friess, and E. Wagner, Comparison of four different particle sizing methods for siRNA polyplex characterization , European Journal of Pharmaceutics and Biopharmaceutics 84 (2), 255 (2013).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 5,
+      "citation": "F. C. Simmel, DNA origami \u2013 art, science, and engineering , Frontiers in Life Science (2013). http://dx.doi.org/10.1080/21553769.2012.745453",
+      "links": [
+        "http://dx.doi.org/10.1080/21553769.2012.745453"
+      ],
+      "doi_links": [
+        "10.1080/21553769.2012.745453"
+      ],
+      "citation_year_candidates": [
+        "2013",
+        "2012"
+      ],
+      "target_key": "10.1080/21553769.2012.745453",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2013,
+      "ordinal": 6,
+      "citation": "F. C. Simmel, Programming the dynamics of biochemical reaction networks , ACS Nano 7, 6-10 (2013). http://dx.doi.org/10.1021/nn305811d",
+      "links": [
+        "http://dx.doi.org/10.1021/nn305811d"
+      ],
+      "doi_links": [
+        "10.1021/nn305811d"
+      ],
+      "citation_year_candidates": [
+        "2013"
+      ],
+      "target_key": "authorlead:simmel:2013:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 1,
+      "citation": "M. Langecker, V. Arnaut, T. G. Martin, J.List, S. Renner, M. Mayer, H. Dietz, F. C. Simmel, Synthetic lipid membrane channels formed by designed DNA nanostructures , Science 338 , 932-936 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 2,
+      "citation": "F. C. Simmel, DNA-based assembly lines and nanofactories , Curr. Op. Biotechnology 23 , 516-521 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 3,
+      "citation": "G. P. Acuna, M. Bucher, I. Stein, C. Steinhauer, A. Kuzyk, P. Holzmeister, R. Schreiber, A. Moroz, F. D. Stefani, T. Liedl, F. C. Simmel, and P. Tinnefeld, Distance dependence of single-fluorophore quenching by gold nanoparticles studied on DNA origami , ACS Nano 6 , 3189 - 3195 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 4,
+      "citation": "A. Bessonov, J. Takemoto, F. C. Simmel, Probing DNA-lipid membrane interactions with a lipopeptide nanopore , ACS Nano 6 , 3356-3363 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 5,
+      "citation": "M. Weitz, F. C. Simmel, Synthetic in vitro transcription circuits , Transcription 3 , 87-91(2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 6,
+      "citation": "A. Kuzyk, R. Schreiber, Z. Fan, G. Pardatscher, E. Roller, A. H\u00f6gele, F. C. Simmel, A. Govorov, T. Liedl, DNA-based self-assembly of chiral plasmonic nanostructures with tailored optical response , Nature 483 , 311-314 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 7,
+      "citation": "S. Schink, S. Renner, K. Alim, V. Arnaut, F. C. Simmel, U. Gerland, A versatile first passage framework for the translocation dynamics of structured polynucleotides , Biophysical Journal 102 , 85-95 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:7",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2012,
+      "ordinal": 8,
+      "citation": "R. Jungmann, M. Scheible, F. C. Simmel, Nanoscale imaging in DNA nanotechnology , WIREs Nanomedicine & Nanobiotechnology 4 , 66-81 (2012).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2012"
+      ],
+      "target_key": "authorlead:simmel:2012:8",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 1,
+      "citation": "M. Langecker, D. Pedone, F. C. Simmel, U. Rant, Electrophoretic time-of-flight measurements of single DNA molecules with two stacked nanopores , Nano Letters 11 , 5002-5007 (2011). http://dx.doi.org/10.1021/nl2030079",
+      "links": [
+        "http://dx.doi.org/10.1021/nl2030079"
+      ],
+      "doi_links": [
+        "10.1021/nl2030079"
+      ],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 2,
+      "citation": "E. Franco, E. Friedrichs, J. Kim, R. Jungmann, R. Murray, E. Winfree, F. C. Simmel, Timing molecular production and motion with a synthetic transcriptional clock , Proc. Natl. Acad. Sci. U.S.A. 108 , E784-E793 (2011). DOI: 10.1073/pnas.1100060108",
+      "links": [
+        "http://www.pnas.org/cgi/doi/10.1073/pnas.1100060108"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 3,
+      "citation": "A. Kuzyk, Dielectrophoresis at the nanoscale , Electrophoresis, 32 , 2307, (2011). http://dx.doi.org/10.1002/elps.201100038",
+      "links": [
+        "http://dx.doi.org/10.1002/elps.201100038"
+      ],
+      "doi_links": [
+        "10.1002/elps.201100038"
+      ],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 4,
+      "citation": "R. Jungmann, M. Scheible, A. Kuzyk, G. Pardatscher, C. E. Castro, F. C. Simmel, DNA origami-based nanoribbons: assembly, length distribution, and twist, Nanotechnology, 22, 275301 (2011). http://iopscience.iop.org/0957-4484/22/27/275301",
+      "links": [
+        "http://iopscience.iop.org/0957-4484/22/27/275301/"
+      ],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 5,
+      "citation": "Y. Krishnan and F. C. Simmel, Nucleic acid based molecular devices, Angewandte Chemie Int. Ed. 50 , 3124-3156 (2011). http://dx.doi.org/10.1002/anie.200907223",
+      "links": [
+        "http://dx.doi.org/10.1002/anie.200907223"
+      ],
+      "doi_links": [
+        "10.1002/anie.200907223"
+      ],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2011,
+      "ordinal": 6,
+      "citation": "S. Renner, A. Bessonov, F. C. Simmel, Voltage-controlled insertion of single \u03b1-hemolysin and MspA nanopores into lipid bilayer membranes, Appl. Phys. Lett. 98 , 083701 (2011). http://dx.doi.org/10.1063/1.3558902",
+      "links": [
+        "http://dx.doi.org/10.1063/1.3558902"
+      ],
+      "doi_links": [
+        "10.1063/1.3558902"
+      ],
+      "citation_year_candidates": [
+        "2011"
+      ],
+      "target_key": "authorlead:simmel:2011:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 1,
+      "citation": "S. Renner, A. Bessonov, U. Gerland, F. C. Simmel, Sequence-dependent unfolding kinetics of DNA hairpins studied by nanopore force spectroscopy , J. Phys. Cond. Mat. 22 , 454119 (2010).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 2,
+      "citation": "R. Jungmann, C. Steinhauer, M. Scheible, A. Kuzyk, P. Tinnefeld, F. C. Simmel, Single-Molecule Kinetics and Super-Resolution Microscopy by Fluorescence Imaging of Transient Binding on DNA Origami , Nano Letters 10, 4756-4761 (2010) http://dx.doi.org/10.1021/nl103427w",
+      "links": [
+        "http://dx.doi.org/10.1021/nl103427w"
+      ],
+      "doi_links": [
+        "10.1021/nl103427w"
+      ],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "10.1021/nl103427w",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 3,
+      "citation": "S. Modi, D. Bhatia, F. C. Simmel, and Y. Krishnan, Structural DNA Nanotechnology: From bases to bricks, from structure to function , Journal of Physical Chemistry Letters 1 , 1994-2005 (2010). http://dx.doi.org/10.1021/jz1004957",
+      "links": [
+        "http://dx.doi.org/10.1021/jz1004957"
+      ],
+      "doi_links": [
+        "10.1021/jz1004957"
+      ],
+      "citation_year_candidates": [
+        "1994",
+        "2005",
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 4,
+      "citation": "V. Tejedor, O. Benichou, R. Voituriez, R. Jungmann, F. C. Simmel, C. Selhuber, L. Oddershede, and R. Metzler, Quantitative analysis of single particle trajectories , Biophysical Journal 98 , 1364-1372 (2010).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:4",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 5,
+      "citation": "S. Kaniber, M. Brandstetter, F. C. Simmel, I. Carmeli, A. Holleitner, On-Chip Functionalization of Carbon Nanotubes with Photosystem I , Journal of the American Chemical Society 132 , 2872-2873 (2010).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:5",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2010,
+      "ordinal": 6,
+      "citation": "S. Renner, S. Geltinger, F. C. Simmel, Nanopore Translocation and Force Spectroscopy Experiments in Microemulsion Droplets , Small, 6 , 190-194 (2010). http://dx.doi.org/10.1002/smll.200901435",
+      "links": [
+        "http://dx.doi.org/10.1002/smll.200901435"
+      ],
+      "doi_links": [
+        "10.1002/smll.200901435"
+      ],
+      "citation_year_candidates": [
+        "2010"
+      ],
+      "target_key": "authorlead:simmel:2010:6",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2009,
+      "ordinal": 1,
+      "citation": "F. C. Simmel, N & V: Wiring up ion channels , Nature Physics 5 , 783 - 784 (2009).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2009"
+      ],
+      "target_key": "authorlead:simmel:2009:1",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2009,
+      "ordinal": 2,
+      "citation": "C. Steinhauer, R. Jungmann, T. Sobey, F. C. Simmel, P. Tinnefeld, DNA Origami as a Nanoscopic Ruler for Super-Resolution Microscopy , Angewandte Chemie Int. Ed. 48 , 8870-8873(2009).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2009"
+      ],
+      "target_key": "authorlead:simmel:2009:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2009,
+      "ordinal": 3,
+      "citation": "F. C. Simmel, Processive motion of bipedal DNA walkers , ChemPhysChem 10 , 2593-2597 (2009). S. Kaniber, F. C. Simmel, A. W. Holleitner, I. Carmeli, The optoelectronic properties of a photosystem I - carbon nanotube hybrid system , Nanotechnology 20 , art. 345701 (2009).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2009",
+        "2009"
+      ],
+      "target_key": "authorlead:simmel:2009:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2008,
+      "ordinal": 1,
+      "citation": "R. Jungmann, T. Liedl, T. L. Sobey, W. Shih, and F. C. Simmel, Isothermal assembly of DNA origami structures using denaturing agents, Journal of the American Chemical Society, 130 , 10062-10063 (2008). http://dx.doi.org/ 10.1021/ja8030196",
+      "links": [
+        "http://dx.doi.org/10.1021/ja8030196"
+      ],
+      "doi_links": [
+        "10.1021/ja8030196"
+      ],
+      "citation_year_candidates": [
+        "2008"
+      ],
+      "target_key": "10.1021/ja8030196",
+      "identity_status": "explicit_doi_registry_match"
+    },
+    {
+      "heading_year": 2008,
+      "ordinal": 2,
+      "citation": "F. C. Simmel, Three-dimensional nanoconstruction with DNA, Angewandte Chemie Int. Ed. 47 , 5884-5887 (2008).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2008"
+      ],
+      "target_key": "authorlead:simmel:2008:2",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2008,
+      "ordinal": 3,
+      "citation": "R. Jungmann, S. Renner, F. C. Simmel, From DNA nanotechnology to synthetic biology , HFSP Journal 2 , 99-109 (2008).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2008"
+      ],
+      "target_key": "authorlead:simmel:2008:3",
+      "identity_status": "pending_identity"
+    },
+    {
+      "heading_year": 2008,
+      "ordinal": 4,
+      "citation": "M. Olapinski, S. Manus, N. Fertig, F. C. Simmel, Probing whole cell currents in high-frequency fields: Identification of thermal effects , Biosensors and Bioelectronics 23 , 872-878 (2008).",
+      "links": [],
+      "doi_links": [],
+      "citation_year_candidates": [
+        "2008"
+      ],
+      "target_key": "authorlead:simmel:2008:4",
+      "identity_status": "pending_identity"
+    }
+  ],
+  "evidence": [
+    {
+      "local_file": "assets/research-20261105/simmel-publications.html",
+      "sha256": "691cbf66c28454a58dd090b7446a91245986bbfb86f6093b652e1c2cd57e964a",
+      "url": "https://www.bio.nat.tum.de/en/e14/publications/",
+      "locator": "All publication paragraphs under year headings2026\u20132008. No earlier-year section on this page; not full career coverage."
+    }
+  ],
+  "limitations": "Lab year headings are discovery dates, not verified first-online dates. All selected paragraph occurrences retained including reviews and low-keyword work; identity, versions and sources pending."
+}

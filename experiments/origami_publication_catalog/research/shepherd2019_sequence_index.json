@@ -1,0 +1,1877 @@
+{
+  "evidence": {
+    "local_file": "assets/research-20261105/shepherd2019-si.xlsx",
+    "sha256": "b9e001110abb9a93593f730a9175b867c61d89014840d2add41f9bcc74425bc9",
+    "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41598-019-42665-1/MediaObjects/41598_2019_42665_MOESM2_ESM.xlsx",
+    "locator": "Four sheets; TableS1 B1/B2 scaffold sequences; S3 A1:B44 and S4 A1:B74 named staple entries"
+  },
+  "sheets": [
+    {
+      "sheet": "Table S1 - Sequences",
+      "cells": [
+        {
+          "cell": "A1",
+          "value": "phPB52",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B1",
+          "value": "GAGCGCAACGCAATTAATGTGCGCCCTGTAGCGGCGCATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGGCTCCCTTTAGGGTTCCGATTTAGTGCTTTACGGCACCTCGACCCCAAAAAACTTGATTAGGGTGATGGTTCACGTAGTGGGCCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGTCTATTCTTTTGATTTATAAGGGATTTTGCCGATTTCGGCCTATTGGTTAAAAAATGAGCTGATTTAACAAAAATTTAACGCGAATTACAACCGGGGTACATATGATTGGGGTCTGACGCTCAGTGGAACGAAAACTCACGTTAAGGGATTTTGGTCATGAGATTATCAAAAAGGATCTTCACCTAGATCCTTTTAAATTAAAAATGAAGTTTTAAATCAATCTAAAGTATATATGAGTAAACTTGGTCTGACAGTTACCAATGCTTAATCAGTGAGGCACCTATCTCAGCGATCTGTCTATTTCGTTCATCCATAGTTGCCTGACTCCCCGTCGTGTAGATAACTACGATACGGGAGGGCTTACCATCTGGCCCCAGTGCTGCAATGATACCGCGAGACCCACGCTCACCGGCTCCAGATTTATCAGCAATAAACCAGCCAGCCGGAAGGGCCGAGCGCAGAAGTGGTCCTGCAACTTTATCCGCCTCCATCCAGTCTATTAATTGTTGCCGGGAAGCTAGAGTAAGTAGTTCGCCAGTTAATAGTTTGCGCAACGTTGTTGCCATTGCTACAGGCATCGTGGTGTCACGCTCGTCGTTTGGTATGGCTTCATTCAGCTCCGGTTCCCAACGATCAAGGCGAGTTACATGATCCCCCATGTTGTGCAAAAAAGCGGTTAGCTCCTTCGGTCCTCCGATCGTTGTCAGAAGTAAGTTGGCCGCAGTGTTATCACTCATGGTTATGGCAGCACTGCATAATTCTCTTACTGTCATGCCATCCGTAAGATGCTTTTCTGTGACTGGTGAGTACTCAACCAAGTCATTCTGAGAATAGTGTATGCGGCGACCGAGTTGCTCTTGCCCGGCGTCAATACGGGATAATACCGCGCCACATAGCAGAACTTTAAAAGTGCTCATCATTGGAAAACGTTCTTCGGGGCGAAAACTCTCAAGGATCTTACCGCTGTTGAGATCCAGTTCGATGTAACCCACTCGTGCACCCAACTGATCTTCAGCATCTTTTACTTTCACCAGCGTTTCTGGGTGAGCAAAAACAGGAAGGCAAAATGCCGCAAAAAAGGGAATAAGGGCGACACGGAAATGTTGAATACTCATACTCTTCCTTTTTCAATATTATTGAAGCATTTATCAGGGTTATTGTCTCATGAGCGGATACATATTTGAATGTATTTAGAAAAATAAACAAATAGGGGTTCCGCGCACATTTCCCCGAAAAGTGCCACCTGACGTCTAAGAAACCATTATTATCATGACATTAACCTATAAAAATAGGCGTATCACGAGGCCCTTTCGTC",
+          "sequence_candidate": true,
+          "base_count": 1676
+        },
+        {
+          "cell": "A2",
+          "value": "phPB84",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B2",
+          "value": "GAGCGCAACGCAATTAATGTGCGCCCTGTAGCGGCGCATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGGCTCCCTTTAGGGTTCCGATTTAGTGCTTTACGGCACCTCGACCCCAAAAAACTTGATTAGGGTGATGGTTCACGTAGTGGGCCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGTCTATTCTTTTGATTTATAAGGGATTTTGCCGATTTCGGCCTATTGGTTAAAAAATGAGCTGATTTAACAAAAATTTAACGCGAATTACAACCGGGGTACATATGATTGGGGTCTGACGCTCAGTGGAACGAAAACTCACGTTAAGGGATTTTGGTCATGAGATTATCAAAAAGGATCTTCACCTAGATCCTTTTAAATTAAAAATGAAGTTTTAAATCAATCTAAAGTATATATGAGTAAACTTGGTCTGACAGTTACCAATGCTTAATCAGTGAGGCACCTATCTCAGCGATCTGTCTATTTCGTTCATCCATAGTTGCCTGACTCCCCGTCGTGTAGATAACTACGATACGGGAGGGCTTACCATCTGGCCCCAGTGCTGCAATGATACCGCGAGACCCACGCTCACCGGCTCCAGATTTATCAGCAATAAACCAGCCAGCCGGAAGGGCCGAGCGCAtAAGTGGTCCTGCAACTTTATCCGCCTCCATCCAGTCTATTAATTGTTGCCGGGAAGCTAGAGTAAGTAGTTCGCCAGTTAATAGTTTGCGCAACGTTGTTGCCATTGCTACAGGCATCGTGGTGTCACGCTCGTCGTTTGGTATGGCTTCATTCAGCTCCGGTTCCCAACGATCAAGGCGAGTTACATGATCCCCCATGTTGTGCAAAAAAGCGGTTAGCTCCTTCGGTCCTCCGATCGTTGTCAGAAGTAAGTTGGCCGCAGTGTTATCACTCATGGTTATGGCAGCACTGCATAATTCTCTTACTGTCATGCCATCCGTAAGATGCTTTTCTGTGACTGGTGAGTACTCAACCAAGTCATTCTGAGAATAGTGTATGCGGCGACCGAGTTGCTCTTGCCCGGCGTCAATACGGGATAATACCGCGCCACATAGCAGAACTTTAAAAGTGCTCATCATTGGAAAACGTTCTTCGGGGCGAAAACTCTCAAGGATCTTACCGCTGTTGAGATCCAGTTCGATGTAACCCACTCGTGCACCCAACTGATCTTCAGCATCTTTTACTTTCACCAGCGTTTCTGGGTGAGCAAAAACAGGAAGGCAAAATGCCGCAAAAAAGGGAATAAGGGCGACACGGAAATGTTGAATACTCATACTCTTCCTTTTTCAATATTATTGAAGCATTTATCAGGGTTATTGTCTCATGAGCGGATACATATTTGAATGTATTTAGAAAAATAAACAAATAGGGGTTCCGCGCACATTTCCCCGAAAAGTGCCACCTGACGTCTAAGAAACCATTATTATCATGACATTAACCTATAAAAATAGGCGTATCACGAGGCCCTTTCGTCGAATTCGTCGTCGTCCCCTCAAACTCTTGGGTGGAGAGGCTATTCGTTTAAGGTCACATCGCATGTAATTTACTTATTCTCTGTTGTTGAGCCACCCGGGCGCCAGATTTTGTTTAAAGCTTTGTCTCTTAGTTTGTATAGACAGATTCAGAGTGCAAGGTTTCGTTCGCTCGTACCTGGTTTTCCCTGGTTCTTCACAGATAGGATTTGACTTTCTACAACACTTATGCGGCTTCCTACCCGTTTGAAGGCCGATACAGGTGCTGCGCAAAATGCGGGCGAACATAGAGTATCAAAACAACGCCTTCTAATCTAGGAATATAGGGAAGATACGTATTTGCTACCATGCTTTCTTGGGTCATTAACGACCAACCTCTTTTCTTTTAAAGTAGGATTGCACAATGAATGAATACACGTGGTCCGATAACTGACCAAGTAACATGGTTATCACTaGATGTCCGCCAGACGTGTGCAAACCAACCCGGGAGTTACGTCACTAATCCTTCGCTACGTCGTGAAGATATTTACTTGTGAATATCGAGGGTAATAAGATAATAGACTGTGACTAGTATTGCCAGACTGTCGCTACCTGCAACACATAACTATCCTGAGGTTACTGCATAGTACTGATTACACCCGAGTCAAAATTTCTAACTTCTAACATGTACCTAGTAACCAGCTCAATAATTATGTCAGAATATAGCTCTGGGAACCCTCGGACAATTATGATACACGGTATTAATATCTTGCTTGCGTTAGCCACTTCTCATCTTTGGATACCGATTCTATTTTGCATAGCAGTTCCTTTTACACATATAAGAATTTCGCCATAGGTATGCTGCAG",
+          "sequence_candidate": true,
+          "base_count": 2520
+        },
+        {
+          "cell": "A3",
+          "value": "phCruc",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B3",
+          "value": "GAGCGCAACGCAATTAATGTGCGCCCTGTAGCGGCGCATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGGCTCCCTTTAGGGTTCCGATTTAGTGCTTTACGGCACCTCGACCCCAAAAAACTTGATTAGGGTGATGGTTCACGTAGTGGGCCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGTCTATTCTTTTGATTTATAAGGGATTTTGCCGATTTCGGCCTATTGGTTAAAAAATGAGCTGATTTAACAAAAATTTAACGCGAATTACAACCGGGGTACATATGATTGGGGTCTGACGCTCAGTGGAACGAAAACTCACGTTAAGGGATTTTGGTCATGAGATTATCAAAAAGGATCTTCACCTAGATCCTTTTAAATTAAAAATGAAGTTTTAAATCAATCTAAAGTATATATGAGTAAACTTGGTCTGACAGTTACCAATGCTTAATCAGTGAGGCACCTATCTCAGCGATCTGTCTATTTCGTTCATCCATAGTTGCCTGACTCCCCGTCGTGTAGATAACTACGATACGGGAGGGCTTACCATCTGGCCCCAGTGCTGCAATGATACCGCGAGACCCACGCTCACCGGCTCCAGATTTATCAGCAATAAACCAGCCAGCCGGAAGGGCCGAGCGCAGAAGTGGTCCTGCAACTTTATCCGCCTCCATCCAGTCTATTAATTGTTGCCGGGAAGCTAGAGTAAGTAGTTCGCCAGTTAATAGTTTGCGCAACGTTGTTGCCATTGCTACAGGCATCGTGGTGTCACGCTCGTCGTTTGGTATGGCTTCATTCAGCTCCGGTTCCCAACGATCAAGGCGAGTTACATGATCCCCCATGTTGTGCAAAAAAGCGGTTAGCTCCTTCGGTCCTCCGATCGTTGTCAGAAGTAAGTTGGCCGCAGTGTTATCACTCATGGTTATGGCAGCACTGCATAATTCTCTTACTGTCATGCCATCCGTAAGATGCTTTTCTGTGACTGGTGAGTACTCAACCAAGTCATTCTGAGAATAGTGTATGCGGCGACCGAGTTGCTCTTGCCCGGCGTCAATACGGGATAATACCGCGCCACATAGCAGAACTTTAAAAGTGCTCATCATTGGAAAACGTTCTTCGGGGCGAAAACTCTCAAGGATCTTACCGCTGTTGAGATCCAGTTCGATGTAACCCACTCGTGCACCCAACTGATCTTCAGCATCTTTTACTTTCACCAGCGTTTCTGGGTGAGCAAAAACAGGAAGGCAAAATGCCGCAAAAAAGGGAATAAGGGCGACACGGAAATGTTGAATACTCATACTCTTCCTTTTTCAATATTATTGAAGCATTTATCAGGGTTATTGTCTCATGAGCGGATACATATTTGAATGTATTTAGAAAAATAAACAAATAGGGGTTCCGCGCACATTTCCCCGAAAAGTGCCACCTGACGTCTAAGAAACCATTATTATCATGACATTAACCTATAAAAATAGGCGTATCACGAGGCCCTTTCGTCGAATTCGTCGTCGTCCCCTCAAACTCTTGGGTGGAGAGGCTATTCGTTTAAGGTCACATCGCATGTAATTTACTTATTCTCTGTTGTTGAGCCACCCGGGCGCCAGATTTTGTTTAAAGCTTTGTCTCTTAGTTTGTATAGACAGATTCAGAGTGCAAGGTTTCGTTCGCTCGTACCTGGTTTTCCCTGGTTCTTCACAGATAGGATTTGACTTTCTACAACACTTATGCGGCTTCCTACCCGTTTGAAGGCCGATACAGGTGCTGCGCAAAATGCGGGCGAACATAGAGTATCAAAACAACGCCTTCTAATCTAGGAATATAGGGAAGATACGTATTTGCTACCATGCTTTCTGGGGTCATTAACGACCAACCTCTTTTCTTTTAAAGTAGGATTGCACAATGAATGAATACACGTGGTCCGATAACTGACCAAGTAACATGGTTATCACTCGATGTCCGCCAGACGTGTGCAAACCAACCCGGGAGTTACGTCACTAATCCTTCGCTACGTCGTGAAGATATTTACTTGTGAATATCGAGGGTAATAAGATAATAGACTGTGACTAGTATTGCCAGACTGTCGCTACCTGCAACACATAACTATCCTGAGGTTACTGCATAGTACTGATTACACCCGAGTCAAAATTTCTAACTTCTAACATGTACCTAGTAACCAGCTCAATAATTATGTCAGAATATAGCTCTGGGAACCCTCGGACAATTATGATACACGGTATTAATATCTTGCTTGCGTTAGCCACTTCTCATCTTTGGATACCGATTCTATTTTGCATAGCAGTTCCTTTTACACATATAAGAATTTCGCCATAGGTATGACCTACCCCAGATCGTCGATTATCTGCTGGAAAATTTATTTAACACTATGTTTCTCTCCAGATGTGAGTATACACGATAAATAATACCTGGGTACCGGTTGGTGTTATTACCTTGTTTCTAAGTGCTTAATCGGCGCTTAGTGATAAGGTTGTACTAGTCGACGCGTGGCCGCCAATTATTCTTGTCATAATTTGACTTTGTTCTATATGACTATGATCTCCTGTCATCTCACCTATTGATGCCACCTTTTCAGCCTGCAG",
+          "sequence_candidate": true,
+          "base_count": 2775
+        },
+        {
+          "cell": "A5",
+          "value": "Digital Information block sequence",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B5",
+          "value": "GTCGTCGTCCCCTCAAACTCTTGGGTGGAGAGGCTATTCGTTTAAGGTCACATCGCATGTAATTTACTTATTCTCTGTTGTTGAGCCACCCGGGCGCCAGATTTTGTTTAAAGCTTTGTCTCTTAGTTTGTATAGACAGATTCAGAGTGCAAGGTTTCGTTCGCTCGTACCTGGTTTTCCCTGGTTCTTCACAGATAGGATTTGACTTTCTACAACACTTATGCGGCTTCCTACCCGTTTGAAGGCCGATACAGGTGCTGCGCAAAATGCGGGCGAACATAGAGTATCAAAACAACGCCTTCTAATCTAGGAATATAGGGAAGATACGTATTTGCTACCATGCTTTCTGGGGTCATTAACGACCAACCTCTTTTCTTTTAAAGTAGGATTGCACAATGAATGAATACACGTGGTCCGATAACTGACCAAGTAACATGGTTATCACTCGATGTCCGCCAGACGTGTGCAAACCAACCCGGGAGTTACGTCACTAATCCTTCGCTACGTCGTGAAGATATTTACTTGTGAATATCGAGGGTAATAAGATAATAGACTGTGACTAGTATTGCCAGACTGTCGCTACCTGCAACACATAACTATCCTGAGGTTACTGCATAGTACTGATTACACCCGAGTCAAAATTTCTAACTTCTAACATGTACCTAGTAACCAGCTCAATAATTATGTCAGAATATAGCTCTGGGAACCCTCGGACAATTATGATACACGGTATTAATATCTTGCTTGCGTTAGCCACTTCTCATCTTTGGATACCGATTCTATTTTGCATAGCAGTTCCTTTTACACATATAAGAATTTCGCCATAGGTATGACCTACCCCAGATCGTCGATTATCTGCTGGAAAATTTATTTAACACTATGTTTCTCTCCAGATGTGAGTATACACGATAAATAATACCTGGGTACCGGTTGGTGTTATTACCTTGTTTCTAAGTGCTTAATCGGCGCTTAGTGATAAGGTTGTACTAGTCGACGCGTGGCCGCCAATTATTCTTGTCATAATTTGACTTTGTTCTATATGACTATGATCTCCTGTCATCTCACCTATTGATGCCACCTTTTCAGC",
+          "sequence_candidate": true,
+          "base_count": 1087
+        },
+        {
+          "cell": "A6",
+          "value": "The Crucible bitstream DNA sequence",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B6",
+          "value": "ACCCGGGCGCCAGATTTTGTTTAAAGCTTTGTCTCTTAGTTTGTATAGACAGATTCAGAGTGCAAGGTTTCGTTCGCTCGTACCTGGTTTTCCCTGGTTCTTCACAGATAGGATTTGACTTTCTACAACACTTATGCGGCTTCCTACCCGTTTGAAGGCCGATACAGGTGCTGCGCAAAATGCGGGCGAACATAGAGTATCAAAACAACGCCTTCTAATCTAGGAATATAGGGAAGATACGTATTTGCTACCATGCTTTCTGGGGTCATTAACGACCAACCTCTTTTCTTTTAAAGTAGGATTGCACAATGAATGAATACACGTGGTCCGATAACTGACCAAGTAACATGGTTATCACTCGATGTCCGCCAGACGTGTGCAAACCAACCCGGGAGTTACGTCACTAATCCTTCGCTACGTCGTGAAGATATTTACTTGTGAATATCGAGGGTAATAAGATAATAGACTGTGACTAGTATTGCCAGACTGTCGCTACCTGCAACACATAACTATCCTGAGGTTACTGCATAGTACTGATTACACCCGAGTCAAAATTTCTAACTTCTAACATGTACCTAGTAACCAGCTCAATAATTATGTCAGAATATAGCTCTGGGAACCCTCGGACAATTATGATACACGGTATTAATATCTTGCTTGCGTTAGCCACTTCTCATCTTTGGATACCGATTCTATTTTGCATAGCAGTTCCTTTTACACATATAAGAATTTCGCCATAGGTATGACCTACCCCAGATCGTCGATTATCTGCTGGAAAATTTATTTAACACTATGTTTCTCTCCAGATGTGAGTATACACGATAAATAATACCTGGGTACCGGTTGGTGTTATTACCTTGTTTCTAAGTGCTTAATCGGCGCTTAGTGATAAGGTT",
+          "sequence_candidate": true,
+          "base_count": 896
+        },
+        {
+          "cell": "A8",
+          "value": "F1ori amplicon Top Strand",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B8",
+          "value": "/5phos/GAGCGCAACGCAATTAATGTGCGCCCTGTAGCGGCGCATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGGCTCCCTTTAGGGTTCCGATTTAGTGCTTTACGGCACCTCGACCCCAAAAAACTTGATTAGGGTGATGGTTCACGTAGTGGGCCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGTCTATTCTTTTGATTTATAAGGGATTTTGCCGATTTCGGCCTATTGGTTAAAAAATGAGCTGATTTAACAAAAATTTAACGCGAATTACAACCGGGGTACATATGATT",
+          "sequence_candidate": true,
+          "base_count": 468
+        },
+        {
+          "cell": "A9",
+          "value": "AmpR amplicon Bottom Strand",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B9",
+          "value": "/5phos/ACATTAATTGCGTTGCGCTCGACGAAAGGGCCTCGTGATACGCCTATTTTTATAGGTTAATGTCATGATAATAATGGTTTCTTAGACGTCAGGTGGCACTTTTCGGGGAAATGTGCGCGGAACCCCTATTTGTTTATTTTTCTAAATACATTCAAATATGTATCCGCTCATGAGACAATAACCCTGATAAATGCTTCAATAATATTGAAAAAGGAAGAGTATGAGTATTCAACATTTCCGTGTCGCCCTTATTCCCTTTTTTGCGGCATTTTGCCTTCCTGTTTTTGCTCACCCAGAAACGCTGGTGAAAGTAAAAGATGCTGAAGATCAGTTGGGTGCACGAGTGGGTTACATCGAACTGGATCTCAACAGCGGTAAGATCCTTGAGAGTTTTCGCCCCGAAGAACGTTTTCCAATGATGAGCACTTTTAAAGTTCTGCTATGTGGCGCGGTATTATCCCGTATTGACGCCGGGCAAGAGCAACTCGGTCGCCGCATACACTATTCTCAGAATGACTTGGTTGAGTACTCACCAGTCACAGAAAAGCATCTTACGGATGGCATGACAGTAAGAGAATTATGCAGTGCTGCCATAACCATGAGTGATAACACTGCGGCCAACTTACTTCTGACAACGATCGGAGGACCGAAGGAGCTAACCGCTTTTTTGCACAACATGGGGGATCATGTAACTCGCCTTGATCGTTGGGAACCGGAGCTGAATGAAGCCATACCAAACGACGAGCGTGACACCACGATGCCTGTAGCAATGGCAACAACGTTGCGCAAACTATTAACTGGCGAACTACTTACTCTAGCTTCCCGGCAACAATTAATAGACTGGATGGAGGCGGATAAAGTTGCAGGACCACTTCTGCGCTCGGCCCTTCCGGCTGGCTGGTTTATTGCTGATAAATCTGGAGCCGGTGAGCGTGGGTCTCGCGGTATCATTGCAGCACTGGGGCCAGATGGTAAGCCCTCCCGTATCGTAGTTATCTACACGACGGGGAGTCAGGCAACTATGGATGAACGAAATAGACAGATCGCTGAGATAGGTGCCTCACTGATTAAGCATTGGTAACTGTCAGACCAAGTTTACTCATATATACTTTAGATTGATTTAAAACTTCATTTTTAATTTAAAAGGATCTAGGTGAAGATCCTTTTTGATAATCTCATGACCAAAATCCCTTAACGTGAGTTTTCGTTCCACTGAGCGTCAGACCCCAATCATATGTACCCCGGTTGTA",
+          "sequence_candidate": true,
+          "base_count": 1250
+        }
+      ],
+      "sequence_candidate_cells": 7
+    },
+    {
+      "sheet": "Table S2 - Primers",
+      "cells": [
+        {
+          "cell": "A1",
+          "value": "Sanger sequencing primers",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A2",
+          "value": "SeqPrimer1",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B2",
+          "value": "ACAACCGGGGTACATATGATTG",
+          "sequence_candidate": true,
+          "base_count": 22
+        },
+        {
+          "cell": "A3",
+          "value": "SeqPrimer2",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B3",
+          "value": "GACGAAAGGGCCTCGTGATA",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A4",
+          "value": "SeqPrimer3",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B4",
+          "value": "CAATCATATGTACCCCGGTTGT",
+          "sequence_candidate": true,
+          "base_count": 22
+        },
+        {
+          "cell": "A5",
+          "value": "SeqPrimer4",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B5",
+          "value": "GACGAAAGGGCCTCGTGATA",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A6",
+          "value": "SeqPrimer5",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B6",
+          "value": "ACCGAAGGAGCTAACCGCTT",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A7",
+          "value": "SeqPrimer6",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B7",
+          "value": "CCCGATTTAGAGCTTGACGG",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A8",
+          "value": "SeqPrimer7",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B8",
+          "value": "TGCTATGCAAAATAGAATCG",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A9",
+          "value": "SeqPrimer8",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B9",
+          "value": "ACCAGGGAAAACCAGGTAC",
+          "sequence_candidate": true,
+          "base_count": 19
+        },
+        {
+          "cell": "A10",
+          "value": "SeqPrimer9",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B10",
+          "value": "GCGCTCCTGCAGGCTGAAAAGGTGGCATCAATAG",
+          "sequence_candidate": true,
+          "base_count": 34
+        },
+        {
+          "cell": "A11",
+          "value": "SeqPrimer10",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B11",
+          "value": "CTGCAGCATACCTATGGCGAAATTCTTATATGTG",
+          "sequence_candidate": true,
+          "base_count": 34
+        },
+        {
+          "cell": "A12",
+          "value": "SeqPrimer11",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B12",
+          "value": "ACCAGGGAAAACCAGGTAC",
+          "sequence_candidate": true,
+          "base_count": 19
+        },
+        {
+          "cell": "A13",
+          "value": "SeqPrimer12",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B13",
+          "value": "CTGAATGAAGCCATACCAAACGA",
+          "sequence_candidate": true,
+          "base_count": 23
+        },
+        {
+          "cell": "A14",
+          "value": "SeqPrimer13",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B14",
+          "value": "GACGAAAGGGCCTCGTGATA",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A15",
+          "value": "SeqPrimer14",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B15",
+          "value": "ACATTAATTGCGTTGCGCTC",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A17",
+          "value": "Primers used in cloning",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A18",
+          "value": "F1gBlock_forward",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B18",
+          "value": "/5phos/GAGCGCAACGCAATTAATGT",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "D18",
+          "value": "Used with aPCR to build the top strand of the minimized phage",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A19",
+          "value": "F1gBlock_reverse",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B19",
+          "value": "ATCATATGTACCCCGGTTGT",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "D19",
+          "value": "Used with aPCR to build the top strand of the minimized phage",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A20",
+          "value": "AmpR_forward",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B20",
+          "value": "ACAACCGGGGTACATATGATTGGGGTCTGACGCTCAGTGGAA",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "D20",
+          "value": "Used with aPCR to build the bottom strand of the minimized phage",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A21",
+          "value": "AmpR_reverse",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B21",
+          "value": "/5phos/ACATTAATTGCGTTGCGCTCGACGAAAGGGCCTCGTGATA",
+          "sequence_candidate": true,
+          "base_count": 40
+        },
+        {
+          "cell": "D21",
+          "value": "Used with aPCR to build the bottom strand of the minimized phage",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A23",
+          "value": "Crucible_EcoRI_forward",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B23",
+          "value": "TTCGTCGAATTCGTCGTCGTCCCCTCAAACT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "D23",
+          "value": "Used with normal PCR on The Crucible DNA for generating an EcoRI cut site",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A24",
+          "value": "Crucible_PstI_reverse",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B24",
+          "value": "GCGCTCCTGCAGGCTGAAAAGGTGGCATCAATAG",
+          "sequence_candidate": true,
+          "base_count": 34
+        },
+        {
+          "cell": "D24",
+          "value": "Used with normal PCR on The Crucible DNA for generating a PstI cut site",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A25",
+          "value": "PB84ins_PstI_reverse",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B25",
+          "value": "CTGCAGCATACCTATGGCGAAATTCTTATATGTG",
+          "sequence_candidate": true,
+          "base_count": 34
+        },
+        {
+          "cell": "D25",
+          "value": "Paired with Crucible_EcoRI_forward and used with normal PCR on The Crucible DNA for generating an PstI cut site to ligate to phPB84",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A26",
+          "value": "F1A_PstI_for",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B26",
+          "value": "GGTATGCTGCAGGAGCGCAACGCAATTAATGT",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "D26",
+          "value": "Used with normal PCR on the phPB52 DNA for generating a PstI cut site",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "A27",
+          "value": "F1A_EcoRI_rev",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B27",
+          "value": "GACGACGAATTCGACGAAAGGGCCTCGTGATA",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "D27",
+          "value": "Used with normal PCR on the phPB52 DNA for generating an EcoRI cut site",
+          "sequence_candidate": false,
+          "base_count": null
+        }
+      ],
+      "sequence_candidate_cells": 23
+    },
+    {
+      "sheet": "Table S3 - PB52 staples",
+      "cells": [
+        {
+          "cell": "A1",
+          "value": "pbip52_1-1293-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B1",
+          "value": "TCTCAACAGCGTTTTTGTAAGATCCTAACATGGGGGATTTTTTCATGTAACT",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A2",
+          "value": "pbip52_1-1520-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B2",
+          "value": "TTTTTCTAAAAGTGGGTTACATCGAACTGGACTATTTGTTTA",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A3",
+          "value": "pbip52_1-1510-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B3",
+          "value": "TACATTCAAATGGGTGCACG",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A4",
+          "value": "pbip52_2-1261-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B4",
+          "value": "GCCCCGAAGAGAGCTAACCGCTTTTTTGCACTGAGAGTTTTC",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A5",
+          "value": "pbip52_2-1251-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B5",
+          "value": "ACGTTTTCCAAGGACCGAAG",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A6",
+          "value": "pbip52_3-1088-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B6",
+          "value": "GTAAGAGAATTTTTTTATGCAGTGCTCTTACTTCTGATTTTTCAACGATCGGATGATGAGCACTTTTTTTTTAAAGTT",
+          "sequence_candidate": true,
+          "base_count": 78
+        },
+        {
+          "cell": "A7",
+          "value": "pbip52_3-783-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B7",
+          "value": "TCTGCGCTGGCGGATAAAGTTGCAACGGATG",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A8",
+          "value": "pbip52_3-1096-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B8",
+          "value": "GCATGACAACAGAAAAGCATCTTGGACCACT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A9",
+          "value": "pbip52_4-880-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B9",
+          "value": "CAACGTTGCGCTTTTTAAACTATTAAGACAGATCGCTTTTTTGAGATAGGTG",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A10",
+          "value": "pbip52_4-1043-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B10",
+          "value": "GCGGCCAAGCCATAACCATGAGTGCTGTAGC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A11",
+          "value": "pbip52_4-888-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B11",
+          "value": "AATGGCAAGTGACACCACGATGCATAACACT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A12",
+          "value": "pbip52_5-484-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B12",
+          "value": "ATCTCATGACCGCTACAGGGCGCCACTTTTCCCTTTTTGATA",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A13",
+          "value": "pbip52_5-474-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B13",
+          "value": "CAAAATCCCTCTTAAAGCGC",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A14",
+          "value": "pbip52_6-516-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B14",
+          "value": "TAAAAGGATCTTTTTTAGGTGAAGATGGGGAAATGTGTTTTTCGCGGAACCC",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A15",
+          "value": "pbip52_6-951-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B15",
+          "value": "TTGGGAACCGTTTAAAACTTCATTTTTAATTCGCCTTGATCG",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A16",
+          "value": "pbip52_6-941-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B16",
+          "value": "GAGCTGAATGTTTAGATTGA",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A17",
+          "value": "pbip52_7-568-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B17",
+          "value": "ACCAAGTTTACTTTTTTCATATATACAAGCCATACCATTTTTAACGACGAGC",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A18",
+          "value": "pbip52_7-419-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B18",
+          "value": "TTAAATTTTGAGCGTCAGACCCCAATTGGTA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A19",
+          "value": "pbip52_7-576-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B19",
+          "value": "ACTGTCAGCCTCACTGATTAAGCAATTCGCG",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A20",
+          "value": "pbip52_8-828-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B20",
+          "value": "ACAATTAATAGTTTTTACTGGATGGACGGCCCTTCCGTTTTTGCTGGCTGGT",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A21",
+          "value": "pbip52_8-848-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B21",
+          "value": "CTTACTCTAGCAACTATGGATGAACGAAATACTGGCGAACTA",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A22",
+          "value": "pbip52_8-838-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B22",
+          "value": "CTTCCCGGCAGGGAGTCAGG",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A23",
+          "value": "pbip52_9-1190-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B23",
+          "value": "GACGCCGGGCATTTTTAGAGCAACTCTTGGTTGAGTATTTTTCTCACCAGTC",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A24",
+          "value": "pbip52_9-1345-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B24",
+          "value": "TAAAAGATGCTTTTTTGAAGATCAGTTATGTATCCGCTTTTTTCATGAGACA",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A25",
+          "value": "pbip52_9-1353-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B25",
+          "value": "GGTGAAAGTGTTTTTGCTCACCCAGTATTAT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A26",
+          "value": "pbip52_9-1198-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B26",
+          "value": "CCCGTATTCTGCTATGTGGCGCGGAAACGCT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A27",
+          "value": "pbip52_10-157-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B27",
+          "value": "GCCCCCGACACTAAATCGGAACCCCGCCCTT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A28",
+          "value": "pbip52_10-1406-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B28",
+          "value": "ATTCCCTTTCAACATTTCCGTGTTAAAGGGA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A29",
+          "value": "pbip52_11-1449-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B29",
+          "value": "AAAAAGGAAGATTTTTGTATGAGTATTTTTGCGGCATTTTTTTTTGCCTTCC",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A30",
+          "value": "pbip52_11-44-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B30",
+          "value": "GTAACCACCACTTTTTACCCGCCGCGTAACGTGAGTTTTTTTTTCGTTCCACTTGTTAAATCATTTTTGCTCATTTTT",
+          "sequence_candidate": true,
+          "base_count": 78
+        },
+        {
+          "cell": "A31",
+          "value": "pbip52_11-52-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B31",
+          "value": "CGCTGCGCGGGCGCTGGCAAGTGTGCTTCAA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A32",
+          "value": "pbip52_11-1457-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B32",
+          "value": "TAATATTGATAACCCTGATAAATAGCGGTCA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A33",
+          "value": "pbip52_12-308-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B33",
+          "value": "AACAAGAGTCCTTTTTACTATTAAAGCGTCTATCAGGTTTTTGCGATGGCCC",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A34",
+          "value": "pbip52_12-328-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B34",
+          "value": "TGAGTGTTGTTGGCGAGAAAGGAAGGGAAGACGAGATAGGGT",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A35",
+          "value": "pbip52_12-318-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B35",
+          "value": "TCCAGTTTGGCCGGCGAACG",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A36",
+          "value": "pbip52_13-202-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B36",
+          "value": "TGGGGTCGAGGTTTTTTGCCGTAAAGTTTAGAGCTTGTTTTTACGGGGAAAG",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A37",
+          "value": "pbip52_13-210-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B37",
+          "value": "AAGTTTTTACTACGTGAACCATCATATTCTC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A38",
+          "value": "pbip52_13-1147-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B38",
+          "value": "AGAATGACGGTCGCCGCATACACCCCTAATC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A39",
+          "value": "pbip52_14-360-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B39",
+          "value": "TTATAAATCAATTTTTAAGAATAGACAAGCGAAAGGATTTTTGCGGGCGCTA",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A40",
+          "value": "pbip52_14-679-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B40",
+          "value": "CCTCCCGTCAGCACTGGGGCCAGAAATCGGC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A41",
+          "value": "pbip52_14-368-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B41",
+          "value": "AAAATCCCTAACCAATAGGCCGATGGTAAGC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A42",
+          "value": "pbip52_15-724-V",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B42",
+          "value": "GTGGGTCTCGCTTTTTGGTATCATTGATCGTAGTTATTTTTTCTACACGACG",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A43",
+          "value": "pbip52_15-263-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B43",
+          "value": "CGAAAAACAACGTGGACTCCAACGCTGGAGC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A44",
+          "value": "pbip52_15-732-E",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B44",
+          "value": "CGGTGAGCTTATTGCTGATAAATTCAAAGGG",
+          "sequence_candidate": true,
+          "base_count": 31
+        }
+      ],
+      "sequence_candidate_cells": 44
+    },
+    {
+      "sheet": "Table S4 - PB84 staples",
+      "cells": [
+        {
+          "cell": "A1",
+          "value": "PB84_st1",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B1",
+          "value": "GCGAAATTAGACAAAGCTTTAAACAAAATCTG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A2",
+          "value": "PB84_st2",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B2",
+          "value": "AAACTAAGCTTATATGTGTAAAAGGAACTGC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A3",
+          "value": "PB84_st3",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B3",
+          "value": "TATGCAAATTGCACTCTGAATCTGTCTATAC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A4",
+          "value": "PB84_st4",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B4",
+          "value": "CAGGTACGAGCTTTTTGAACGAAACCATAGAATCGGTTTTTTATCCAAAGATCCGTGTATCATTTTTTAATTGTCCGA",
+          "sequence_candidate": true,
+          "base_count": 78
+        },
+        {
+          "cell": "A5",
+          "value": "PB84_st5",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B5",
+          "value": "GGGAAAACTCAAATCCTATCTGTGTTTCTTA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A6",
+          "value": "PB84_st6",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B6",
+          "value": "GACGTCAGTCATGATAATAATGGAAGAACCA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A7",
+          "value": "PB84_st7",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B7",
+          "value": "GGTTAATGGTGGCACTTTTCGGGGAAATGTGC",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A8",
+          "value": "PB84_st8",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B8",
+          "value": "TGAGCTGGTTATTTTTCTAGGTACATCCGCATAAGTGTTTTTTTGTAGAAAG",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A9",
+          "value": "PB84_st9",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B9",
+          "value": "GTAGGAAGGTTAGAAGTTAGAAATTTTGACT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A10",
+          "value": "PB84_st10",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B10",
+          "value": "CGGGTGTACACCTGTATCGGCCTTCAAACGG",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A11",
+          "value": "PB84_st11",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B11",
+          "value": "TTGCGCAGATCAGTACTATGCAGTAACCTCAG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A12",
+          "value": "PB84_st12",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B12",
+          "value": "GATAGTTATGATACTCTATGTTCGCCCGCATT",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A13",
+          "value": "PB84_st13",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B13",
+          "value": "ATTCATTCATTTTTTTGTGCAATCCTCTAGATTAGAATTTTTGGCGTTGTTT",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A14",
+          "value": "PB84_st14",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B14",
+          "value": "CTATATTCACTTTAAAAGAAAAGAGGTTGATACGTATCTTCC",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A15",
+          "value": "PB84_st15",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B15",
+          "value": "CCGCTCATGAAAGCATGGTAGCAAGTCGTTAA",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A16",
+          "value": "PB84_st16",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B16",
+          "value": "TGACCCAAGAGACAATAACCCTGAATATGTAT",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A17",
+          "value": "PB84_st17",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B17",
+          "value": "CCACGTGTAAGGATTAGTGACGTAACTCCCGG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A18",
+          "value": "PB84_st18",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B18",
+          "value": "GTTGGTTTCATGTTACTTGGTCAGTTATCGGA",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A19",
+          "value": "PB84_st19",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B19",
+          "value": "GTGATAACGCACACGTCTGGCGGAAGAGAAT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A20",
+          "value": "PB84_st20",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B20",
+          "value": "TGTGTTGCAGGTTTTTTAGCGACAGTAAATATCTTCATTTTTCGACGTAGCG",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A21",
+          "value": "PB84_st21",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B21",
+          "value": "ATTCACAAGTCTGGCAATAC",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A22",
+          "value": "PB84_st22",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B22",
+          "value": "CCCCAATCTCTTATTACCCTCGATTAGTCACA",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A23",
+          "value": "PB84_st23",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B23",
+          "value": "GTCTATTAATATGTACCCCGGTTGGCGTCAGA",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A24",
+          "value": "PB84_st24",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B24",
+          "value": "ATAATTATGGGTTCCCAGAGCTATCGAGATA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A25",
+          "value": "PB84_st25",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B25",
+          "value": "GGGTTGAGATCAAAAGAATAGACATTCTGAC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A26",
+          "value": "PB84_st26",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B26",
+          "value": "TATTAATAGAGAAGTGGCTAACGCTGACGGG",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A27",
+          "value": "PB84_st27",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B27",
+          "value": "GAAAGCCGCCCCGATTTAGAGCTAAGCAAGA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A28",
+          "value": "PB84_st28",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B28",
+          "value": "AAGGGAGCGCGAACGTGGCGAGAAAGGAAGGG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A29",
+          "value": "PB84_st29",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B29",
+          "value": "GCGCCCGGTTGCGCTCCTGCAGCATACCTATG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A30",
+          "value": "PB84_st30",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B30",
+          "value": "ACAGGGCGCACTTTTTATTAATTGCGGTGGCTCAACATTTTTACAGAGAATA",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A31",
+          "value": "PB84_st31",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B31",
+          "value": "GCGCCGCTCTGGCGAACTACTTACTCTAGCGCCGCGCTTAAT",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A32",
+          "value": "PB84_st32",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B32",
+          "value": "CACGCTGCGCGTAACCACCACACCCTTCCCGG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A33",
+          "value": "PB84_st33",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B33",
+          "value": "CAACAATTAATAGACTGGATGGAGGTAGCGGT",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A34",
+          "value": "PB84_st34",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B34",
+          "value": "GCGGATAAAGGCTGGCAAGT",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A35",
+          "value": "PB84_st35",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B35",
+          "value": "GAAAGGAGCGGTTTTTGCGCTAGGGCTTGCAGGACCATTTTTCTTATGCGCT",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A36",
+          "value": "PB84_st36",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B36",
+          "value": "AAGAAAGCGTAAAGCACTAAATCGGAACCCTA",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A37",
+          "value": "PB84_st37",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B37",
+          "value": "GCCCTCCCGTATTTTTTCGTAGTTATGTTTTTTGGGGTTTTTTCGAGGTGCC",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A38",
+          "value": "PB84_st38",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B38",
+          "value": "CTAATCAACTACACGACGGGGAGTCAGGCGTGAACCATCACC",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A39",
+          "value": "PB84_st39",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B39",
+          "value": "TCTATCAGGGCGATGGCCCACTACAACTATGG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A40",
+          "value": "PB84_st40",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B40",
+          "value": "ATGAACGAAATAGACAGATCGCTGAAAAACCG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A41",
+          "value": "PB84_st41",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B41",
+          "value": "AGATAGGTGCTCAAAGGGCG",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A42",
+          "value": "PB84_st42",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B42",
+          "value": "TAAATCAGCTCTTTTTATTTTTTAACTAAAGAACGTGTTTTTGACTCCAACG",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A43",
+          "value": "PB84_st43",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B43",
+          "value": "TCCACTATCAATAGGCCGAAATCGGCAAAATC",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A44",
+          "value": "PB84_st44",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B44",
+          "value": "CCTTATAATGTTGTTCCAGTTTGGAACAAGAG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A45",
+          "value": "PB84_st45",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B45",
+          "value": "ATTTTTGTCGTGAGTTTTCGTTCCACTGATAATTCGCGTTAA",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A46",
+          "value": "PB84_st46",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B46",
+          "value": "CTCACTGATTATTTTTAGCATTGGTACTCATGACCAATTTTTAATCCCTTAA",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A47",
+          "value": "PB84_st47",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B47",
+          "value": "TTGATAATACTGTCAGACCAAGTTTACTCATA",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A48",
+          "value": "PB84_st48",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B48",
+          "value": "TATACTTAAAAGGATCTAGGTGAAGATCCTTT",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A49",
+          "value": "PB84_st49",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B49",
+          "value": "TTAATTTAAGATTGATTTAAAACTACTTCTG",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A50",
+          "value": "PB84_st50",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B50",
+          "value": "GATGGTAACGGCCCTTCCGGCTGGCTGGTTTA",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A51",
+          "value": "PB84_st51",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B51",
+          "value": "TTGCTGATGGTATCATTGCAGCACTGGGGCCA",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A52",
+          "value": "PB84_st52",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B52",
+          "value": "CCCCGAAGAACTTTTTGTTTTCCAATCAACGTTGCGCTTTTTAAACTATTAA",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A53",
+          "value": "PB84_st53",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B53",
+          "value": "AATGGCAAGATGAGCACTTTTAAAGTTCTGCT",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A54",
+          "value": "PB84_st54",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B54",
+          "value": "ATGTGGCGGCGTGACACCACGATGCCTGTAGC",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A55",
+          "value": "PB84_st55",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B55",
+          "value": "AACGACGACGGTATTATCCCGTATTGACGCC",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A56",
+          "value": "PB84_st56",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B56",
+          "value": "GGGCAAGACGGAGCTGAATGAAGCCATACCA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A57",
+          "value": "PB84_st57",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B57",
+          "value": "CGGAGGACCGATTTTTAGGAGCTAACCTCGCCTTGATTTTTTCGTTGGGAACGCAACTCGGTCTTTTTGCCGCATACA",
+          "sequence_candidate": true,
+          "base_count": 78
+        },
+        {
+          "cell": "A58",
+          "value": "PB84_st58",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B58",
+          "value": "TCATGTAACGCTTTTTTGCACAACGAGCGTG",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A59",
+          "value": "PB84_st59",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B59",
+          "value": "GGTCTCGCAAATCTGGAGCCGGTATGGGGGA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A60",
+          "value": "PB84_st60",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B60",
+          "value": "ACAACGATAACACTGCGGCCAACTTTCATTT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A61",
+          "value": "PB84_st61",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B61",
+          "value": "CAGTCACAGAATTTTTAAGCATCTTAGCTGCCATAACTTTTTCATGAGTGAT",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A62",
+          "value": "PB84_st62",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B62",
+          "value": "TATGCAGTCGGATGGCATGACAGTACATCTA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A63",
+          "value": "PB84_st63",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B63",
+          "value": "GTACTCACCTATTCTCAGAATGACGCATTTT",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A64",
+          "value": "PB84_st64",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B64",
+          "value": "GCCTTCCTATTCCCTTTTTTGCGTTGGTTGA",
+          "sequence_candidate": true,
+          "base_count": 31
+        },
+        {
+          "cell": "A65",
+          "value": "PB84_st65",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B65",
+          "value": "AGAGTTTTCGAGTAAATTAC",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A66",
+          "value": "PB84_st66",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B66",
+          "value": "ATCTCAACAGCGGTAAGATCCTTGATGCGATG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A67",
+          "value": "PB84_st67",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B67",
+          "value": "TGACCTTAAACGAATAGCCTCTCCCGAACTGG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A68",
+          "value": "PB84_st68",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B68",
+          "value": "AGGGGACGGGGTGCACGAGTGGGTTACATACCCAAGAGTTTG",
+          "sequence_candidate": true,
+          "base_count": 42
+        },
+        {
+          "cell": "A69",
+          "value": "PB84_st69",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B69",
+          "value": "AAAAGATGCTGTTTTTAAGATCAGTTACGACGAATTCTTTTTGACGAAAGGG",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A70",
+          "value": "PB84_st70",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B70",
+          "value": "GTGAAAGTGTATGAGTATTCAACATTTCCGTG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A71",
+          "value": "PB84_st71",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B71",
+          "value": "TCGCCCTTGTTTTTGCTCACCCAGAAACGCTG",
+          "sequence_candidate": true,
+          "base_count": 32
+        },
+        {
+          "cell": "A72",
+          "value": "PB84_st72",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B72",
+          "value": "CCTATTTGTTTTTTTTATTTTTCTAAAATAATATTGATTTTTAAAAGGAAGA",
+          "sequence_candidate": true,
+          "base_count": 52
+        },
+        {
+          "cell": "A73",
+          "value": "PB84_st73",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B73",
+          "value": "TAAATGCTTCATACATTCAA",
+          "sequence_candidate": true,
+          "base_count": 20
+        },
+        {
+          "cell": "A74",
+          "value": "PB84_st74",
+          "sequence_candidate": false,
+          "base_count": null
+        },
+        {
+          "cell": "B74",
+          "value": "GCGGAACCCCTCGTGATACGCCTATTTTTATA",
+          "sequence_candidate": true,
+          "base_count": 32
+        }
+      ],
+      "sequence_candidate_cells": 74
+    }
+  ],
+  "limitations": "Cell index and author-labeled staple table counts; no sequence-to-route verification or molecular reconstruction."
+}

@@ -291,3 +291,15 @@ def test_simulate_jobs_route_one_engine_failing_keeps_others(monkeypatch):
     r = client.get("/api/simulate/jobs", params={"design_source_path": "/w/d.nadoc"})
     assert r.status_code == 200
     assert {n["engine"] for n in r.json()} == {"namd"}
+
+
+def test_pathless_namd_copy_is_visible_only_to_its_recorded_project():
+    nodes = [
+        sim_jobs.normalize_md_job({'job_id': 'copy', 'project_id': 'part'}),
+        sim_jobs.normalize_md_job({'job_id': 'other', 'project_id': 'other'}),
+        sim_jobs.normalize_md_job({'job_id': 'unknown'}),
+        sim_jobs.normalize_md_job({'job_id': 'other-path', 'project_id': 'part', 'design_source_path': 'other.nadoc'}),
+    ]
+    assert sim_jobs.filter_nodes(nodes, 'part.nadoc', False, project_id='part') == nodes[:1]
+    assert sim_jobs.filter_nodes(nodes, 'part.nadoc', False) == []
+    assert sim_jobs.filter_nodes(nodes, None, False, project_id='part') == []

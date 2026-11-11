@@ -1,0 +1,1194 @@
+{
+  "entries": [
+    {
+      "ordinal": 1,
+      "text": "Computational Design Strategies for Nanoscale 3D Auxetic Metastructures from DNA S. Seo, A.S. Madhvacharyula, A.A. Swett, R. Li, Y. Du, and J.H. Choi JACS Au, 6, 5836-5847 (2026)",
+      "links": [
+        "https://pubs.acs.org/jaaucr/article/doi/10.1021/jacsau.6c01136/5443632/Computational-Design-Strategies-for-Nanoscale-3D"
+      ],
+      "stated_bibliographic_year": 2026,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/jacsau.6c01136/5443632/computational-design-strategies-for-nanoscale-3d"
+      ],
+      "target_key": "author_bibliography:choi:b8654867e4d24d67"
+    },
+    {
+      "ordinal": 2,
+      "text": "Programmable Assembly of Higher-Order DNA Nanostructures from Microbial ssDNA Staple Libraries M.H. Yen, M.R. Kesama, Y. Du, J.H. Choi, and K.V. Solomon Small, e75880 (2026)",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/smll.75880"
+      ],
+      "stated_bibliographic_year": 2026,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/smll.75880"
+      ],
+      "target_key": "author_bibliography:choi:fcc7d430f42b412d"
+    },
+    {
+      "ordinal": 3,
+      "text": "Programmable Synthesis of DNA Networks in Giant Vesicles via Rolling Circle Amplification M.R. Kesama, J.L. Guo, Anusha, Y. Du, C. Mao, and J.H. Choi Nano Letters, 26, 4866-4873 (2026)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acs.nanolett.6c00726"
+      ],
+      "stated_bibliographic_year": 2026,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.6c00726"
+      ],
+      "target_key": "author_bibliography:choi:1828c315b1b92d5f"
+    },
+    {
+      "ordinal": 4,
+      "text": "A Nanoscale Jitterbug Transformer from DNA S. Seo, A.A. Swett, M.R. Kesama, A.S. Madhvacharyula, R. Li, Y. Du, M. Eder, F.C. Simmel, and J.H. Choi Nature Communications, 17, 7244 (2026)",
+      "links": [
+        "https://www.nature.com/articles/s41467-026-74070-4"
+      ],
+      "stated_bibliographic_year": 2026,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:ec4eabb65665edb2"
+    },
+    {
+      "ordinal": 5,
+      "text": "Intracellular Neuronal Recordings Across DNA Tiles S. Xiao, S.H. Um, M. Xu, D. Dankwa, S. Seo, J.H. Choi, A. Aksimentiev, L.N. Green, and K. Jayant Nature Nanotechnology, 21, 859-868 (2026)",
+      "links": [
+        "https://www.nature.com/articles/s41565-026-02180-7"
+      ],
+      "stated_bibliographic_year": 2026,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:00bca8825871aa39"
+    },
+    {
+      "ordinal": 6,
+      "text": "Understanding Interfacial Photoswitching Mechanisms in Atomically Thin TMD-Spiropyran Hybrids S. Park, J. Ji, M. Brophy, J. Audi, J. Rouillon, C. Benitez-Martin, J. Andreasson, J.H. You, and J.H. Choi Advanced Materials Technologies, 11, e71071 (2026)",
+      "links": [
+        "https://advanced.onlinelibrary.wiley.com/doi/10.1002/admt.71071"
+      ],
+      "stated_bibliographic_year": 2026,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/admt.71071"
+      ],
+      "target_key": "author_bibliography:choi:c1ae68bd211a55d6"
+    },
+    {
+      "ordinal": 7,
+      "text": "DNA Crystals as a Template for Patterned Functional Materials A.A. Swett, Y.H. Kim, S.W. Park, M.R. Kesama, N. Siraj, C. Mao, and J.H. Choi Small Structures, 7, e202500693 (2026)",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/sstr.202500693"
+      ],
+      "stated_bibliographic_year": 2026,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/sstr.202500693"
+      ],
+      "target_key": "author_bibliography:choi:af70872eb51d61c1"
+    },
+    {
+      "ordinal": 8,
+      "text": "Understanding Structural Mechanics of Ligated DNA Crystals via Molecular Dynamics Simulation Y.H. Kim, A.S. Madhvacharyula, R. Li, A.A. Swett, S. Seo, E.J. Batchelder-Schwab, N. Siraj, C. Mao, and J.H. Choi Nanoscale Horizons, 10, 3340-3350 (2025)",
+      "links": [
+        "https://pubs.rsc.org/en/content/articlelanding/2025/nh/d5nh00524h"
+      ],
+      "stated_bibliographic_year": 2025,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:99737f153dd07894"
+    },
+    {
+      "ordinal": 9,
+      "text": "Realizing Mechanical Frustration at the Nanoscale Using DNA Origami A.S. Madhvacharyula, R. Li, A.A. Swett, Y. Du, S. Seo, F.C. Simmel, and J.H. Choi Nature Communications, 16, 5164 (2025)",
+      "links": [
+        "https://doi.org/10.1038/s41467-025-60492-z"
+      ],
+      "stated_bibliographic_year": 2025,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1038/s41467-025-60492-z"
+      ],
+      "target_key": "author_bibliography:choi:04f257db6b82103e"
+    },
+    {
+      "ordinal": 10,
+      "text": "DNA Origami-Cyanine Nanocomplex for Precision Imaging of KRAS-mutant Pancreatic Cancer Cells H. Moon, Y. Du, S.R. Choi, S. Seo, C. Cheng, B.D. Elzey, J.H. Choi, and B. Han Advanced Science, 12, 2410278 (2025)",
+      "links": [
+        "https://doi.org/10.1002/advs.202410278"
+      ],
+      "stated_bibliographic_year": 2025,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/advs.202410278"
+      ],
+      "target_key": "author_bibliography:choi:577ff03efd678264"
+    },
+    {
+      "ordinal": 11,
+      "text": "Tunable Photodetectors Based on Hybrid Structures from Transition Metal Dichalcogenides and Photochromic Molecules S. Park, J. Ji, J. Andreasson, J.H. You, and J.H. Choi IEEE Sensors Reviews, 2, 405-418 (2025)",
+      "links": [
+        "https://ieeexplore.ieee.org/document/11112565"
+      ],
+      "stated_bibliographic_year": 2025,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:1da7a25a4d713965"
+    },
+    {
+      "ordinal": 12,
+      "text": "Layer-number-dependent Photoswitchability in 2D MoS2-Diarylethene Hybrids S. Park, J. Ji, S. Pillai, J. Rouillon, C. Benitez-Martin, J. Andreasson, J.H. You, and J.H. Choi Nanoscale, 17, 3152-3159 (2025)",
+      "links": [
+        "https://doi.org/10.1039/D4NR03631J"
+      ],
+      "stated_bibliographic_year": 2025,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1039/d4nr03631j"
+      ],
+      "target_key": "author_bibliography:choi:03d0c590730c0295"
+    },
+    {
+      "ordinal": 13,
+      "text": "Photoswitchable Optoelectronic Properties of 2D MoSe2-Diarylethene Hybrid Structures S. Park, J. Ji, C. Cunningham, S. Pillai, J. Rouillon, C. Benitez-Martin, M. Fang, E.H. Yang, J. Andreasson, J.H. You, and J.H. Choi Scientific Reports, 14, 7325 (2024)",
+      "links": [
+        "https://doi.org/10.1038/s41598-024-57479-z"
+      ],
+      "stated_bibliographic_year": 2024,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1038/s41598-024-57479-z"
+      ],
+      "target_key": "author_bibliography:choi:e913acc2743be018"
+    },
+    {
+      "ordinal": 14,
+      "text": "DNA Nanostar Structures with Tunable Auxetic Properties Y. Du, R. Li, A.S. Madhvacharyula, A.A. Swett, and J.H. Choi Molecular Systems Design & Engineering, 9, 765-774 (2024)",
+      "links": [
+        "https://doi.org/10.1039/D3ME00202K"
+      ],
+      "stated_bibliographic_year": 2024,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1039/d3me00202k"
+      ],
+      "target_key": "author_bibliography:choi:61d1a0a452419a3e"
+    },
+    {
+      "ordinal": 15,
+      "text": "Motility of Synthetic Cells from Engineered Lipids A. Shrivastava, Y. Du, H.K. Adepu, R. Li, A.S. Madhvacharyula, A.A. Swett, and J.H. Choi ACS Synthetic Biology, 12, 2789-2801 (2023)",
+      "links": [
+        "https://doi.org/10.1021/acssynbio.3c00271"
+      ],
+      "stated_bibliographic_year": 2023,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acssynbio.3c00271"
+      ],
+      "target_key": "author_bibliography:choi:c177e1868db117d8"
+    },
+    {
+      "ordinal": 16,
+      "text": "Morphology Engineering of Hybrid Supercapacitor Electrodes from Hierarchical Stem-like Carbon Networks with Flower-like MoS2 Structures J. Ji, S. Park, and J.H. Choi ACS Omega, 8, 16833-16841 (2023)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsomega.3c00445"
+      ],
+      "stated_bibliographic_year": 2023,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acsomega.3c00445"
+      ],
+      "target_key": "author_bibliography:choi:431bb8b454fb6c71"
+    },
+    {
+      "ordinal": 17,
+      "text": "Mechanics of Dynamic and Deformable DNA Nanostructures R. Li, A.S. Madhvacharyula, Y. Du, H.K. Adepu, and J.H. Choi Chemical Science, 14, 8018-8046 (2023)",
+      "links": [
+        "https://doi.org/10.1039/D3SC01793A"
+      ],
+      "stated_bibliographic_year": 2023,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1039/d3sc01793a"
+      ],
+      "target_key": "author_bibliography:choi:5117c641426f0925"
+    },
+    {
+      "ordinal": 18,
+      "text": "Mechanical Deformation Behaviors and Structural Properties of Ligated DNA Crystals R. Li, M. Zheng, A.S. Madhvacharyula, Y. Du, C. Mao, and J.H. Choi Biophysical Journal, 121, 4078-4090 (2022)",
+      "links": [
+        "https://www.sciencedirect.com/science/article/pii/S000634952200813X"
+      ],
+      "stated_bibliographic_year": 2022,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:9af92191fede6827"
+    },
+    {
+      "ordinal": 19,
+      "text": "Recent Progress in 2D Hybrid Heterostructures from Transition Metal Dichalcogenides and Organic Layers: Properties and Applications in Energy and Optoelectronics J. Ji and J.H. Choi Nanoscale, 14, 10648-10689 (2022)",
+      "links": [
+        "https://pubs.rsc.org/en/content/articlelanding/2022/NR/D2NR01358D"
+      ],
+      "stated_bibliographic_year": 2022,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:ba37a118fe895d33"
+    },
+    {
+      "ordinal": 20,
+      "text": "High-Performance Supercapacitor Electrodes Based on Composites of MoS2 Nanosheets, Carbon Nanotubes, and ZIF-8 Metal-Organic Framework Nanoparticles D.N. Houpt, J. Ji, D. Yang, and J.H. Choi ACS Applied Nano Materials, 5, 1491-1499 (2022)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsanm.1c04065"
+      ],
+      "stated_bibliographic_year": 2022,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acsanm.1c04065"
+      ],
+      "target_key": "author_bibliography:choi:febfab29a738a10d"
+    },
+    {
+      "ordinal": 21,
+      "text": "Understanding the Effects of Dielectric Property, Separation Distance, and Band Alignment on Interlayer Excitons in 2D Hybrid MoS2/WSe2 Heterostructures J. Ji and J.H. Choi ACS Applied Electronic Materials, 3, 3052-3059 (2021)",
+      "links": [
+        "https://pubs.acs.org/doi/abs/10.1021/acsaelm.1c00282"
+      ],
+      "stated_bibliographic_year": 2021,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acsaelm.1c00282"
+      ],
+      "target_key": "author_bibliography:choi:6d8330410e7cade7"
+    },
+    {
+      "ordinal": 22,
+      "text": "Kinetic DNA Self-Assembly: Simultaneously Co-Folding Complementary DNA Strands into Identical Nanostructures M. Zheng, Z. Li, L. Liu, M. Li, V.E. Paluzzi, J.H. Choi, and C. Mao Journal of the American Chemical Society, 143, 20363-20367 (2021)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.1c09925"
+      ],
+      "stated_bibliographic_year": 2021,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/jacs.1c09925"
+      ],
+      "target_key": "author_bibliography:choi:7413577130cccca7"
+    },
+    {
+      "ordinal": 23,
+      "text": "Engineering the Nanoscaled Morphologies of Linear DNA Homopolymers M. Zheng, Q. Li, Q. Li, V.E. Paluzzi, J.H. Choi, and C. Mao Macromolecular Rapid Communications, 42, 2100217 (2021)",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/marc.202100217"
+      ],
+      "stated_bibliographic_year": 2021,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/marc.202100217"
+      ],
+      "target_key": "author_bibliography:choi:89b4d6323a0b4f80"
+    },
+    {
+      "ordinal": 24,
+      "text": "Programmable Aggregation of Artificial Cells with DNA Signals H. Qiu, F. Li, Y. Du, R. Li, J.Y Hyun, S.Y. Lee, and J.H. Choi ACS Synthetic Biology, 10, 1268-1276 (2021)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acssynbio.0c00550"
+      ],
+      "stated_bibliographic_year": 2021,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acssynbio.0c00550"
+      ],
+      "target_key": "author_bibliography:choi:cda01c8645bed720"
+    },
+    {
+      "ordinal": 25,
+      "text": "Conformational Control of DNA Origami by DNA Oligomers, Intercalators and UV Light R. Li, H. Chen, H. Lee, and J.H. Choi Methods and Protocols, 4, 38 (2021)",
+      "links": [
+        "https://pubmed.ncbi.nlm.nih.gov/34067324/"
+      ],
+      "stated_bibliographic_year": 2021,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:f2d4a06c58de49a3"
+    },
+    {
+      "ordinal": 26,
+      "text": "Elucidating the Mechanical Energy for Cyclization of a DNA Origami Tile R. Li, H. Chen, H. Lee, and J.H. Choi Applied Sciences, 11, 2357 (2021)",
+      "links": [
+        "https://www.mdpi.com/2076-3417/11/5/2357"
+      ],
+      "stated_bibliographic_year": 2021,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:44dab0187a303f6c"
+    },
+    {
+      "ordinal": 27,
+      "text": "Topological Assembly of a Deployable Hoberman Flight Ring from DNA R. Li, H. Chen, and J.H. Choi Small, 17, 2007069 (2021)",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/smll.202007069"
+      ],
+      "stated_bibliographic_year": 2021,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/smll.202007069"
+      ],
+      "target_key": "author_bibliography:choi:e5c3b69da0e6a458"
+    },
+    {
+      "ordinal": 28,
+      "text": "Auxetic Two-Dimensional Nanostructures from DNA R. Li, H. Chen, and J.H. Choi Angewandte Chemie International Edition, 60, 7165-7173 (2021)",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/anie.202014729"
+      ],
+      "stated_bibliographic_year": 2021,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/anie.202014729"
+      ],
+      "target_key": "author_bibliography:choi:e51a79890e830b1c"
+    },
+    {
+      "ordinal": 29,
+      "text": "Mechanistic Understanding of Surface Migration Dynamics with DNA Walkers Y. Du, J. Pan, H. Qiu, C. Mao, and J.H. Choi Journal of Physical Chemistry B, 125, 507-517 (2021)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acs.jpcb.0c09048"
+      ],
+      "stated_bibliographic_year": 2021,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acs.jpcb.0c09048"
+      ],
+      "target_key": "author_bibliography:choi:41e26b6c9c27f039"
+    },
+    {
+      "ordinal": 30,
+      "text": "Selective Chemical Modulation of Interlayer Excitons in Atomically Thin Heterostructures J. Ji, C.M. Delehey, D.N. Houpt, M.K. Heighway, T. Lee, and J.H. Choi Nano Letters, 20, 2500-2506 (2020)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acs.nanolett.9b05254"
+      ],
+      "stated_bibliographic_year": 2020,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.9b05254"
+      ],
+      "target_key": "author_bibliography:choi:f5ae5cfdbf9e49b4"
+    },
+    {
+      "ordinal": 31,
+      "text": "Layer-Number-Dependent Electronic and Optoelectronic Properties of 2D WSe2-Organic Hybrid Heterojunction J. Ji and J.H. Choi Advanced Materials Interfaces, 6, 1900637 (2019)",
+      "links": [
+        "https://www.researchgate.net/publication/334200642_Layer-Number-Dependent_Electronic_and_Optoelectronic_Properties_of_2D_WSe_2_-Organic_Hybrid_Heterojunction"
+      ],
+      "stated_bibliographic_year": 2019,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:9487be0993ad313e"
+    },
+    {
+      "ordinal": 32,
+      "text": "Perovskite Nickelates as Bio-electronic Interfaces H.T. Zhang, F. Zhou, F. Li, H. Chan, Q. Wu, Z. Zhang, B. Narayanan, K. Ramadoss, I. Chakraborty, G. Saha, G. Kamath, K. Roy, H. Zhou, A.A. Chubykin, S.K.R.S. Sankaranarayanan, J.H. Choi, and S. Ramanathan Nature Communications, 10, 1651 (2019)",
+      "links": [
+        "https://www.nature.com/articles/s41467-019-09660-6"
+      ],
+      "stated_bibliographic_year": 2019,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:ffdd5bfc2e1e8684"
+    },
+    {
+      "ordinal": 33,
+      "text": "Mimicking Chemotactic Cell Migration with DNA Programmable Synthetic Vesicles J. Pan, Y. Du, H. Qiu, L.R. Upton, F. Li, and J.H. Choi Nano Letters, 19, 9138-9144 (2019)",
+      "links": [
+        "https://pubs.acs.org/doi/abs/10.1021/acs.nanolett.9b04428"
+      ],
+      "stated_bibliographic_year": 2019,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.9b04428"
+      ],
+      "target_key": "author_bibliography:choi:afe27eec4f05c7e4"
+    },
+    {
+      "ordinal": 34,
+      "text": "A Review on Optical Imaging of DNA Nanostructures and Dynamic Processes Y. Du, J. Pan, and J.H. Choi Methods and Application in Fluorescence, 7, 012002 (2019)",
+      "links": [
+        "https://iopscience.iop.org/article/10.1088/2050-6120/aaed11"
+      ],
+      "stated_bibliographic_year": 2019,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1088/2050-6120/aaed11"
+      ],
+      "target_key": "author_bibliography:choi:939b5998441b1701"
+    },
+    {
+      "ordinal": 35,
+      "text": "Local Direction Change of Surface Gliding Microtubules F. Li, J. Pan, and J.H. Choi Biotechnology and Bioengineering, 116, 1128-1138 (2019)",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/bit.26933"
+      ],
+      "stated_bibliographic_year": 2019,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/bit.26933"
+      ],
+      "target_key": "author_bibliography:choi:f1739dfff3afa3a0"
+    },
+    {
+      "ordinal": 36,
+      "text": "Structural DNA Nanotechnology: Artificial Nanostructures for Biomedical Research Y. Ke, C. Castro, and J.H. Choi Annual Review of Biomedical Engineering, 20, 377\u2013403 (2018)",
+      "links": [
+        "https://www.annualreviews.org/doi/10.1146/annurev-bioeng-062117-120904"
+      ],
+      "stated_bibliographic_year": 2018,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1146/annurev-bioeng-062117-120904"
+      ],
+      "target_key": "author_bibliography:choi:16aaab4dc0be3fe5"
+    },
+    {
+      "ordinal": 37,
+      "text": "Tailoring Photoelectrochemical Properties of Transition Metal Dichalcogenide Nanolayers with Porphyrin Functionalization H. Zhang, J. Ji, A.A. Gonzalez, and J.H. Choi Journal of Materials Chemistry C, 5, 11233-11238 (2017)",
+      "links": [
+        "https://pubs.rsc.org/en/content/articlelanding/2017/tc/c7tc02861j"
+      ],
+      "stated_bibliographic_year": 2017,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:710e4442a6419ca2"
+    },
+    {
+      "ordinal": 38,
+      "text": "Single-Walled Carbon Nanotubes as Optical Probes for Bio-sensing and Imaging J. Pan, F. Li, and J.H. Choi Journal of Materials Chemistry B, 5, 6511-6522 (2017)",
+      "links": [
+        "https://pubs.rsc.org/en/content/articlelanding/2017/tb/c7tb00748e"
+      ],
+      "stated_bibliographic_year": 2017,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:cc831b58704e9b6a"
+    },
+    {
+      "ordinal": 39,
+      "text": "Conformational Effects of UV Light on DNA Origami H. Chen, R. Li, S. Li, J. Andreasson, and J.H. Choi Journal of the American Chemical Society, 139, 1380-1383 (2017)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.6b10821"
+      ],
+      "stated_bibliographic_year": 2017,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/jacs.6b10821"
+      ],
+      "target_key": "10.1021/jacs.6b10821"
+    },
+    {
+      "ordinal": 40,
+      "text": "Visible/Near-Infrared Subdiffraction Imaging Reveals the Stochastic Nature of DNA Walkers J. Pan, T.G. Cha, H. Chen, F. Li, N.A. Bragg, and J.H. Choi Science Advances, 3, e1601600 (2017)",
+      "links": [
+        "https://www.science.org/doi/10.1126/sciadv.1601600"
+      ],
+      "stated_bibliographic_year": 2017,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1126/sciadv.1601600"
+      ],
+      "target_key": "10.1126/sciadv.1601600"
+    },
+    {
+      "ordinal": 41,
+      "text": "DNA Binding of Pd(TC3), a Conformable Cationic Porphyrin with a Long-Lived Triplet State S. Ghimire, M.A. Bork, H. Zhang, P.E. Fanwick, M. Zeller, J.H. Choi, and D.R. McMillin Dalton Transactions, 45, 14277-14284 (2016)",
+      "links": [
+        "https://pubs.rsc.org/en/content/articlelanding/2016/dt/c6dt01918h"
+      ],
+      "stated_bibliographic_year": 2016,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:7019b0681bc62f7a"
+    },
+    {
+      "ordinal": 42,
+      "text": "Engineering Chemically-Exfoliated Large-Area Two-Dimensional MoS2 Nanolayers with Porphyrins for Improved Light Harvesting H. Zhang, J. Choi, A. Ramani, D. Voiry, S.N. Natoli, M. Chhowalla, D.R. McMillin, and J.H. Choi ChemPhysChem, 17, 2854-2862 (2016)",
+      "links": [
+        "https://chemistry-europe.onlinelibrary.wiley.com/doi/abs/10.1002/cphc.201600511"
+      ],
+      "stated_bibliographic_year": 2016,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/cphc.201600511"
+      ],
+      "target_key": "author_bibliography:choi:57c20f6b53a6032c"
+    },
+    {
+      "ordinal": 43,
+      "text": "A DNAzyme-Mediated Logic Gate for Programming Molecular Capture and Release on DNA Origami F. Li, H. Chen, J. Pan, T.G. Cha, I. Menditz, and J.H. Choi Chemical Communications, 52, 8369- 8372 (2016)",
+      "links": [
+        "https://pubs.rsc.org/en/content/articlelanding/2016/cc/c6cc02989b"
+      ],
+      "stated_bibliographic_year": 2016,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:1b45e1f16e3a69a5"
+    },
+    {
+      "ordinal": 44,
+      "text": "DNA Walkers as Transport Vehicles of Nanoparticles along a Carbon Nanotube J. Pan, T.G. Cha, H. Chen, F. Li, and J.H. Choi 3D DNA Nanostructures - Methods and Protocols, Springer (2016)",
+      "links": [
+        "https://experiments.springernature.com/articles/10.1007/978-1-4939-6454-3_19"
+      ],
+      "stated_bibliographic_year": 2016,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1007/978-1-4939-6454-3_19"
+      ],
+      "target_key": "author_bibliography:choi:080c0aea8d4eb6ce"
+    },
+    {
+      "ordinal": 45,
+      "text": "DNA Walker-Regulated Cancer Cell Growth Inhibition F. Li, T.G. Cha, J. Pan, A. Ozcelikkale, B. Han, and J.H. Choi ChemBioChem, 17, 1138-1141 (2016)",
+      "links": [
+        "https://pubmed.ncbi.nlm.nih.gov/27059426/"
+      ],
+      "stated_bibliographic_year": 2016,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:30a387fe5570fb53"
+    },
+    {
+      "ordinal": 46,
+      "text": "Dynamic and Progressive Control of DNA Origami Conformation by Modulating DNA Helicity with Chemical Adducts H. Chen, H. Zhang, J. Pan, T.G. Cha, S. Li, J. Andreasson, and J.H. Choi ACS Nano, 10, 4989\u22124996 (2016)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsnano.6b01339"
+      ],
+      "stated_bibliographic_year": 2016,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.6b01339"
+      ],
+      "target_key": "10.1021/acsnano.6b01339"
+    },
+    {
+      "ordinal": 47,
+      "text": "Understanding Solvent Effects on the Properties of 2D Transition Metal Dichalcogenides J. Choi, H. Zhang, H. Du, and J.H. Choi ACS Applied Materials and Interfaces, 8, 8864\u20138869 (2016)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsami.6b01491"
+      ],
+      "stated_bibliographic_year": 2016,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acsami.6b01491"
+      ],
+      "target_key": "author_bibliography:choi:93487b823c9766d5"
+    },
+    {
+      "ordinal": 48,
+      "text": "Modulating Optoelectronic Properties of 2D Transition Metal Dichalcogenides by Photo-induced Charge Transfer J. Choi, H. Zhang, and J.H. Choi ACS Nano, 10, 1671-1680 (2016)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsnano.5b07457"
+      ],
+      "stated_bibliographic_year": 2016,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.5b07457"
+      ],
+      "target_key": "author_bibliography:choi:ac46aa3d61e5be7a"
+    },
+    {
+      "ordinal": 49,
+      "text": "Nanomanufacturing of 2-D Transition Metal Dichalcogenide Materials Using Self-Assembled DNA Nanotubes J. Choi, H. Chen, F. Li, L. Yang, S.N. Kim, R. Naik, P. Ye, and J.H. Choi Small, 11, 5520-5527 (2015)",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/smll.201501431"
+      ],
+      "stated_bibliographic_year": 2015,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/smll.201501431"
+      ],
+      "target_key": "author_bibliography:choi:f05181029fac82ec"
+    },
+    {
+      "ordinal": 50,
+      "text": "Design Principles of DNA Enzyme-based Walkers: Translocation Kinetics and Photoregulation T.G. Cha, J. Pan, H. Chen, H.N. Robinson, X. Li, C. Mao, and J.H. Choi Journal of the American Chemical Society, 137, 9429-9437 (2015)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.5b05522"
+      ],
+      "stated_bibliographic_year": 2015,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/jacs.5b05522"
+      ],
+      "target_key": "author_bibliography:choi:5fd182f364092eda"
+    },
+    {
+      "ordinal": 51,
+      "text": "Regeneration of Light-Harvesting Complexes via Dynamic Replacement of Photodegraded Chromophores H. Zhang, J. Pan, S. Ghimire, M.A. Bork, M.M. Riccitelli, D.R. McMillin, and J.H. Choi ACS Applied Materials and Interfaces, 7, 7833-7837 (2015)",
+      "links": [
+        "https://pubmed.ncbi.nlm.nih.gov/25848806/"
+      ],
+      "stated_bibliographic_year": 2015,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:f6d5ccdd5c72a73b"
+    },
+    {
+      "ordinal": 52,
+      "text": "Recent Progress on DNA based Walkers J. Pan, F. Li, T.G. Cha, H. Chen, and J.H. Choi Current Opinion in Biotechnology, 34, 56-64 (2015)",
+      "links": [
+        "https://www.sciencedirect.com/science/article/abs/pii/S0958166914002055"
+      ],
+      "stated_bibliographic_year": 2015,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:59a64ab02468348c"
+    },
+    {
+      "ordinal": 53,
+      "text": "DNA Origami as Programmable Nanomanufacturing Tools H. Chen, F. Li, J. Pan, J. Choi, and J.H. Choi Encyclopedia of Nanotechnology, Springer (2015)",
+      "links": [
+        "https://link.springer.com/referenceworkentry/10.1007%2F978-94-007-6178-0_100907-1"
+      ],
+      "stated_bibliographic_year": 2015,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1007/978-94-007-6178-0_100907-1"
+      ],
+      "target_key": "10.1007/978-94-007-6178-0_100907-1"
+    },
+    {
+      "ordinal": 54,
+      "text": "Understanding Photophysical Interactions of Semiconducting Carbon Nanotubes with Porphyrin Chromophores H. Zhang, M.A. Bork, K.J. Riedy, D.R. McMillin, and J.H. Choi Journal of Physical Chemistry C, 118, 11612-11619 (2014)",
+      "links": [
+        "https://docecity.com/understanding-photophysical-interactions-of-semiconducting-c-5f102e6350a5b.html"
+      ],
+      "stated_bibliographic_year": 2014,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:22d8c5ccb096705b"
+    },
+    {
+      "ordinal": 55,
+      "text": "Understanding the Mechanical Properties of DNA Origami Tiles and Controlling the Kinetics of their Folding and Unfolding Reconfiguration H. Chen, T.W. Weng, M.M. Riccitelli, Y. Cui, J. Irudayaraj, and J.H. Choi Journal of the American Chemical Society, 136, 6995-7005 (2014)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/ja500612d"
+      ],
+      "stated_bibliographic_year": 2014,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/ja500612d"
+      ],
+      "target_key": "10.1021/ja500612d"
+    },
+    {
+      "ordinal": 56,
+      "text": "Single-Stranded DNA Functionalized Single-Walled Carbon Nanotubes for Microbiosensors via Layer-by-Layer Electrostatic Self-Assembly Z. Kang, X. Yan, Y. Zhang, J. Pan, J. Shi, X. Zhang, Y. Liu, J.H. Choi, and D.M. Porterfield ACS Applied Materials and Interfaces, 6, 3784-3789 (2014)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/am500118k"
+      ],
+      "stated_bibliographic_year": 2014,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/am500118k"
+      ],
+      "target_key": "author_bibliography:choi:32f60c03ab759a86"
+    },
+    {
+      "ordinal": 57,
+      "text": "Accessibility and External versus Intercalative Binding to DNA as Assessed by Oxygen-Induced Quenching of the Palladium(II)-Containing Cationic Porphyrins Pd(T4) and Pd(tD4) M.A. Bork, C.G. Gianopoulos, H. Zhang, P.E. Fanwick, J.H. Choi, and D.R. McMillin Biochemistry, 53, 714-724 (2014)",
+      "links": [
+        "https://pubmed.ncbi.nlm.nih.gov/24428500/"
+      ],
+      "stated_bibliographic_year": 2014,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:0a5b481f9728faf6"
+    },
+    {
+      "ordinal": 58,
+      "text": "A Synthetic DNA Motor That Transports Nanoparticles along Carbon Nanotubes T.G. Cha, J. Pan, H. Chen, J. Salgado, X. Li, C. Mao, and J.H. Choi Nature Nanotechnology, 9, 39-43 (2014)",
+      "links": [
+        "https://www.nature.com/articles/nnano.2013.257"
+      ],
+      "stated_bibliographic_year": 2014,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:a30f28042eba924c"
+    },
+    {
+      "ordinal": 59,
+      "text": "Hierarchically Assembled DNA Origami Tubules with Reconfigurable Chirality H. Chen, T.G. Cha, J. Pan, and J.H. Choi Nanotechnology, 24, 435601 (2013)",
+      "links": [
+        "https://pubmed.ncbi.nlm.nih.gov/24076521/"
+      ],
+      "stated_bibliographic_year": 2013,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:d10bc7df87b12588"
+    },
+    {
+      "ordinal": 60,
+      "text": "Carbon Nanotubes and Graphene for Photonic Applications S. Yamashita, Y. Saito, and J.H. Choi Elsevier (2013)",
+      "links": [
+        "https://www.elsevier.com/books/carbon-nanotubes-and-graphene-for-photonic-applications/yamashita/978-0-85709-417-9"
+      ],
+      "stated_bibliographic_year": 2013,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:3b0d7f5c68448060"
+    },
+    {
+      "ordinal": 61,
+      "text": "Carbon Nanotube based Optical Platforms for Biomolecular Detection J. Pan, T.G. Cha, H. Chen, and J.H. Choi Carbon Nanotubes and Graphene for Photonic Applications, Elsevier (2013)",
+      "links": [
+        "https://www.researchgate.net/publication/282998563_Carbon_nanotube-based_optical_platforms_for_biomolecular_detection"
+      ],
+      "stated_bibliographic_year": 2013,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:fca4560355be9612"
+    },
+    {
+      "ordinal": 62,
+      "text": "Carbon Nanotube Solar Cells B.A. Baker, H. Zhang, T.G. Cha, and J.H. Choi Carbon Nanotubes and Graphene for Photonic Applications, Elsevier (2013)",
+      "links": [
+        "https://www.sciencedirect.com/science/article/pii/B978085709417950009X"
+      ],
+      "stated_bibliographic_year": 2013,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:4ba1dc3d931e24a1"
+    },
+    {
+      "ordinal": 63,
+      "text": "Multiplexed Optical Detection of Plasma Porphyrins Using DNA Aptamer-Functionalized Carbon Nanotubes J. Pan, H. Zhang, T.G. Cha, H. Chen, and J.H. Choi Analytical Chemistry, 85, 8391-8396 (2013)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/ac401794n"
+      ],
+      "stated_bibliographic_year": 2013,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/ac401794n"
+      ],
+      "target_key": "author_bibliography:choi:a300cd709faad7f0"
+    },
+    {
+      "ordinal": 64,
+      "text": "Understanding Oligonucleotide-Templated Nanocrystals: Growth Mechanisms and Surface Properties T.G. Cha, B.A. Baker, J. Salgado, C.J. Bates, K.H. Chen, A.C. Chang, J.-H. Han, M.S. Strano, and J.H. Choi ACS Nano, 6, 8136-8143 (2012)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/nn302779m"
+      ],
+      "stated_bibliographic_year": 2012,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/nn302779m"
+      ],
+      "target_key": "author_bibliography:choi:ae8b2ae031490efc"
+    },
+    {
+      "ordinal": 65,
+      "text": "DNA Oligonucleotide Templated Nanohybrids Using Electronic Type Sorted Carbon Nanotubes for Light Harvesting H. Zhang, B.A. Baker, T.G. Cha, M.D. Sauffer, Y. Wu, N. Hinkson, M.A. Bork, C.M. McShane, K.S. Choi, D.R. McMillin, and J.H. Choi Advanced Materials, 24, 5447-5451 (2012)",
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/adma.201201628"
+      ],
+      "stated_bibliographic_year": 2012,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1002/adma.201201628"
+      ],
+      "target_key": "author_bibliography:choi:8b0d4339afce293c"
+    },
+    {
+      "ordinal": 66,
+      "text": "Self-Repairing Photoelectrochemical Complexes based on Nanoscale Synthetic and Biological Components M.H. Ham, A.A. Boghossian, J.H. Choi, and M.S. Strano Encyclopedia of Nanotechnology, Springer (2012)",
+      "links": [
+        "https://link.springer.com/referenceworkentry/10.1007/978-90-481-9751-4_220"
+      ],
+      "stated_bibliographic_year": 2012,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1007/978-90-481-9751-4_220"
+      ],
+      "target_key": "author_bibliography:choi:dfe72a858d653cea"
+    },
+    {
+      "ordinal": 67,
+      "text": "Microbiosensors based on DNA Modified Single-Walled Carbon Nanotube and Pt Black Nanocomposites J. Shi, T.G. Cha, J.C. Claussen, A.R. Diggs, J.H. Choi, and M.D. Porterfield Analyst, 136, 4916-4924 (2011)",
+      "links": [
+        "https://pubs.rsc.org/en/content/articlelanding/2011/an/c1an15179g"
+      ],
+      "stated_bibliographic_year": 2011,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:27fc30804a2e0fe5"
+    },
+    {
+      "ordinal": 68,
+      "text": "Optical Nanosensor Architecture for Cell Signaling Molecules Using DNA Aptamer-Coated Carbon Nanotubes T.G. Cha, B.A. Baker, M.D. Sauffer, J. Salgado, D. Jaroch, J.L. Rickus, D.M. Porterfield, and J.H. Choi ACS Nano, 5, 4236-4244 (2011)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/nn201323h"
+      ],
+      "stated_bibliographic_year": 2011,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/nn201323h"
+      ],
+      "target_key": "author_bibliography:choi:ec4d254a1fc2f36d"
+    },
+    {
+      "ordinal": 69,
+      "text": "Biomimetic Strategies for Solar Energy Conversion: A Technical Perspective A.A. Boghossian, M.H. Ham, J.H. Choi, and M.S. Strano Energy and Environmental Science, 4, 3834-3843 (2011)",
+      "links": [
+        "https://pubs.rsc.org/en/content/articlelanding/2011/ee/c1ee01363g"
+      ],
+      "stated_bibliographic_year": 2011,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:a3e6a9a91b7513d5"
+    },
+    {
+      "ordinal": 70,
+      "text": "Dynamic Self-Assembly of Nanoscale Components for Solar Energy Conversion A.A. Boghossian, M.H. Ham, J.H. Choi, and M.S. Strano Self-Healing at the Nanoscale, Mechanisms and Key Concepts of Natural and Artificial Systems, CRC Press, Taylor and Francis Group (2011)",
+      "links": [
+        "https://books.google.com/books"
+      ],
+      "stated_bibliographic_year": 2011,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:43fae1a70dd84d53"
+    },
+    {
+      "ordinal": 71,
+      "text": "Dynamics and Reversible Self-Assembly of Photoelectrochemical Complexes on Lipid Bilayer Disks, Photosynthetic Reaction Centers, and Single-Walled Carbon Nanotubes A.A. Boghossian, J.H. Choi, M.H. Ham, and M.S. Strano Langmuir, 27, 1599-1609 (2011)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/la103469s"
+      ],
+      "stated_bibliographic_year": 2011,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/la103469s"
+      ],
+      "target_key": "author_bibliography:choi:138d4655f7ecf5c3"
+    },
+    {
+      "ordinal": 72,
+      "text": "Photoelectrochemical Complexes for Solar Energy Conversion that Chemically and Autonomously Regenerate M.H. Ham, J.H. Choi, A.A. Boghossian, E.S. Jeng, R.A. Graff, D.A. Heller, A.C. Chang, A. Mattis, T.H. Bayburt, Y.V. Grinkova, A.S. Zeiger, K.V. Vliet, E.K. Hobbie, S.G. Sligar, C.A. Wraight, and M.S. Strano Nature Chemistry, 2, 929-936 (2010)",
+      "links": [
+        "https://www.nature.com/articles/nchem.822"
+      ],
+      "stated_bibliographic_year": 2010,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:b30da17f448131a0"
+    },
+    {
+      "ordinal": 73,
+      "text": "Exciton Antennas and Concentrators from Core-Shell and Corrugated Carbon Nanotube Filaments of Homogeneous Composition J.H. Han, G.L.C. Paulus, R. Maruyama, D.A. Heller, W.J. Kim, P.W. Barone, C.Y. Lee, J.H. Choi, M.-H. Ham, C. Song, C. Fantini, and M.S. Strano Nature Materials, 9, 833-839 (2010)",
+      "links": [
+        "https://www.nature.com/articles/nmat2832"
+      ],
+      "stated_bibliographic_year": 2010,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:ff5b244742c222e7"
+    },
+    {
+      "ordinal": 74,
+      "text": "Oligonucleotide DNA and RNA as Direct Capping Ligand for Nanocrystals: An Emerging Method for Biological Diagnostics and Therapeutics B.A. Baker and J.H. Choi Nano, 4, 189-199 (2009)",
+      "links": [
+        "https://www.worldscientific.com/doi/abs/10.1142/S1793292009001678"
+      ],
+      "stated_bibliographic_year": 2009,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1142/s1793292009001678"
+      ],
+      "target_key": "author_bibliography:choi:f5493311681dde27"
+    },
+    {
+      "ordinal": 75,
+      "text": "DNA Aptamer-Passivated Nanocrystal Synthesis: A Facile Approach for Nanoparticle-based Cancer Cell Growth Inhibition J.H. Choi, K.H. Chen, J.-H. Han, A.M. Chaffee, and M.S. Strano Small, 5, 672-675 (2009)",
+      "links": [
+        "https://pubmed.ncbi.nlm.nih.gov/19235795/"
+      ],
+      "stated_bibliographic_year": 2009,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:aa6aa26312ab824e"
+    },
+    {
+      "ordinal": 76,
+      "text": "Nanometer Positioning, Parallel Alignment, and Placement of Single Anisotropic Nanoparticles Using Hydrodynamic Forces in Cylindrical Droplets R. Sharma, C.Y. Lee, J.H. Choi, K. Chen, and M.S. Strano Nano Letters, 7, 2693-2700 (2007)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/nl0711211"
+      ],
+      "stated_bibliographic_year": 2007,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/nl0711211"
+      ],
+      "target_key": "author_bibliography:choi:98cbc8ef7e53a1dc"
+    },
+    {
+      "ordinal": 77,
+      "text": "Solvatochromism in Single-Walled Carbon Nanotubes J.H. Choi and M.S. Strano Applied Physics Letters, 90, Article 223114 (2007)",
+      "links": [
+        "https://aip.scitation.org/doi/10.1063/1.2745228"
+      ],
+      "stated_bibliographic_year": 2007,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1063/1.2745228"
+      ],
+      "target_key": "author_bibliography:choi:03535e2f1bbf0747"
+    },
+    {
+      "ordinal": 78,
+      "text": "Temperature Behavior of the Photoluminescence Decay of Semiconducting Carbon Nanotubes: The Effective Lifetime D. Karaiskaj, A. Mascarenhas, J.H. Choi, R.A. Graff, and M.S. Strano Physical Review B, 75, Article 113409 (2007)",
+      "links": [
+        "https://journals.aps.org/prb/abstract/10.1103/PhysRevB.75.113409"
+      ],
+      "stated_bibliographic_year": 2007,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1103/physrevb.75.113409"
+      ],
+      "target_key": "author_bibliography:choi:58c9d65d875c4ffe"
+    },
+    {
+      "ordinal": 79,
+      "text": "Multimodal Biomedical Imaging with Asymmetric Single-Walled Carbon Nanotube/Iron Oxide Nanoparticle Complexes J.H. Choi, F.T. Nguyen, P.W. Barone, D.A. Heller, A.E. Moll, D. Patel, S.A. Boppart, and M.S. Strano Nano Letters, 7, 861-867 (2007)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/nl062306v"
+      ],
+      "stated_bibliographic_year": 2007,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/nl062306v"
+      ],
+      "target_key": "author_bibliography:choi:b6c2321ea9ffd960"
+    },
+    {
+      "ordinal": 80,
+      "text": "Laser Ablation of Nanoscale Particles with 193 nm Light J.H. Choi, D. Lucas, and C.P. Koshland Journal of Physics, Conference Series, 59, 54-59 (2007)",
+      "links": [
+        "https://iopscience.iop.org/article/10.1088/1742-6596/59/1/012"
+      ],
+      "stated_bibliographic_year": 2007,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1088/1742-6596/59/1/012"
+      ],
+      "target_key": "author_bibliography:choi:319b53ebfb6b42db"
+    },
+    {
+      "ordinal": 81,
+      "text": "Aptamer-Capped Nanocrystal Quantum Dots: A New Method for Label Free Protein Detection J.H. Choi, K.H. Chen, and M.S. Strano Journal of the American Chemical Society, 128, 15584-15585 (2006)",
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/ja066506k"
+      ],
+      "stated_bibliographic_year": 2006,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/ja066506k"
+      ],
+      "target_key": "author_bibliography:choi:4d95662ff10b407a"
+    },
+    {
+      "ordinal": 82,
+      "text": "In situ, Real-time Detection of Soot Particles Coated with NaCl Using 193 nm Light J.H. Choi, C.B. Stipe, C.P. Koshland, and D. Lucas Applied Physics B, 84, 385-388 (2006)",
+      "links": [
+        "https://link.springer.com/article/10.1007/s00340-006-2341-8"
+      ],
+      "stated_bibliographic_year": 2006,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1007/s00340-006-2341-8"
+      ],
+      "target_key": "author_bibliography:choi:c8c15b47484ee8b9"
+    },
+    {
+      "ordinal": 83,
+      "text": "Photochemical Interaction of Polystyrene Nanospheres with 193 nm Pulsed Laser Light J.H. Choi, D. Lucas, C.P. Koshland, and R.F. Sawyer Journal of Physical Chemistry B, 109, 23905-23910 (2005)",
+      "links": [
+        "https://pubs.acs.org/doi/abs/10.1021/jp0540611"
+      ],
+      "stated_bibliographic_year": 2005,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1021/jp0540611"
+      ],
+      "target_key": "author_bibliography:choi:52dc710e73d7c371"
+    },
+    {
+      "ordinal": 84,
+      "text": "Measurement of Polystyrene Nanospheres Using Excimer Laser Fragmentation Fluorescence Spectroscopy J.H. Choi, C.P. Koshland, R.F. Sawyer, and D. Lucas Applied Spectroscopy, 59, 1203-1208 (2005)",
+      "links": [
+        "https://pubmed.ncbi.nlm.nih.gov/16274531/"
+      ],
+      "stated_bibliographic_year": 2005,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:547b18a0a0142992"
+    },
+    {
+      "ordinal": 85,
+      "text": "NaCl Particle Interaction with 193 nm Light: Ultraviolet Photofragmentation and Nanoparticle Production J.H. Choi, C.B. Stipe, C.P. Koshland, R.F. Sawyer, and D. Lucas Journal of Applied Physics, 97, Article 124315 (2005)",
+      "links": [
+        "https://aip.scitation.org/doi/10.1063/1.1948511"
+      ],
+      "stated_bibliographic_year": 2005,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1063/1.1948511"
+      ],
+      "target_key": "author_bibliography:choi:bd3ff5bc102a6f59"
+    },
+    {
+      "ordinal": 86,
+      "text": "Detection of Lead in Soil with Excimer Laser Fragmentation Fluorescence Spectroscopy J.H. Choi, C.J. Damm, N.J. O\u2019Donovan, R.F. Sawyer, C.P. Koshland, and D. Lucas Applied Spectroscopy, 59, 258-261 (2005)",
+      "links": [
+        "https://www.researchgate.net/publication/8012205_Detection_of_Lead_in_Soil_with_Excimer_Laser_Fragmentation_Fluorescence_Spectroscopy"
+      ],
+      "stated_bibliographic_year": 2005,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:02ca6c4d5a48389e"
+    },
+    {
+      "ordinal": 87,
+      "text": "Nanoparticle Production by UV Irradiation of Combustion Generated Soot Particles C.B. Stipe, J.H. Choi, D. Lucas, R.F. Sawyer, and C.P. Koshland Journal of Nanoparticle Research, 6, 467-477 (2004)",
+      "links": [
+        "https://link.springer.com/article/10.1007/s11051-004-2162-9"
+      ],
+      "stated_bibliographic_year": 2004,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.1007/s11051-004-2162-9"
+      ],
+      "target_key": "author_bibliography:choi:44305ff74b22e0fa"
+    },
+    {
+      "ordinal": 88,
+      "text": "Flow and Heat(Mass) Transfer Characteristics in an Impingement/Effusion Cooling System with Crossflow D.H. Rhee, J.H. Choi, and H.H. Cho Journal of Turbomachinery, 125, 74-82 (2003)",
+      "links": [
+        "https://asmedigitalcollection.asme.org/turbomachinery/article-abstract/125/1/74/446169/Flow-and-Heat-Mass-Transfer-Characteristics-in-an"
+      ],
+      "stated_bibliographic_year": 2003,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:90dac6627f50f8ad"
+    },
+    {
+      "ordinal": 89,
+      "text": "Heat(Mass) Transfer on the Effusion Plate in Impingement-Effusion Cooling Systems D.H. Rhee, J.H. Choi, and H.H. Cho Journal of Thermophysics and Heat Transfer, 17, 95-102 (2003)",
+      "links": [
+        "https://arc.aiaa.org/doi/10.2514/2.6739"
+      ],
+      "stated_bibliographic_year": 2003,
+      "record_section": "publication",
+      "explicit_doi_candidates": [
+        "10.2514/2.6739"
+      ],
+      "target_key": "author_bibliography:choi:daa5f72cfdcc4179"
+    },
+    {
+      "ordinal": 90,
+      "text": "Heat/Mass Transfer Characteristics on Turbine Shroud with Blade Tip Clearance H.H. Cho, D.H. Rhee, and J.H. Choi Annals of the New York Academy of Sciences, 934, 281-288 (2001)",
+      "links": [
+        "https://www.researchgate.net/publication/11880697_HeatMass_Transfer_Characteristics_on_Turbine_Shroud_with_Blade_Tip_Clearance"
+      ],
+      "stated_bibliographic_year": 2001,
+      "record_section": "publication",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:e9aadc5ee24bf11c"
+    },
+    {
+      "ordinal": 91,
+      "text": "Devices and Method Using Interfacial Photoswitching Mechanisms in Atomically-thin Two-Dimensional Transition Metal Dichalcogenides-Spiropyran Hybrids S. Park, J. Ji, J.H. You, J.H. Choi US 64/005,161 (2026)",
+      "links": [],
+      "stated_bibliographic_year": 2026,
+      "record_section": "patent",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:8c25675bdd2777cf"
+    },
+    {
+      "ordinal": 92,
+      "text": "A Nanotransformer Using DNA Origami and Its Use in Formulating a Delivery System J.H. Choi, R. Li, Y. Du, A.S. Madhvacharyula, A.A. Swett, S. Seo, M.R. Kesama PCT/US26/47849 (2026)",
+      "links": [],
+      "stated_bibliographic_year": 2026,
+      "record_section": "patent",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:dc19bb5d00030030"
+    },
+    {
+      "ordinal": 93,
+      "text": "DNA Origami Nanocomplexes for Selective Delivery of Imaging and Therapeutic Agents to KRAS-mutant Pancreatic Cancer Cells J.H. Choi, B. Han, H.R. Moon, Y. Du, S. Choi, C. Cheng, G. Chiu, K.V. Solomon PCT/US25/37305 (2025)",
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "record_section": "patent",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:c84d7f8a1f486812"
+    },
+    {
+      "ordinal": 94,
+      "text": "System and Methods to Exploit Photoswitchable Optoelectronic Properties of 2D Hybrid Structures J.H. Choi, J. Ji, S. Park, J.H. You US 19/072,726 (2025)",
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "record_section": "patent",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:08388e2dd8428741"
+    },
+    {
+      "ordinal": 95,
+      "text": "Composite Electrodes for Supercapacitors, Ternary Materials, and Related Methods J.H. Choi, J. Ji US 12,191,079 (2025)",
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "record_section": "patent",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:55a0482cad4ef4b9"
+    },
+    {
+      "ordinal": 96,
+      "text": "Ternary Composite Material, Supercapacitor, and Related Methods J.H. Choi, D. Houpt, J. Ji US 12,191,078 (2025)",
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "record_section": "patent",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:ccfdfd7e9cbf116d"
+    },
+    {
+      "ordinal": 97,
+      "text": "Ultralow Concentration Sensing of Bio-Matter with Perovskite Nickelate Devices and Arrays H. Zhang, F. Zuo, F. Li, J.H. Choi, S. Ramanathan US 12,338,482 (2025)",
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "record_section": "patent",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:bdaac66d03f85b78"
+    },
+    {
+      "ordinal": 98,
+      "text": "Microbiosensors based on DNA Modified Single-Walled Carbon Nanotube and Pt Black Nanocomposites D.M. Porterfield, T.G. Cha, J.H. Choi, J.C. Claussen, A.R. Diggs, J. Shi US 8,882,977 (2014)",
+      "links": [],
+      "stated_bibliographic_year": 2014,
+      "record_section": "patent",
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:choi:e6a98d67583c4add"
+    }
+  ],
+  "counts": {
+    "publication": 90,
+    "patent": 8
+  },
+  "pre2020_stated_years": {
+    "publication": 60,
+    "patent": 1
+  },
+  "unfollowed_navigation": [
+    "https://scholar.google.com/citations"
+  ],
+  "caveats": [
+    "Listed years are not verified first-online dates.",
+    "Primary page mixes journal papers, books, chapters and patents; reconcile publication type individually.",
+    "No title/keyword exclusion or complete design assertion follows from enumeration."
+  ]
+}

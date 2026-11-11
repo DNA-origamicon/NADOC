@@ -206,3 +206,17 @@ routing constraint, not an estimate of vendor prices or a change to order export
 Focused recorded 6HB/18HB tests cover maximum 42, crossover/coverage preservation,
 saved-file publication plus independent replay, regional exclusions, insertion/
 deletion accounting, validation and atomic rejection of a long extension.
+
+## 2026-11-09 — Standard HTTP 500 from a stale development worker
+
+The live `Submodel_tests` document failed Standard `/design/full-autostaple`
+with HTTP 500, while the same source and request passed in a fresh process.
+The server worker had remained alive since November 5 despite newer source;
+the reload supervisor was waiting for that worker to exit. File notifications,
+SIGTERM and SIGINT did not replace it. After verifying/restoring exact recovery
+cache contents for all six open documents, replacing the stuck worker let the
+existing supervisor start current code. The identical isolated live-server
+request returned HTTP 200 with 40 staple crossovers. No routing code changed.
+Check live worker age and reproduce in a fresh process before changing routing
+semantics for this symptom. Temporary document sessions were closed and their
+cache absence checked; the user's active design was not restapled.

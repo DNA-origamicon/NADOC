@@ -24,6 +24,39 @@ off. Seeking and animation pins restore the latest saved volume configuration, e
 before its first checkpoint. Playback overrides are transient and restore on stop.
 The matching annotation action records its own channel independently.
 
+## Multi-view / multi-overlay crash (2026-11-09)
+
+Reproduced on existing `workspace/duplex.nadoc`: recursive scene cloning left
+`Box3Helper.box` undefined, so framing and rendering threw `isEmpty` and stopped
+the animation loop. The shared comparison copier now copies box state, excludes
+TransformControls before cloning, and retains helper-owned child references
+without duplicating ArrowHelper geometry. Geometry/material copies remain isolated.
+Split-view fitting now accounts for the narrowest pane's aspect/FOV; both modes
+pass CSS-pixel viewport/scissor dimensions to Three.js (which applies pixel ratio).
+
+Read-only browser regression: `frontend/e2e/duplex_comparison.spec.js`; verified
+2/3/4 panes, overlay switching, Full selection and closing at 2x display scaling,
+with no page errors. Inspected screenshots show the entire duplex in both split
+panes and aligned overlay layers. Optional `NADOC_COMPARISON_REVIEW=1` holds
+temporary screenshots for inspection; the standard reporter removes them.
+No saved structures were created or changed. Verified cleanup of reports,
+test credentials, playback scratch and session artifacts. Focused unit tests: 19 passed.
+Final `just test-frontend`: 881 files passed; 10,170 tests passed, 1 skipped.
+
+Presentation follow-up: `frontend/e2e/duplex_overlay_share.spec.js` passed against
+a real loopback presentation host and separate guest browser. Verified Full +
+Cylinder layers, opacity/separation, guest orbit, live change to three layers
+(including mrDNA Fine), and disabling overlay on the same invitation. Guest pixels
+were inspected; no page errors. Sharing-focused unit tests: 32 passed. This checks
+local presentation transport/rendering, not external DNS/Funnel connectivity.
+Build `frontend/dist` before this test: the bridge replaces hosts whose viewer
+build differs. Wait for Start to finish before opening the guest invitation.
+The first setup attempts exposed that build mismatch, an initial `/scene` observer
+filter that missed requests without queries, and an early invitation-open race;
+the final regression corrects those test setup issues. No production sharing
+code changes were needed. Test host, credentials, captures and temporary build
+were cleaned; no design files were authored or modified.
+
 ## Crossover extras in view volumes (2026-10-16)
 
 Full and Beads volume layers now build the shared crossover-extra meshes alongside

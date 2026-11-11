@@ -2757,6 +2757,7 @@ def build_namd_solvated_package(
     graphene_only: bool = False,
     # Retained for caller compatibility; compute hardware never changes the cell.
     devices: str = "0",
+    topology_override=None,
     progress: Optional[ProgressCb] = None,
 ) -> bytes:
     """Return raw ZIP bytes of a complete NAMD explicit-solvent package.
@@ -2837,6 +2838,10 @@ def build_namd_solvated_package(
         dna_psf = complete_psf(Design())
         dna_pdb = "END\n"
         topology_metadata = {"topology_builder": "graphene_control_no_dna"}
+    elif topology_override is not None:
+        dna_pdb = topology_override.pdb_text
+        dna_psf = topology_override.psf_text
+        topology_metadata = topology_override.metadata
     elif require_full_topology:
         topology_build = build_charmm_psfgen_topology(
             design, atomistic_model=atomistic_model

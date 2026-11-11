@@ -1,0 +1,904 @@
+{
+  "xls": {
+    "local_file": "assets/sources/acs-expansion-20261104/8831800-nn7b03187_si_002.xls",
+    "sha256": "548da8d0178209c78118d49be3d6a4f067321050195077b6271cfe65bebf01e5",
+    "url": "https://ndownloader.figshare.com/files/8831800",
+    "locator": "All sheet names, dimensions and first two rows; not full sequence/variant audit"
+  },
+  "xls_reader": {
+    "library": "xlrd",
+    "version": "2.0.2"
+  },
+  "sheets": [
+    {
+      "name": "26nt 25H",
+      "rows": 227,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S1. 10B×25H (B26-S26) rectangle.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "26nt 11H",
+      "rows": 233,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S2. 22B×11H (B26-S26) rectangle. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "16 nt 23H",
+      "rows": 209,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S3. 18B×23H (B16-S32) rectangle. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "26nt 5H",
+      "rows": 217,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S4. 44B×5H (B26-S26) rectangle. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "irregular ring",
+      "rows": 222,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S5. A circle structure with circular sector shaped blocks. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "25H-X",
+      "rows": 228,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S6. Patterns based on the 10B×25H (B26-S26) rectangle with streptavidin decoration. b.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "25H-O",
+      "rows": 228,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S6. Patterns based on the 10B×25H (B26-S26) rectangle with streptavidin decoration. d.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "25H-QIAN",
+      "rows": 167,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S7. Patterns with cavities based on the 10B×25H (B26-S26) rectangle. a.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "25H-KUN",
+      "rows": 179,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S7. Patterns with cavities based on the 10B×25H (B26-S26) rectangle. c.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "3-11",
+      "rows": 233,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S8. 8B×3H×11H (B26-S26) cuboid. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "Sequence",
+          "annealing concentration (if scaffold is 10nM)"
+        ]
+      ]
+    },
+    {
+      "name": "5-7-26",
+      "rows": 247,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S9. 8B×5H×7H (B26-S26) cuboid. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "5-7-37",
+      "rows": 142,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S10. 5B×5H×7H (B37-S37) cuboid. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "7-9-16-32",
+      "rows": 222,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S11. 7B×7H×9H (B16-S32) cuboid. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "7-9-16-36",
+      "rows": 222,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S12. 7B×7H×9H (B16-S36) cuboid. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "3-3-26",
+      "rows": 254,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S13. 28B×3H×3H (B26-S26) rod.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "9-9-16-32",
+      "rows": 164,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S14. 5B×9H×9H(B16-S32) cuboid. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "11H-shift",
+      "rows": 228,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Figure S15. Translocation of 2-D structure of based on the 22B×11H (B26-S26) rectangle (with two offset groups of blocks). ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "3-11-gold",
+      "rows": 234,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S18. Translocation of 3-D structures based on the 8B×3H×11H (B26-S26) cuboid. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "3-11-shift",
+      "rows": 245,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S17. Translocation of 3-D structure based on the 8B×3H×11H (B26-S26) cuboid. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "3-11-rotate-gold",
+      "rows": 230,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ],
+        [
+          "normal straple",
+          "staples ",
+          "a-0[54]-0[29]",
+          "50nM",
+          "GGCTCCAAAAGGAGAGTAATGTGTAG"
+        ]
+      ]
+    },
+    {
+      "name": "25H-combing staple...step1 ",
+      "rows": 206,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S19. Contraction and extension of 2-D structures based on 10B×25H (B26-S26) rectangle. a.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "25H-combing staple...step2",
+      "rows": 223,
+      "columns": 12,
+      "first_two_rows": [
+        [
+          "Fig. S19. Contraction and extension of 2-D structures based on 10B×25H (B26-S26) rectangle. b.",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      ]
+    },
+    {
+      "name": "11H-elongation",
+      "rows": 213,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S20. Extended 2-D structure based on the 22B×11H (B26-S26) rectangle. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "5-7-elongation",
+      "rows": 248,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S21. Extended 3-D structure based on 8B×5H×7H (B26-S26). ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "11H-bend-set1",
+      "rows": 196,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S22. Bent 2-D structures with different angle. a. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "11H-bend-set2",
+      "rows": 198,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S22. Bent 2-D structures with different angle. c.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "11H-bend-set3",
+      "rows": 196,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S22. Bent 2-D structures with different angle. e.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "11H-ring",
+      "rows": 184,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S23. 2-D ring-like structure with multiple bending sites based on the 22B×11H (B26-S26) rectangle. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "3-11-bending",
+      "rows": 223,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S24. Bent 3-D structure based on 8B×3H×11H (B26-S26) cuboid. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "3x3-hexagon",
+      "rows": 220,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S25. 3-D hexagon structure based on the 28B×3H×3H(B26-S26) rod. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name(corresponding to cadnano position)",
+          "sequence",
+          "working concentration(suppose scaffold is 10nM)"
+        ]
+      ]
+    },
+    {
+      "name": "3-11-bend-polymer",
+      "rows": 256,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          " Fig. S26. 3-D hexagon homo-trimerized by bent structure monomers. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "3-11-bend-polymer-large",
+      "rows": 256,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S27. 3-D hexagon homo-hexamerized by bent structure monomers. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name",
+          "working concentration",
+          "sequence"
+        ]
+      ]
+    },
+    {
+      "name": "25H-top and bottom",
+      "rows": 227,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S28. Two conformations of the 10B×25H (B26-S26) rectangle without either set of tie staples. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name(corresponding to cadnano position)",
+          "sequence",
+          "working concentration(suppose scaffold is 10nM)"
+        ]
+      ]
+    },
+    {
+      "name": "11H-isomer",
+      "rows": 222,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S29. Two conformations of the 22B×11H (B26-S26) rectangle without either set of tie staples. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "11H-T",
+      "rows": 211,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S30. T-shaped structure based on the 22B×11H (B26-S26) rectangle. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name(corresponding to cadnano position)",
+          "sequence",
+          "working concentration(suppose scaffold is 10nM)"
+        ]
+      ]
+    },
+    {
+      "name": "11H-Broom",
+      "rows": 214,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S31. Broom-shaped structure based on the 22B×11H (B26-S26) rectangle. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name(corresponding to cadnano position)",
+          "sequence",
+          "working concentration(suppose scaffold is 10nM)"
+        ]
+      ]
+    },
+    {
+      "name": "25H-side",
+      "rows": 233,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S32. Two conformations of the 10B×25H (B26-S26) rectangle with respective sets of tie staples. c.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "strand type",
+          "function(describe)",
+          "strand name(corresponding to cadnano position)",
+          "sequence",
+          "working concentration(suppose scaffold is 10nM)"
+        ]
+      ]
+    },
+    {
+      "name": "11H-side",
+      "rows": 222,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S33. Two conformations of the 22B×11H (B26-S26) rectangle with respective sets of tie staples. c.",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    },
+    {
+      "name": "tie and displacement",
+      "rows": 86,
+      "columns": 5,
+      "first_two_rows": [
+        [
+          "Fig. S35. Reversible conformational change for the 10B×25H (B26-S26) rectangle. ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Strand type",
+          "function",
+          "strand name ( helix+position）",
+          "annealing concentration (if scaffold is 10nM)",
+          "Sequence"
+        ]
+      ]
+    }
+  ],
+  "zip": {
+    "local_file": "assets/sources/acs-expansion-20261104/10302255-nn7b06699_si_002.zip",
+    "sha256": "253a09ea1645336449538da5a54d6e2cb6bb80eb2b5672b6917dcce3039e9125",
+    "url": "https://ndownloader.figshare.com/files/10302255",
+    "locator": "Entire central-directory inventory; JSON and SVG bytes read and hashed; AVI not inspected"
+  },
+  "members": [
+    {
+      "name": "ACSNano_Reif2017_SI_P2/Reif_SI_TIRF_After_Filter_ExcessDye.avi",
+      "bytes": 94378836,
+      "compressed_bytes": 32910991,
+      "crc32": "f6157690"
+    },
+    {
+      "name": "ACSNano_Reif2017_SI_P2/Reif_SI_TIRF_Without_Filter_ExcessDyes.avi",
+      "bytes": 94378836,
+      "compressed_bytes": 26584132,
+      "crc32": "759dbf53"
+    },
+    {
+      "name": "ACSNano_Reif2017_SI_P2/Tall_rectangle.json",
+      "bytes": 274965,
+      "compressed_bytes": 60799,
+      "crc32": "2f0b102f",
+      "sha256": "eb925ecd4010348c4e3169ee6e541f264f45292e5c841394f46d7f7290a4cb94",
+      "json_name": "schematic tall regtangle rothemund 2006.json",
+      "top_level_keys": [
+        "name",
+        "vstrands"
+      ],
+      "virtual_helix_records": 32,
+      "first_helix_fields": [
+        "stap_colors",
+        "num",
+        "scafLoop",
+        "stap",
+        "skip",
+        "scaf",
+        "stapLoop",
+        "col",
+        "loop",
+        "row"
+      ]
+    },
+    {
+      "name": "ACSNano_Reif2017_SI_P2/Tall_rectangle.svg",
+      "bytes": 2074867,
+      "compressed_bytes": 124774,
+      "crc32": "1953706b",
+      "sha256": "f0ef024390a2f6d6a51206bfc93dd8885987a6df0785daababa9712d132c2b5a"
+    }
+  ],
+  "limitations": [
+    "Sheet row counts are not sequence or complete source counts.",
+    "JSON presence and virtual-helix count do not certify physical geometry, full staple coverage or source compatibility.",
+    "PDF text FigS15 says three offset groups; spreadsheet11H-shift header says two. Preserve discrepancy."
+  ]
+}

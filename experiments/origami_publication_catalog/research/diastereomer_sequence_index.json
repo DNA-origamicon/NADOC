@@ -1,0 +1,1747 @@
+{
+  "evidence": {
+    "local_file": "assets/sources/acs-expansion-20261104/17811194-nn9b06734_si_001.pdf",
+    "sha256": "fc0fd0459dd240bded24e514d31900c9aa393723ef2b853d7ae0c5d710e34c5a",
+    "url": "https://ndownloader.figshare.com/files/17811194",
+    "locator": "All16pages extracted text read; PDF2routing,PDF12ambiguous sequence andPDF15capture/switching table visually inspected. Main article not acquired."
+  },
+  "row_counts": {
+    "S2": 126,
+    "S3": 23,
+    "S4": 12,
+    "S5": 12
+  },
+  "rows": [
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "12[139]",
+      "end": "10[126]",
+      "sequence_literal": "AGTTGAGAAACGAAATTAAGAGGCTGCACGTATAAAACACTA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "12[55]",
+      "end": "10[42]",
+      "sequence_literal": "CCTCAAATTACCCTGTGAATTTGTGAGAAAACAGCGGTAATA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "54[69]",
+      "end": "11[62]",
+      "sequence_literal": "CATAAAATTTCTGCAAAAGAAGTTTTGCTCAGCCA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "55[119]",
+      "end": "12[119]",
+      "sequence_literal": "CAGTGCCTACATGGGTCCAGACGACGTAATGCATTTTCGAGC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "55[151]",
+      "end": "12[140]",
+      "sequence_literal": "CTAATTACGAGGCATAGCCACATTATTCATC",
+      "stated_length": 31,
+      "literal_character_count": 31,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "10[41]",
+      "end": "12[28]",
+      "sequence_literal": "GTAAAATTCGTCATAACAGTTCAGAAAA",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "55[56]",
+      "end": "12[56]",
+      "sequence_literal": "ACTTAAAAAATCCCGAATAAACACCGGATTACCAGTATAACC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "55[87]",
+      "end": "12[77]",
+      "sequence_literal": "TTAAAAAATAGCGAGAGGGGCTTAACGTTATA",
+      "stated_length": 32,
+      "literal_character_count": 32,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "55[105]",
+      "end": "12[91]",
+      "sequence_literal": "AGTGCCTTACCAGACGACGATATTTAACTATAAAGTATAGTA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "16[118]",
+      "end": "13[111]",
+      "sequence_literal": "CATCCTAATTTACGCAACAATGCTAATGGGTAAAG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "16[55]",
+      "end": "13[48]",
+      "sequence_literal": "GTTTTAATTCGAGCAAAGACTTCAGAAGCAGGTCT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "52[125]",
+      "end": "14[119]",
+      "sequence_literal": "TATTCACTCCTGAACAAGATTAAACAATAAACAAC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "11[28]",
+      "end": "14[35]",
+      "sequence_literal": "TGCGGAAGTTTAGAAAAAAGAGACGCAGGATAGACCAAAAATCAAAGCG",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "53[56]",
+      "end": "14[56]",
+      "sequence_literal": "AAAAAGCGTTCCGGTCTAGTTAATTTCACGTTAAATAAGACT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "53[84]",
+      "end": "14[77]",
+      "sequence_literal": "TGAAGGGATGGGCGGTTGTGTTTACTAGTGTGATA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "55[98]",
+      "end": "14[91]",
+      "sequence_literal": "CGGGGTCGGAGTGTGACAAAACAGAACGCGAAATA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "50[125]",
+      "end": "16[119]",
+      "sequence_literal": "GAGCCGCTTTCCTTATCATTTATAAAATAATATCC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "52[132]",
+      "end": "16[140]",
+      "sequence_literal": "CGAGAGAGTAGACTCCTCAAGAGAAGGACGGATAATGGCTCAAATTACC",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "54[34]",
+      "end": "16[35]",
+      "sequence_literal": "TTTCTCCGTACAGCGCCATGTCGGGAACAAGCCCGTTCAAAG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "51[56]",
+      "end": "16[56]",
+      "sequence_literal": "CGCGGTCGGAACGTACATATAACTATATTCAAATATATTTGC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "51[87]",
+      "end": "16[77]",
+      "sequence_literal": "GCCAATGGTAAAGTTAAAACCTAAAGCGAGAA",
+      "stated_length": 32,
+      "literal_character_count": 32,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "53[98]",
+      "end": "16[91]",
+      "sequence_literal": "AGTCTCTTCATTAATGTTTATAGCATGTAGAAGAC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "46[111]",
+      "end": "17[104]",
+      "sequence_literal": "ATCGGCACATCTTTACCGGAAGCCACCCACCACCACCAGAGCACCAATC",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "52[34]",
+      "end": "18[35]",
+      "sequence_literal": "GGATAACCGACGGCCAGTGCCGGTAACGAACAGGTTGATAAG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "48[62]",
+      "end": "18[56]",
+      "sequence_literal": "GGCAGCAGCAGAAGAGTCAATTTAGGTTGGGTTCT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "49[84]",
+      "end": "18[77]",
+      "sequence_literal": "TCTGGCGAGCTCCGGCCAGAGCTGATGCTTTTAAC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "22[118]",
+      "end": "19[111]",
+      "sequence_literal": "AACCTCCCGACTAAGCTTATCATAGCAAAGCAAGC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "48[125]",
+      "end": "19[118]",
+      "sequence_literal": "GAACCAGATTTTCATCGTATGAATCCAAGAACGGGTATTAAACGTTTTT",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "25[42]",
+      "end": "19[48]",
+      "sequence_literal": "AATAGTAATTTTCAAATGGTCTCTGCGATTCCATAACATGTTTTGCTGA",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "48[118]",
+      "end": "20[126]",
+      "sequence_literal": "AGCCACCTCATAATCAAAATCTGTAGCGCTAAGAACGCGACAGCGGAAT",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "48[132]",
+      "end": "20[140]",
+      "sequence_literal": "ATAGGCGCTAACCGCCACCCTCAGAACCGGATAGCAGTGAATATCAACG",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "50[34]",
+      "end": "20[35]",
+      "sequence_literal": "CCAGGGTCTGGCGAAAGGGGGAAGGGCGAGCTTAATTAAATA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "47[56]",
+      "end": "20[56]",
+      "sequence_literal": "CGGTGGTATTGCAGTGTCTGTAAATCGTATTAAGACGCTGTG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "47[87]",
+      "end": "20[77]",
+      "sequence_literal": "GCCCGCTCAGCAGCAACCTTATCAATAGCGAT",
+      "stated_length": 32,
+      "literal_character_count": 32,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "49[91]",
+      "end": "20[91]",
+      "sequence_literal": "CCACCCTCAGAACCCCGCCTCGAGAACAGCAAATCAGTCCTT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "44[125]",
+      "end": "22[119]",
+      "sequence_literal": "GAAACGTTGAAGCCTTAAAGAATGGCGTTTTAGCG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "48[34]",
+      "end": "22[35]",
+      "sequence_literal": "ATCGGTGAAAGCGCCATTCGCCAGCTTTAGTTTCAACGAGTA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "45[56]",
+      "end": "22[56]",
+      "sequence_literal": "TTTCGCAGCTGGTATGGAACAAGAGTCCAATAACCTTGCTAT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 11,
+      "start": "45[84]",
+      "end": "22[77]",
+      "sequence_literal": "GCGGTAACCTGGAGGTGTCCAAATTAATAATATAT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "43[112]",
+      "end": "24[126]",
+      "sequence_literal": "TTACCATTAGCAAGTCACCGTTAACGAGCGTCTTTTTTCAAG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "44[132]",
+      "end": "24[140]",
+      "sequence_literal": "TGTATCGAGCCCTCATAGTTAGCGTAACGTAAATGCAGATGACGAACTG",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "46[34]",
+      "end": "24[35]",
+      "sequence_literal": "CCGGCACCGACGACAGTATCGGGGCGCATTTCGCATTTGGGG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "25[56]",
+      "end": "24[49]",
+      "sequence_literal": "TAGTGGTTCCGAAATGTTCCAGTTTGTTTAGCTAT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "43[87]",
+      "end": "24[77]",
+      "sequence_literal": "CTCAGTATGAGCCGGGTCAAGAACGATAGGGT",
+      "stated_length": 32,
+      "literal_character_count": 32,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "45[91]",
+      "end": "24[91]",
+      "sequence_literal": "TCAGTAGCGACAGATCGATAGAAAGGGCAGCTACAATGAATA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "41[119]",
+      "end": "26[126]",
+      "sequence_literal": "AAGGTGAAAGACAAAATAAGAAACGAGAACTTCCA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "44[34]",
+      "end": "26[35]",
+      "sequence_literal": "TCGTAACGGATTGACCGTAATAGTAACATTCTACTACAGGCA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "41[56]",
+      "end": "26[56]",
+      "sequence_literal": "ATGCCGGGTGTCACAGCACCGCCTGGCCTCCTGTTTGATGAC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "42[83]",
+      "end": "26[70]",
+      "sequence_literal": "TGGTGTGAATCCCTCCAGCAGGCGAAAA",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "43[98]",
+      "end": "26[91]",
+      "sequence_literal": "CACCAGTATTTGGGTATCCTGAAATAAACACGCTG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "38[111]",
+      "end": "27[111]",
+      "sequence_literal": "GACACCAAAATTCAACATTCAACCGATTCATATTATTTATCC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "39[119]",
+      "end": "28[119]",
+      "sequence_literal": "TACCAGCAAAAGAAACAGGGAAGCGCAAGATTTTTTGTTTAA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "40[132]",
+      "end": "28[140]",
+      "sequence_literal": "TCGGTCAATGAATAATAATTTTTTCACGAGCCTTTCATCGCCAACAAAG",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "42[34]",
+      "end": "28[35]",
+      "sequence_literal": "ACCCGTCTTCCTGTAGCCAGCCCAATAGCAATAAAAAAAACA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "39[56]",
+      "end": "28[56]",
+      "sequence_literal": "CGCCTGTCGGGGGTCAGAGAGGCGGTTTCTGATTGCCCTTCT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "39[87]",
+      "end": "28[77]",
+      "sequence_literal": "ATTGGGCCCCCTGCATCAAGTTGCAGAGACGG",
+      "stated_length": 32,
+      "literal_character_count": 32,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "30[111]",
+      "end": "28[91]",
+      "sequence_literal": "TGAACACAGAATAAAATGAAAATAGCAGCCCTTTT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "36[125]",
+      "end": "30[119]",
+      "sequence_literal": "AACTGGCATATCAGAGAGAGTAAATTAGACGGGAG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "40[34]",
+      "end": "30[35]",
+      "sequence_literal": "GAACGCCTTCGCATTAAATTTCAAATATGGAGAAGGAACCCT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "37[56]",
+      "end": "30[56]",
+      "sequence_literal": "GCCAGCAGTACCGACACGTTGCGCTCACCCAACGCGCGGGAG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "37[84]",
+      "end": "30[77]",
+      "sequence_literal": "CGTGATATTGCGGCGGGCCGTGGGCGCCCATTAAT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "39[98]",
+      "end": "30[91]",
+      "sequence_literal": "CAATAGACGGAATATACAGAGCCTGAACAATCGTG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "35[98]",
+      "end": "31[111]",
+      "sequence_literal": "AGGAAACGAACAAACAAGAAACAATGAATAAGCCCGTAATTG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "38[34]",
+      "end": "31[41]",
+      "sequence_literal": "TTAAATTTAATCAGAAAAGCCCGTAAAAAGTAATG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "34[125]",
+      "end": "32[119]",
+      "sequence_literal": "AAGAAAATAGCTATCTTACCGACTAACCCACAAGA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "32[55]",
+      "end": "32[56]",
+      "sequence_literal": "AGGGTGACTGATAAATTAACACAACATATCACATTAATTGAA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "35[87]",
+      "end": "32[70]",
+      "sequence_literal": "GTAGGTGCCTCCTCACAGTTTCCAGATGAGTGAGCTAAC",
+      "stated_length": 39,
+      "literal_character_count": 39,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "37[98]",
+      "end": "32[91]",
+      "sequence_literal": "TAGAAAATTATTACTCAGAGGAATAATAAGCTGGG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "31[140]",
+      "end": "33[146]",
+      "sequence_literal": "CTACGAATAAACGGGTAAAATAATGAGGACTAAAG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "36[34]",
+      "end": "33[48]",
+      "sequence_literal": "CTAGCATAGAGTCTGGAGCAATTTTGAGTTCAACCGTTCTAG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "32[41]",
+      "end": "34[28]",
+      "sequence_literal": "CGGAGACAGTCAAATATGATAAGATCTA",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "34[90]",
+      "end": "34[91]",
+      "sequence_literal": "GAGTGAAATTGTTAGAAGCATAAAGTGTAAAGCAGGTTACCA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "35[140]",
+      "end": "35[139]",
+      "sequence_literal": "CAGCAGCCTACAGAGGCTTGCCCTTTTTAAGATCGTCACCCT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "33[147]",
+      "end": "35[150]",
+      "sequence_literal": "ACTTTTTCATGA??GAGGGTAGCAACGGGAAA",
+      "stated_length": 32,
+      "literal_character_count": 32,
+      "unknown_characters": 2
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "35[56]",
+      "end": "35[55]",
+      "sequence_literal": "GAATTCGCATGCCGGAGAGGGTAGCTATACAAGAGAATCGTC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "39[140]",
+      "end": "36[133]",
+      "sequence_literal": "TTTCGAGTGCGCCGCTTTGACCAAAAGAATACACTAATGCCACCGCTTT",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "36[132]",
+      "end": "36[140]",
+      "sequence_literal": "TGCGGAGATACCATCGCCCACGCATAACTTAAAGG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "32[118]",
+      "end": "37[111]",
+      "sequence_literal": "ATTGAGTATAGCAAGTAAGCAGATAGCCGCAATAAAGACTCCTACATAC",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "28[118]",
+      "end": "37[125]",
+      "sequence_literal": "CGTCAAACATAAAAACGCAAAATAAAGGTGGCAAC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "32[48]",
+      "end": "37[55]",
+      "sequence_literal": "GAAAGGCTGTAGGTAAAGATTGCATGAACGGTAATCCAAAAACAGGACT",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "33[70]",
+      "end": "37[69]",
+      "sequence_literal": "CGAGCCGTCCGCTCACAATTCTAATCATTCCCCGGCGCGTGC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 12,
+      "start": "28[76]",
+      "end": "37[83]",
+      "sequence_literal": "GCAACAGGCGTATTTTTCACGCTGTTCTTCGCGTC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "30[90]",
+      "end": "37[97]",
+      "sequence_literal": "CCAGCTGAGGGTGGTTTTTTTAGTTTATGCAAACG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "26[125]",
+      "end": "39[118]",
+      "sequence_literal": "GAGCCTAATTTGCCCAATCCAAAGGGCGTATGGTT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "28[139]",
+      "end": "39[139]",
+      "sequence_literal": "TACAACGCACTCATACAATGACAACAATGCTTATCAGCTTGC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "35[151]",
+      "end": "39[150]",
+      "sequence_literal": "GACCAGGGAGCGATATACGATAGTGTGA",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "28[55]",
+      "end": "39[55]",
+      "sequence_literal": "AAATCGGTTCAACGTTAGATTGTATAAGTTGTTAAATCAGCG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "43[140]",
+      "end": "40[133]",
+      "sequence_literal": "AACAACTGAACAACACGAGGCACCTGCTCCATGTTTTTGTATAATTGTA",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "24[125]",
+      "end": "41[118]",
+      "sequence_literal": "ATTAGTTGCTATTTCCAACGCCACCGACTTCATTA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "26[55]",
+      "end": "41[55]",
+      "sequence_literal": "ATCCAATAGCATAATGCTCATTTTTTAATTTCATCAACATAG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "26[90]",
+      "end": "41[97]",
+      "sequence_literal": "GTTTGCCTATAAATCAAAATTAATTAGAGGTAAAT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "38[69]",
+      "end": "42[56]",
+      "sequence_literal": "GTCATACGCACTCTCAGCGCAGTTACCTAATCGTTAACGGCA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "24[76]",
+      "end": "42[84]",
+      "sequence_literal": "TGAGTGTTCGGCAATTCAGCAGCAGCCAGCGGTGCCGGTGAAGCTACAC",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "24[139]",
+      "end": "43[139]",
+      "sequence_literal": "ACCAACTAGCCGGATAAAGGAATTGCTAGCGGGATTTTGCTA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "39[151]",
+      "end": "43[150]",
+      "sequence_literal": "ATTCAAAAGGTTGAAAATAGAAAGTTCA",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "25[49]",
+      "end": "43[55]",
+      "sequence_literal": "GTAGCATTCTAAATGTGAGCGGGGATAGGTCACGG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "26[111]",
+      "end": "44[112]",
+      "sequence_literal": "AGTTACAAATCTTATGCACCCGATGCGGGAGGTTTCACCAAT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "47[140]",
+      "end": "44[133]",
+      "sequence_literal": "GTAACACTGTAGCATCTTGACGCTGGCTGACCTTCAAGAGGAAATTTTC",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "41[98]",
+      "end": "45[111]",
+      "sequence_literal": "ATTGACGGAAATTATTGAGCCAGCACCAGAAACCAATCAAGT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "20[125]",
+      "end": "45[125]",
+      "sequence_literal": "CATTACCGCGCCCACGGTATTCGTTTTCTTGCCTTTAGCGTC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "22[55]",
+      "end": "45[55]",
+      "sequence_literal": "TCCCAATAATAACCATGTTGGTGTAGATGCCTCAGGAAGAGC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "20[76]",
+      "end": "45[83]",
+      "sequence_literal": "AGCTTAGCGCTATTGCATCAGCGCCGGGCGCGGTT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "24[90]",
+      "end": "46[91]",
+      "sequence_literal": "GCCCGAGTGGACTCATAAATCTTTCCCTTAGAAATTCATAGC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "47[98]",
+      "end": "46[98]",
+      "sequence_literal": "CGTTTGCTTTTCGG",
+      "stated_length": 14,
+      "literal_character_count": 14,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "20[139]",
+      "end": "47[139]",
+      "sequence_literal": "TAACAAAAGAGTAATTCCACAGACAGACACAACCCATGTACC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "43[151]",
+      "end": "47[150]",
+      "sequence_literal": "ACAGACGTTAGATCTAACAACGCCTGAG",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "20[55]",
+      "end": "47[55]",
+      "sequence_literal": "TAGCTCATAACAGTGCTCGCACTCCAGCCATTCAGGCTGCGT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "51[140]",
+      "end": "48[133]",
+      "sequence_literal": "GTATAGCTTAGTACAGATGGTCAGAACGAGTAGTACTCATTCAAGCCCA",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "43[56]",
+      "end": "48[63]",
+      "sequence_literal": "GTAAAGGTTTCTTTCCCTGCGCTCAATCCGGGGTCGCCATCCTGCCAAC",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "18[111]",
+      "end": "49[125]",
+      "sequence_literal": "CCAAGTAAATAATCGGCTGTCCACCAGATCAGAGCCACCACC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "18[55]",
+      "end": "49[55]",
+      "sequence_literal": "TTAATTGATATAATCCGCAACTGTTGGGATGTGCTGCAAGCG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "16[76]",
+      "end": "49[83]",
+      "sequence_literal": "AACTTTTGTAAATGCACATCCCAGCGTGGTGCTGG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "18[104]",
+      "end": "50[91]",
+      "sequence_literal": "CCGCACTCAGAGAGACTACCTAAATCCAATCGCAACGCCGCC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "16[139]",
+      "end": "51[139]",
+      "sequence_literal": "TTATGCGGGGCTTGCGCCACCCTCAGCATTGGGTTGATATAA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "47[151]",
+      "end": "51[150]",
+      "sequence_literal": "TTTTTTTCAGGCCACCCAGGAGGTCCGG",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "18[48]",
+      "end": "51[55]",
+      "sequence_literal": "CTCCTTTCAGGATTAGAGAGTGCGCGATTAAGTTGAAGCTTTCAGAGAA",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "55[140]",
+      "end": "52[133]",
+      "sequence_literal": "ATGCCCCTGAAAGTCTAACGGGAAAAATCTACGTTTAAGAACGTGCCGT",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "12[118]",
+      "end": "53[125]",
+      "sequence_literal": "CAGTAATTAATTCTCTTTTGACCGTTCCAGTAAGC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "49[56]",
+      "end": "53[69]",
+      "sequence_literal": "GACTTGTAGAACGTTCATAACCGTTTTTGATTGCCCGCACAG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "12[76]",
+      "end": "53[83]",
+      "sequence_literal": "CAAATTCATCATAAACATCGAGCGGCCTTTAGTGA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "14[90]",
+      "end": "53[97]",
+      "sequence_literal": "CCGACCGAAAAAGCCTGTTCCACTGGTAAAAGCGC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "51[98]",
+      "end": "54[105]",
+      "sequence_literal": "GAGGTTGAGGCAGGTAAATCCGAATTTATGATACA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "12[111]",
+      "end": "55[118]",
+      "sequence_literal": "AAGAGAAAACGCCAACATGTACCTCGTTTGAGTAA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "10[125]",
+      "end": "55[139]",
+      "sequence_literal": "TCATAACATTTAGGCAGAGTTAGGAATATAAGAGCACAGTTA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 13,
+      "start": "51[151]",
+      "end": "55[150]",
+      "sequence_literal": "AATTACCAGGTTAGGATTGAAACACTGC",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S2",
+      "pdf_page": 14,
+      "start": "12[48]",
+      "end": "55[55]",
+      "sequence_literal": "TGCTTTAAAATATTCATTGAACAGAGGGGGATCAA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "5[105]",
+      "end": "0[112]",
+      "sequence_literal": "GCCATTGAATATCCTACTTCTTCACGCACGGTACGCCAGAATGAGCCGT",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "6[153]",
+      "end": "0[140]",
+      "sequence_literal": "GTATTAACAGAAGATTAAAAACGCGAACAAATATCTTTAGGA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "3[42]",
+      "end": "0[52]",
+      "sequence_literal": "GTTTGGAAAGGAGCTTTTGCGGAACAAAACTC",
+      "stated_length": 32,
+      "literal_character_count": 32,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "9[63]",
+      "end": "0[73]",
+      "sequence_literal": "AAAACAACAAACAATTCGACAGAGAGCGGGAGCTAAACAGGAGACT",
+      "stated_length": 46,
+      "literal_character_count": 46,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "5[21]",
+      "end": "3[34]",
+      "sequence_literal": "AAATAAATCAAAATTTCATCAATATAAT",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "6[121]",
+      "end": "4[126]",
+      "sequence_literal": "GGAAAAAACGCTCATGGCAAACTA",
+      "stated_length": 24,
+      "literal_character_count": 24,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "6[37]",
+      "end": "4[42]",
+      "sequence_literal": "ATACGTAGATTTTCAGGGAAGGGT",
+      "stated_length": 24,
+      "literal_character_count": 24,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "4[118]",
+      "end": "5[104]",
+      "sequence_literal": "TGCTGGTCAACAGGTTATTTACATTGGCAGATTCCACCGCCA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "2[118]",
+      "end": "6[122]",
+      "sequence_literal": "CTGTCCATTGATTATCTGACCGACCAGTAATAAAAAAAT",
+      "stated_length": 39,
+      "literal_character_count": 39,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "3[161]",
+      "end": "6[154]",
+      "sequence_literal": "AATATCACCAGCAGCAAATGAACAGTGCGCGGTCA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "4[34]",
+      "end": "6[21]",
+      "sequence_literal": "TACCATAGAAATTGTACAGTAACAGTAC",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "6[48]",
+      "end": "6[49]",
+      "sequence_literal": "ACGTCAGGCCTGATTGCTTGGGGTCGAGTGGCGAGAAAGGTA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "2[76]",
+      "end": "6[77]",
+      "sequence_literal": "GCTTTCCCTACAGGCCATCACAAAGCACTAAATCGGACGGGG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "2[160]",
+      "end": "7[160]",
+      "sequence_literal": "AATATCTAACCTCAATCGCCATAAAACA",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "4[97]",
+      "end": "7[97]",
+      "sequence_literal": "TATAGCGGTCACGCCTATGGTTGCTTTTACCTTTTAAAGGGA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "2[139]",
+      "end": "8[126]",
+      "sequence_literal": "GAGGCCATGCCTGACGCCAACAGAGATA",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "0[135]",
+      "end": "8[140]",
+      "sequence_literal": "TAAATTAGTCTTTAATGTACCGAA",
+      "stated_length": 24,
+      "literal_character_count": 24,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "2[55]",
+      "end": "8[42]",
+      "sequence_literal": "CCACCAGTTATACTTTTGAATACCAAGT",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "0[51]",
+      "end": "8[56]",
+      "sequence_literal": "GTAAAACAAACATCAAGAAGTTTT",
+      "stated_length": 24,
+      "literal_character_count": 24,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "4[76]",
+      "end": "8[63]",
+      "sequence_literal": "AACCACCAGCGGGCAAAGCCGGCGAACGGTGCCGTCCAAATC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "5[77]",
+      "end": "8[84]",
+      "sequence_literal": "GCTAGGGCGCTGGCAAGTGTTCCGATTTAGAGCTTGAACCCTTTACACT",
+      "stated_length": 49,
+      "literal_character_count": 49,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "1[140]",
+      "end": "9[160]",
+      "sequence_literal": "CAAATCAACAGTTGAAAGGAATTATCTATGATAGC",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S3",
+      "pdf_page": 14,
+      "start": "2[97]",
+      "end": "9[97]",
+      "sequence_literal": "CGTGACGAGCACGTTAAAGGGATTTTAGTTTGAGGTCATTTG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "9[126]",
+      "end": "2[119]",
+      "sequence_literal": "AATGGCTCAACTAATAGATTACCTGAGAAAAGAGT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "3[140]",
+      "end": "2[140]",
+      "sequence_literal": "GTATCACCTTGCTGGGTCAGTTGGCAGT",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "9[42]",
+      "end": "2[35]",
+      "sequence_literal": "GATGATGTTAAATCCTTTGCCATTATCAGGAATTA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "3[56]",
+      "end": "2[56]",
+      "sequence_literal": "TCCTTAATGCGCCGTCGTTAGAATCAAA",
+      "stated_length": 28,
+      "literal_character_count": 28,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "9[84]",
+      "end": "2[77]",
+      "sequence_literal": "AACAATTATTTAGAAGTATTAGGCCGATATAACGT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "9[98]",
+      "end": "2[98]",
+      "sequence_literal": "AAAATACGTGGCACCAATAGATAATACAACAGGAAAATTAAC",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "9[112]",
+      "end": "4[119]",
+      "sequence_literal": "AGACAATATTTTTGGAACCCTGTAATAATCGGCCT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "4[139]",
+      "end": "4[140]",
+      "sequence_literal": "AAGAACTAAATACCTACATCCGCCTGCAAAAATCTAAAGCAG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "0[30]",
+      "end": "4[35]",
+      "sequence_literal": "CGTCCTGAGCAAAAGAATACAAAACCTGATTTAGAACC",
+      "stated_length": 38,
+      "literal_character_count": 38,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "4[55]",
+      "end": "4[56]",
+      "sequence_literal": "AATAATGTTAAGGGAAGAAAGCGAAAGGACACCCGCCGCGTG",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "0[72]",
+      "end": "4[77]",
+      "sequence_literal": "TTAAATTAATTACATTTACGTGAAGCGCGTATGCGCGT",
+      "stated_length": 38,
+      "literal_character_count": 38,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S4",
+      "pdf_page": 14,
+      "start": "7[98]",
+      "end": "4[98]",
+      "sequence_literal": "GCCACCAGTCACACTGAAAGCGTAAGTTGTAGCAAAGAACAA",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "30[76]",
+      "end": "35[86]",
+      "sequence_literal": "GAATCGGTGCCCGCTTGAGGAGGTCATAGCTGTTTCCT",
+      "stated_length": 38,
+      "literal_character_count": 38,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "32[90]",
+      "end": "35[97]",
+      "sequence_literal": "GTGCCTATCGGGAAACCTGAGGCAGTATGAAACCG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "27[70]",
+      "end": "39[86]",
+      "sequence_literal": "CTGAGAGGACGATCGTGGTGCTGCGGCCAGA",
+      "stated_length": 31,
+      "literal_character_count": 31,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "28[90]",
+      "end": "39[97]",
+      "sequence_literal": "CACCAGTGCAAGCGGTCCAGCGAGGGAGTCACAAT",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "22[76]",
+      "end": "43[86]",
+      "sequence_literal": "GTGAGTGACTATTAACTGTTGGCTCGTCATAAACATCC",
+      "stated_length": 38,
+      "literal_character_count": 38,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "21[98]",
+      "end": "43[97]",
+      "sequence_literal": "ATAGAAGAACCGTCTATCAACCAACGTCCAGCACCGCAAAAT",
+      "stated_length": 42,
+      "literal_character_count": 42,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "18[76]",
+      "end": "47[86]",
+      "sequence_literal": "CTCCGGCAGTGAATGCAAGAACACGCAACCAGCTTACG",
+      "stated_length": 38,
+      "literal_character_count": 38,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "20[90]",
+      "end": "47[97]",
+      "sequence_literal": "GAAAACAAATCATAGGTCTTCCCTCAGATTATTAG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "14[76]",
+      "end": "51[86]",
+      "sequence_literal": "AATAAGGTCTTCTGCGATGCTTCGTCTCGTCGCTGGCA",
+      "stated_length": 38,
+      "literal_character_count": 38,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "16[90]",
+      "end": "51[97]",
+      "sequence_literal": "AAAGAACTTTAATGGTTTGCCAGCCAGATTGACAG",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "11[63]",
+      "end": "55[86]",
+      "sequence_literal": "ACGCTCAACAGTAGCTTTTGCTCATTTGCCGCCAGCAG",
+      "stated_length": 38,
+      "literal_character_count": 38,
+      "unknown_characters": 0
+    },
+    {
+      "table": "S5",
+      "pdf_page": 15,
+      "start": "12[90]",
+      "end": "55[97]",
+      "sequence_literal": "TCATATGTTGAGAATCGCCATAAAAACCGTTTTAA",
+      "stated_length": 35,
+      "literal_character_count": 35,
+      "unknown_characters": 0
+    }
+  ],
+  "limitations": "Only TablesS2-S5. Literal32characters in one row include two unknown question marks, visually confirmed in PDF. TableS7 wrapped and bold functional domains not reconstructed. Capture extensions and complete variant mixtures unresolved. Not a certified synthesis set."
+}

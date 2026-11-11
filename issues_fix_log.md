@@ -1331,3 +1331,16 @@ CPD comparison packet and four unavailable-`/mnt/f` filesystem checks. FULL rema
 DEFERRED in `.nadoc-slow-pending`. The aggregate runtime gate fired at 485 seconds;
 triage found zero per-test budget violators, so no unrelated tests were reclassified
 and no limits changed. Compact evidence: `.development-artifacts/autostaple-frames-20261104/validation.json`.
+
+
+### ISSUE-179 — Live oxDNA jitter (2026-11-09)
+
+Root cause: an independently updated burst count was used as frame identity,
+while the published coordinate snapshot lagged behind it; deduplication could
+consume an ID before its positions existed. The earlier assumption that spline
+lookahead alone would absorb arrival jitter was insufficient. Added atomic frame
+publication, a four-frame jitter reserve, bounded queue, cadence filtering and
+start-to-start polling. Reduced curve-allocation and per-subframe display setup
+work. Timings are available in the Live popup. Native visual confirmation remains
+MV-59; software validation details are retained under
+`.development-artifacts/live-jitter-validation.json`.

@@ -185,6 +185,53 @@ describe('initOxdnaLive factory', () => {
     expect(api.stopOxdnaLive).toHaveBeenCalledWith('s1')
   })
 
+  it('polls start-to-start without overlapping a slow request', async () => {
+    vi.useFakeTimers()
+    let active = 0, peak = 0
+    const starts = []
+    api.getOxdnaLiveFrame.mockImplementation(async () => {
+      starts.push(performance.now()); peak = Math.max(peak, ++active)
+      await new Promise(resolve => setTimeout(resolve, 200))
+      active--
+      return { ready: false }
+    })
+    const ctl = make()
+    try {
+      ctl.toggle()
+      await vi.advanceTimersByTimeAsync(1200)
+      expect(starts).toEqual([0, 500, 1000])
+      expect(peak).toBe(1)
+      expect(ctl.getDiagnostics().requestMs).toBe(200)
+    } finally { ctl.stop(); vi.useRealTimers() }
+  })
+
+  it('uses published frame identity even when two snapshots have the same burst count', async () => {
+    vi.useFakeTimers()
+    let id = 0
+    api.getOxdnaLiveFrame.mockImplementation(async () => ({ ready: true, frame_id: ++id,
+      n_bursts: 1, positions: [{ backbone_position: [id, 0, 0] }] }))
+    const ctl = make()
+    try {
+      ctl.toggle(); await vi.advanceTimersByTimeAsync(600)
+      expect(display.displayLiveFrame).toHaveBeenCalledTimes(2)
+    } finally { ctl.stop(); vi.useRealTimers() }
+  })
+
+  it('discards a pending response from a stopped session after restart', async () => {
+    let resolveOld
+    api.getOxdnaLiveFrame.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+    const ctl = make()
+    await flush(); ctl.toggle(); await wait(30)
+    expect(resolveOld).toBeTypeOf('function')
+    ctl.stop()
+    api.startOxdnaLive.mockResolvedValue({ session_id: 's2' })
+    ctl.toggle(); await wait(30)
+    resolveOld({ ready: true, positions: [{ backbone_position: [99, 0, 0] }], n_bursts: 9 })
+    await flush()
+    expect(display.displayLiveFrame).not.toHaveBeenCalled()
+    ctl.stop()
+  })
+
   it('disables the button with a tooltip when oxpy is unavailable', async () => {
     api.oxdnaLiveAvailable.mockResolvedValue({ available: false, reason: 'oxpy not built' })
     make()

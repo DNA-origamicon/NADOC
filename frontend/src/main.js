@@ -344,6 +344,7 @@ import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_
 import { initRightSidebarTabs } from './ui/right_sidebar_tabs.js'
 import { initDesignReadinessHost } from './ui/design_readiness_host.js'
 import { initZoomVolume } from './scene/zoom_volume.js'
+import { initSimulationSubmodel } from './ui/simulation_submodel.js'
 import { initViewVolumes } from './scene/view_volumes.js'
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
@@ -432,6 +433,8 @@ async function main() {
   const assemblyVolumes = initAssemblyViewVolumes({ scene, store, api, assemblyRenderer })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer, applyAssemblyLayers: assemblyVolumes.update })
   window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
+  const submodel = initSimulationSubmodel({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer })
+  window.__NADOC_SUBMODEL__ = submodel?.debug
 
   // Debug hook (gated on shared flag for now): expose enough state for in-
   // browser diagnostic probes without leaking everything to prod. Remove
@@ -1327,7 +1330,7 @@ async function main() {
   })
 
   const namdPegCoating = initNamdPegCoating({ api, store })
-  const mdPanel = initMdJobsPanel({
+  const mdPanel = initMdJobsPanel({ submodel,
     mdDisplayController,
     getWorkspacePath: () => store.getState().assemblyActive ? _assemblyWorkspacePath : _workspacePath,
     getFlexScale: () => flexScale,
@@ -1488,7 +1491,7 @@ async function main() {
   // oxDNA panel's own viz card via this controller (same validated renderer + pure
   // mappers as oxdnaDisplay, pointed at the LAMMPS endpoints).
   const lammpsDisplay = initLammpsDisplay({ designRenderer })
-  oxdnaPanel = initOxdnaJobsPanel({
+  oxdnaPanel = initOxdnaJobsPanel({ submodel,
     oxdnaDisplay, lammpsDisplay, oxdnaLive,
     getWorkspacePath: () => store.getState().assemblyActive
       ? _assemblyWorkspacePath : _workspacePath,

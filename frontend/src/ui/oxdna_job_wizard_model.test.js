@@ -88,6 +88,7 @@ describe('oxDNA copied-job seed display', () => {
   it('shows the newly assigned seed, not the source request seed, while editing', () => {
     const wizard = makeWizard()
     wizard.openEditable(copiedJob())
+    expect(document.querySelector('.modal__header .wizard-job-id').textContent).toBe(`Job ID: ${copiedJob().job_id}`)
     const input = document.querySelector('[data-oxdna-field="seed"]')
     expect(input.value).toBe('246802468')
     expect(input.readOnly).toBe(true)
@@ -98,6 +99,7 @@ describe('oxDNA copied-job seed display', () => {
   it('shows the newly assigned seed in the read-only settings snapshot', () => {
     const wizard = makeWizard()
     wizard.openReadOnly(copiedJob())
+    expect(document.querySelector('.modal__header .wizard-job-id').textContent).toBe(`Job ID: ${copiedJob().job_id}`)
     const text = document.querySelector('.oxdna-job-settings-view').textContent
     expect(text).toContain('"seed": 246802468')
     expect(text).not.toContain('"seed": 135791357')

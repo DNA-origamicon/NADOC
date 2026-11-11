@@ -1,0 +1,989 @@
+{
+  "audit": {
+    "provider_total": 64,
+    "parsed_records": 64,
+    "unique_repository_ids": 64,
+    "selected_occurrences": 42,
+    "oldest_year": 2013,
+    "newest_year": 2025,
+    "not_unique_work_count": true
+  },
+  "entries": [
+    {
+      "repository_id": "129066",
+      "url": "https://epub.ub.uni-muenchen.de/129066/",
+      "title": "Self\u2010Assembled Physical Unclonable Function Labels Based on Plasmonic Coupling.",
+      "citation": "Dass, Mihir ORCID: https://orcid.org/0000-0002-4654-4455 ; Raab, Lena ; Pauer, Christoph ; Sikeler, Christoph ; Heinze, Larissa ; Tavacoli, Joe ORCID: https://orcid.org/0000-0003-1065-6532 ; Martynenko, Irina V. ORCID: https://orcid.org/0000-0001-5239-3043 ; R\u00fchrmair, Ulrich ORCID: https://orcid.org/0000-0003-0156-6738 ; Posnjak, Gregor ORCID: https://orcid.org/0000-0002-9863-4444 und Liedl, Tim ORCID: https://orcid.org/0000-0002-0040-0173 (26. M\u00e4rz 2025): Self\u2010Assembled Physical Unclonable Function Labels Based on Plasmonic Coupling. In: Advanced Optical Materials, Bd. 13, Nr. 19, 2500496 [PDF, 9MB]",
+      "stated_date": "26. M\u00e4rz 2025",
+      "stated_year": 2025,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "133570",
+      "url": "https://epub.ub.uni-muenchen.de/133570/",
+      "title": "DNA origami signal amplification in lateral flow immunoassays.",
+      "citation": "Ij\u00e4s, Heini ; Trommler, Julian ; Nguyen, Linh ; van Rest, Stefan ; Nickels, Philipp C. ; Liedl, Tim und Urban, Maximilian J. (2025): DNA origami signal amplification in lateral flow immunoassays. In: Nature Communications, Bd. 16, 3216 [PDF, 1MB]",
+      "stated_date": "2025",
+      "stated_year": 2025,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "122388",
+      "url": "https://epub.ub.uni-muenchen.de/122388/",
+      "title": "DNA Origami\u2010Directed Self\u2010Assembly of Gold Nanospheres for Plasmonic Metasurfaces.",
+      "citation": "Sikeler, Christoph ; Haslinger, Franziska ; Martynenko, Irina V. und Liedl, Tim ORCID: https://orcid.org/0000-0002-0040-0173 (2024): DNA Origami\u2010Directed Self\u2010Assembly of Gold Nanospheres for Plasmonic Metasurfaces. In: Advanced Functional Materials [PDF, 3MB]",
+      "stated_date": "2024",
+      "stated_year": 2024,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "109274",
+      "url": "https://epub.ub.uni-muenchen.de/109274/",
+      "title": "Unraveling the Chirality Transfer from Circularly Polarized Light to Single Plasmonic Nanoparticles.",
+      "citation": "Lee, Seunghoon ORCID: https://orcid.org/0000-0001-9447-4503 ; Fan, Chenghao ORCID: https://orcid.org/0000-0002-7294-2238 ; Movsesyan, Artur ORCID: https://orcid.org/0000-0002-5425-7747 ; B\u00fcrger, Johannes ORCID: https://orcid.org/0000-0003-4821-1790 ; Wendisch, Fedja J. ORCID: https://orcid.org/0000-0002-0110-4771 ; S. Menezes, Leonardo de ORCID: https://orcid.org/0000-0002-8654-1953 ; Maier, Stefan A. ORCID: https://orcid.org/0000-0001-9704-7902 ; Ren, Haoran ORCID: https://orcid.org/0000-0002-2885-875X ; Liedl, Tim ORCID: https://orcid.org/0000-0002-0040-0173 ; Besteiro, Lucas V. ORCID: https://orcid.org/0000-0001-7356-7719 ; Govorov, Alexander O. ORCID: https://orcid.org/0000-0003-1316-6758 und Cort\u00e9s, Emiliano ORCID: https://orcid.org/0000-0001-8248-4165 (2024): Unraveling the Chirality Transfer from Circularly Polarized Light to Single Plasmonic Nanoparticles. In: Angewandte Chemie International Edition [PDF, 3MB]",
+      "stated_date": "2024",
+      "stated_year": 2024,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "134101",
+      "url": "https://epub.ub.uni-muenchen.de/134101/",
+      "title": "Accessible hotspots for single-protein SERS in DNA-origami assembled gold nanorod dimers with tip-to-tip alignment.",
+      "citation": "Schuknecht, Francis ; Ko\u0142\u0105taj, Karol ; Steinberger, Michael ; Liedl, Tim und Lohmueller, Theobald (2023): Accessible hotspots for single-protein SERS in DNA-origami assembled gold nanorod dimers with tip-to-tip alignment. In: Nature Communications, Bd. 14, Nr. 1 [PDF, 2MB]",
+      "stated_date": "2023",
+      "stated_year": 2023,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "112019",
+      "url": "https://epub.ub.uni-muenchen.de/112019/",
+      "title": "A label-free light-scattering method to resolve assembly and disassembly of DNA nanostructures.",
+      "citation": "Ijas, Heini ; Liedl, Tim ; Linko, Veikko und Posnjak, Gregor (2022): A label-free light-scattering method to resolve assembly and disassembly of DNA nanostructures. In: Biophysical Journal, Bd. 121, Nr. 24: S. 4800-4809",
+      "stated_date": "2022",
+      "stated_year": 2022,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "106865",
+      "url": "https://epub.ub.uni-muenchen.de/106865/",
+      "title": "Propulsion of Magnetic Beads Asymmetrically Covered with DNA Origami Appendages.",
+      "citation": "Pauer, Christoph ; Venczel, Aron ; Dass, Mihir ; Liedl, Tim und Tavacoli, Joe (2022): Propulsion of Magnetic Beads Asymmetrically Covered with DNA Origami Appendages. In: Advanced Materials Technologies, Bd. 7, Nr. 12 [PDF, 1MB]",
+      "stated_date": "2022",
+      "stated_year": 2022,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "106894",
+      "url": "https://epub.ub.uni-muenchen.de/106894/",
+      "title": "Visible wavelength spectral tuning of absorption and circular dichroism of DNA-assembled Au/Ag core-shell nanorod assemblies.",
+      "citation": "Dass, Mihir ; Kuen, Lilli ; Posnjak, Gregor ; Burger, Sven und Liedl, Tim (2022): Visible wavelength spectral tuning of absorption and circular dichroism of DNA-assembled Au/Ag core-shell nanorod assemblies. In: Materials Advances, Bd. 3, Nr. 8: S. 3438-3445 [PDF, 3MB]",
+      "stated_date": "2022",
+      "stated_year": 2022,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "111438",
+      "url": "https://epub.ub.uni-muenchen.de/111438/",
+      "title": "Phase-Selective Four-Wave Mixing of Resonant Plasmonic Nanoantennas.",
+      "citation": "Giegold, Veit ; Kolataj, Karol ; Liedl, Tim und Hartschuh, Achim (2022): Phase-Selective Four-Wave Mixing of Resonant Plasmonic Nanoantennas. In: ACS Photonics, Bd. 9, Nr. 11: S. 3727-3733",
+      "stated_date": "2022",
+      "stated_year": 2022,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "112545",
+      "url": "https://epub.ub.uni-muenchen.de/112545/",
+      "title": "Chiral Bioinspired Plasmonics: A Paradigm Shift for Optical Activity and Photochemistry.",
+      "citation": "Avalos-Ovando, Oscar ; Santiago, Eva Yazmin ; Movsesyan, Artur ; Kong, Xiang-Tian ; Yu, Peng ; Besteiro, Lucas V. ; Khorashad, Larousse Khosravi ; Okamoto, Hiromi ; Slocik, Joseph M. ; Correa-Duarte, Miguel A. ; Comesana-Hermo, Miguel ; Liedl, Tim ; Wang, Zhiming ; Markovich, Gil ; Burger, Sven und Govorov, Alexander O. (2022): Chiral Bioinspired Plasmonics: A Paradigm Shift for Optical Activity and Photochemistry. In: ACS Photonics, Bd. 9, Nr. 7: S. 2219-2236",
+      "stated_date": "2022",
+      "stated_year": 2022,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "115122",
+      "url": "https://epub.ub.uni-muenchen.de/115122/",
+      "title": "Three-phase DNA-origami stepper mechanism based on multi-leg interactions.",
+      "citation": "Kilwing, Luzia ; Lill, Pascal ; Nathwani, Bhavik ; Singh, Jasleen Kaur Daljit ; Liedl, Tim und Shih, William M. (2022): Three-phase DNA-origami stepper mechanism based on multi-leg interactions. In: Biophysical Journal, Bd. 121, Nr. 24: S. 4860-4866",
+      "stated_date": "2022",
+      "stated_year": 2022,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "115450",
+      "url": "https://epub.ub.uni-muenchen.de/115450/",
+      "title": "Friction Induces Anisotropic Propulsion in Sliding Magnetic Microtriangles.",
+      "citation": "Junot, Gaspard ; Leyva, Sergi G. ; Pauer, Christoph ; Calero, Carles ; Pagonabarraga, Ignacio ; Liedl, Tim ; Tavacoli, Joe und Tierno, Pietro (2022): Friction Induces Anisotropic Propulsion in Sliding Magnetic Microtriangles. In: Nano Letters, Bd. 22, Nr. 18: S. 7408-7414",
+      "stated_date": "2022",
+      "stated_year": 2022,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "115454",
+      "url": "https://epub.ub.uni-muenchen.de/115454/",
+      "title": "Onset of Chirality in Plasmonic Meta-Molecules and Dielectric Coupling.",
+      "citation": "Martens, Kevin ; Funck, Timon ; Santiago, Eva Y. ; Govorov, Alexander O. ; Burger, Sven und Liedl, Tim (2022): Onset of Chirality in Plasmonic Meta-Molecules and Dielectric Coupling. In: ACS Nano, Bd. 16, Nr. 10: S. 16143-16149",
+      "stated_date": "2022",
+      "stated_year": 2022,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "100415",
+      "url": "https://epub.ub.uni-muenchen.de/100415/",
+      "title": "Long- and short-ranged chiral interactions in DNA-assembled plasmonic chains.",
+      "citation": "Martens, Kevin ; Binkowski, Felix ; Nguyen, Linh ; Hu, Li ; Govorov, Alexander O. ; Burger, Sven und Liedl, Tim (2021): Long- and short-ranged chiral interactions in DNA-assembled plasmonic chains. In: Nature Communications, Bd. 12, Nr. 1, 2025",
+      "stated_date": "2021",
+      "stated_year": 2021,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "96733",
+      "url": "https://epub.ub.uni-muenchen.de/96733/",
+      "title": "Chiral Photomelting of DNA-Nanocrystal Assemblies Utilizing Plasmonic Photoheating.",
+      "citation": "Avalos-Ovando, Oscar ; Besteiro, Lucas V. ; Movsesyan, Artur ; Markovich, Gil ; Liedl, Tim ; Martens, Kevin ; Wang, Zhiming ; Correa-Duarte, Miguel A. und Govorov, Alexander O. (2021): Chiral Photomelting of DNA-Nanocrystal Assemblies Utilizing Plasmonic Photoheating. In: Nano Letters, Bd. 21, Nr. 17: S. 7298-7308",
+      "stated_date": "2021",
+      "stated_year": 2021,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "96938",
+      "url": "https://epub.ub.uni-muenchen.de/96938/",
+      "title": "Nanoscale FasL Organization on DNA Origami to Decipher Apoptosis Signal Activation in Cells.",
+      "citation": "Berger, Ricarda M. L. ; Weck, Johann M. ; Kempe, Simon M. ; Hill, Oliver ; Liedl, Tim ; R\u00e4dler, Joachim O. ; Monzel, Cornelia und Heuer-Jungemann, Amelie (2021): Nanoscale FasL Organization on DNA Origami to Decipher Apoptosis Signal Activation in Cells. In: Small, Bd. 17, Nr. 26, 2101678",
+      "stated_date": "2021",
+      "stated_year": 2021,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "97630",
+      "url": "https://epub.ub.uni-muenchen.de/97630/",
+      "title": "DNA Origami-Enabled Plasmonic Sensing.",
+      "citation": "Dass, Mihir ; Guer, Fatih N. ; Kolqtaj, Karol ; Urban, Maximilian J. und Liedl, Tim (2021): DNA Origami-Enabled Plasmonic Sensing. In: Journal of Physical Chemistry C, Bd. 125, Nr. 11: S. 5969-5981",
+      "stated_date": "2021",
+      "stated_year": 2021,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "98447",
+      "url": "https://epub.ub.uni-muenchen.de/98447/",
+      "title": "The Art of Designing DNA Nanostructures with CAD Software.",
+      "citation": "Glaser, Martin ; Deb, Sourav ; Seier, Florian ; Agrawal, Amay ; Liedl, Tim ; Douglas, Shawn ; Gupta, Manish K. und Smith, David M. (2021): The Art of Designing DNA Nanostructures with CAD Software. In: Molecules, Bd. 26, Nr. 8, 2287",
+      "stated_date": "2021",
+      "stated_year": 2021,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "98652",
+      "url": "https://epub.ub.uni-muenchen.de/98652/",
+      "title": "Double- to Single-Strand Transition Induces Forces and Motion in DNA Origami Nanostructures.",
+      "citation": "Gur, Fatih N. ; Kempter, Susanne ; Schueder, Florian ; Sikeler, Christoph ; Urban, Maximilian J. ; Jungmann, Ralf ; Nickels, Philipp C. und Liedl, Tim (2021): Double- to Single-Strand Transition Induces Forces and Motion in DNA Origami Nanostructures. In: Advanced Materials, Bd. 33, Nr. 37, 2101986",
+      "stated_date": "2021",
+      "stated_year": 2021,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "99179",
+      "url": "https://epub.ub.uni-muenchen.de/99179/",
+      "title": "Unraveling the interaction between doxorubicin and DNA origami nanostructures for customizable chemotherapeutic drug release.",
+      "citation": "Ijas, Heini ; Shen, Boxuan ; Heuer-Jungemann, Amelie ; Keller, Adrian ; Kostiainen, Mauri A. ; Liedl, Tim ; Ihalainen, Janne A. und Linko, Veikko (2021): Unraveling the interaction between doxorubicin and DNA origami nanostructures for customizable chemotherapeutic drug release. In: Nucleic Acids Research, Bd. 49, Nr. 6: S. 3048-3062",
+      "stated_date": "2021",
+      "stated_year": 2021,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "100426",
+      "url": "https://epub.ub.uni-muenchen.de/100426/",
+      "title": "DNA Origami Meets Bottom-Up Nanopatterning.",
+      "citation": "Martynenko, Irina ; Ruider, Veronika ; Dass, Mihir ; Liedl, Tim und Nickels, Philipp C. (2021): DNA Origami Meets Bottom-Up Nanopatterning. In: ACS Nano, Bd. 15, Nr. 7: S. 10769-10774",
+      "stated_date": "2021",
+      "stated_year": 2021,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "101049",
+      "url": "https://epub.ub.uni-muenchen.de/101049/",
+      "title": "Programmable Design and Performance of Modular Magnetic Microswimmers.",
+      "citation": "Pauer, Christoph ; du Roure, Olivia ; Heuvingh, Julien ; Liedl, Tim und Tavacoli, Joe (2021): Programmable Design and Performance of Modular Magnetic Microswimmers. In: Advanced Materials, Bd. 33, Nr. 16, 2006237",
+      "stated_date": "2021",
+      "stated_year": 2021,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "90645",
+      "url": "https://epub.ub.uni-muenchen.de/90645/",
+      "title": "DNA origami-based single-molecule force spectroscopy elucidates RNA Polymerase III pre-initiation complex stability.",
+      "citation": "Kramm, Kevin ; Schr\u00f6der, Tim ; Gouge, Jerome ; Vera, Andres Manuel ; Gupta, Kapil ; Heiss, Florian B. ; Liedl, Tim ; Engel, Christoph ; Berger, Imre ; Vannini, Alessandro ; Tinnefeld, Philip und Grohmann, Dina (2020): DNA origami-based single-molecule force spectroscopy elucidates RNA Polymerase III pre-initiation complex stability. In: Nature Communications, Bd. 11, Nr. 1 [PDF, 2MB]",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "90634",
+      "url": "https://epub.ub.uni-muenchen.de/90634/",
+      "title": "A DNA Origami Platform for Single-Pair Forster Resonance Energy Transfer Investigation of DNA-DNA Interactions and Ligation.",
+      "citation": "Bartnik, Kira ; Barth, Anders ; Pilo-Pais, Mauricio ; Crevenna, Alvaro H. ; Liedl, Tim und Lamb, Don C. (2020): A DNA Origami Platform for Single-Pair Forster Resonance Energy Transfer Investigation of DNA-DNA Interactions and Ligation. In: Journal of the American Chemical Society, Bd. 142, Nr. 2: S. 815-825",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89572",
+      "url": "https://epub.ub.uni-muenchen.de/89572/",
+      "title": "DNA Origami Nano-Sheets and Nano-Rods Alter the Orientational Order in a Lyotropic Chromonic Liquid Crystal.",
+      "citation": "Zhang, Bingru ; Martens, Kevin ; Kneer, Luisa ; Funck, Timon ; Nguyen, Linh ; Berger, Ricarda ; Dass, Mihir ; Kempter, Susanne ; Schmidtke, Jurgen ; Liedl, Tim und Kitzerow, Heinz-S. (2020): DNA Origami Nano-Sheets and Nano-Rods Alter the Orientational Order in a Lyotropic Chromonic Liquid Crystal. In: Nanomaterials, Bd. 10, Nr. 9, 1695",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89317",
+      "url": "https://epub.ub.uni-muenchen.de/89317/",
+      "title": "Enzymatic degradation of liquid droplets of DNA is modulated near the phase boundary.",
+      "citation": "Saleh, Omar A. ; Jeon, Byoung-Jin und Liedl, Tim (2020): Enzymatic degradation of liquid droplets of DNA is modulated near the phase boundary. In: Proceedings of the National Academy of Sciences of the United States of America, Bd. 117, Nr. 28: S. 16160-16166",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89224",
+      "url": "https://epub.ub.uni-muenchen.de/89224/",
+      "title": "Photophysical Effects behind the Efficiency of Hot Electron Injection in Plasmon-Assisted Catalysis: The Joint Role of Morphology and Composition.",
+      "citation": "Negrin-Montecelo, Yoel ; Comesana-Hermo, Miguel ; Khorashad, Larousse Khosravi ; Sousa-Castillo, Ana ; Wang, Zhiming ; Perez-Lorenzo, Moises ; Liedl, Tim ; Govorov, Alexander O. und Correa-Duarte, Miguel A. (2020): Photophysical Effects behind the Efficiency of Hot Electron Injection in Plasmon-Assisted Catalysis: The Joint Role of Morphology and Composition. In: ACS Energy Letters, Bd. 5, Nr. 2: S. 395-402",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89091",
+      "url": "https://epub.ub.uni-muenchen.de/89091/",
+      "title": "Chiral Assembly of Gold-Silver Core-Shell Plasmonic Nanorods on DNA Origami with Strong Optical Activity.",
+      "citation": "Nguyen, Linh ; Dass, Mihir ; Ober, Martina F. ; Besteiro, Lucas V. ; Wang, Zhiming M. ; Nickel, Bert ; Govorov, Alexander O. ; Liedl, Tim und Heuer-Jungemann, Amelie (2020): Chiral Assembly of Gold-Silver Core-Shell Plasmonic Nanorods on DNA Origami with Strong Optical Activity. In: ACS Nano, Bd. 14, Nr. 6: S. 7454-7461",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89083",
+      "url": "https://epub.ub.uni-muenchen.de/89083/",
+      "title": "Cryopreservation of DNA Origami Nanostructures.",
+      "citation": "Xin, Yang ; Kielar, Charlotte ; Zhu, Siqi ; Sikeler, Christoph ; Xu, Xiaodan ; Moeser, Christin ; Grundmeier, Guido ; Liedl, Tim ; Heuer-Jungemann, Amelie ; Smith, David M. und Keller, Adrian (2020): Cryopreservation of DNA Origami Nanostructures. In: Small, Bd. 16, Nr. 13, 1905959",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82977",
+      "url": "https://epub.ub.uni-muenchen.de/82977/",
+      "title": "Chiral Plasmonic Nanocrystals for Generation of Hot Electrons: Toward Polarization-Sensitive Photochemistry.",
+      "citation": "Liu, Tianji ; Besteiro, Lucas V. ; Liedl, Tim ; Correa-Duarte, Miguel A. ; Wang, Zhiming und Govorov, Alexander O. (2019): Chiral Plasmonic Nanocrystals for Generation of Hot Electrons: Toward Polarization-Sensitive Photochemistry. In: Nano Letters, Bd. 19, Nr. 2: S. 1395-1407",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "83240",
+      "url": "https://epub.ub.uni-muenchen.de/83240/",
+      "title": "DNA-Origami-Templated Silica Growth by Sol-Gel Chemistry.",
+      "citation": "Linh, Nguyen ; Doeblinger, Markus ; Liedl, Tim und Heuer-Jungemann, Amelie (2019): DNA-Origami-Templated Silica Growth by Sol-Gel Chemistry. In: Angewandte Chemie-International Edition, Bd. 58, Nr. 3: S. 912-916",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "83231",
+      "url": "https://epub.ub.uni-muenchen.de/83231/",
+      "title": "Directing Single-Molecule Emission with DNA Origami-Assembled Optical Antennas.",
+      "citation": "Hubner, Kristina ; Pilo-Pais, Mauricio ; Selbach, Florian ; Liedl, Tim ; Tinnefeld, Philip ; Stefani, Fernando D. und Acuna, Guillermo P. (2019): Directing Single-Molecule Emission with DNA Origami-Assembled Optical Antennas. In: Nano Letters, Bd. 19, Nr. 9: S. 6629-6634",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82973",
+      "url": "https://epub.ub.uni-muenchen.de/82973/",
+      "title": "Single Particle Tracking and Super-Resolution Imaging of Membrane-Assisted Stop-and-Go Diffusion and Lattice Assembly of DNA Origami.",
+      "citation": "Kempter, Susanne ; Khmelinskaia, Alena ; Strauss, Maximilian T. ; Schwille, Petra ; Jungmann, Ralf ; Liedl, Tim und Bae, Wooli (2019): Single Particle Tracking and Super-Resolution Imaging of Membrane-Assisted Stop-and-Go Diffusion and Lattice Assembly of DNA Origami. In: ACS Nano, Bd. 13, Nr. 2: S. 996-1002",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82926",
+      "url": "https://epub.ub.uni-muenchen.de/82926/",
+      "title": "Long-Range Plasmon-Assisted Chiral Interactions in Nanocrystal Assemblies.",
+      "citation": "Hu, Li ; Liedl, Tim ; Martens, Kevin ; Wang, Zhiming und Govorov, Alexander O. (2019): Long-Range Plasmon-Assisted Chiral Interactions in Nanocrystal Assemblies. In: ACS Photonics, Bd. 6, Nr. 3: S. 749-756",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82814",
+      "url": "https://epub.ub.uni-muenchen.de/82814/",
+      "title": "DNA nanostructures in vitro, in vivo and on membranes.",
+      "citation": "Bae, Wooli ; Kocabey, Samet und Liedl, Tim (2019): DNA nanostructures in vitro, in vivo and on membranes. In: Nano Today, Bd. 26: S. 98-107",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82717",
+      "url": "https://epub.ub.uni-muenchen.de/82717/",
+      "title": "Dual Aptamer-Functionalized 3D Plasmonic Metamolecule for Thrombin Sensing.",
+      "citation": "Funck, Timon ; Liedl, Tim und Bae, Wooli (2019): Dual Aptamer-Functionalized 3D Plasmonic Metamolecule for Thrombin Sensing. In: Applied Sciences-Basel, Bd. 9, Nr. 15, 3006",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82489",
+      "url": "https://epub.ub.uni-muenchen.de/82489/",
+      "title": "DNA-Based Assembly of Quantum Dots into Dimers and Helices.",
+      "citation": "Zhang, Tao und Liedl, Tim (2019): DNA-Based Assembly of Quantum Dots into Dimers and Helices. In: Nanomaterials, Bd. 9, Nr. 3, 339",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82482",
+      "url": "https://epub.ub.uni-muenchen.de/82482/",
+      "title": "DNA-Mediated Self-Assembly of Plasmonic Antennas with a Single Quantum Dot in the Hot Spot.",
+      "citation": "Nicoli, Francesca ; Zhang, Tao ; H\u00fcbner, Kristina ; Jin, Boyuan ; Selbach, Florian ; Acuna, Guillermo ; Argyropoulos, Christos ; Liedl, Tim und Pilo-Pais, Mauricio (2019): DNA-Mediated Self-Assembly of Plasmonic Antennas with a Single Quantum Dot in the Hot Spot. In: Small, Bd. 15, Nr. 26, 1804418",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82463",
+      "url": "https://epub.ub.uni-muenchen.de/82463/",
+      "title": "From DNA Tiles to Functional DNA Materials.",
+      "citation": "Heuer-Jungemann, Amelie und Liedl, Tim (2019): From DNA Tiles to Functional DNA Materials. In: Trends in Chemistry, Bd. 1, Nr. 9: S. 799-814",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "67997",
+      "url": "https://epub.ub.uni-muenchen.de/67997/",
+      "title": "Position Accuracy of Gold Nanoparticles on DNA Origami Structures Studied with Small-Angle X-ray Scattering.",
+      "citation": "Hartl, Caroline ; Frank, Kilian ; Amenitsch, Heinz ; Fischer, Stefan ; Liedl, Tim und Nickel, Bert (2018): Position Accuracy of Gold Nanoparticles on DNA Origami Structures Studied with Small-Angle X-ray Scattering. In: Nano Letters, Bd. 18, Nr. 4: S. 2609-2615",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "66957",
+      "url": "https://epub.ub.uni-muenchen.de/66957/",
+      "title": "Force-Induced Unravelling of DNA Origami.",
+      "citation": "Engel, Megan C. ; Smith, David M. ; Jobst, Markus A. ; Sagutdinow, Martin ; Liedl, Tim ; Romano, Flavio ; Rovigatti, Lorenzo ; Louis, Ard A. und Doye, Jonathan P. K. (2018): Force-Induced Unravelling of DNA Origami. In: ACS Nano, Bd. 12, Nr. 7: S. 6734-6747",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "66976",
+      "url": "https://epub.ub.uni-muenchen.de/66976/",
+      "title": "Sensing Picomolar Concentrations of RNA Using Switchable Plasmonic Chirality.",
+      "citation": "Funck, Timon ; Nicoli, Francesca ; Kuzyk, Anton und Liedl, Tim (2018): Sensing Picomolar Concentrations of RNA Using Switchable Plasmonic Chirality. In: Angewandte Chemie-International Edition, Bd. 57, Nr. 41: S. 13495-13498",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "67064",
+      "url": "https://epub.ub.uni-muenchen.de/67064/",
+      "title": "Circular Dichroism of Chiral Molecules in DNA-Assembled Plasmonic Hotspots.",
+      "citation": "Kneer, Luisa M. ; Roller, Eva-Maria ; Besteiro, Lucas ; Schreiber, Robert ; Govorov, Alexander O. und Liedl, Tim (2018): Circular Dichroism of Chiral Molecules in DNA-Assembled Plasmonic Hotspots. In: ACS Nano, Bd. 12, Nr. 9: S. 9110-9115",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "67067",
+      "url": "https://epub.ub.uni-muenchen.de/67067/",
+      "title": "DNA-Assembled Advanced Plasmonic Architectures.",
+      "citation": "Liu, Na und Liedl, Tim (2018): DNA-Assembled Advanced Plasmonic Architectures. In: Chemical Reviews, Bd. 118, Nr. 6: S. 3032-3053",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "67993",
+      "url": "https://epub.ub.uni-muenchen.de/67993/",
+      "title": "3D DNA Origami Crystals.",
+      "citation": "Zhang, Tao ; Hartl, Caroline ; Frank, Kilian ; Heuer-Jungemann, Amelie ; Fischer, Stefan ; Nickels, Philipp C. ; Nickel, Bert und Liedl, Tim (2018): 3D DNA Origami Crystals. In: Advanced Materials, Bd. 30, Nr. 28, 1800273",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "55697",
+      "url": "https://epub.ub.uni-muenchen.de/55697/",
+      "title": "Molecular Tools and Nanodevices Built from DNA.",
+      "citation": "Liedl, Tim (2017): Molecular Tools and Nanodevices Built from DNA. In: Biophysical Journal, Bd. 112, Nr. 3: 341A-341A",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "49969",
+      "url": "https://epub.ub.uni-muenchen.de/49969/",
+      "title": "Dexamethasone-conjugated DNA nanotubes as anti-inflammatory agents in vivo.",
+      "citation": "Sellner, Sabine ; Kocabey, Samet ; Zhang, Tao ; Nekolla, Katharina ; Hutten, Saskia ; Krombach, Fritz ; Liedl, Tim und Rehberg, Markus (2017): Dexamethasone-conjugated DNA nanotubes as anti-inflammatory agents in vivo. In: Biomaterials, Bd. 134: S. 78-90",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "53525",
+      "url": "https://epub.ub.uni-muenchen.de/53525/",
+      "title": "Hotspot-mediated non-dissipative and ultrafast plasmon passage.",
+      "citation": "Roller, Eva-Maria ; Besteiro, Lucas V. ; Pupp, Claudia ; Khorashad, Larousse Khosravi ; Govorov, Alexander O. und Liedl, Tim (2017): Hotspot-mediated non-dissipative and ultrafast plasmon passage. In: Nature Physics, Bd. 13, Nr. 8: S. 761-765",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "54192",
+      "url": "https://epub.ub.uni-muenchen.de/54192/",
+      "title": "Directional Photonic Wire Mediated by Homo-Forster Resonance Energy Transfer on a DNA Origami Platform.",
+      "citation": "Nicoli, Francesca ; Barth, Anders ; Bae, Wooli ; Neukirchinger, Fabian ; Crevenna, Alvaro H. ; Lamb, Don C. und Liedl, Tim (2017): Directional Photonic Wire Mediated by Homo-Forster Resonance Energy Transfer on a DNA Origami Platform. In: Acs Nano, Bd. 11, Nr. 11: S. 11264-11272",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "54418",
+      "url": "https://epub.ub.uni-muenchen.de/54418/",
+      "title": "Sculpting light by arranging optical components with DNA nanostructures.",
+      "citation": "Pilo-Pais, Mauricio ; Acuna, Guillermo P. ; Tinnefeld, Philip und Liedl, Tim (2017): Sculpting light by arranging optical components with DNA nanostructures. In: Mrs Bulletin, Bd. 42, Nr. 12: S. 936-942",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "55724",
+      "url": "https://epub.ub.uni-muenchen.de/55724/",
+      "title": "Self-Assembled DNA Tubes Forming Helices of Controlled Diameter and Chirality.",
+      "citation": "Maier, Alexander Mario ; Bae, Wooli ; Schiffels, Daniel ; Emmerig, Johannes Friedrich ; Schiff, Maximilian und Liedl, Tim (2017): Self-Assembled DNA Tubes Forming Helices of Controlled Diameter and Chirality. In: Acs Nano, Bd. 11, Nr. 2: S. 1301-1306",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "55816",
+      "url": "https://epub.ub.uni-muenchen.de/55816/",
+      "title": "Establishing a DNA Origami Platform for Single-Molecule Fluorescence Studies of DNA Double-Strand Break Repair.",
+      "citation": "Bartnik, Kira ; Crevenna, Alvaro H. ; Pilo-Pais, Mauricio ; Liedl, Tim und Lamb, Don C. (2017): Establishing a DNA Origami Platform for Single-Molecule Fluorescence Studies of DNA Double-Strand Break Repair. In: Biophysical Journal, Bd. 112, Nr. 3: 515A-515A",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47709",
+      "url": "https://epub.ub.uni-muenchen.de/47709/",
+      "title": "Alignment and Graphene-Assisted Decoration of Lyotropic Chromonic Liquid Crystals Containing DNA Origami Nanostructures.",
+      "citation": "Martens, Kevin ; Funck, Timon ; Kempter, Susanne ; Roller, Eva-Maria ; Liedl, Tim ; Blaschke, Benno M. ; Knecht, Peter ; Garrido, Jos\u00e9 Antonio ; Zhang, Bingru und Kitzerow, Heinz (2016): Alignment and Graphene-Assisted Decoration of Lyotropic Chromonic Liquid Crystals Containing DNA Origami Nanostructures. In: Small, Bd. 12, Nr. 12: S. 1658-1666",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47684",
+      "url": "https://epub.ub.uni-muenchen.de/47684/",
+      "title": "DNA Origami Force Balance.",
+      "citation": "Nickels, Philipp C. ; Holzmeister, Phil ; W\u00fcnsch, Bettina ; Grohmann, Dina ; Tinnefeld, Philipp und Liedl, Tim (2016): DNA Origami Force Balance. In: Biophysical Journal, Bd. 110, Nr. 3: 563A-563A",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47559",
+      "url": "https://epub.ub.uni-muenchen.de/47559/",
+      "title": "Quantitative Single-Molecule Surface Enhanced Raman Scattering by Optothermal Tuning of DNA Origami-Assembled Plasmonic Nanoantennas.",
+      "citation": "Simoncelli, Sabrina ; Roller, Eva-Maria ; Urban, Patrick ; Schreiber, Robert ; Turberfield, Andrew J. ; Liedl, Tim und Lohm\u00fcller, Theobald (2016): Quantitative Single-Molecule Surface Enhanced Raman Scattering by Optothermal Tuning of DNA Origami-Assembled Plasmonic Nanoantennas. In: Acs Nano, Bd. 10, Nr. 11: S. 9809-9815",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47552",
+      "url": "https://epub.ub.uni-muenchen.de/47552/",
+      "title": "Plasmon-Exciton Coupling Using DNA Templates.",
+      "citation": "Roller, Eva-Maria ; Argyropoulos, Christos ; H\u00f6gele, Alexander ; Liedl, Tim und Pilo-Pais, Mauricio (2016): Plasmon-Exciton Coupling Using DNA Templates. In: Nano Letters, Bd. 16, Nr. 9: S. 5962-5966",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47550",
+      "url": "https://epub.ub.uni-muenchen.de/47550/",
+      "title": "Shape and Interhelical Spacing of DNA Origami Nanostructures Studied by Small-Angle X-ray Scattering.",
+      "citation": "Fischer, Stefan ; Hartl, Caroline ; Frank, Kilian ; R\u00e4dler, Joachim O. ; Liedl, Tim und Nickel, Bert (2016): Shape and Interhelical Spacing of DNA Origami Nanostructures Studied by Small-Angle X-ray Scattering. In: Nano Letters, Bd. 16, Nr. 7: S. 4282-4287",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47547",
+      "url": "https://epub.ub.uni-muenchen.de/47547/",
+      "title": "Magnetic Propulsion of Microswimmers with DNA-Based Flagellar Bundles.",
+      "citation": "Maier, Alexander M. ; Weig, Cornelius ; Oswald, Peter ; Frey, Erwin ; Fischer, Peer und Liedl, Tim (2016): Magnetic Propulsion of Microswimmers with DNA-Based Flagellar Bundles. In: Nano Letters, Bd. 16, Nr. 2: S. 906-910",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47543",
+      "url": "https://epub.ub.uni-muenchen.de/47543/",
+      "title": "Proximity-Induced H-Aggregation of Cyanine Dyes on DNA-Duplexes.",
+      "citation": "Nicoli, Francesca ; Roos, Matthias K. ; Hemmig, Elisa A. ; Di Antonio, Marco ; Vivie-Riedle, Regina de und Liedl, Tim (2016): Proximity-Induced H-Aggregation of Cyanine Dyes on DNA-Duplexes. In: Journal of Physical Chemistry A, Bd. 120, Nr. 50: S. 9941-9947",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47542",
+      "url": "https://epub.ub.uni-muenchen.de/47542/",
+      "title": "DNA Origami Seesaws as Comparative Binding Assay.",
+      "citation": "Nickels, Philipp C. ; Hoiberg, Hans C. ; Simmel, Stephanie S. ; Holzmeister, Phil ; Tinnefeld, Philip und Liedl, Tim (2016): DNA Origami Seesaws as Comparative Binding Assay. In: ChemBioChem, Bd. 17, Nr. 12: S. 1093-1096",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47478",
+      "url": "https://epub.ub.uni-muenchen.de/47478/",
+      "title": "Molecular force spectroscopy with a DNA origami-based nanoscopic force clamp.",
+      "citation": "Nickels, Philipp C. ; W\u00fcnsch, Bettina ; Holzmeister, Phil ; Bae, Wooli ; Kneer, Luisa M. ; Grohmann, Dina ; Tinnefeld, Philip und Liedl, Tim (2016): Molecular force spectroscopy with a DNA origami-based nanoscopic force clamp. In: Science, Bd. 354, Nr. 6310: S. 305-307",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "24815",
+      "url": "https://epub.ub.uni-muenchen.de/24815/",
+      "title": "Cellular Uptake of Tile-Assembled DNA Nanotubes.",
+      "citation": "Kocabey, Samet ; Meinl, Hanna ; MacPherson, Iain S. ; Cassinelli, Valentina ; Manetto, Antonio ; Rothenfusser, Simon ; Liedl, Tim und Lichtenegger, Felix S. (2015): Cellular Uptake of Tile-Assembled DNA Nanotubes. In: Nanomaterials, Bd. 5, Nr. 1: S. 47-60 [PDF, 1MB]",
+      "stated_date": "2015",
+      "stated_year": 2015,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "33722",
+      "url": "https://epub.ub.uni-muenchen.de/33722/",
+      "title": "DNA origami based assembly of gold nanoparticle dimers for surface-enhanced Raman scattering.",
+      "citation": "Thacker, Vivek V. ; Herrmann, Lars O. ; Sigle, Daniel O. ; Zhang, Tao ; Liedl, Tim ; Baumberg, Jeremy J. und Keyser, Ulrich F. (2014): DNA origami based assembly of gold nanoparticle dimers for surface-enhanced Raman scattering. In: Nature Communications, Bd. 5, 3448 [PDF, 1MB]",
+      "stated_date": "2014",
+      "stated_year": 2014,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "22684",
+      "url": "https://epub.ub.uni-muenchen.de/22684/",
+      "title": "Multiplexed ionic current sensing with glass nanopores.",
+      "citation": "Bell, Nicholas A. W. ; Thacker, Vivek V. ; Hernandez-Ainsa, Silvia ; Fuentes-Perez, Maria E. ; Moreno-Herrero, Fernando ; Liedl, Tim und Keyser, Ulrich F. (12. M\u00e4rz 2013): Multiplexed ionic current sensing with glass nanopores. In: Lab on a Chip, Bd. 13, Nr. 10: S. 1859-1862 [PDF, 594kB]",
+      "stated_date": "12. M\u00e4rz 2013",
+      "stated_year": 2013,
+      "provider_type": "journal_article"
+    }
+  ],
+  "selected": [
+    {
+      "repository_id": "90645",
+      "url": "https://epub.ub.uni-muenchen.de/90645/",
+      "title": "DNA origami-based single-molecule force spectroscopy elucidates RNA Polymerase III pre-initiation complex stability.",
+      "citation": "Kramm, Kevin ; Schr\u00f6der, Tim ; Gouge, Jerome ; Vera, Andres Manuel ; Gupta, Kapil ; Heiss, Florian B. ; Liedl, Tim ; Engel, Christoph ; Berger, Imre ; Vannini, Alessandro ; Tinnefeld, Philip und Grohmann, Dina (2020): DNA origami-based single-molecule force spectroscopy elucidates RNA Polymerase III pre-initiation complex stability. In: Nature Communications, Bd. 11, Nr. 1 [PDF, 2MB]",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "90634",
+      "url": "https://epub.ub.uni-muenchen.de/90634/",
+      "title": "A DNA Origami Platform for Single-Pair Forster Resonance Energy Transfer Investigation of DNA-DNA Interactions and Ligation.",
+      "citation": "Bartnik, Kira ; Barth, Anders ; Pilo-Pais, Mauricio ; Crevenna, Alvaro H. ; Liedl, Tim und Lamb, Don C. (2020): A DNA Origami Platform for Single-Pair Forster Resonance Energy Transfer Investigation of DNA-DNA Interactions and Ligation. In: Journal of the American Chemical Society, Bd. 142, Nr. 2: S. 815-825",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89572",
+      "url": "https://epub.ub.uni-muenchen.de/89572/",
+      "title": "DNA Origami Nano-Sheets and Nano-Rods Alter the Orientational Order in a Lyotropic Chromonic Liquid Crystal.",
+      "citation": "Zhang, Bingru ; Martens, Kevin ; Kneer, Luisa ; Funck, Timon ; Nguyen, Linh ; Berger, Ricarda ; Dass, Mihir ; Kempter, Susanne ; Schmidtke, Jurgen ; Liedl, Tim und Kitzerow, Heinz-S. (2020): DNA Origami Nano-Sheets and Nano-Rods Alter the Orientational Order in a Lyotropic Chromonic Liquid Crystal. In: Nanomaterials, Bd. 10, Nr. 9, 1695",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89317",
+      "url": "https://epub.ub.uni-muenchen.de/89317/",
+      "title": "Enzymatic degradation of liquid droplets of DNA is modulated near the phase boundary.",
+      "citation": "Saleh, Omar A. ; Jeon, Byoung-Jin und Liedl, Tim (2020): Enzymatic degradation of liquid droplets of DNA is modulated near the phase boundary. In: Proceedings of the National Academy of Sciences of the United States of America, Bd. 117, Nr. 28: S. 16160-16166",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89224",
+      "url": "https://epub.ub.uni-muenchen.de/89224/",
+      "title": "Photophysical Effects behind the Efficiency of Hot Electron Injection in Plasmon-Assisted Catalysis: The Joint Role of Morphology and Composition.",
+      "citation": "Negrin-Montecelo, Yoel ; Comesana-Hermo, Miguel ; Khorashad, Larousse Khosravi ; Sousa-Castillo, Ana ; Wang, Zhiming ; Perez-Lorenzo, Moises ; Liedl, Tim ; Govorov, Alexander O. und Correa-Duarte, Miguel A. (2020): Photophysical Effects behind the Efficiency of Hot Electron Injection in Plasmon-Assisted Catalysis: The Joint Role of Morphology and Composition. In: ACS Energy Letters, Bd. 5, Nr. 2: S. 395-402",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89091",
+      "url": "https://epub.ub.uni-muenchen.de/89091/",
+      "title": "Chiral Assembly of Gold-Silver Core-Shell Plasmonic Nanorods on DNA Origami with Strong Optical Activity.",
+      "citation": "Nguyen, Linh ; Dass, Mihir ; Ober, Martina F. ; Besteiro, Lucas V. ; Wang, Zhiming M. ; Nickel, Bert ; Govorov, Alexander O. ; Liedl, Tim und Heuer-Jungemann, Amelie (2020): Chiral Assembly of Gold-Silver Core-Shell Plasmonic Nanorods on DNA Origami with Strong Optical Activity. In: ACS Nano, Bd. 14, Nr. 6: S. 7454-7461",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "89083",
+      "url": "https://epub.ub.uni-muenchen.de/89083/",
+      "title": "Cryopreservation of DNA Origami Nanostructures.",
+      "citation": "Xin, Yang ; Kielar, Charlotte ; Zhu, Siqi ; Sikeler, Christoph ; Xu, Xiaodan ; Moeser, Christin ; Grundmeier, Guido ; Liedl, Tim ; Heuer-Jungemann, Amelie ; Smith, David M. und Keller, Adrian (2020): Cryopreservation of DNA Origami Nanostructures. In: Small, Bd. 16, Nr. 13, 1905959",
+      "stated_date": "2020",
+      "stated_year": 2020,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82977",
+      "url": "https://epub.ub.uni-muenchen.de/82977/",
+      "title": "Chiral Plasmonic Nanocrystals for Generation of Hot Electrons: Toward Polarization-Sensitive Photochemistry.",
+      "citation": "Liu, Tianji ; Besteiro, Lucas V. ; Liedl, Tim ; Correa-Duarte, Miguel A. ; Wang, Zhiming und Govorov, Alexander O. (2019): Chiral Plasmonic Nanocrystals for Generation of Hot Electrons: Toward Polarization-Sensitive Photochemistry. In: Nano Letters, Bd. 19, Nr. 2: S. 1395-1407",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "83240",
+      "url": "https://epub.ub.uni-muenchen.de/83240/",
+      "title": "DNA-Origami-Templated Silica Growth by Sol-Gel Chemistry.",
+      "citation": "Linh, Nguyen ; Doeblinger, Markus ; Liedl, Tim und Heuer-Jungemann, Amelie (2019): DNA-Origami-Templated Silica Growth by Sol-Gel Chemistry. In: Angewandte Chemie-International Edition, Bd. 58, Nr. 3: S. 912-916",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "83231",
+      "url": "https://epub.ub.uni-muenchen.de/83231/",
+      "title": "Directing Single-Molecule Emission with DNA Origami-Assembled Optical Antennas.",
+      "citation": "Hubner, Kristina ; Pilo-Pais, Mauricio ; Selbach, Florian ; Liedl, Tim ; Tinnefeld, Philip ; Stefani, Fernando D. und Acuna, Guillermo P. (2019): Directing Single-Molecule Emission with DNA Origami-Assembled Optical Antennas. In: Nano Letters, Bd. 19, Nr. 9: S. 6629-6634",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82973",
+      "url": "https://epub.ub.uni-muenchen.de/82973/",
+      "title": "Single Particle Tracking and Super-Resolution Imaging of Membrane-Assisted Stop-and-Go Diffusion and Lattice Assembly of DNA Origami.",
+      "citation": "Kempter, Susanne ; Khmelinskaia, Alena ; Strauss, Maximilian T. ; Schwille, Petra ; Jungmann, Ralf ; Liedl, Tim und Bae, Wooli (2019): Single Particle Tracking and Super-Resolution Imaging of Membrane-Assisted Stop-and-Go Diffusion and Lattice Assembly of DNA Origami. In: ACS Nano, Bd. 13, Nr. 2: S. 996-1002",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82926",
+      "url": "https://epub.ub.uni-muenchen.de/82926/",
+      "title": "Long-Range Plasmon-Assisted Chiral Interactions in Nanocrystal Assemblies.",
+      "citation": "Hu, Li ; Liedl, Tim ; Martens, Kevin ; Wang, Zhiming und Govorov, Alexander O. (2019): Long-Range Plasmon-Assisted Chiral Interactions in Nanocrystal Assemblies. In: ACS Photonics, Bd. 6, Nr. 3: S. 749-756",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82814",
+      "url": "https://epub.ub.uni-muenchen.de/82814/",
+      "title": "DNA nanostructures in vitro, in vivo and on membranes.",
+      "citation": "Bae, Wooli ; Kocabey, Samet und Liedl, Tim (2019): DNA nanostructures in vitro, in vivo and on membranes. In: Nano Today, Bd. 26: S. 98-107",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82717",
+      "url": "https://epub.ub.uni-muenchen.de/82717/",
+      "title": "Dual Aptamer-Functionalized 3D Plasmonic Metamolecule for Thrombin Sensing.",
+      "citation": "Funck, Timon ; Liedl, Tim und Bae, Wooli (2019): Dual Aptamer-Functionalized 3D Plasmonic Metamolecule for Thrombin Sensing. In: Applied Sciences-Basel, Bd. 9, Nr. 15, 3006",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82489",
+      "url": "https://epub.ub.uni-muenchen.de/82489/",
+      "title": "DNA-Based Assembly of Quantum Dots into Dimers and Helices.",
+      "citation": "Zhang, Tao und Liedl, Tim (2019): DNA-Based Assembly of Quantum Dots into Dimers and Helices. In: Nanomaterials, Bd. 9, Nr. 3, 339",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82482",
+      "url": "https://epub.ub.uni-muenchen.de/82482/",
+      "title": "DNA-Mediated Self-Assembly of Plasmonic Antennas with a Single Quantum Dot in the Hot Spot.",
+      "citation": "Nicoli, Francesca ; Zhang, Tao ; H\u00fcbner, Kristina ; Jin, Boyuan ; Selbach, Florian ; Acuna, Guillermo ; Argyropoulos, Christos ; Liedl, Tim und Pilo-Pais, Mauricio (2019): DNA-Mediated Self-Assembly of Plasmonic Antennas with a Single Quantum Dot in the Hot Spot. In: Small, Bd. 15, Nr. 26, 1804418",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "82463",
+      "url": "https://epub.ub.uni-muenchen.de/82463/",
+      "title": "From DNA Tiles to Functional DNA Materials.",
+      "citation": "Heuer-Jungemann, Amelie und Liedl, Tim (2019): From DNA Tiles to Functional DNA Materials. In: Trends in Chemistry, Bd. 1, Nr. 9: S. 799-814",
+      "stated_date": "2019",
+      "stated_year": 2019,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "67997",
+      "url": "https://epub.ub.uni-muenchen.de/67997/",
+      "title": "Position Accuracy of Gold Nanoparticles on DNA Origami Structures Studied with Small-Angle X-ray Scattering.",
+      "citation": "Hartl, Caroline ; Frank, Kilian ; Amenitsch, Heinz ; Fischer, Stefan ; Liedl, Tim und Nickel, Bert (2018): Position Accuracy of Gold Nanoparticles on DNA Origami Structures Studied with Small-Angle X-ray Scattering. In: Nano Letters, Bd. 18, Nr. 4: S. 2609-2615",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "66957",
+      "url": "https://epub.ub.uni-muenchen.de/66957/",
+      "title": "Force-Induced Unravelling of DNA Origami.",
+      "citation": "Engel, Megan C. ; Smith, David M. ; Jobst, Markus A. ; Sagutdinow, Martin ; Liedl, Tim ; Romano, Flavio ; Rovigatti, Lorenzo ; Louis, Ard A. und Doye, Jonathan P. K. (2018): Force-Induced Unravelling of DNA Origami. In: ACS Nano, Bd. 12, Nr. 7: S. 6734-6747",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "66976",
+      "url": "https://epub.ub.uni-muenchen.de/66976/",
+      "title": "Sensing Picomolar Concentrations of RNA Using Switchable Plasmonic Chirality.",
+      "citation": "Funck, Timon ; Nicoli, Francesca ; Kuzyk, Anton und Liedl, Tim (2018): Sensing Picomolar Concentrations of RNA Using Switchable Plasmonic Chirality. In: Angewandte Chemie-International Edition, Bd. 57, Nr. 41: S. 13495-13498",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "67064",
+      "url": "https://epub.ub.uni-muenchen.de/67064/",
+      "title": "Circular Dichroism of Chiral Molecules in DNA-Assembled Plasmonic Hotspots.",
+      "citation": "Kneer, Luisa M. ; Roller, Eva-Maria ; Besteiro, Lucas ; Schreiber, Robert ; Govorov, Alexander O. und Liedl, Tim (2018): Circular Dichroism of Chiral Molecules in DNA-Assembled Plasmonic Hotspots. In: ACS Nano, Bd. 12, Nr. 9: S. 9110-9115",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "67067",
+      "url": "https://epub.ub.uni-muenchen.de/67067/",
+      "title": "DNA-Assembled Advanced Plasmonic Architectures.",
+      "citation": "Liu, Na und Liedl, Tim (2018): DNA-Assembled Advanced Plasmonic Architectures. In: Chemical Reviews, Bd. 118, Nr. 6: S. 3032-3053",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "67993",
+      "url": "https://epub.ub.uni-muenchen.de/67993/",
+      "title": "3D DNA Origami Crystals.",
+      "citation": "Zhang, Tao ; Hartl, Caroline ; Frank, Kilian ; Heuer-Jungemann, Amelie ; Fischer, Stefan ; Nickels, Philipp C. ; Nickel, Bert und Liedl, Tim (2018): 3D DNA Origami Crystals. In: Advanced Materials, Bd. 30, Nr. 28, 1800273",
+      "stated_date": "2018",
+      "stated_year": 2018,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "55697",
+      "url": "https://epub.ub.uni-muenchen.de/55697/",
+      "title": "Molecular Tools and Nanodevices Built from DNA.",
+      "citation": "Liedl, Tim (2017): Molecular Tools and Nanodevices Built from DNA. In: Biophysical Journal, Bd. 112, Nr. 3: 341A-341A",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "49969",
+      "url": "https://epub.ub.uni-muenchen.de/49969/",
+      "title": "Dexamethasone-conjugated DNA nanotubes as anti-inflammatory agents in vivo.",
+      "citation": "Sellner, Sabine ; Kocabey, Samet ; Zhang, Tao ; Nekolla, Katharina ; Hutten, Saskia ; Krombach, Fritz ; Liedl, Tim und Rehberg, Markus (2017): Dexamethasone-conjugated DNA nanotubes as anti-inflammatory agents in vivo. In: Biomaterials, Bd. 134: S. 78-90",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "53525",
+      "url": "https://epub.ub.uni-muenchen.de/53525/",
+      "title": "Hotspot-mediated non-dissipative and ultrafast plasmon passage.",
+      "citation": "Roller, Eva-Maria ; Besteiro, Lucas V. ; Pupp, Claudia ; Khorashad, Larousse Khosravi ; Govorov, Alexander O. und Liedl, Tim (2017): Hotspot-mediated non-dissipative and ultrafast plasmon passage. In: Nature Physics, Bd. 13, Nr. 8: S. 761-765",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "54192",
+      "url": "https://epub.ub.uni-muenchen.de/54192/",
+      "title": "Directional Photonic Wire Mediated by Homo-Forster Resonance Energy Transfer on a DNA Origami Platform.",
+      "citation": "Nicoli, Francesca ; Barth, Anders ; Bae, Wooli ; Neukirchinger, Fabian ; Crevenna, Alvaro H. ; Lamb, Don C. und Liedl, Tim (2017): Directional Photonic Wire Mediated by Homo-Forster Resonance Energy Transfer on a DNA Origami Platform. In: Acs Nano, Bd. 11, Nr. 11: S. 11264-11272",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "54418",
+      "url": "https://epub.ub.uni-muenchen.de/54418/",
+      "title": "Sculpting light by arranging optical components with DNA nanostructures.",
+      "citation": "Pilo-Pais, Mauricio ; Acuna, Guillermo P. ; Tinnefeld, Philip und Liedl, Tim (2017): Sculpting light by arranging optical components with DNA nanostructures. In: Mrs Bulletin, Bd. 42, Nr. 12: S. 936-942",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "55724",
+      "url": "https://epub.ub.uni-muenchen.de/55724/",
+      "title": "Self-Assembled DNA Tubes Forming Helices of Controlled Diameter and Chirality.",
+      "citation": "Maier, Alexander Mario ; Bae, Wooli ; Schiffels, Daniel ; Emmerig, Johannes Friedrich ; Schiff, Maximilian und Liedl, Tim (2017): Self-Assembled DNA Tubes Forming Helices of Controlled Diameter and Chirality. In: Acs Nano, Bd. 11, Nr. 2: S. 1301-1306",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "55816",
+      "url": "https://epub.ub.uni-muenchen.de/55816/",
+      "title": "Establishing a DNA Origami Platform for Single-Molecule Fluorescence Studies of DNA Double-Strand Break Repair.",
+      "citation": "Bartnik, Kira ; Crevenna, Alvaro H. ; Pilo-Pais, Mauricio ; Liedl, Tim und Lamb, Don C. (2017): Establishing a DNA Origami Platform for Single-Molecule Fluorescence Studies of DNA Double-Strand Break Repair. In: Biophysical Journal, Bd. 112, Nr. 3: 515A-515A",
+      "stated_date": "2017",
+      "stated_year": 2017,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47709",
+      "url": "https://epub.ub.uni-muenchen.de/47709/",
+      "title": "Alignment and Graphene-Assisted Decoration of Lyotropic Chromonic Liquid Crystals Containing DNA Origami Nanostructures.",
+      "citation": "Martens, Kevin ; Funck, Timon ; Kempter, Susanne ; Roller, Eva-Maria ; Liedl, Tim ; Blaschke, Benno M. ; Knecht, Peter ; Garrido, Jos\u00e9 Antonio ; Zhang, Bingru und Kitzerow, Heinz (2016): Alignment and Graphene-Assisted Decoration of Lyotropic Chromonic Liquid Crystals Containing DNA Origami Nanostructures. In: Small, Bd. 12, Nr. 12: S. 1658-1666",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47684",
+      "url": "https://epub.ub.uni-muenchen.de/47684/",
+      "title": "DNA Origami Force Balance.",
+      "citation": "Nickels, Philipp C. ; Holzmeister, Phil ; W\u00fcnsch, Bettina ; Grohmann, Dina ; Tinnefeld, Philipp und Liedl, Tim (2016): DNA Origami Force Balance. In: Biophysical Journal, Bd. 110, Nr. 3: 563A-563A",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47559",
+      "url": "https://epub.ub.uni-muenchen.de/47559/",
+      "title": "Quantitative Single-Molecule Surface Enhanced Raman Scattering by Optothermal Tuning of DNA Origami-Assembled Plasmonic Nanoantennas.",
+      "citation": "Simoncelli, Sabrina ; Roller, Eva-Maria ; Urban, Patrick ; Schreiber, Robert ; Turberfield, Andrew J. ; Liedl, Tim und Lohm\u00fcller, Theobald (2016): Quantitative Single-Molecule Surface Enhanced Raman Scattering by Optothermal Tuning of DNA Origami-Assembled Plasmonic Nanoantennas. In: Acs Nano, Bd. 10, Nr. 11: S. 9809-9815",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47552",
+      "url": "https://epub.ub.uni-muenchen.de/47552/",
+      "title": "Plasmon-Exciton Coupling Using DNA Templates.",
+      "citation": "Roller, Eva-Maria ; Argyropoulos, Christos ; H\u00f6gele, Alexander ; Liedl, Tim und Pilo-Pais, Mauricio (2016): Plasmon-Exciton Coupling Using DNA Templates. In: Nano Letters, Bd. 16, Nr. 9: S. 5962-5966",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47550",
+      "url": "https://epub.ub.uni-muenchen.de/47550/",
+      "title": "Shape and Interhelical Spacing of DNA Origami Nanostructures Studied by Small-Angle X-ray Scattering.",
+      "citation": "Fischer, Stefan ; Hartl, Caroline ; Frank, Kilian ; R\u00e4dler, Joachim O. ; Liedl, Tim und Nickel, Bert (2016): Shape and Interhelical Spacing of DNA Origami Nanostructures Studied by Small-Angle X-ray Scattering. In: Nano Letters, Bd. 16, Nr. 7: S. 4282-4287",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47547",
+      "url": "https://epub.ub.uni-muenchen.de/47547/",
+      "title": "Magnetic Propulsion of Microswimmers with DNA-Based Flagellar Bundles.",
+      "citation": "Maier, Alexander M. ; Weig, Cornelius ; Oswald, Peter ; Frey, Erwin ; Fischer, Peer und Liedl, Tim (2016): Magnetic Propulsion of Microswimmers with DNA-Based Flagellar Bundles. In: Nano Letters, Bd. 16, Nr. 2: S. 906-910",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47543",
+      "url": "https://epub.ub.uni-muenchen.de/47543/",
+      "title": "Proximity-Induced H-Aggregation of Cyanine Dyes on DNA-Duplexes.",
+      "citation": "Nicoli, Francesca ; Roos, Matthias K. ; Hemmig, Elisa A. ; Di Antonio, Marco ; Vivie-Riedle, Regina de und Liedl, Tim (2016): Proximity-Induced H-Aggregation of Cyanine Dyes on DNA-Duplexes. In: Journal of Physical Chemistry A, Bd. 120, Nr. 50: S. 9941-9947",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47542",
+      "url": "https://epub.ub.uni-muenchen.de/47542/",
+      "title": "DNA Origami Seesaws as Comparative Binding Assay.",
+      "citation": "Nickels, Philipp C. ; Hoiberg, Hans C. ; Simmel, Stephanie S. ; Holzmeister, Phil ; Tinnefeld, Philip und Liedl, Tim (2016): DNA Origami Seesaws as Comparative Binding Assay. In: ChemBioChem, Bd. 17, Nr. 12: S. 1093-1096",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "47478",
+      "url": "https://epub.ub.uni-muenchen.de/47478/",
+      "title": "Molecular force spectroscopy with a DNA origami-based nanoscopic force clamp.",
+      "citation": "Nickels, Philipp C. ; W\u00fcnsch, Bettina ; Holzmeister, Phil ; Bae, Wooli ; Kneer, Luisa M. ; Grohmann, Dina ; Tinnefeld, Philip und Liedl, Tim (2016): Molecular force spectroscopy with a DNA origami-based nanoscopic force clamp. In: Science, Bd. 354, Nr. 6310: S. 305-307",
+      "stated_date": "2016",
+      "stated_year": 2016,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "24815",
+      "url": "https://epub.ub.uni-muenchen.de/24815/",
+      "title": "Cellular Uptake of Tile-Assembled DNA Nanotubes.",
+      "citation": "Kocabey, Samet ; Meinl, Hanna ; MacPherson, Iain S. ; Cassinelli, Valentina ; Manetto, Antonio ; Rothenfusser, Simon ; Liedl, Tim und Lichtenegger, Felix S. (2015): Cellular Uptake of Tile-Assembled DNA Nanotubes. In: Nanomaterials, Bd. 5, Nr. 1: S. 47-60 [PDF, 1MB]",
+      "stated_date": "2015",
+      "stated_year": 2015,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "33722",
+      "url": "https://epub.ub.uni-muenchen.de/33722/",
+      "title": "DNA origami based assembly of gold nanoparticle dimers for surface-enhanced Raman scattering.",
+      "citation": "Thacker, Vivek V. ; Herrmann, Lars O. ; Sigle, Daniel O. ; Zhang, Tao ; Liedl, Tim ; Baumberg, Jeremy J. und Keyser, Ulrich F. (2014): DNA origami based assembly of gold nanoparticle dimers for surface-enhanced Raman scattering. In: Nature Communications, Bd. 5, 3448 [PDF, 1MB]",
+      "stated_date": "2014",
+      "stated_year": 2014,
+      "provider_type": "journal_article"
+    },
+    {
+      "repository_id": "22684",
+      "url": "https://epub.ub.uni-muenchen.de/22684/",
+      "title": "Multiplexed ionic current sensing with glass nanopores.",
+      "citation": "Bell, Nicholas A. W. ; Thacker, Vivek V. ; Hernandez-Ainsa, Silvia ; Fuentes-Perez, Maria E. ; Moreno-Herrero, Fernando ; Liedl, Tim und Keyser, Ulrich F. (12. M\u00e4rz 2013): Multiplexed ionic current sensing with glass nanopores. In: Lab on a Chip, Bd. 13, Nr. 10: S. 1859-1862 [PDF, 594kB]",
+      "stated_date": "12. M\u00e4rz 2013",
+      "stated_year": 2013,
+      "provider_type": "journal_article"
+    }
+  ],
+  "evidence": [
+    {
+      "local_file": "assets/research-20261105/liedl-lmu-repository-history.html",
+      "sha256": "84d8529d39cd3470ba73deb355987ed5bf784d3d896cddbb9dd4f8a81d5ffd3e",
+      "url": "https://epub.ub.uni-muenchen.de/view/autoren/Liedl%3D3ATim%3D3A%3D3A.html",
+      "locator": "Complete author index; reported64 publication records, all blocks retained, labeled journal articles"
+    }
+  ],
+  "limitations": "Repository coverage begins2013; lab page extends2004. Reconcile overlap, dates and identities; repository dates not assumed first online.",
+  "review_reconciliations": {
+    "10.1002/anie.201811323": {
+      "evidence": {
+        "local_file": "assets/research-20261105/liedl-silica-repository.html",
+        "sha256": "3f86c56e0c086decf6fab13a8db6c0b5a107a5060a06518fa4ef79131d4118b7",
+        "url": "https://epub.ub.uni-muenchen.de/83240/",
+        "locator": "Repository title/authors and DOI identifier; journal volume58/issue3,2019; first-online not established"
+      },
+      "meaning": "Lab2018:2 and repository83240 same DOI; source/year meanings pending"
+    }
+  }
+}

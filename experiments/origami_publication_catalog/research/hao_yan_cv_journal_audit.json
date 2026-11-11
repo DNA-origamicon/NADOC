@@ -1,0 +1,17 @@
+{
+  "entries": 239,
+  "with_title_candidates": 56,
+  "without_title_candidates": 183,
+  "year_scope_counts": {
+    "earlier_methodological_lead": 27,
+    "later_or_boundary_verification_pending": 46,
+    "pre2020_or_mixed_year_lead": 165,
+    "undated_pending": 1
+  },
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11933
+  }
+}

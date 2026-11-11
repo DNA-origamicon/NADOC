@@ -9,7 +9,7 @@ from backend.core.part_history_proof import root_design
 from experiments.recorded_review_process import Process, ProcessRequired, verify
 
 
-def _replay_input(source, edits):
+def _replay_input(source, edits, design):
     from backend.core.models import Design
     if set(source) != {'root', 'input_sources', 'commands', 'state_sha256'}:
         raise ProcessRequired('Document operation lacks its exact construction inputs')
@@ -25,7 +25,10 @@ def _replay_input(source, edits):
             raise ProcessRequired('Document input is not a user-facing part operation')
         process.apply(command['kind'], command['params'])
     replayed = apply_metadata_edits(process.design, edits)
-    if content_digest(branch_value(replayed)) != source['state_sha256']:
+    from scripts.agent_schema_receipts import matches_source_receipt
+    expected = branch_value(replayed)
+    if (content_digest(expected) != source['state_sha256']
+            and not matches_source_receipt(design, expected, source['state_sha256'])):
         raise ProcessRequired('Document operation source does not independently reproduce')
 
 
@@ -43,7 +46,7 @@ def verify_inputs(design):
             commands += len(source.get('commands', []))
             if commands > 10000:
                 raise ProcessRequired('Document source replay allowance exceeded')
-            _replay_input(source, metadata)
+            _replay_input(source, metadata, design)
         prefix.append(entry)
 
 
@@ -69,7 +72,8 @@ def audit(design, audit_part):
                 raise ProcessRequired('Nested loadout wrapper is not a branch construction')
             # Audit the exact saved branch independently, including all physical fields.
             audit_part(snapshot.model_copy(update={'last_editable_loadout_id': None}), document=False)
-            if branch.snapshot_size_bytes != len(snapshot.model_dump_json().encode()):
+            from scripts.agent_schema_receipts import raw_snapshot
+            if branch.snapshot_size_bytes != len(raw_snapshot(branch.design_snapshot_gz_b64)):
                 raise ProcessRequired('Loadout snapshot size does not match its contents')
             verify_revision(design, branch, snapshot)
             if branch.id == design.active_loadout_id and branch_value(snapshot) != branch_value(design):

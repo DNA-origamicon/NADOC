@@ -1,0 +1,147 @@
+{
+  "scope": "retained first-five image recovery readiness; no molecular construction",
+  "cases": [
+    {
+      "id": "D007",
+      "source_sha256_matches": true,
+      "report_sha256": "ac1cac5f010ae453379b868aa17d939c51497fdda204f24f6f1ff3463991f440",
+      "trace_sha256": "fc88bb0e5832021278843e79045862429c5e740568e4210c094846c491770478",
+      "saved_design_exists": false,
+      "saved_design_replay": "NOT_RUN: audit does not certify designs",
+      "helix_count": 60,
+      "strand_paths": 145,
+      "unjoined_fragments": 0,
+      "insertion_sites": 0,
+      "insertions_outside_single_site_command_range": [],
+      "assigned_sequences_historical": 145,
+      "trace_contains_sequence_map": false,
+      "publication_status": "AGENT_PROCESS_REQUIRED: native construction and replay not established"
+    },
+    {
+      "id": "D008",
+      "source_sha256_matches": true,
+      "report_sha256": "4e112ce736caf8e700ec1e7aa0d1884501418af8f5906f8ba2ea9cbc78f4dd2f",
+      "trace_sha256": "6ea7656712cac6ced7f800a0566603bee08f130272e74674a588e8068dc214d8",
+      "saved_design_exists": false,
+      "saved_design_replay": "NOT_RUN: audit does not certify designs",
+      "helix_count": 60,
+      "strand_paths": 150,
+      "unjoined_fragments": 0,
+      "insertion_sites": 0,
+      "insertions_outside_single_site_command_range": [],
+      "assigned_sequences_historical": 150,
+      "trace_contains_sequence_map": false,
+      "publication_status": "AGENT_PROCESS_REQUIRED: native construction and replay not established"
+    },
+    {
+      "id": "D005",
+      "source_sha256_matches": true,
+      "report_sha256": "4d0346974475d78869518e7b3c5868ba02fe2b3afd372cda832346ff7d6a2e9e",
+      "trace_sha256": "9148657648f4f3d3b92282ee2d7f9e1b37740bcc9469fbea7c990eedc9b1c14e",
+      "saved_design_exists": false,
+      "saved_design_replay": "NOT_RUN: audit does not certify designs",
+      "helix_count": 60,
+      "strand_paths": 218,
+      "unjoined_fragments": 0,
+      "insertion_sites": 361,
+      "insertions_outside_single_site_command_range": [
+        [
+          0,
+          70,
+          144
+        ]
+      ],
+      "assigned_sequences_historical": 0,
+      "trace_contains_sequence_map": false,
+      "publication_status": "AGENT_PROCESS_REQUIRED: native construction and replay not established"
+    },
+    {
+      "id": "D006",
+      "source_sha256_matches": true,
+      "report_sha256": "e3c4af2b76d906032c7bb6d49ab66b9353e163b3184d5d625be507785b86664c",
+      "trace_sha256": "119b97e894ffb107d0152f8d47e1dde41161f6d8e62bf9519d7cd53af31545fe",
+      "saved_design_exists": false,
+      "saved_design_replay": "NOT_RUN: audit does not certify designs",
+      "helix_count": 19,
+      "strand_paths": 210,
+      "unjoined_fragments": 0,
+      "insertion_sites": 0,
+      "insertions_outside_single_site_command_range": [],
+      "assigned_sequences_historical": 0,
+      "trace_contains_sequence_map": false,
+      "publication_status": "AGENT_PROCESS_REQUIRED: native construction and replay not established"
+    },
+    {
+      "id": "D021",
+      "source_sha256_matches": true,
+      "report_sha256": "e66016aec08b8653e5427c1222f526c59769c7e8182ef1b18c1b04c02ba04438",
+      "trace_sha256": "1fad01d3a3655e16578a5296964e24b2b8872b6a40960a6cc1a62f5f159eccc8",
+      "saved_design_exists": false,
+      "saved_design_replay": "NOT_RUN: audit does not certify designs",
+      "helix_count": 55,
+      "strand_paths": 0,
+      "unjoined_fragments": 62,
+      "insertion_sites": 0,
+      "insertions_outside_single_site_command_range": [],
+      "assigned_sequences_historical": 0,
+      "trace_contains_sequence_map": false,
+      "publication_status": "AGENT_PROCESS_REQUIRED: native construction and replay not established"
+    }
+  ],
+  "legacy_scripts": [
+    {
+      "path": "experiments/origami_publication_catalog/recovery/recover_first5.py",
+      "sha256": "dde7d96bdac73d27c58bf6d1fe1433df139945d49db794c94dc8f461a3dbeb48",
+      "direct_serialization_lines": [
+        172
+      ],
+      "calls_agent_publish": false
+    },
+    {
+      "path": "experiments/origami_publication_catalog/recovery/recover_pin_partial.py",
+      "sha256": "b921685db92ef50d031e0fe0dade9597226bdd15a2a5f8559b1b2f464634da52",
+      "direct_serialization_lines": [
+        57
+      ],
+      "calls_agent_publish": false
+    }
+  ],
+  "dependency_probes": [
+    {
+      "kind": "helix-add-at-cell",
+      "known": true,
+      "barrier": true
+    },
+    {
+      "kind": "strand-add",
+      "known": true,
+      "barrier": true
+    },
+    {
+      "kind": "loop-skip-insert",
+      "known": true,
+      "barrier": true
+    },
+    {
+      "kind": "strand-sequence",
+      "known": true,
+      "barrier": true
+    }
+  ],
+  "dependency_index": {
+    "complete": true,
+    "parents": {
+      "probe-0": [],
+      "probe-1": [
+        "probe-0"
+      ],
+      "probe-2": [
+        "probe-1"
+      ],
+      "probe-3": [
+        "probe-2"
+      ]
+    }
+  },
+  "warning": "Known dependency contracts do not certify parameters, source evidence, or replay."
+}

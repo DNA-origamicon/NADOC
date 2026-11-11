@@ -1,3 +1,4 @@
+import { showWizardJobId } from './job_wizard_identity.js'
 import { createButton, createModal, el } from './primitives/index.js'
 import { initWizardTargetStep } from './md_job_wizard_target.js'
 import { formatBytes } from './format_bytes.js'
@@ -546,6 +547,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     editJob = null
     derivedEditor = null
     modal.header.querySelector('.modal__title').textContent = 'New oxDNA job'
+    showWizardJobId(modal, null)
     wizardShell.hidden = false
     readOnlyPanel.hidden = true
     closeBtn.textContent = 'Cancel'
@@ -572,6 +574,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     editJob = job
     derivedEditor = null
     modal.header.querySelector('.modal__title').textContent = 'Edit oxDNA job'
+    showWizardJobId(modal, job.job_id)
     const kind = job.run_config?.kind || (job.parent_job_id ? 'run' : 'relax')
     if (kind !== 'relax' || job.parent_job_id) {
       wizardShell.hidden = true
@@ -681,6 +684,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     editJob = null
     derivedEditor = null
     modal.header.querySelector('.modal__title').textContent = 'oxDNA job settings'
+    showWizardJobId(modal, job.job_id)
     wizardShell.hidden = true
     readOnlyPanel.hidden = false
     closeBtn.textContent = 'Close'

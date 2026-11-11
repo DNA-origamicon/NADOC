@@ -4,6 +4,17 @@ Research side project; not a production feature. Discovery baseline: November 2,
 
 [Structure map](structure_map.html) · [Publication registry](publication_registry.html) · [Priority review gaps](priority_review_gaps.csv) · [Machine-readable coverage](search_coverage.json)
 
+## November 5 durable research continuation
+
+Current census progress is recorded in [RESEARCH_CHECKPOINT.md](RESEARCH_CHECKPOINT.md)
+and the five `research/` ledgers; historical map counts below do not describe closure.
+Author-history work prioritizes the requested laboratories; FNANO remains deferred.
+Turberfield's Oxford provider pagination has now been enumerated through all38
+pages:187 citation occurrences,169 pre2020/boundary/date-uncertain leads, including
+four missing/uncertain dates. Duplicate works, versions, publication types and
+primary dates remain to be reconciled; this is not exhaustive author coverage.
+See `research/turberfield_bibliography_inventory.json` and batchAUTHOR0014.
+
 ## November 4 update
 
 The current map contains **75 reviewed groups from 47 publications and 25 candidate groups**. Initial ACS review added 22 groups and promoted one existing candidate. Acquisition now retains **269 files from 244 publications**, including 151 files recovered when retrying the initial 145 HTTP 403 lookup failures. The broader 2,210-record discovery census was not rerun. [Access recovery](acs_access_resolution.json), [acquisition totals](acs_expansion_summary.json), [request history](acs_acquisition.json), [source-page index](acs_source_index.json), and [review decisions](expansion/acs_reviews.json) retain the evidence.
@@ -77,3 +88,15 @@ python experiments/origami_publication_catalog/expansion/finalize.py
 ```
 
 The curation script contains explicit review decisions; automated retrieval does not make new inclusion decisions. The small landmark and curated-metadata snapshots were retrieved separately and are retained with source URLs/hashes. Rebuilding the map from retained inputs requires only `build_map.py` and `finalize.py`. Validation checks referenced files and hashes, local HTML links, stable unique structure IDs, date cutoff, null scores without reviewed images, and the paused/deleted recovery workspace. No production application code is changed.
+# Rapid source pilot — 2026-11-05
+
+SEQ0001 screened ten previously unreviewed records with available PDF supplements,
+using frozen keys in `research/sequence_pilot_0001_keys.json`. Seven have substantial
+staple lists and proceed to detailed processing; three defer under the100-sequence
+gate. See `research/sequence_pilot_0001_report.json` for file/page evidence and
+limitations. This availability-selected sample does not estimate whole-corpus yield.
+Raw DNA strings are not strand counts: scaffold text, wrapped sequences and many
+small unrelated tables require context checks. An image-only table was checked
+visually. Literature relevance remains undecided by this gate. All three known
+patent-type records are now excluded by explicit user scope; prior patent queues
+are superseded, evidence retained. FNANO remains deferred.

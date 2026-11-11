@@ -1,0 +1,1719 @@
+{
+  "files": [
+    {
+      "name": "14941472-nn9b01025_si_001.pdf",
+      "sha256": "1b035b9c8af1f06778dd2f72a1fd2f7c3522b6f8536f2d18b867f1a4729c535b"
+    },
+    {
+      "name": "14941475-nn9b01025_si_002.xlsx",
+      "sha256": "bc4f874d144a4b45c261a1484597dee0acfb083dd66bb2fbe775bf87142799f9"
+    },
+    {
+      "name": "14941478-nn9b01025_si_003.zip",
+      "sha256": "16960e7155d50fbc796cd985711f8bc13ae3eea5f07171cc8604d1fc80ea77ab"
+    }
+  ],
+  "limitations": "Read-only workbook/archive inventory; no software executed, structures generated, or full synthesis sets certified.",
+  "archive_members": [
+    {
+      "name": "apps/",
+      "size": 0
+    },
+    {
+      "name": "apps/GENE_SPLITTER.zip",
+      "size": 192973
+    },
+    {
+      "name": "__MACOSX/",
+      "size": 0
+    },
+    {
+      "name": "__MACOSX/apps/",
+      "size": 0
+    },
+    {
+      "name": "__MACOSX/apps/._GENE_SPLITTER.zip",
+      "size": 678
+    },
+    {
+      "name": "apps/SEQUENCE_STATISTICS.zip",
+      "size": 198716
+    },
+    {
+      "name": "__MACOSX/apps/._SEQUENCE_STATISTICS.zip",
+      "size": 678
+    },
+    {
+      "name": "apps/readme.rtf",
+      "size": 4866
+    },
+    {
+      "name": "__MACOSX/apps/._readme.rtf",
+      "size": 445
+    },
+    {
+      "name": "apps/SCAFFOLD_SMITH.zip",
+      "size": 749843
+    },
+    {
+      "name": "__MACOSX/apps/._SCAFFOLD_SMITH.zip",
+      "size": 678
+    },
+    {
+      "name": "__MACOSX/._apps",
+      "size": 239
+    }
+  ],
+  "workbook_sheets": [
+    {
+      "name": "Scaffolds",
+      "stored_rows": 21,
+      "rows": [
+        [
+          {
+            "cell": "A1",
+            "length": 15,
+            "preview": "Name (Dietzlab)"
+          },
+          {
+            "cell": "B1",
+            "length": 12,
+            "preview": "Name (paper)"
+          },
+          {
+            "cell": "C1",
+            "length": 19,
+            "preview": "Compatibility group"
+          },
+          {
+            "cell": "D1",
+            "length": 6,
+            "preview": "Length"
+          },
+          {
+            "cell": "E1",
+            "length": 6,
+            "preview": "Method"
+          },
+          {
+            "cell": "F1",
+            "length": 10,
+            "preview": "GC content"
+          },
+          {
+            "cell": "G1",
+            "length": 3,
+            "preview": "DB?"
+          },
+          {
+            "cell": "H1",
+            "length": 8,
+            "preview": "Features"
+          },
+          {
+            "cell": "I1",
+            "length": 22,
+            "preview": "needs to be processed?"
+          },
+          {
+            "cell": "J1",
+            "length": 22,
+            "preview": "Extinction coefficient"
+          },
+          {
+            "cell": "K1",
+            "length": 14,
+            "preview": "Sequence ssDNA"
+          },
+          {
+            "cell": "L1",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "M1",
+            "length": 25,
+            "preview": "Sequence precursor dsDNA "
+          }
+        ],
+        [
+          {
+            "cell": "A2",
+            "length": 4,
+            "preview": "7249"
+          },
+          {
+            "cell": "B2",
+            "length": 14,
+            "preview": "M13-based 7249"
+          },
+          {
+            "cell": "C2",
+            "length": 3,
+            "preview": "CS1"
+          },
+          {
+            "cell": "D2",
+            "length": 4,
+            "preview": "7249"
+          },
+          {
+            "cell": "E2",
+            "length": 1,
+            "preview": "I"
+          },
+          {
+            "cell": "F2",
+            "length": 2,
+            "preview": "42"
+          },
+          {
+            "cell": "G2",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "I2",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J2",
+            "length": 8,
+            "preview": "71200000"
+          },
+          {
+            "cell": "K2",
+            "length": 7249,
+            "preview": "TGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGGCTATTCTTTTGATTTATAAGGGATTTTGCCGATTTCGGAACCACC"
+          },
+          {
+            "cell": "L2",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N2",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O2",
+            "length": 4,
+            "preview": "7249"
+          },
+          {
+            "cell": "P2",
+            "length": 13,
+            "preview": "I_CS1_7249_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A3",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "B3",
+            "length": 3,
+            "preview": "Sc1"
+          },
+          {
+            "cell": "C3",
+            "length": 3,
+            "preview": "CS1"
+          },
+          {
+            "cell": "D3",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "E3",
+            "length": 1,
+            "preview": "I"
+          },
+          {
+            "cell": "F3",
+            "length": 2,
+            "preview": "42"
+          },
+          {
+            "cell": "G3",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "I3",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J3",
+            "length": 8,
+            "preview": "74300000"
+          },
+          {
+            "cell": "K3",
+            "length": 7560,
+            "preview": "TGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGGCTATTCTTTTGATTTATAAGGGATTTTGCCGATTTCGGAACCACC"
+          },
+          {
+            "cell": "L3",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N3",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O3",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "P3",
+            "length": 13,
+            "preview": "I_CS1_7560_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A4",
+            "length": 4,
+            "preview": "8064"
+          },
+          {
+            "cell": "B4",
+            "length": 14,
+            "preview": "M13-based 8064"
+          },
+          {
+            "cell": "C4",
+            "length": 3,
+            "preview": "CS1"
+          },
+          {
+            "cell": "D4",
+            "length": 4,
+            "preview": "8064"
+          },
+          {
+            "cell": "E4",
+            "length": 1,
+            "preview": "I"
+          },
+          {
+            "cell": "F4",
+            "length": 2,
+            "preview": "44"
+          },
+          {
+            "cell": "G4",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "I4",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J4",
+            "length": 8,
+            "preview": "79100000"
+          },
+          {
+            "cell": "K4",
+            "length": 8064,
+            "preview": "GGCAATGACCTGATAGCCTTTGTAGATCTCTCAAAAATAGCTACCCTCTCCGGCATTAATTTATCAGCTAGAACGGTTGAATATCATATTGATGGTGATTTGACTGTCTCCGGCCTTTCTCACCCTTTTGAATCTTTACC"
+          },
+          {
+            "cell": "L4",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N4",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O4",
+            "length": 4,
+            "preview": "8064"
+          },
+          {
+            "cell": "P4",
+            "length": 13,
+            "preview": "I_CS1_8064_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A5",
+            "length": 3,
+            "preview": "CS2"
+          },
+          {
+            "cell": "B5",
+            "length": 3,
+            "preview": "Sc2"
+          },
+          {
+            "cell": "C5",
+            "length": 3,
+            "preview": "CS2"
+          },
+          {
+            "cell": "D5",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "E5",
+            "length": 3,
+            "preview": "III"
+          },
+          {
+            "cell": "F5",
+            "length": 2,
+            "preview": "44"
+          },
+          {
+            "cell": "G5",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "H5",
+            "length": 8,
+            "preview": "CpG-free"
+          },
+          {
+            "cell": "I5",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J5",
+            "length": 8,
+            "preview": "74300000"
+          },
+          {
+            "cell": "K5",
+            "length": 7560,
+            "preview": "ACGCGCCCTGTAGCGGCGCATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGT"
+          },
+          {
+            "cell": "L5",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N5",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O5",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "P5",
+            "length": 15,
+            "preview": "III_CS2_7560_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A6",
+            "length": 6,
+            "preview": "CS3_XS"
+          },
+          {
+            "cell": "B6",
+            "length": 4,
+            "preview": "2873"
+          },
+          {
+            "cell": "C6",
+            "length": 3,
+            "preview": "CS3"
+          },
+          {
+            "cell": "D6",
+            "length": 4,
+            "preview": "2873"
+          },
+          {
+            "cell": "E6",
+            "length": 2,
+            "preview": "II"
+          },
+          {
+            "cell": "F6",
+            "length": 2,
+            "preview": "50"
+          },
+          {
+            "cell": "G6",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "I6",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J6",
+            "length": 18,
+            "preview": "28235965.608465608"
+          },
+          {
+            "cell": "K6",
+            "length": 2873,
+            "preview": "GTGGCACTTTTCGGGGAAATGTGCGCGGAACCCCTATTTGTTTATTTTTCTAAATACATTCAAATATGTATCCGCTCATGAGACAATAACCCTGATAAATGCTTCAATAATATTGAAAAAGGAAGAGTATGAGTATTCAA"
+          },
+          {
+            "cell": "L6",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N6",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O6",
+            "length": 4,
+            "preview": "2873"
+          },
+          {
+            "cell": "P6",
+            "length": 14,
+            "preview": "II_CS3_2873_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A7",
+            "length": 5,
+            "preview": "CS3_S"
+          },
+          {
+            "cell": "B7",
+            "length": 4,
+            "preview": "4536"
+          },
+          {
+            "cell": "C7",
+            "length": 3,
+            "preview": "CS3"
+          },
+          {
+            "cell": "D7",
+            "length": 4,
+            "preview": "4536"
+          },
+          {
+            "cell": "E7",
+            "length": 2,
+            "preview": "II"
+          },
+          {
+            "cell": "F7",
+            "length": 2,
+            "preview": "49"
+          },
+          {
+            "cell": "G7",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "I7",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J7",
+            "length": 8,
+            "preview": "44580000"
+          },
+          {
+            "cell": "K7",
+            "length": 4536,
+            "preview": "CATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGG"
+          },
+          {
+            "cell": "L7",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N7",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O7",
+            "length": 4,
+            "preview": "4536"
+          },
+          {
+            "cell": "P7",
+            "length": 14,
+            "preview": "II_CS3_4536_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A8",
+            "length": 5,
+            "preview": "CS3_M"
+          },
+          {
+            "cell": "B8",
+            "length": 4,
+            "preview": "6048"
+          },
+          {
+            "cell": "C8",
+            "length": 3,
+            "preview": "CS3"
+          },
+          {
+            "cell": "D8",
+            "length": 4,
+            "preview": "6048"
+          },
+          {
+            "cell": "E8",
+            "length": 2,
+            "preview": "II"
+          },
+          {
+            "cell": "F8",
+            "length": 2,
+            "preview": "49"
+          },
+          {
+            "cell": "G8",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "I8",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J8",
+            "length": 8,
+            "preview": "59440000"
+          },
+          {
+            "cell": "K8",
+            "length": 6048,
+            "preview": "CATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGG"
+          },
+          {
+            "cell": "L8",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N8",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O8",
+            "length": 4,
+            "preview": "6048"
+          },
+          {
+            "cell": "P8",
+            "length": 14,
+            "preview": "II_CS3_6048_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A9",
+            "length": 5,
+            "preview": "CS3_L"
+          },
+          {
+            "cell": "B9",
+            "length": 3,
+            "preview": "Sc4"
+          },
+          {
+            "cell": "C9",
+            "length": 3,
+            "preview": "CS3"
+          },
+          {
+            "cell": "D9",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "E9",
+            "length": 2,
+            "preview": "II"
+          },
+          {
+            "cell": "F9",
+            "length": 2,
+            "preview": "49"
+          },
+          {
+            "cell": "G9",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "I9",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J9",
+            "length": 8,
+            "preview": "74300000"
+          },
+          {
+            "cell": "K9",
+            "length": 7560,
+            "preview": "CATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGG"
+          },
+          {
+            "cell": "L9",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N9",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O9",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "P9",
+            "length": 14,
+            "preview": "II_CS3_7560_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A10",
+            "length": 6,
+            "preview": "CS3_XL"
+          },
+          {
+            "cell": "B10",
+            "length": 4,
+            "preview": "9072"
+          },
+          {
+            "cell": "C10",
+            "length": 3,
+            "preview": "CS3"
+          },
+          {
+            "cell": "D10",
+            "length": 4,
+            "preview": "9072"
+          },
+          {
+            "cell": "E10",
+            "length": 2,
+            "preview": "II"
+          },
+          {
+            "cell": "F10",
+            "length": 2,
+            "preview": "49"
+          },
+          {
+            "cell": "G10",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "I10",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J10",
+            "length": 8,
+            "preview": "89160000"
+          },
+          {
+            "cell": "K10",
+            "length": 9072,
+            "preview": "CATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGG"
+          },
+          {
+            "cell": "L10",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N10",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O10",
+            "length": 4,
+            "preview": "9072"
+          },
+          {
+            "cell": "P10",
+            "length": 14,
+            "preview": "II_CS3_9072_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A11",
+            "length": 8,
+            "preview": "CS3_cut1"
+          },
+          {
+            "cell": "B11",
+            "length": 26,
+            "preview": "self-linearizing scaffolod"
+          },
+          {
+            "cell": "C11",
+            "length": 3,
+            "preview": "CS3"
+          },
+          {
+            "cell": "D11",
+            "length": 4,
+            "preview": "7653"
+          },
+          {
+            "cell": "E11",
+            "length": 2,
+            "preview": "II"
+          },
+          {
+            "cell": "F11",
+            "length": 2,
+            "preview": "49"
+          },
+          {
+            "cell": "G11",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "H11",
+            "length": 16,
+            "preview": "self-linearizing"
+          },
+          {
+            "cell": "I11",
+            "length": 8,
+            "preview": "optional"
+          },
+          {
+            "cell": "J11",
+            "length": 17,
+            "preview": "75214007.93650794"
+          },
+          {
+            "cell": "K11",
+            "length": 7653,
+            "preview": "CATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGG"
+          },
+          {
+            "cell": "L11",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N11",
+            "length": 2,
+            "preview": "v2"
+          },
+          {
+            "cell": "O11",
+            "length": 4,
+            "preview": "7653"
+          },
+          {
+            "cell": "P11",
+            "length": 14,
+            "preview": "II_CS3_7653_v2"
+          }
+        ],
+        [
+          {
+            "cell": "A12",
+            "length": 8,
+            "preview": "CS3_cut2"
+          },
+          {
+            "cell": "B12",
+            "length": 23,
+            "preview": "self-bisecting scaffold"
+          },
+          {
+            "cell": "C12",
+            "length": 3,
+            "preview": "CS3"
+          },
+          {
+            "cell": "D12",
+            "length": 4,
+            "preview": "7746"
+          },
+          {
+            "cell": "E12",
+            "length": 2,
+            "preview": "II"
+          },
+          {
+            "cell": "F12",
+            "length": 2,
+            "preview": "49"
+          },
+          {
+            "cell": "G12",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "H12",
+            "length": 14,
+            "preview": "self-bisecting"
+          },
+          {
+            "cell": "I12",
+            "length": 8,
+            "preview": "optional"
+          },
+          {
+            "cell": "J12",
+            "length": 18,
+            "preview": "76128015.873015866"
+          },
+          {
+            "cell": "K12",
+            "length": 7746,
+            "preview": "CATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGG"
+          },
+          {
+            "cell": "L12",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N12",
+            "length": 2,
+            "preview": "v3"
+          },
+          {
+            "cell": "O12",
+            "length": 4,
+            "preview": "7746"
+          },
+          {
+            "cell": "P12",
+            "length": 14,
+            "preview": "II_CS3_7746_v3"
+          }
+        ],
+        [
+          {
+            "cell": "A13",
+            "length": 10,
+            "preview": "CS3_KB_cm3"
+          },
+          {
+            "cell": "B13",
+            "length": 3,
+            "preview": "SC3"
+          },
+          {
+            "cell": "C13",
+            "length": 3,
+            "preview": "CS3"
+          },
+          {
+            "cell": "D13",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "E13",
+            "length": 2,
+            "preview": "II"
+          },
+          {
+            "cell": "F13",
+            "length": 2,
+            "preview": "48"
+          },
+          {
+            "cell": "G13",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "I13",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J13",
+            "length": 18,
+            "preview": "77804364.848484859"
+          },
+          {
+            "cell": "K13",
+            "length": 7560,
+            "preview": "CATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCTTTCGCTTTCTTCCCTTCCTTTCTCGCCACGTTCGCCGGCTTTCCCCGTCAAGCTCTAAATCGGGGG"
+          },
+          {
+            "cell": "L13",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "N13",
+            "length": 2,
+            "preview": "v4"
+          },
+          {
+            "cell": "O13",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "P13",
+            "length": 14,
+            "preview": "II_CS3_7560_v4"
+          }
+        ],
+        [
+          {
+            "cell": "A14",
+            "length": 3,
+            "preview": "CS4"
+          },
+          {
+            "cell": "B14",
+            "length": 3,
+            "preview": "Sc5"
+          },
+          {
+            "cell": "C14",
+            "length": 3,
+            "preview": "CS4"
+          },
+          {
+            "cell": "D14",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "E14",
+            "length": 2,
+            "preview": "IV"
+          },
+          {
+            "cell": "F14",
+            "length": 2,
+            "preview": "50"
+          },
+          {
+            "cell": "G14",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "H14",
+            "length": 17,
+            "preview": "orthogonal to CS4"
+          },
+          {
+            "cell": "I14",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J14",
+            "length": 8,
+            "preview": "74300000"
+          },
+          {
+            "cell": "K14",
+            "length": 7560,
+            "preview": "CATTGACCGGGAGCGCCCTGTAGCGGCGCATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCCGGGATCGGAATTCCGGCCATCGCCCTGATAGACGGTTT"
+          },
+          {
+            "cell": "L14",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "M14",
+            "length": 9596,
+            "preview": "CCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGGCAAGCTTGTCACGCTGATATTCTACACGTAAGGCAA"
+          },
+          {
+            "cell": "N14",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O14",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "P14",
+            "length": 14,
+            "preview": "IV_CS4_7560_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A15",
+            "length": 3,
+            "preview": "CS5"
+          },
+          {
+            "cell": "B15",
+            "length": 3,
+            "preview": "Sc6"
+          },
+          {
+            "cell": "C15",
+            "length": 3,
+            "preview": "CS5"
+          },
+          {
+            "cell": "D15",
+            "length": 4,
+            "preview": "7560"
+          },
+          {
+            "cell": "E15",
+            "length": 2,
+            "preview": "IV"
+          },
+          {
+            "cell": "F15",
+            "length": 2,
+            "preview": "51"
+          },
+          {
+            "cell": "G15",
+            "length": 3,
+            "preview": "DB7"
+          },
+          {
+            "cell": "H15",
+            "length": 17,
+            "preview": "orthogonal to CS5"
+          },
+          {
+            "cell": "I15",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J15",
+            "length": 8,
+            "preview": "74300000"
+          },
+          {
+            "cell": "K15",
+            "length": 7559,
+            "preview": "CATTGACCGGGAGCGCCCTGTAGCGGCGCATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCCGGGATCGGAATTCCGGCCATCGCCCTGATAGACGGTTT"
+          },
+          {
+            "cell": "L15",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "M15",
+            "length": 9598,
+            "preview": "AGCGTCCGCCGAACAATGTAAGTCAGCTCAAGGTATTCGAGATTTATAAGGGATTTTTAACTAAGCCCCACCGGCGTCTTCGAGCAAGTGAACGGACTAGGTACGTGCTCACCTTGTAGAATACTGCAGCAGAACAAGGG"
+          },
+          {
+            "cell": "N15",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O15",
+            "length": 4,
+            "preview": "7559"
+          },
+          {
+            "cell": "P15",
+            "length": 14,
+            "preview": "IV_CS5_7560_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A16",
+            "length": 3,
+            "preview": "CS6"
+          },
+          {
+            "cell": "B16",
+            "length": 4,
+            "preview": "4323"
+          },
+          {
+            "cell": "C16",
+            "length": 3,
+            "preview": "CS6"
+          },
+          {
+            "cell": "D16",
+            "length": 4,
+            "preview": "4323"
+          },
+          {
+            "cell": "E16",
+            "length": 2,
+            "preview": "IV"
+          },
+          {
+            "cell": "F16",
+            "length": 2,
+            "preview": "50"
+          },
+          {
+            "cell": "G16",
+            "length": 3,
+            "preview": "DB6"
+          },
+          {
+            "cell": "I16",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J16",
+            "length": 18,
+            "preview": "42486626.984126985"
+          },
+          {
+            "cell": "K16",
+            "length": 4323,
+            "preview": "TTGAGACCGGGAGCGCCCTGTAGCGGCGCATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCCGGGATCGGAATTCCGGCCATCGCCCTGATAGACGGTTT"
+          },
+          {
+            "cell": "L16",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "M16",
+            "length": 6435,
+            "preview": "TTGAGACCGGGAGCGCCCTGTAGCGGCGTCTCTCATTGACCGGGAGCGCCCTGTAGCGGCGCATTAAGCGCGGCGGGTGTGGTGGTTACGCGCAGCGTGACCGCTACACTTGCCAGCGCCCTAGCGCCCGCTCCCGGGAT"
+          },
+          {
+            "cell": "N16",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O16",
+            "length": 4,
+            "preview": "4323"
+          },
+          {
+            "cell": "P16",
+            "length": 14,
+            "preview": "IV_CS6_4323_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A17",
+            "length": 3,
+            "preview": "RFP"
+          },
+          {
+            "cell": "B17",
+            "length": 4,
+            "preview": "1317"
+          },
+          {
+            "cell": "C17",
+            "length": 3,
+            "preview": "RFP"
+          },
+          {
+            "cell": "D17",
+            "length": 4,
+            "preview": "1317"
+          },
+          {
+            "cell": "E17",
+            "length": 2,
+            "preview": "IV"
+          },
+          {
+            "cell": "F17",
+            "length": 2,
+            "preview": "51"
+          },
+          {
+            "cell": "G17",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "I17",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "J17",
+            "length": 18,
+            "preview": "12943531.746031746"
+          },
+          {
+            "cell": "K17",
+            "length": 1317,
+            "preview": "ACCAACTTCCCGTCCGACGGTCCGGTTATGCAGAAAAAAACCATGGGTTGGGAAGCTTCCACCGAACGTATGTACCCGGAAGACGGTGCTCTGAAAGGTGAAATCAAAATGCGTCTGAAACTGAAAGACGGTGGTCACTA"
+          },
+          {
+            "cell": "L17",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "M17",
+            "length": 3356,
+            "preview": "CCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGGCAAGCTTGTCACAGAGACGCAATACGCAAACCGCCT"
+          },
+          {
+            "cell": "N17",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O17",
+            "length": 4,
+            "preview": "1317"
+          },
+          {
+            "cell": "P17",
+            "length": 14,
+            "preview": "IV_RFP_1317_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A18",
+            "length": 3,
+            "preview": "Sam"
+          },
+          {
+            "cell": "B18",
+            "length": 4,
+            "preview": "1024"
+          },
+          {
+            "cell": "C18",
+            "length": 4,
+            "preview": "CS10"
+          },
+          {
+            "cell": "D18",
+            "length": 4,
+            "preview": "1033"
+          },
+          {
+            "cell": "E18",
+            "length": 2,
+            "preview": "IV"
+          },
+          {
+            "cell": "F18",
+            "length": 2,
+            "preview": "51"
+          },
+          {
+            "cell": "G18",
+            "length": 3,
+            "preview": "DB6"
+          },
+          {
+            "cell": "I18",
+            "length": 32,
+            "preview": "Zn-digestion +EtOH-precipitation"
+          },
+          {
+            "cell": "J18",
+            "length": 18,
+            "preview": "10063915.343915345"
+          },
+          {
+            "cell": "K18",
+            "length": 1033,
+            "preview": "agACTTCCGGCTTAAGCTCTGAAAGGGTTCTATATCTCCAGGTAGATCTGCTCCCAATGTAACATGCTCGGGACCTACAAGGTGTCAGGATCGAAGATTGCACGACGATGACTTACGGACAGCCGGACGTACTCCCTGAA"
+          },
+          {
+            "cell": "L18",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "M18",
+            "length": 6737,
+            "preview": "CCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGGCAAGCTTGTCACTCCGGAAGTTAGTTGAGCTGTCAC"
+          },
+          {
+            "cell": "N18",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O18",
+            "length": 4,
+            "preview": "1033"
+          },
+          {
+            "cell": "P18",
+            "length": 15,
+            "preview": "IV_CS10_1033_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A19",
+            "length": 5,
+            "preview": "Merry"
+          },
+          {
+            "cell": "B19",
+            "length": 4,
+            "preview": "1536"
+          },
+          {
+            "cell": "C19",
+            "length": 4,
+            "preview": "CS10"
+          },
+          {
+            "cell": "D19",
+            "length": 4,
+            "preview": "1545"
+          },
+          {
+            "cell": "E19",
+            "length": 2,
+            "preview": "IV"
+          },
+          {
+            "cell": "F19",
+            "length": 2,
+            "preview": "51"
+          },
+          {
+            "cell": "G19",
+            "length": 3,
+            "preview": "DB6"
+          },
+          {
+            "cell": "I19",
+            "length": 32,
+            "preview": "Zn-digestion +EtOH-precipitation"
+          },
+          {
+            "cell": "J19",
+            "length": 18,
+            "preview": "15095873.015873017"
+          },
+          {
+            "cell": "K19",
+            "length": 1545,
+            "preview": "agACTTCCGGCTTAAGCTCTGAAAGGGTTCTATATCTCCAGGTAGATCTGCTCCCAATGTAACATGCTCGGGACCTACAAGGTGTCAGGATCGAAGATTGCACGACGATGACTTACGGACAGCCGGACGTACTCCCTGAA"
+          },
+          {
+            "cell": "L19",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "M19",
+            "length": 8785,
+            "preview": "CCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGGCAAGCTTGTCACTCCGGAAGTTAGTTGAGCTGTCAC"
+          },
+          {
+            "cell": "N19",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O19",
+            "length": 4,
+            "preview": "1545"
+          },
+          {
+            "cell": "P19",
+            "length": 15,
+            "preview": "IV_CS10_1545_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A20",
+            "length": 6,
+            "preview": "Pippin"
+          },
+          {
+            "cell": "B20",
+            "length": 4,
+            "preview": "2048"
+          },
+          {
+            "cell": "C20",
+            "length": 4,
+            "preview": "CS10"
+          },
+          {
+            "cell": "D20",
+            "length": 4,
+            "preview": "2057"
+          },
+          {
+            "cell": "E20",
+            "length": 2,
+            "preview": "IV"
+          },
+          {
+            "cell": "F20",
+            "length": 2,
+            "preview": "51"
+          },
+          {
+            "cell": "G20",
+            "length": 3,
+            "preview": "DB6"
+          },
+          {
+            "cell": "I20",
+            "length": 32,
+            "preview": "Zn-digestion +EtOH-precipitation"
+          },
+          {
+            "cell": "J20",
+            "length": 17,
+            "preview": "20127830.68783069"
+          },
+          {
+            "cell": "K20",
+            "length": 2057,
+            "preview": "agACTTCCGGCTTAAGCTCTGAAAGGGTTCTATATCTCCAGGTAGATCTGCTCCCAATGTAACATGCTCGGGACCTACAAGGTGTCAGGATCGAAGATTGCACGACGATGACTTACGGACAGCCGGACGTACTCCCTGAA"
+          },
+          {
+            "cell": "L20",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "M20",
+            "length": 10833,
+            "preview": "CCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGGCAAGCTTGTCACTCCGGAAGTTAGTTGAGCTGTCAC"
+          },
+          {
+            "cell": "N20",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O20",
+            "length": 4,
+            "preview": "2057"
+          },
+          {
+            "cell": "P20",
+            "length": 15,
+            "preview": "IV_CS10_2057_v1"
+          }
+        ],
+        [
+          {
+            "cell": "A21",
+            "length": 3,
+            "preview": "CS8"
+          },
+          {
+            "cell": "B21",
+            "length": 16,
+            "preview": "welding scaffold"
+          },
+          {
+            "cell": "C21",
+            "length": 3,
+            "preview": "CS9"
+          },
+          {
+            "cell": "D21",
+            "length": 4,
+            "preview": "7569"
+          },
+          {
+            "cell": "E21",
+            "length": 2,
+            "preview": "IV"
+          },
+          {
+            "cell": "F21",
+            "length": 2,
+            "preview": "49"
+          },
+          {
+            "cell": "G21",
+            "length": 2,
+            "preview": "no"
+          },
+          {
+            "cell": "H21",
+            "length": 16,
+            "preview": "AAXXXXXXAA motif"
+          },
+          {
+            "cell": "I21",
+            "length": 32,
+            "preview": "Zn-digestion +EtOH-precipitation"
+          },
+          {
+            "cell": "J21",
+            "length": 17,
+            "preview": "71067175.75757575"
+          },
+          {
+            "cell": "K21",
+            "length": 7569,
+            "preview": "AGGTGTCCAAGCTGTCAACGCACCAAGCATACAAGGGTGTAAGCTGAGAACCTCATAACGCTAGAACATCATAAGAGCGCAACACGATAATCCAGGAACCTGACAAGGTAGTAACCCCCTAATCCCACAAGAGGGTAACA"
+          },
+          {
+            "cell": "L21",
+            "length": 1,
+            "preview": "."
+          },
+          {
+            "cell": "M21",
+            "length": 9921,
+            "preview": "CCATCGCCCTGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTCTTTAATAGTGGACTCTTGTTCCAAACTGGAACAACACTCAACCCTATCTCGGGCAAGCTTGTCACTTGGACACTAGTTGAGCTGTCACA"
+          },
+          {
+            "cell": "N21",
+            "length": 2,
+            "preview": "v1"
+          },
+          {
+            "cell": "O21",
+            "length": 4,
+            "preview": "7569"
+          },
+          {
+            "cell": "P21",
+            "length": 14,
+            "preview": "IV_CS9_7569_v1"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "Helper plasmids",
+      "stored_rows": 3,
+      "rows": [
+        [
+          {
+            "cell": "B1",
+            "length": 8,
+            "preview": "Sequence"
+          },
+          {
+            "cell": "D1",
+            "length": 6,
+            "preview": "Length"
+          },
+          {
+            "cell": "F1",
+            "length": 10,
+            "preview": "Resistance"
+          }
+        ],
+        [
+          {
+            "cell": "A2",
+            "length": 27,
+            "preview": "M13KO7-based helper plasmid"
+          },
+          {
+            "cell": "B2",
+            "length": 9449,
+            "preview": "tattcatatcaggattatcaataccatatttttgaaaaagccgtttctgtaatgaaggagaaaactcaccgaggcagttccaaagaatggcaaggtcctggtaacggtctgcgattccgacccgtccaacatcaatacaa"
+          },
+          {
+            "cell": "D2",
+            "length": 4,
+            "preview": "9449"
+          },
+          {
+            "cell": "F2",
+            "length": 9,
+            "preview": "kanamycin"
+          }
+        ],
+        [
+          {
+            "cell": "A5",
+            "length": 28,
+            "preview": "m13mp18-based helper plasmid"
+          },
+          {
+            "cell": "B5",
+            "length": 9448,
+            "preview": "ctttttctttaaaaccgaaaagattacttcgcgtttgccacctgacgtctaagaaaaggaatattcagcaatttgcccgtgccgaagaaaggcccacccgtgaaggtgagccagtgagttgattgctacgtaattagtta"
+          },
+          {
+            "cell": "D5",
+            "length": 4,
+            "preview": "9448"
+          },
+          {
+            "cell": "F5",
+            "length": 9,
+            "preview": "kanamycin"
+          }
+        ]
+      ]
+    }
+  ]
+}

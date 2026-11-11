@@ -184,12 +184,12 @@ describe('read-only wizard', () => {
     expect(api.getSlurmPreview).not.toHaveBeenCalled()
   })
 
-  it('names the job by part and creation time, never by job id', async () => {
+  it('shows the full job ID alongside the part and creation time', async () => {
     const { wiz } = setup()
     await wiz.openReadOnly(JOB)
     const title = document.querySelector('.modal__title').textContent
     expect(title).toContain('6hb_demo')
-    expect(title).not.toContain('abc123')
+    expect(document.querySelector('.modal__header .wizard-job-id').textContent).toBe('Job ID: abc123')
   })
 
   it('says so when the job cannot report which values were chosen', async () => {

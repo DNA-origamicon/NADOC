@@ -1,0 +1,97 @@
+{
+  "date": "2026-11-05",
+  "priority_basis": "User correction: author/publication routes first; FNANO only after demonstrated diminishing returns elsewhere.",
+  "fnano": "deferred; preserved; no saturation established",
+  "authors": [
+    {
+      "name": "Carlos Castro",
+      "run_id": "author-castro-osu",
+      "status": "in_progress",
+      "next_action": "Enumerate publication history; reconcile identities and first-online dates; inspect designs/sources and follow citations."
+    },
+    {
+      "name": "Hendrik Dietz",
+      "run_id": "author-dietz-20261105",
+      "status": "in_progress",
+      "next_action": "Enumerate publication history; reconcile identities and first-online dates; inspect designs/sources and follow citations."
+    },
+    {
+      "name": "Shawn Douglas",
+      "run_id": "author-douglas-20261105",
+      "status": "in_progress",
+      "next_action": "Enumerate publication history; reconcile identities and first-online dates; inspect designs/sources and follow citations."
+    },
+    {
+      "name": "William Shih",
+      "run_id": "author-priority-william-shih",
+      "status": "in_progress",
+      "next_action": "Official lab bibliography enumerated through1994; all pre2020/boundary entries and source links retained. Resolve date/version/title identity, including2004 heading followed by older citations; compare HMS paginated bibliography and DASH repository. Source archives and primary design review pending; no coverage closure."
+    },
+    {
+      "name": "Hao Yan",
+      "run_id": "author-hao-yan-asu-cv",
+      "status": "in_progress",
+      "next_action": "Enumerate publication history; reconcile identities and first-online dates; inspect designs/sources and follow citations."
+    },
+    {
+      "name": "Peng Yin",
+      "run_id": "author-priority-peng-yin",
+      "status": "in_progress",
+      "next_action": "Official publication HTML acquired. Enumerate pre2020 numbered entries and boundary dates without keyword filtering; retain PDF/SI links, reconcile identities and review designs. Do not count acquisition as completed history review."
+    },
+    {
+      "name": "Andrew Turberfield",
+      "run_id": "author-priority-andrew-turberfield",
+      "status": "in_progress",
+      "next_action": "Followed provider next-page links to terminal page without relevance cap; reconcile identities/versions/types and dates, inspect sources, follow citations, compare independent histories. FNANO deferred; saturation not established."
+    },
+    {
+      "name": "Mark Bathe",
+      "run_id": "author-priority-mark-bathe",
+      "status": "in_progress",
+      "next_action": "Official public lab page and MIT CV enumerated completely within their publication sections, retaining all pre2020/boundary/unknown-date entries. HTTPS hostname mismatch avoided through public HTTP URL; no authentication requested. Reconcile overlap and metadata errors (e.g. CV56 volume/page duplicated from55), verify primary dates and versions, acquire sources and follow citations. Independent histories and saturation passes remain open."
+    },
+    {
+      "name": "Tim Liedl",
+      "run_id": "author-priority-tim-liedl",
+      "status": "in_progress",
+      "next_action": "Lab119 and LMU repository64 overlapping citation occurrences enumerated; lab2004\u20132024,repository2013\u20132025. Reconcile all identities and primary dates; lab88 selected leads lack source links, repository provides landing links. Silica-growth lead has lab2018 vs repository2019 requiring first-online verification. No saturation."
+    },
+    {
+      "name": "Lulu Qian",
+      "run_id": "author-priority-lulu-qian",
+      "status": "in_progress",
+      "next_action": "Three bibliography sources retained42 overlapping source occurrences. Historical page9 paragraphs enumerated. CV14/17 and historical5/8 primary-identity matched;2006 China-map added and2010 reuse reviewed. Both supplements unresolved; exact scaffold differs(digested2006 versus undigested2010). Seven2006 references retained pending identity;2010 backward/forward citations and remaining bibliography reconciliation open."
+    },
+    {
+      "name": "Friedrich Simmel",
+      "run_id": "author-priority-friedrich-simmel",
+      "status": "in_progress",
+      "next_action": "Lab142 and faculty223 occurrences enumerated, overlapping not unique works; faculty route adds pre2008 coverage. Reconcile provider identities/types, dates, lab overlap, inspect sources, follow backward/forward citations. Local portal403 did not block public faculty endpoint. No saturation."
+    },
+    {
+      "name": "Philip Tinnefeld",
+      "run_id": "author-priority-philip-tinnefeld",
+      "status": "in_progress",
+      "next_action": "All linked bibliography pages enumerated to terminal next-link absence; reconcile dates/identities/source evidence and compare independent LMU repository history. No saturation claim."
+    },
+    {
+      "name": "Jonathan Doye",
+      "run_id": "author-priority-jonathan-doye",
+      "status": "in_progress",
+      "next_action": "Enumerated all official bibliography items; next retrieve linked abstracts for selected entries, reconcile identities/versions/dates, rotate low-keyword records and compare independent histories. Submitted entries not dated from2024heading."
+    },
+    {
+      "name": "Thomas LaBean",
+      "run_id": "author-priority-thomas-labean",
+      "status": "in_progress",
+      "next_action": "Enumerated old CV59and current profile10; identity/type/date review pending. Find alternate later-career history; retain2008\u20132016gap and undated/unpublished leads; no coverage closure."
+    },
+    {
+      "name": "Paul Rothemund",
+      "run_id": "author-rothemund-selected-20261105",
+      "status": "in_progress",
+      "next_action": "Enumerate publication history; reconcile identities and first-online dates; inspect designs/sources and follow citations."
+    }
+  ]
+}

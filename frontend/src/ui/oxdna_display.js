@@ -121,6 +121,12 @@ class NucleotideDefaultColorMap extends Map {
     this.defaultHex = defaultHex
   }
 
+  clone() {
+    const copy = new NucleotideDefaultColorMap(this.defaultHex)
+    for (const [key, value] of this) copy.set(key, value)
+    return copy
+  }
+
   get(key) {
     if (super.has(key)) return super.get(key)
     return _isNucleotideScalarKey(key) ? this.defaultHex : undefined
@@ -1626,12 +1632,15 @@ export function initOxdnaDisplay({
     if (!designRenderer || !Array.isArray(positions) || !positions.length) return false
     const updates = toFemUpdates({ ready: true, positions })
     if (!updates.length) return false
-    _epoch++   // supersede any in-flight relaxed/flex/traj fetch
-    _cancelLoad()
-    designRenderer.clearScalarColors?.()
+    if (_mode !== 'live') {
+      // Live takes ownership once; subframes must not repeatedly cancel downloads
+      // or restore/repaint scalar colors and companion poses on the render thread.
+      _cancelLoad()
+      designRenderer.clearScalarColors?.()
+      nanoparticleRenderer?.clearOxdnaPoses?.()
+      proteinRenderer?.clearOxdnaTransforms?.()
+    }
     _applyFem(updates)
-    nanoparticleRenderer?.clearOxdnaPoses?.()
-    proteinRenderer?.clearOxdnaTransforms?.()
     _active = true
     _mode = 'live'
     _jobId = null

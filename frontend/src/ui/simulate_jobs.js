@@ -1075,6 +1075,14 @@ export function initSimulateJobs({
     panel?.deselectJob?.()
   }
 
+  window.addEventListener('nadoc:submodel-new-setup', event => {
+    if (_sel.engine !== event.detail?.engine) return
+    // The engine panel clears its own selection; keep the master list in sync.
+    _sel = { engine: null, id: null }
+    _renderList()
+    _renderMaster()
+  })
+
   // Rich detail dispatch by engine: reveal the selected job's engine tab and light up
   // that panel's own detail/viz via selectJob (identical to a row click on that tab).
   // A LAMMPS run is the CPU fallback for oxDNA (same oxDNA2 bead model), so it shows in

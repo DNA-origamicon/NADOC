@@ -1,0 +1,926 @@
+[
+  [
+    1,
+    "15",
+    "keynote",
+    "Kathleen Stebe",
+    "Oriented Assembly by Capillarity and Elasticity"
+  ],
+  [
+    1,
+    "15",
+    "invited",
+    "Jean-Philippe Jacques Sobczak",
+    "Rapid folding of DNA into nanoscale shapes at constant temperature"
+  ],
+  [
+    1,
+    "15",
+    "invited",
+    "Nadine Dabby",
+    "Active Self-Assembly of Simple Units Using an Insertion Primitive"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Bruce Maclennan",
+    "Mathematical Principles of Morphogenesis Applied to Nanoscale Self-Assembly"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Russell Deaton",
+    "Directed Percolation Behavior in Tile Self-Assembly"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "John Reif",
+    "Complexity and Computability of Temperature-1 Tilings"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Reem Mokhtar",
+    "Kinetic Digraph Rewrite Systems: Coarse-Grained Models for Dynamic DNA Nanodevices"
+  ],
+  [
+    1,
+    "15",
+    "keynote",
+    "R. Stanley Williams",
+    "Mott Memristors, Spiking Neuristors and Turing Complete Computing with an Electronic Action Potential"
+  ],
+  [
+    1,
+    "15",
+    "invited",
+    "S. Alex Kandel",
+    "Scanning Tunneling Microscopy of Mixed-Valence Molecules for Molecular Electronics"
+  ],
+  [
+    1,
+    "15",
+    "invited",
+    "Vishwa Nellore",
+    "Self-Assembled Cryptographic Device for Two-Factor Authentication"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Heather Duschl",
+    "The Use of Photosensitizers in Dynamic Resonance Energy Transfer Circuits"
+  ],
+  [
+    1,
+    "15",
+    "keynote",
+    "Nobuyasu Koga",
+    "Principles for designing ideal protein structures"
+  ],
+  [
+    1,
+    "15",
+    "invited",
+    "Thomas Ouldridge",
+    "Understanding DNA nanotechnology and biophysics through coarse-grained modeling"
+  ],
+  [
+    1,
+    "15",
+    "invited",
+    "Brian Wolfe",
+    "NUPACK: Analysis and design of nucleic acid molecules, devices, and systems"
+  ],
+  [
+    1,
+    "15",
+    "contributed",
+    "Lun Yang",
+    "Structure-based Simulation of FRET in DNA-based Nanostructures and Light-harvesting Antennas"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Yonggang Ke",
+    "Rapid protoyping of three-dimensional DNA-brick structures"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Matthew Adendorff",
+    "Automatic Structure-based Design of DNA Nanostructures"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Benjamin Steele",
+    "Structure-Based Thermodynamic Modeling of DNA Tile Assembly"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Do-Nyun Kim",
+    "Modelling Electrostatic Effects on DNA Nanostructure Shape and Thermodynamic Stability"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Jean-Philippe Jacques Sobczak",
+    "Towards understanding the assembly of DNA origami nanostructures"
+  ],
+  [
+    1,
+    "15",
+    "poster",
+    "Keyao Pan",
+    "Hierarchical Modelling of DNA and RNA Nanostructures using CanDo and MMB"
+  ],
+  [
+    2,
+    "15",
+    "poster",
+    "Robert Penner",
+    "Atlas of hydrogen bond rotations as uniform tool for analyzing protein architecture and dynamics"
+  ],
+  [
+    2,
+    "16",
+    "keynote",
+    "Robert M. Corn",
+    "Combining Surface Enzyme Chemistries, Plasmonic Nanostructures and Directed Self-Assembly For the Multiplexed On-Chip Synthesis, Capture and Manipulation of Nucleic Acids and Proteins"
+  ],
+  [
+    2,
+    "16",
+    "invited",
+    "So-Jung Park",
+    "Hierarchical Self-Assembly of Nanoparticles and Amphiphilic Polymers"
+  ],
+  [
+    2,
+    "16",
+    "contributed",
+    "Eric Josephs",
+    "Conformational Changes and Hybridization of Single Nucleic Acid Molecules on Dynamic Surfaces"
+  ],
+  [
+    2,
+    "16",
+    "poster",
+    "Gary Abel",
+    "Atomic force microscopy visualization of DNA hybridization and self-assembly on a switchable surface"
+  ],
+  [
+    2,
+    "16",
+    "poster",
+    "Shou-Jun Xiao",
+    "Multiple Transmission-Reflection Infrared Spectroscopy (MTR-IR): A Powerful Tool for Self-Assembled Surface Chemistry on Infrared Transparent Substrates"
+  ],
+  [
+    2,
+    "16",
+    "poster",
+    "Hieu Bui",
+    "Local Hybridization Chain-Reactions on the Surface of DNA Origami"
+  ],
+  [
+    2,
+    "16",
+    "keynote",
+    "Steven De Feyter",
+    "Nanopatterning at the liquid/solid interface via molecular self-assembly: from fundamentals to applications"
+  ],
+  [
+    2,
+    "16",
+    "invited",
+    "Christer Aakeroy",
+    "Multi-component molecular crystalline materials: From assembly to function"
+  ],
+  [
+    2,
+    "16",
+    "invited",
+    "Kazukuni Tahara",
+    "Approaches to Synthesis of Covalently Linked 2D Molecular Networks at Liquid/Solid Interfaces"
+  ],
+  [
+    2,
+    "16",
+    "invited",
+    "Steven L. Tait",
+    "Chemical Design of Robust Two-dimensional Organic Crystals"
+  ],
+  [
+    2,
+    "16",
+    "poster",
+    "Luisa Losensky",
+    "Self-assembled nano- and microtubes from cholesteryl-aminouridine and phospholipids"
+  ],
+  [
+    2,
+    "16",
+    "poster",
+    "Brandon Hirsch",
+    "Anion-Triggered Switching of Supramolecular Architectures at the Liquid-Solid Interface"
+  ],
+  [
+    2,
+    "16",
+    "poster",
+    "Wei Sun",
+    "Casting Metal Structures within Programmable DNA Molds"
+  ],
+  [
+    2,
+    "16",
+    "keynote",
+    "Yen-Ting Lai",
+    "Protein Cages and Nanoscale Materials in Nature and by Design"
+  ],
+  [
+    2,
+    "16",
+    "invited",
+    "Jason Perlmutter",
+    "Viral genome structures are optimal for capsid assembly"
+  ],
+  [
+    2,
+    "16",
+    "contributed",
+    "Justin Flory",
+    "Nucleic Acid Driven Polypeptide Assembly"
+  ],
+  [
+    3,
+    "16",
+    "contributed",
+    "Michael Bruckman",
+    "Designing Rod and Spherical Shaped Viral Nanoparticle MRI Contrast Agents to Image Atherosclerotic Plaques"
+  ],
+  [
+    3,
+    "16",
+    "keynote",
+    "Ronald Breaker",
+    "New Self-cleaving RNA and DNA Enzymes: Applications in Nature and in Biotechnology"
+  ],
+  [
+    3,
+    "16",
+    "invited",
+    "Daniel Anderson",
+    "Combinatorial development of biomaterials and synthetic siRNA delivery systems"
+  ],
+  [
+    3,
+    "16",
+    "contributed",
+    "Sonali Saha",
+    "Sensing intracellular chloride with DNA"
+  ],
+  [
+    3,
+    "16",
+    "contributed",
+    "Alexander Green",
+    "Programmable RNA Assemblies for Complex Logic Operations in Living Cells"
+  ],
+  [
+    3,
+    "16",
+    "poster",
+    "Suruchi Sharma",
+    "A nucleic acid-based fluorescent, ratiometric sensor for cAMP."
+  ],
+  [
+    3,
+    "16",
+    "poster",
+    "Sunaina Surana",
+    "Tissue specific targeting of DNA nanodevices"
+  ],
+  [
+    3,
+    "16",
+    "poster",
+    "Ferenc Fordos",
+    "Construction of dually labeled DNA-nanostructures with enzymatically labeled ssDNA and oligonucleotides for studying cellular uptake"
+  ],
+  [
+    3,
+    "16",
+    "poster",
+    "Steven Perrault",
+    "Lipid Membrane Encapsulation of DNA Nanostructures for In Vivo Applications"
+  ],
+  [
+    3,
+    "17",
+    "keynote",
+    "Saw Wai Hla",
+    "Operating Single Molecule Devices and Machines"
+  ],
+  [
+    3,
+    "17",
+    "invited",
+    "Toma Tomov",
+    "Two Steps Forward for a Fast and Efficient Non-Autonomous DNA Motor"
+  ],
+  [
+    3,
+    "17",
+    "invited",
+    "Nathan Derr",
+    "Coordination of individual and ensemble molecular motors studied using tools from DNA nanotechnology"
+  ],
+  [
+    3,
+    "17",
+    "contributed",
+    "Adam Wollman",
+    "Transport and self-organization across scales powered by motor proteins and programmed by DNA"
+  ],
+  [
+    3,
+    "17",
+    "poster",
+    "Daniel Lubrich",
+    "Measuring forces generated by DNA-tweezers"
+  ],
+  [
+    3,
+    "17",
+    "poster",
+    "Sudhanshu Garg",
+    "Self-Replicating DNA Nanostructures: Autocatalytic Nanodevices derived from Catalytic Nanodevices"
+  ],
+  [
+    3,
+    "17",
+    "keynote",
+    "Niles Pierce",
+    "Programmable molecular technologies for selective nucleic acid target capture and signal amplification"
+  ],
+  [
+    3,
+    "17",
+    "invited",
+    "Steven Benner",
+    "Reagent Innovations for Sensitive, Clean, and Highly Multiplexed Analysis of DNA"
+  ],
+  [
+    3,
+    "17",
+    "invited",
+    "Yi Lu",
+    "Functional DNA Nanotechnology and its Applications in Sensing and Imaging"
+  ],
+  [
+    3,
+    "17",
+    "invited",
+    "Dan Luo",
+    "Bulk-scale DNA Materials and Their Applications"
+  ],
+  [
+    3,
+    "17",
+    "poster",
+    "Dmitry Kolpashchikov",
+    "DNA crossover tiles for nucleic acid analysis and molecular computation"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Yu Sherry Jiang",
+    "Real-time detection of isothermal amplification reactions via a thermostable catalytic hairpin assembly circuit"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Chaitanya Sathe",
+    "Graphene Nanopores for DNA Sensing."
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Chun Geng",
+    "Three-dimensional DNA crystals as biomolecular containers for catalysis"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "João Rosa",
+    "Gold nanobeacons for RNA splicing characterization and in vitro diagnostics tool"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Mauricio Pilo-Pais",
+    "SERS-like Plasmonic Enhancement of Raman Spectroscopy in DNA Origami-based Complex Metallic Nanostructures"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Ralf Jungmann",
+    "Engineering Nucleic Acid-based Probes for Bio-Imaging Applications"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Jan Zimak",
+    "Multiplexed Super-Resolution Imaging using Programmable DNA-based Barcodes"
+  ],
+  [
+    4,
+    "17",
+    "keynote",
+    "Christof Niemeyer",
+    "Self-Assembly of Hybrid conjugates of DNA, proteins and colloids for applications in nanobiotechnology"
+  ],
+  [
+    4,
+    "17",
+    "invited",
+    "Yonggang Ke",
+    "Three-dimensional Discrete DNA structures and DNA Crystals Self-Assembled from DNA Bricks"
+  ],
+  [
+    4,
+    "17",
+    "invited",
+    "Hao Yan",
+    "Self-assembly of Archimedean DNA Structures"
+  ],
+  [
+    4,
+    "17",
+    "invited",
+    "William Shih",
+    "Design strategies for robust multilayer DNA origami"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Max Scheible",
+    "DNA origami arrays for single-molecule fluorescence studies"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Masayuki Endo",
+    "Direct visualization of Cre-loxP site specific recombination using DNA origami scaffold"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Danielle Schultz",
+    "Evidence for rod-shaped DNA-stabilized nanocluster emitters"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Stacy Shiffler-Copp",
+    "Bringing distinct, few-atom silver clusters into nanoscale proximity on a DNA construct"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Dongran Han",
+    "DNA Origami Constructed From Parallel Helices"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Philipp Nickels",
+    "DNA Origami Structures folded directly from Bacteriophage M13 and λ"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Shuoxing Jiang",
+    "Hybridization Kinetics of Multivalent DNA Tiles"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Seung Hyeon Ko",
+    "Quantum Dot Fluorescence Lifetime Engineering with DNA Origami Constructs"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Donald Kellis",
+    "DNA Mediated Excitonic AND Logic Gate"
+  ],
+  [
+    4,
+    "17",
+    "poster",
+    "Donald L. Kellis",
+    "Effects of DNA Condensing Agents on DNA Nanostructures"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Sarah Helmig",
+    "Towards Application of DNA Origami Nanostructures for electron transport studies"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Keitel Cervantes-Salguero",
+    "Reconfigurable ring-shaped molecular clusters"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "John Min",
+    "Coaxial multimerization of Stacked-Ring DNA Origami Structures"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Lasse L. Hildebrandt",
+    "The 11 states of a DNA actuator investigated by single molecule FRET microscopy"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Susan Buckhout-White",
+    "Formation and Characterization of DNA-Based FRET Networks"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Bryan Wei",
+    "Diverse weaving patterns for assembling complex DNA structures"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Sadao Takabayashi",
+    "Maximizing Gold Nanoparticle Attachment onto DNA Origami"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Sondra Hellstrom",
+    "Epitaxial growth of DNA-assembled plasmonic nanoparticle superlattices"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Masudur Rahman",
+    "Real Time AFM Observation of Streptavidin Modification of Surface Bound One Dimensional DNA Origami Assemblies"
+  ],
+  [
+    5,
+    "17",
+    "keynote",
+    "Samie Jaffrey",
+    "Imaging RNA Biology using RNA Mimics of Green Fluorescent Protein"
+  ],
+  [
+    5,
+    "17",
+    "invited",
+    "Carston Wagner",
+    "Engineering Cell-Cell Interactions through Chemically Self-Assembled Nanorings (CSANS)"
+  ],
+  [
+    5,
+    "17",
+    "invited",
+    "Hirohide Saito",
+    "RNP synthetic biology: developing RNP-based nanostructures and translational ON/OFF switches in mammalian cells"
+  ],
+  [
+    5,
+    "17",
+    "contributed",
+    "Maximilian Weitz",
+    "Dynamical diversity of a compartmentalized programmable biochemical oscillator"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Vishwesh Kulkarni",
+    "Load Capacity Improvements for in vitro Transcriptional Devices"
+  ],
+  [
+    5,
+    "17",
+    "poster",
+    "Cosimo Ducani",
+    "Using the Monoclonal Stoichiometric Method (MOSIC) to Enzymatically Produce Long Single-stranded DNA Oligos"
+  ],
+  [
+    5,
+    "18",
+    "keynote",
+    "Hui-Ming Cheng",
+    "Synthesis and Appication Explorations of Three-Dimensional Graphene Interconnected Networks"
+  ],
+  [
+    6,
+    "18",
+    "invited",
+    "Rohit Karnik",
+    "Ionic and Molecular Transport through Graphene Membranes"
+  ],
+  [
+    6,
+    "18",
+    "invited",
+    "Carlo Carraro",
+    "Nanocrystalline Carbon: Electrical Gateway to the Silicon Carbide Bulk."
+  ],
+  [
+    6,
+    "18",
+    "invited",
+    "David Geohegan",
+    "Understanding the growth kinetics of carbon nanostructure architectures during synthesis with real-time diagnostics"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Haitao Liu",
+    "On the intrinsic wettability of graphene"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Van-Duong Dao",
+    "Dry Plasma Reduction to Synthesize MWNT/Pt Nanohybrid Materials for the Counter Electrode of Dye-sensitized Solar Cells"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Christoph Schneider",
+    "DNA-directed nanotemplating of components for biosensors"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Zhong Jin",
+    "Metallized DNA nanolithography for encoding and transferring spatial information for graphene patterning"
+  ],
+  [
+    6,
+    "18",
+    "keynote",
+    "Younan Xia",
+    "Putting Nanostructured Materials to Work for Biomedical Research"
+  ],
+  [
+    6,
+    "18",
+    "invited",
+    "Kirill Afonin",
+    "Activation of different split functionalities inside target cells through anagnoristic R/DNA hybrids: a novel approach in therapeutic RNA nanotechnology"
+  ],
+  [
+    6,
+    "18",
+    "contributed",
+    "Alan Shaw",
+    "Using DNA Origami Nano-Calipers to Study Length-Scale Dependence on Cellular Receptor Activation"
+  ],
+  [
+    6,
+    "18",
+    "contributed",
+    "Thomas Tørring",
+    "Creating functional DNA–Protein Conjugates"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Nicole Steinmetz",
+    "Plant virus-based nanoparticles (VNPs) and co-operative VNP assemblies in biomedical nanotechnology"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Durgadas Cherukaraveedu",
+    "Genetic Engineering of Nanoparticle Formation"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Scott M. Reed",
+    "Utility of Lipid Membranes Assembled on Nanoparticles for Measuring Protein Membrane Interactions"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Sara Goltry",
+    "Long-Term Operability of a DNA-based Nanomachine in Human Serum"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Christian Bech Rosen",
+    "DNA-Templated Protein Conjugation"
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Ronnie Pedersen",
+    "Peptide Nucleic Acids in DNA Nanostructures."
+  ],
+  [
+    6,
+    "18",
+    "poster",
+    "Xin Li",
+    "Toward reliable DNA strand displacement: reduce leaky reaction"
+  ],
+  [
+    6,
+    "18",
+    "invited",
+    "Wan Kuang",
+    "Combined Atomic Force Microscopy and Far-field Characterization of Individual Surface Plasmon Waveguides Nanofabricated using Scaffolded DNA Origami"
+  ],
+  [
+    6,
+    "18",
+    "invited",
+    "Masayuki Endo",
+    "Direct observation of DNA structural changes in the designed DNA nanostructures"
+  ],
+  [
+    6,
+    "18",
+    "invited",
+    "Kurt Vesterager Gothelf",
+    "Alignment of Conjugated Polymers using DNA Origami"
+  ],
+  [
+    7,
+    "18",
+    "invited",
+    "Ebbe Sloth Andersen",
+    "Demonstration of a versatile DNA origami nanosensor device"
+  ],
+  [
+    7,
+    "18",
+    "invited",
+    "Michael L. Norton",
+    "Addressing SWCNT onto Single and One Dimensional DNA Origami"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Philip Lukeman",
+    "Title: Undergraduate-Conducted DNA-Based Nanotechnology: Photochemical Switch Control - Virus-Binding ‘Claws’- Designer Triangles"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Yangyang Yang",
+    "Photo-functionalization of DNA origami: photo-responsible behavior observation and reversible multi-orientational assembling"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Haitao Liu",
+    "Nanoscale growth and patterning of inorganic oxides using DNA nanostructure templates"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Jinglin Fu",
+    "A ‘Swing Arm’-channeled multienzyme complex organized on DNA nanoscaffolds"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Daniel Schiffels",
+    "Characterization of the Mechanical Properties of DNA Nanotubes"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Jakob Woller",
+    "Reversible Self-Assembly of DNA Nanostructures Anchored to Lipid Bilayer Membranes"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Cameron Myhrvold",
+    "Isothermal self-assembly of DNA nanostructures under diverse and biocompatible conditions"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Shelley Wickham",
+    "Prospecting for Gold: Using a DNA-origami stacked-ring cylinder to capture AuNPs."
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Bert Huttanus",
+    "Enhanced Colorimetric Detection of DNA via Catalytic Aggregation of Gold Nanoparticles"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Jonas Joerg Funke",
+    "Accurate, high-throughput two-point distance measurements for protein research using a DNA-caliper"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Elisabeth Gates",
+    "Site-specific Metallization of Thin, Branched DNA Origami Structures for Conductive Nanowires"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Wei Sun",
+    "Controllable Release of Gold Nanoparticles from a Switchable DNA Box"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Xiaolong Shi",
+    "Novel sub-tile structure for DNA tile based self-assembly"
+  ],
+  [
+    7,
+    "18",
+    "poster",
+    "Subhadeep Roy",
+    "Silver Nanoassemblies Constructed from Boranephosphonate DNA"
+  ]
+]

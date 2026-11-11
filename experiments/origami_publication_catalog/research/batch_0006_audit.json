@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-05",
+  "reinitialize_byte_identical": true,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5063,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 7974
+  },
+  "counts": {
+    "publication_versions": 5063,
+    "provisional_work_keys_not_reconciled": 5063,
+    "review_stages": {
+      "metadata_screened": 166,
+      "unreviewed": 4783,
+      "fulltext_reviewed": 22,
+      "design_sources_reviewed": 92
+    },
+    "relevance": {
+      "uncertain": 4948,
+      "background_or_review": 5,
+      "design_bearing": 109,
+      "not_origami": 1
+    },
+    "catalog_eligibility": {
+      "unresolved": 5057,
+      "excluded": 5,
+      "eligible": 1
+    },
+    "design_groups": 107,
+    "design_source_reviews": 26,
+    "discovery_runs": 27
+  },
+  "exclusions": 0,
+  "molecular_files_authored": 0
+}

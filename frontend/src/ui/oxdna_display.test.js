@@ -488,6 +488,22 @@ describe('initOxdnaDisplay controller', () => {
     expect(ctrl.activeJobId()).toBe(null)
   })
 
+  it('initializes live display ownership once while applying every subframe', () => {
+    const deps = makeDeps({ ready: false, positions: [] })
+    const ctrl = initOxdnaDisplay(deps)
+    deps.designRenderer.clearScalarColors = vi.fn()
+    const positions = [{ helix_id: 'h0', bp_index: 2, direction: 'REVERSE',
+      backbone_position: [4, 5, 6], nx: 0, ny: 1, nz: 0 }]
+    ctrl.displayLiveFrame(positions)
+    ctrl.displayLiveFrame(positions)
+    expect(deps.designRenderer.applyFemPositions).toHaveBeenCalledTimes(2)
+    expect(deps.designRenderer.clearScalarColors).toHaveBeenCalledTimes(1)
+    ctrl.stopAndRestore()
+    deps.designRenderer.clearScalarColors.mockClear()
+    ctrl.displayLiveFrame(positions)
+    expect(deps.designRenderer.clearScalarColors).toHaveBeenCalledTimes(1)
+  })
+
   it('displayLiveFrame ignores empty/bad payloads', () => {
     const deps = makeDeps({ ready: false, positions: [] })
     const ctrl = initOxdnaDisplay(deps)

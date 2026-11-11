@@ -1,0 +1,41 @@
+{
+  "batch_id": "B0010",
+  "first_pass_count": 9,
+  "input_count": 25,
+  "new_provisional_design_groups": [
+    "RDE0035"
+  ],
+  "complete_sources_certified": 0,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5599,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 10262
+  },
+  "counts": {
+    "publication_versions": 5599,
+    "canonical_work_keys": 5598,
+    "provisional_work_keys_not_reconciled": 5597,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 716,
+      "unreviewed": 4691,
+      "fulltext_reviewed": 44,
+      "design_sources_reviewed": 148
+    },
+    "relevance": {
+      "uncertain": 5402,
+      "background_or_review": 14,
+      "design_bearing": 179,
+      "not_origami": 4
+    },
+    "catalog_eligibility": {
+      "unresolved": 5590,
+      "excluded": 8,
+      "eligible": 1
+    },
+    "design_groups": 135,
+    "design_source_reviews": 58,
+    "discovery_runs": 41
+  }
+}

@@ -187,13 +187,19 @@ def _norm_path(p) -> str:
     return value
 
 
-def filter_nodes(nodes: list[dict], design_source_path, show_all: bool) -> list[dict]:
+def filter_nodes(nodes: list[dict], design_source_path, show_all: bool, project_id=None) -> list[dict]:
     """Nodes to show for the active design.  With ``show_all`` every node passes;
-    otherwise only nodes whose ``design_source_path`` matches the active design's path
-    (no path known → nothing, rather than leaking other designs' jobs)."""
+    otherwise match the source path, or exact project ownership for pathless NAMD
+    copies. No active path means no results, rather than leaking other designs' jobs.
+    """
     if show_all:
         return nodes
     cur = _norm_path(design_source_path)
     if not cur:
         return []
-    return [n for n in nodes if _norm_path(n.get("design_source_path")) == cur]
+    # Older NAMD copies lost their path but retained exact project ownership.
+    # Recover their visibility without guessing from names or rewriting history.
+    return [n for n in nodes if _norm_path(n.get("design_source_path")) == cur or (
+        n.get("engine") == "namd" and not _norm_path(n.get("design_source_path"))
+        and project_id is not None and n.get("project_id") == project_id
+    )]

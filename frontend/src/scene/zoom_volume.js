@@ -1,3 +1,4 @@
+import { copyZoomBox, zoomBoxBounds, entriesInZoomBox } from './zoom_volume_box.js'
 import './zoom_volume.css'
 import * as THREE from 'three'
 import { matchTargetEntries, describeTarget } from './annotation_targets.js'
@@ -123,6 +124,7 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
   box.name = 'zoom-volume-selection-box'; box.visible = false; box.userData.helper = true; box.userData.setupOnly = true; box.raycast = () => {}; scene.add(box)
   let renderer = null, targets = [], displays = [], revision = 0, disposed = false, ready = false, customPosition = null
   let loading = false, hasFrozenImage = false
+  let volume = null
   let documentId = null, mode = null, abort = new AbortController()
   let contextRoots = [], contextBaseCount = 0, contextObjectCount = 0, selectionConnectionCount = 0, contextConnectionCount = 0
   const contextOpacity = () => 1 - Number($('structure-transparency').value) / 100
@@ -145,11 +147,27 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
   function clear() {
     loading = false; hasFrozenImage = false; frozen.hidden = true; loadingOverlay.hidden = true
     host.setAttribute('aria-busy', 'false'); displayedBounds.makeEmpty()
-    abort.abort(); revision++; ready = false; targets = []; bounds.makeEmpty()
+    abort.abort(); revision++; ready = false; targets = []; volume = null; bounds.makeEmpty()
     for (const d of displays) d.dispose(); displays = []; contextRoots = []; contextBaseCount = 0; contextObjectCount = 0; contextConnectionCount = 0; selectionConnectionCount = 0
     host.style.display = 'none'; svg.style.display = 'none'; box.visible = false
     $('status').textContent = 'Select an element in the 3D view.'
   }
+  function setBox(value) {
+    const next = copyZoomBox(value)
+    if (!next) return false
+    const state = store.getState()
+    volume = next
+    targets = state.assemblyActive
+      ? (state.currentAssembly?.instances ?? []).map(i => ({ instanceId: i.id, refs: [] }))
+      : [{ refs: [] }]
+    documentId = state.assemblyActive ? state.currentAssembly?.id : state.currentDesign?.id
+    mode = state.assemblyActive
+    $('enabled').checked = true
+    void rebuild()
+    return true
+  }
+  const onBox = event => setBox(event.detail)
+  window.addEventListener('nadoc:zoom-volume-box', onBox)
   function capture() {
     const previousTargets = targets
     const state = store.getState()
@@ -161,6 +179,7 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
       targets = state.assemblyOverhangSelection?.length ? state.assemblyOverhangSelection.map(o => ({ instanceId: o.instanceId, refs: [{ kind: 'overhang', id: o.overhangId }] })) : cluster && ids.has(cluster.instanceId) ? [{ instanceId: cluster.instanceId, refs: [{ kind: 'cluster', id: cluster.clusterId }] }] : [...ids].map(instanceId => ({ instanceId, refs: null }))
     } else targets = state.selection?.items?.length ? [{ refs: structuredClone(state.selection.items) }] : state.activeClusterId ? [{ refs: [{ kind: 'cluster', id: state.activeClusterId }] }] : []
     if (!targets.length) { targets = previousTargets; $('status').textContent = 'Select an element first.'; return }
+    volume = null
     documentId = state.assemblyActive ? state.currentAssembly?.id : state.currentDesign?.id; mode = state.assemblyActive
     $('enabled').checked = true
     void rebuild()
@@ -199,7 +218,7 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
         const design = target.instanceId ? assemblyRenderer.getInstanceDesign(target.instanceId) : state.currentDesign
         if (!design) continue
         const entries = target.instanceId ? volumeBackboneEntries(data?.entries, data?.nucleotides) : volumeBackboneEntries(designRenderer.getBackboneEntries(), state.currentGeometry ?? [])
-        const matched = target.refs ? matchTargetEntries(target.refs, design, entries) : entries
+        const matched = volume ? entriesInZoomBox(entries, volume, data?.matrixWorld) : target.refs ? matchTargetEntries(target.refs, design, entries) : entries
         const sourceId = target.instanceId ?? 'design'
         if (!selectedBySource.has(sourceId)) selectedBySource.set(sourceId, { keys: new Set(), refs: [], whole: false })
         const selected = selectedBySource.get(sourceId)
@@ -237,6 +256,7 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
         root.updateWorldMatrix(true, true)
         if (connections.count) bounds.union(new THREE.Box3().setFromObject(root))
       }
+      if (volume) bounds.copy(zoomBoxBounds(volume))
       // Build context in a separate pass, after the complete selection bounds are known.
       // Include neighboring assembly instances as well as neighbors in the selected part.
       if ($('with-structure').checked) {
@@ -271,13 +291,14 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
           setZoomContextOpacity(root, contextOpacity())
         }
       }
-      bounds.expandByScalar(1.5)
+      if (volume) bounds.copy(zoomBoxBounds(volume))
+      else bounds.expandByScalar(1.5)
       if (!renderer) {
         renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setClearColor(0x171e28)
         renderer.domElement.setAttribute('aria-label', 'Zoom Volume: selected elements'); renderer.domElement.style.display = 'block'; host.append(renderer.domElement)
       }
       ready = true
-      $('status').textContent = `${targets[0]?.instanceId ? 'Assembly selection' : describeTarget(targets[0].refs, state.currentDesign)} · ${count} bases${externalCount ? ` · ${externalCount} attached objects` : ''}`
+      $('status').textContent = `${volume ? 'Submodel box' : targets[0]?.instanceId ? 'Assembly selection' : describeTarget(targets[0].refs, state.currentDesign)} · ${count} bases${externalCount ? ` · ${externalCount} attached objects` : ''}`
     } catch (error) { if (current === revision && !disposed) { $('status').textContent = `Zoom Volume failed: ${error.message}`; ready = false } }
     finally {
       // Superseded requests must not hide the spinner for the current build.
@@ -304,6 +325,8 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
     host.style.width = `${size}px`; host.style.height = `${size + 26}px`
     if (loading || !ready) { svg.style.display = 'none'; return }
     displayedBounds.copy(bounds)
+    box.box = volume ? new THREE.Box3(new THREE.Vector3(...volume.min_corner), new THREE.Vector3(...volume.max_corner)) : displayedBounds
+    box.quaternion.fromArray(volume?.rotation ?? [0, 0, 0, 1])
     const viewport = renderer.getSize(new THREE.Vector2()); if (viewport.x !== size) renderer.setSize(size, size)
     const main = getRenderCamera(); fitZoomCamera(camera, main.quaternion, bounds, 1)
     light.position.copy(camera.position); renderer.render(insetScene, camera)
@@ -327,5 +350,5 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
   })
   assemblyRenderer?.onRebuildComplete?.(() => { if (!disposed && mode && targets.length) void rebuild() })
   addFrameCallback(frame)
-  return { capture, clear, debug: () => ({ ready, loading, hasFrozenImage, targets, contextBaseCount, contextObjectCount, selectionConnectionCount, contextConnectionCount, contextOpacity: contextOpacity(), contextVisible: contextRoots.some(root => root.visible), bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, orientation: camera.quaternion.toArray(), triangles: renderer?.info.render.triangles ?? 0 }), dispose() { disposed = true; clear(); unsubscribe(); removeFrameCallback(frame); renderer?.dispose(); host.remove(); svg.remove(); section.remove(); box.removeFromParent(); box.geometry.dispose(); box.material.dispose() } }
+  return { capture, setBox, clear, debug: () => ({ ready, loading, hasFrozenImage, targets, volume: volume ? structuredClone(volume) : null, contextBaseCount, contextObjectCount, selectionConnectionCount, contextConnectionCount, contextOpacity: contextOpacity(), contextVisible: contextRoots.some(root => root.visible), bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, orientation: camera.quaternion.toArray(), triangles: renderer?.info.render.triangles ?? 0 }), dispose() { disposed = true; window.removeEventListener('nadoc:zoom-volume-box', onBox); clear(); unsubscribe(); removeFrameCallback(frame); renderer?.dispose(); host.remove(); svg.remove(); section.remove(); box.removeFromParent(); box.geometry.dispose(); box.material.dispose() } }
 }

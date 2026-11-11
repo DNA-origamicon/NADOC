@@ -649,6 +649,7 @@ def estimate_profile_from_design(
     mgcl2_mM: float = 12.5,
     box_mode: str = 'bbox',
     box_size_nm=None,
+    submodel=None,
 ) -> Optional[dict]:
     """Estimate a solvation profile from the *dry* design — no GROMACS run.
 
@@ -675,12 +676,31 @@ def estimate_profile_from_design(
     design = design.without_reference_geometry()
     from backend.core.pdb_export import export_coordinate_pdb  # noqa: PLC0415
 
+    import json
+    if submodel is not None and hasattr(submodel, 'model_dump'):
+        submodel = submodel.model_dump(mode='json')
+    region_key = json.dumps({k: v for k, v in submodel.items() if k != 'visible'}, sort_keys=True) if submodel else None
     key = _profile_cache_key(design, padding_nm, atomistic_model)
-    if key is not None:key += (box_mode,tuple(box_size_nm) if box_size_nm is not None else None,float(nacl_mM),float(mgcl2_mM))
+    if key is not None:key += (box_mode,tuple(box_size_nm) if box_size_nm is not None else None,float(nacl_mM),float(mgcl2_mM),region_key)
     if key is not None and key in _PROFILE_CACHE:
         return _PROFILE_CACHE[key]
 
-    pdb = export_coordinate_pdb(design, box_margin_nm=padding_nm, model=atomistic_model)
+    exact_solute_atoms = None
+    solute_charge = None
+    region = None
+    if submodel:
+        # Use the same full-residue/bonded-support crop as actual preparation.
+        # This produces derived PSF/PDB data, never a cropped authored Design.
+        from backend.core.namd_topology import build_charmm_psfgen_topology
+        from backend.core.namd_submodel import crop_topology, sections, selection_summary
+        full = build_charmm_psfgen_topology(design, atomistic_model=atomistic_model)
+        cropped, receipt = crop_topology(full, submodel)
+        pdb = cropped.pdb_text
+        exact_solute_atoms, records = sections(cropped.psf_text)['NATOM']
+        solute_charge = sum(float(row.split()[6]) for row in records)
+        region = selection_summary(receipt)
+    else:
+        pdb = export_coordinate_pdb(design, box_margin_nm=padding_nm, model=atomistic_model)
     dna: list[tuple[float, float, float]] = []
     n_p = 0
     for ln in pdb.splitlines():
@@ -714,7 +734,7 @@ def estimate_profile_from_design(
     water_before = int(box_vol * _FULL_BOX_WATER_DENSITY_NM3)
     ions = ion_counts(
         water_before,
-        -float(n_p),
+        solute_charge if solute_charge is not None else -float(n_p),
         nacl_mM=nacl_mM,
         mgcl2_mM=mgcl2_mM,
         box_nm=box_nm,
@@ -739,17 +759,19 @@ def estimate_profile_from_design(
     # preparation instead of doubling every heavy atom. Other chemistry keeps
     # the previous allowance. Inferred axes retain 1.5 A per face for hydrogens.
     from backend.core.namd_atom_counts import canonical_dna_atoms
-    canonical_atoms=None if getattr(design,'photoproduct_junctions',None) else canonical_dna_atoms(pdb)
-    solute_upper=canonical_atoms if canonical_atoms is not None else 2*len(dna)
-    upper_box=tuple(d if box_size_nm and box_size_nm[i] is not None else d+.3 for i,d in enumerate(box_nm))
+    canonical_atoms=None if exact_solute_atoms is not None or getattr(design,'photoproduct_junctions',None) else canonical_dna_atoms(pdb)
+    solute_upper=exact_solute_atoms if exact_solute_atoms is not None else canonical_atoms if canonical_atoms is not None else 2*len(dna)
+    upper_box=tuple(d if exact_solute_atoms is not None or (box_size_nm and box_size_nm[i] is not None) else d+.3 for i,d in enumerate(box_nm))
     upper_water=math.ceil(math.prod(upper_box)*_WATER_NUMBER_DENSITY_NM3)
-    upper_ions=ion_counts(upper_water,-float(n_p),nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM,box_nm=upper_box,mg_hexahydrate=True)
+    upper_ions=ion_counts(upper_water,solute_charge if solute_charge is not None else -float(n_p),nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM,box_nm=upper_box,mg_hexahydrate=True)
     net_ions=upper_ions.n_mg*(MGH_ATOMS-3*MGH_WATERS_CONSUMED)-2*(upper_ions.n_na+upper_ions.n_cl)
     profile.update(atom_upper_bound=solute_upper+3*upper_water+max(0,net_ions),
         resource_box_nm=upper_box,atom_bound_basis='bulk-water-plus-charmm-dry-count-v2',
-        atom_components=dict(solute_atoms=solute_upper,solute_basis='CHARMM canonical DNA' if canonical_atoms is not None else 'heavy-atom allowance',
+        atom_components=dict(solute_atoms=solute_upper,solute_basis='retained CHARMM PSF atoms' if exact_solute_atoms is not None else 'CHARMM canonical DNA' if canonical_atoms is not None else 'heavy-atom allowance',
             solvent_atoms=3*upper_water,ion_correction_atoms=max(0,net_ions),
             solvent_basis='bulk density without subtracting solute exclusion'))
+    if region:
+        profile['submodel'] = region
     if key is not None:
         if len(_PROFILE_CACHE) >= _PROFILE_CACHE_MAX:
             _PROFILE_CACHE.pop(next(iter(_PROFILE_CACHE)))  # evict oldest
@@ -776,7 +798,7 @@ def classify_vram_fit(rec: Optional[dict]) -> str:
 def preflight_vram_advice(
     design, *, padding_nm: float = 6.0, devices: str = "0", atomistic_model=None,
     gpu_resident_mode: str = "auto", box_mode="rotation", box_size_nm=None,
-    nacl_mM=0.0, mgcl2_mM=12.5, threads=16, stage_overrides=None,
+    nacl_mM=0.0, mgcl2_mM=12.5, threads=16, stage_overrides=None, submodel=None,
 ) -> dict:
     """Pre-preparation budgets for the selected box and worst planned settings.
 
@@ -797,7 +819,7 @@ def preflight_vram_advice(
     try:
         host_budget=available_for_work(available_bytes=host_mb*1024**2)/1024**2
         profile=estimate_profile_from_design(design,padding_nm=padding_nm,atomistic_model=atomistic_model,
-            box_mode=box_mode,box_size_nm=box_size_nm,nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM)
+            box_mode=box_mode,box_size_nm=box_size_nm,nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM,submodel=submodel)
         if not profile:return unknown
         atoms=profile.get('atom_upper_bound',profile['dna_atoms']+profile['full_water']*3+profile['ion_atoms'])
         box=[10*d for d in profile.get('resource_box_nm',profile.get('box_nm',[]))] or None
@@ -824,6 +846,14 @@ def preflight_vram_advice(
             if forced is not None and str(forced).lower() not in ('on','off','yes','no','true','false','1','0'):raise ValueError('Unresolved GPUresident directive')
             selected_name='offload' if gpu_resident_mode=='off' and not cpu else 'resident'
             if forced is not None:selected_name='resident' if str(forced).lower() in ('on','yes','true','1') else 'offload'
+            if submodel:
+                selected_name='offload'
+                # Fixed-mask buffers are budgeted for every simulated atom.
+                for value in modes.values():
+                    value['ram_mib'] += math.ceil(64*atoms/1024**2)
+                    value['gpu_mib'] += math.ceil(32*atoms/1024**2)
+                modes['resident']['supported'] = False
+                modes['resident']['limitations'] = ['NAMD fixed-shell submodels require CPU or GPU offload']
             stage_modes.append((modes,selected_name))
         def aggregate(name):
             values=[m[name] for m,_ in stage_modes]
@@ -833,9 +863,11 @@ def preflight_vram_advice(
                     'supported':all(x['supported'] for x in values),'limitations':sorted({s for x in values for s in x['limitations']})}
         modes={name:aggregate(name) for name in ('resident','offload')}
         selected=[m[name] for m,name in stage_modes]
-        prep=preparation_memory_mib(atoms)
+        region=profile.get('submodel') or {}
+        preparation_atoms=atoms+max(0,region.get('source_solute_atoms',0)-region.get('retained_solute_atoms',0))
+        prep=preparation_memory_mib(preparation_atoms)
         ram=max(prep,max(x['ram_mib']+x['health_ram_mib'] for x in selected))
-        gpu=max(x['gpu_mib'] for x in selected)
+        gpu=0 if cpu else max(x['gpu_mib'] for x in selected)
         gpu_budget=None if cpu else vram_mb*_USABLE_FRACTION
         required={'host RAM':ram};budgets={'host RAM':host_budget};capacities={'host RAM':host_mb}
         if not cpu:required['GPU']=gpu;budgets['GPU']=gpu_budget;capacities['GPU']=vram_mb
@@ -853,7 +885,8 @@ def preflight_vram_advice(
             box_nm=profile.get('box_nm'),resource_box_nm=profile.get('resource_box_nm'),
             current_vram_mb=gpu,required_vram_mb=math.ceil(gpu/_USABLE_FRACTION),
             current_host_mb=ram,preparation_ram_mb=prep,
-            preparation_expected_peak_ram_mb=preparation_expected_mib(atoms),
+            preparation_expected_peak_ram_mb=preparation_expected_mib(preparation_atoms),
+            submodel=profile.get('submodel'),
             preparation_estimate_basis='atom upper bound and 2.6 million restraint allowance',
             host_mb=host_mb,host_budget_mb=int(host_budget),
             vram_mb=vram_mb,vram_budget_mb=int(gpu_budget) if gpu_budget is not None else None,

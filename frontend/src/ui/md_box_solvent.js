@@ -92,7 +92,7 @@ export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
           temperatureLabel:isCharged() || isPair()?'K':'K target · protocol-controlled',estimated:true}
         if(selectedJob){
           detail={...detail,solute:null,padding:null,estimated:false,source:'Prepared initial box',
-            jobName:selectedJob.design_name,na:null,mg:null,temperature:null,
+            sourceCellCenter:!!jobMeta?.source_cell_center_nm,jobName:selectedJob.design_name,nptAllowed:jobMeta?.npt_allowed !== false,na:null,mg:null,temperature:null,
             numbers:jobMeta?.ready?{na:jobMeta.species?.NA,mg:jobMeta.species?.MG,cl:jobMeta.species?.CL}:null}
         }
       }
@@ -112,13 +112,13 @@ export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
     inputs.temperature.disabled=!(isCharged() || pair)
     if(inputs.temperature.disabled)inputs.temperature.value=300
     inputs.temperature.title=inputs.temperature.disabled?'Ordinary DNA relaxation targets 300 K; stage temperatures remain controlled by the protocol.':'Target temperature for the surface control.'
-    boundary.textContent=selectedJob?'Saved periodic cell; dimensions shown are before pressure equilibration.':pair?'Slab: lateral periodic · normal vacuum padding (3×)':'Periodic on all six faces'
+    boundary.textContent=selectedJob?(jobMeta?.npt_allowed === false?'Saved fixed-volume periodic cell (NVT).':'Saved periodic cell; dimensions shown are before pressure equilibration.'):pair?'Slab: lateral periodic · normal vacuum padding (3×)':'Periodic on all six faces'
     if(selectedJob)for(const input of Object.values(inputs))input.disabled=true
     if(preview && (selectedJob || pair || !explicit))for(const [i,k] of ['x','y','z'].entries())inputs[k].value=(preview.selected_nm || preview.calculated_nm)[i].toFixed(3)
     const clearance=host.querySelector('#md-box-clearance')
     if(clearance){
       const gaps=!selectedJob && preview && faceClearances(preview.solvent_nm || preview.selected_nm || preview.calculated_nm,preview.center_nm,preview.solute_bounds_nm)
-      clearance.textContent=selectedJob?'Initial package box; pressure equilibration changes its dimensions. Face clearances require the matching simulation coordinates.':gaps?`Water clearance to faces (nm): ${gaps.map((pair,i)=>`${'XYZ'[i]}− ${pair[0].toFixed(2)} / ${'XYZ'[i]}+ ${pair[1].toFixed(2)}`).join(' · ')}`:'Water clearance to faces: unavailable until the structure and box are calculated.'
+      clearance.textContent=selectedJob?(jobMeta?.npt_allowed === false?'Fixed-volume package box. Face clearances require the matching simulation coordinates.':'Initial package box; pressure equilibration changes its dimensions. Face clearances require the matching simulation coordinates.'):gaps?`Water clearance to faces (nm): ${gaps.map((pair,i)=>`${'XYZ'[i]}− ${pair[0].toFixed(2)} / ${'XYZ'[i]}+ ${pair[1].toFixed(2)}`).join(' · ')}`:'Water clearance to faces: unavailable until the structure and box are calculated.'
     }
     paintFeedback();emit()
   }
@@ -132,7 +132,7 @@ export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
         const result=await api.getMdSolventMeta(job.job_id)
         if(current!==version || disposed)return
         if(!result?.box_nm?.every(v=>Number.isFinite(v) && v>0) || result.box_nm.length!==3)throw Error('Saved box dimensions unavailable for this job. No default box is substituted.')
-        jobMeta=result;preview={selected_nm:[...result.box_nm],boundary:'periodic'}
+        jobMeta=result;preview={selected_nm:[...result.box_nm],center_nm:result.source_cell_center_nm,boundary:'periodic'}
         const electrode=selectedContext?.two_electrodes
         if(electrode){
           const axis={x:0,y:1,z:2}[electrode.normal]

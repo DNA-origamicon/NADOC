@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "positioner_references": 33,
+  "rotary_references": 30,
+  "primary_lab_reconciliations_preserved_on_regeneration": 2,
+  "parser_fixture_tests": 3,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5457,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 9118
+  }
+}

@@ -26,6 +26,8 @@ oxDNA output is Physical-layer only; it never mutates Design topology.
 
 from __future__ import annotations
 
+from backend.api.simulation_submodel import SubmodelSelection, read_selection, save_selection
+
 from backend.core import simulation_runtime
 
 from backend.api.startup_cache import coalesce_job_reads
@@ -245,6 +247,7 @@ def _apply_oxdna_run_dir(job, run_dir: Optional[str]) -> None:
 
 
 class CreateOxdnaJobRequest(BaseModel):
+    submodel: SubmodelSelection | None = None
     run_dir: Optional[str] = None
     execution_target: str = Field("local", pattern="^(local|alpine|runpod)$")
     cluster_name: Optional[str] = None
@@ -418,6 +421,7 @@ class SurfaceElement(SurfaceGeometry):
 
 
 class RunRequest(BaseModel):
+    submodel: SubmodelSelection | None = None
     run_dir: Optional[str] = None
     """A consolidated production run: unbiased MD plus any combination of an electric
     field, a hard surface, and anchor traps (each independent/optional).  Branches a
@@ -847,7 +851,7 @@ async def estimate_oxdna_disk(body: CreateOxdnaJobRequest) -> dict:
             equil_steps=body.equil_steps,
         )
         stages = [(s.steps, print_conf_interval(s)) for s in specs]
-        predicted = oxdna_run_output_bytes(stages, n_nt)
+        predicted = oxdna_run_output_bytes(stages, n_nt * (2 if body.submodel and body.submodel.box else 1))
     except Exception as exc:  # noqa: BLE001 — a forecast must never block a launch
         logger.warning("estimate_oxdna_disk failed (allowing launch): %s", exc)
         return {**forecast(_workspace(), 0), "skipped": True}
@@ -861,7 +865,7 @@ async def estimate_oxdna_run_disk(job_id: str, body: RunRequest) -> dict:
 
     job = _load_job(job_id)
     predicted = oxdna_run_output_bytes(
-        [(body.steps, max(1, int(body.steps_per_frame)))], job.n_nucleotides
+        [(body.steps, max(1, int(body.steps_per_frame)))], job.n_nucleotides * (2 if (body.submodel and body.submodel.box) or job.submodel else 1)
     )
     return forecast(job.job_dir(_workspace()), predicted)
 
@@ -872,6 +876,10 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
     Preparation (write topology/conf/design snapshot) is fast — no solvation.
     """
+    if body.submodel and body.submodel.box:
+        if body.execution_target != "local":
+            raise HTTPException(422, "Submodels currently run locally on CPU; choose Local")
+        body = body.model_copy(update={"backend": "CPU"})
     if body.backend not in {"CPU", "CUDA"}:
         raise HTTPException(400, f"Unknown backend: {body.backend!r}")
     if body.interaction_type not in {"DNA2", "DNA"}:
@@ -1209,6 +1217,9 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         job.save(_workspace())
         return job.to_dict()
 
+    if body.submodel is not None:
+        save_selection(job.job_dir(_workspace()), body.submodel)
+        specs = _submodel_preflight(job, specs) if body.submodel.box else specs
     job.status = OxdnaStatus.queued
     job.save(_workspace())
 
@@ -1374,7 +1385,7 @@ async def copy_oxdna_job(job_id: str, body: Optional[OxdnaRunLocation] = None) -
     _apply_oxdna_run_dir(copied, body.run_dir if body else None)
     copied_dir = copied.job_dir(ws)
     copied_dir.mkdir(parents=True, exist_ok=copied.archived)
-    files = {"topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", "attachment_forces.txt", AVERAGE_SEQUENCE_FILE}
+    files = {"submodel_selection.json", "topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", "attachment_forces.txt", AVERAGE_SEQUENCE_FILE}
     files.update(spec.forces_file for spec in copied_specs if spec.forces_file)
     files.update(spec.parfile for spec in copied_specs if spec.parfile)
     try:
@@ -1811,6 +1822,19 @@ async def get_oxdna_error_log(job_id: str) -> dict:
             log_text = "(no oxDNA log was written for this stage)"
 
     run_bin = find_oxdna()
+    submodel_md = False
+    if getattr(job, "submodel", None) and target is not None:
+        receipt = job.stage_dir(ws, target.name) / "submodel/execution.json"
+        if receipt.is_file():
+            run_bin = json.loads(receipt.read_text()).get("binary", run_bin)
+        else:
+            from backend.core.oxdna_submodel import installation
+            try:
+                engines = installation()
+                run_bin = engines["mc" if target.kind == "mc" else "md"]
+            except ValueError:
+                run_bin = None
+        submodel_md = target.kind != "mc"
     return {
         "job_id": job_id,
         "status": job.status.value if hasattr(job.status, "value") else str(job.status),
@@ -1821,7 +1845,7 @@ async def get_oxdna_error_log(job_id: str) -> dict:
         "diagnostics": {
             "requested_backend": job.backend,
             "oxdna_bin": run_bin,
-            "cuda_capable": oxdna_supports_cuda(run_bin) if run_bin else False,
+            "cuda_capable": oxdna_supports_cuda(run_bin) if run_bin and not submodel_md else False,
         },
     }
 
@@ -1831,6 +1855,14 @@ async def get_oxdna_progress(job_id: str) -> dict:
     job = _load_job(job_id)
     specs = load_stage_specs(job.job_dir(_workspace()))
     return job_progress(job, _workspace(), specs)
+
+
+def _submodel_preflight(job, specs):
+    from backend.core.oxdna_submodel import preflight
+    try:
+        return preflight(job, _workspace(), specs)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/oxdna/jobs/{job_id}/start")
@@ -1865,6 +1897,7 @@ async def start_oxdna_job(job_id: str) -> dict:
             specs = _prepare_surface_approach_retry(job, specs, _workspace())
         except (KeyError, OSError, ValueError) as exc:
             raise HTTPException(400, f"Cannot extend surface approach: {exc}") from exc
+    specs = _submodel_preflight(job, specs)
     job.status = OxdnaStatus.running
     job.error = None
     job.save(_workspace())
@@ -2008,6 +2041,7 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     )
     job.stages.append(prod.to_status())
     job.current_stage_idx = len(specs) - 1
+    specs = _submodel_preflight(job, specs)
     job.status = OxdnaStatus.running
     job.error = None
     job.save(_workspace())
@@ -2178,6 +2212,22 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     if in_unattended_chain_spawn() and child.execution_target == "local":
         start_job(child, _workspace(), load_stage_specs(child.job_dir(_workspace())))
     return child.to_dict()
+
+
+def _inherit_submodel_selection(pjd, cjd, selection):
+    """Carry both the editable box and unchanged executed identities to a child."""
+    if selection is not None:
+        save_selection(cjd, selection)
+    elif (pjd / "submodel_selection.json").exists():
+        shutil.copy2(pjd / "submodel_selection.json", cjd / "submodel_selection.json")
+    from backend.core.oxdna_submodel import selected as submodel_box, fingerprint as submodel_fingerprint
+    inherited = pjd / "submodel_plan.json"
+    if inherited.exists() and submodel_box(cjd):
+        prior = json.loads(inherited.read_text())
+        if prior["selection_fingerprint"] == submodel_fingerprint(submodel_box(cjd)):
+            shutil.copy2(inherited, cjd / "submodel_plan.json")
+            shutil.copy2(pjd / "submodel_topology.top", cjd / "submodel_topology.top")
+
 
 
 def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
@@ -2420,6 +2470,8 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         child.run_config["surface"] = wall_in
         with open(cjd / "run_forces.txt", "a", encoding="utf-8") as stream:
             stream.write("\n" + peg_terminal_field_text(cap["spec"], field_in))
+    _inherit_submodel_selection(pjd, cjd, body.submodel)
+
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
     child.status = OxdnaStatus.queued
     if target is None:
@@ -4909,3 +4961,39 @@ async def get_oxdna_rmsf_surface(
 def get_oxdna_available() -> dict:
     """Probe for a usable oxDNA binary (mirror /md/namd-available)."""
     return oxdna_available()
+
+
+
+
+@router.get("/oxdna/jobs/{job_id}/submodel")
+async def get_oxdna_submodel(job_id: str) -> dict:
+    return read_selection(_load_job(job_id).job_dir(_workspace()))
+
+
+@router.put("/oxdna/jobs/{job_id}/submodel")
+async def put_oxdna_submodel(job_id: str, selection: SubmodelSelection) -> dict:
+    job = _load_job(job_id)
+    from backend.core.oxdna_submodel import fingerprint
+    if job.status == OxdnaStatus.running:
+        previous = read_selection(job.job_dir(_workspace()))["box"]
+        proposed = selection.model_dump(mode="json")["box"]
+        if (fingerprint(previous) if previous else None) != (fingerprint(proposed) if proposed else None):
+            raise HTTPException(409, "Stop the job before changing its submodel; visibility can still be toggled")
+    return save_selection(job.job_dir(_workspace()), selection)
+
+
+@router.post("/oxdna/jobs/{job_id}/submodel-estimate")
+async def estimate_oxdna_submodel(job_id: str, selection: SubmodelSelection) -> dict:
+    from backend.core.oxdna_submodel import plan, estimate, fingerprint
+    job = _load_job(job_id)
+    if selection.box is None:
+        return {"projection": None}
+    try:
+        box = selection.box.model_dump(mode="json")
+        frozen = job.job_dir(_workspace()) / "submodel_plan.json"
+        recipe = json.loads(frozen.read_text()) if frozen.exists() else None
+        if not recipe or recipe["selection_fingerprint"] != fingerprint(box):
+            _, _, recipe = plan(job, _workspace(), box)
+        return {"projection": estimate(recipe, load_stage_specs(job.job_dir(_workspace())))}
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(422, str(exc)) from exc

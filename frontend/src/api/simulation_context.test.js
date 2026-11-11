@@ -103,3 +103,13 @@ it('upgrades a compact FEM projection for engines needing browser geometry', asy
     }
   }
 })
+
+it('reads and saves submodel UI selections without materializing an assembly', async () => {
+  const context = createAssemblySimulationContext(), materialize = vi.fn()
+  for (const engine of ['oxdna', 'md']) for (const method of ['GET', 'PUT']) {
+    const path = `/${engine}/jobs/job/submodel`
+    expect(needsAssemblySimulation(path, method)).toBe(false)
+    await context.ensure({ path, method, assemblyActive: true, assembly: { id: 'assembly' }, materialize })
+  }
+  expect(materialize).not.toHaveBeenCalled()
+})

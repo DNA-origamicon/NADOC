@@ -1,0 +1,3488 @@
+{
+  "source_file": "assets/research-20261105/hao-yan-asu-cv.pdf",
+  "source_sha256": "c7943d2851572d286437e52a2451b4e2e560c02f287c8f4b4ffde7772f046ccc",
+  "method": "Complete numbered journal-section extraction; descending243..1 with source gap228\u2013231 asserted; raw text retained; no keyword relevance filter",
+  "entries": [
+    {
+      "number": 243,
+      "pdf_pages": [
+        4
+      ],
+      "raw_text": "Y. Gao, Y. Sha, Y. Liu, J. Chen, M. Li, S. Gao, Q. Li, X. Zuo, C. Chen, T. Zhang, K. Wang, P. Wang, G. Chen, X. Liu*, H. Yan*, C. Fan*, Massively Parallel sub-10-nanometer lithography of Graphene with DNA-silica Composite Masked Material Manufacturing, Nature Nanotechnology, submitted (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 242,
+      "pdf_pages": [
+        4
+      ],
+      "raw_text": "G. B. M. Wisna, D. Sukhareva, J. Zhao, D. Satyabola, H. Yan*, R. F. Hariadi*, DNA Origami Cryptography in 2D and 3D Space with Improved Detection and Fast Readout Enabled by High- Speed DNA-PAINT and Unsupervised Clustering, Nature Communications, submitted (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 241,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "Y. Xu\u01c2, R. Zheng\u01c2, A. Prasad\u01c2, M. Liu, X. Zhou, R. Porter, M. Sample, E. Poppleton, J. Procyk, H. Liu, H. Lee, H. Yan*, P. Sulc*, N. Stephanopoulos*, High-affinity binding to the SARS-CoV- 2 spike trimer by a multivalent protein-DNA synthetic antibody, J. Am. Chem. Soc., Submitted.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [],
+      "year_scope": "undated_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 240,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "S. Fan, S. Wang, L. Ding, T. Speck, H. Yan*, S. Nussberger*, N. Liu*, Shape Matters: Autonomously Self-organized DNA Nanorobots as Masseur and Gatekeeper for Synthetic Cells, Nature Materials, in revision (2024).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2024"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 239,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "C. Zhang*, R. Wu, F. Sun, Y. Lin, Y. Zhang, Y. Liang, Y. Chen., L. Liu*, Q. Ouyang*, L. Qian*, H. Yan*. Parallel DNA Storage by Programming and Printing Epigenetic Bits, Nature, in revision (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 238,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "L. Yu, L. Chen, D. Satyabola, A. Prasad, H. Yan*, NucleoCraft: The art of stimuli-responsive precision in DNA and RNA bioengineering, BME Frontiers, DOI: 10.34133/bmef.00 (2024).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2024"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 237,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "D. Satyabola, A. Prasad, H. Yan*, X. Zhou*, Bioinspired photonic systems directed by designer DNA nanostructures, ACS Applied Optical Materials, doi.org/10.1021/acsaom.4c00103 (2024).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2024"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 236,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "P. Zhan, J. Yang, L. Ding, X. Jing, K. Hipp, S. Nussberger, H. Yan, N. Liu*, 3D DNA origami pincers that multitask on giant unilamellar vesicle, Science Advances, 10, eadn8903 (2024).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2024"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 235,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "H. Liu, M. Matthies, J. Russo, L. Rovigatti, R. Narayanan, T. Diep, D. McKeen, O. Gang, N. Stephanopoulos, F. Sciortino, H. Yan, F. Romano, P. Sulc*, Inverse Design of a Pyrochlore Lattice of DNA Origami Through Model-driven Experiments, Science, 384, 776-781 (2024).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2024"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 234,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "Y. Wang, H. Wang, Y. Li, C. Yang, Y. Tang, X. Lu, J. Fan, W. Tang, Y. Shang, H. Yan*, J. Liu*, B. Ding*, Chemically Conjugated Branched Staples for Super-DNA Origami, J. Am. Chem. Soc., 146, 4178-4186 (2024).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2024"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 233,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "T. Yip, X. Qi, H. Yan*, Y. Chang*, RNA Origami Functions as a Self-adjuvanted Nanovaccine Platform for Cancer Immunotherapy, ACS Nano, 18, 4056-4067 (2024).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2024"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 232,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "C. Simmons, H. Skyler, P. Sulc, N. Stephanopoulos*, H. Yan*, Site-specific Arrangement and Structure Determination of Minor Groove Binding Molecules in Self-assembled Three- dimensional DNA Crystals, J. Am. Chem. Soc., 145, 26075-26085 (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 227,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "R.P. Narayanan, A. Prasad, A. Buchberger, L. Zhou, J. Bernal-Chanchavac, T. MacCulloch, N.E. Fahmi, H. Yan, F. Zhang M.J. Webber*, N. Stephanopoulos*, Supramolecular polymerization       of    DNA      nanostructures      using      high-affinity  host-guest interactions. Small, 230785 (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 226,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "L. Yu, H. Yan*, DNA-based Computation for Multiple Biomarkers. Nature Biomedical Engineering 7, 1535-1536 (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 225,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "L. Yu, Y. Xu, M. Al-Amin, S. Jiang, M. Sample, A. Prasad, N. Stephanopoulos, P. Sulc, H. Yan*, CytoDirect: a Nucleic Acid Nanodevice for Specific and Efficient Delivery of Functional Payloads to the Cytoplasm. J. Am. Chem. Soc., 145, 27336-27347 (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 224,
+      "pdf_pages": [
+        5
+      ],
+      "raw_text": "Y. Tang, H. Liu, Q. Wang, X. Qi, L. Yu, P. Sulc, F. Zhang, H. Yan*, S. Jiang*, DNA Origami Tessellations, J. Am. Chem. Soc., 145, 13858-13868 (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 223,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "J. Yang, K. Jahnke, L. Xin, X. Jing, P. Zhan, A. Peil, A. Griffo, M. Skugor, D. Yang, S. Fan, K. Gopfrich*, H. Yan*, P. Wang*, N. Liu*, Modulating Lipid Membrane Morphology by Dynamic DNA Origami Networks, Nano Letters, 23, 6330-6336 (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 222,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "K. Dai, C. Gong, Y. Xu, F. Ding, X. Qi, X. Tu, L. Yu, X. Liu, J. Li, C. Fan, H. Yan*, G. Yao* Single-Stranded RNA Origami-based Epigenetic Immunomodulation, Nano Letters 23, 7188- 7196 (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 221,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "K. Dai, Y. Xu, Y. Yang, J. Shen, X. Liu, X. Tu, L. Yu, X. Qi, J. Li, L. Wang, X. Zuo, Y. Liu*, H. Yan*, C. Fan*, G. Yao*, Edge Length-Programmed Single-Stranded RNA Origami for Predictive Innate Immune Activation and Therapy, J. Am. Chem. Soc., 145, 17112-17124 (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 220,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "Y. Tang, H. Liu, Q. Wang, X. Qi, L. Yu, P. Sulc, F. Zhang, H. Yan*, S. Jiang*, DNA Origami Tessellations, J. Am. Chem. Soc., 145, 13858-13868 (2023).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2023"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 219,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "D. Fu, R. P. Narayanan, A. Prasad, F. Zhang, D. Williams, J. S. Schreck, H. Yan*, J. Reif*. Automated Design of 3D DNA Origami with Non-rasterized 2D Curvature, Science Advances, 8, eade445 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 218,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "X. Zhou', D. Satyabola, H. Liu, S. Jiang, X. Qi, L. Yu, S. Lin, Y. Liu, N.W. Woodbury*, H. Yan*. Two-Dimensional Excitonic Networks Directed by DNA Templates as an Efficient Model Light-Harvesting and Energy Transfer System, Angew. Chem. Int. Ed. 61, e2022112 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 217,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "R. P. Narayanan, J. Procyk, P. Nandi, A. Prasad, Y. Xu, E. Poppleton, D. Williams, F. Zhang, H. Yan, P. Chiu*, N. Stephanopoulos*, and P. \u0160ulc*, Coarse-Grained Simulations for the Characterization and Optimization of Hybrid Protein\u2013DNA Nanostructures, ACS Nano 16, 14086- 14096 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 216,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "L. Ma, Y. Liu, C. Han, A. Movsesyan, P. Li, H. Li, P. Tang, Y. Yuan, S. Jiang, W. Ni, H. Yan, A. Govorov, Z. Wang, X. Lan*, DNA-Assembled Chiral Satellite-Core Nanoparticle Superstructures: Two-State Chiral Interactions from Dynamic and Static Conformations, Nano Letters 22, 4784-4791 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 215,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "K. Chen, F. Xu, Y. Hu, H. Yan*, L. Pan*, DNA Kirigami Driven by Polymerase- Triggered Strand Displacement, Small 18, 2201478 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 214,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "X. Zhou, H. Liu, F. Djutanta, D. Satyabola, S. Jiang, X. Qi, L. Yu, S. Lin, R.F. Hariadi, Y. Liu, N.W. Woodbury*, H. Yan*, DNA-Templated Programmable Excitonic Wires for Micron- Scale Exciton Transport, Chem. 8, 2442-2459 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 213,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "X. Zhou, S. Lin, H. Yan*, Interfacing DNA nanotechnology and biomimetic photonic complex: advances and prospects in energy and biomedicine, J. Nanobiotechnology 20: 257 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 212,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "C. Simmons, T. MacCulloch, M. Krepl, M. Matthies, A. Buchberger, I. Crawford, J. Sponer, P. Sulc, N. Stephanopoulos* and H. Yan*, The influence of Holliday junction sequence and dynamics on DNA crystal self-assembly Nature. Communications 13, article number 3112 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 211,
+      "pdf_pages": [
+        6
+      ],
+      "raw_text": "J. Bohlin', E. Poppleton', M. Matthies', J. Procyk', A. Mallya, H. Yan & P. Sulc*, Design and simulation of DNA, RNA, and hybrid protein-nucleic acid nanostructures with OxView, Nature Protocols 17, 1762-1788 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 210,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "L. Liu, F. Hong, H. Liu, X. Zhou, S. Jiang, P. Sulc, J. Jiang*, H. Yan*, A localized DNA Finite State Machine with Temporal Resolution, Science Advances 8, DOI: 10.1126/sciadv.abm9530 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 209,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "C. Zhang*, X. Ma, X. Zheng, Y. Ke, K. Chen, D. Liu, Z. Lu, J. Yang* and H. Yan*, Programmable Allosteric DNA Regulations for Molecular Networks and Nanomachines, Science Advances 5, DOI: 10.1126/sciadv.abl4589 (2022).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 208,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "S. Dey, A. Dorey, L. Abraham, Y. Xing, I. Zhang, F. Zhang, S. Howorka*, H. Yan*, A Reversibly Gated Protein-Transporting Membrane Channel Made of DNA, Nature Communications 13, Article number: 2271 (2022)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2022"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 207,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "H. Liu, F. Hong, F. Smith, J. Goertz, T. Ouldridge, M. Stevens, H. Yan & P. Sulc*, Kinetics of RNA and RNA:DNA hybrid strand displacement, ACS Synth. Biol. 10, 3066-3073 (2021).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2021"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 206,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "Y. Liu, L. Ma, S. Jiang, C. Han, P. Tang, H. Yang, X. Duan, N. Liu*, H. Yan* & X. Lan*, DNA Programmable Self-Assembly of Planar, Thin-Layered Chiral Nanoparticle Superstructures with Complex Two-Dimensional Patterns, ACS Nano 15, 16664-16672 (2021).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2021"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 205,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "T. Yuan, Y. Shao, X. Zhou, Q. Liu, Z. Zhu, B. Zhou, Y. Dong, N. Stephanopoulos, S. Gui*, H. Yan*, D. Liu*, Highly Permeable DNA Supramolecular Hydrogel Promotes Neurogenesis and Functional Recovery after Completely Transected Spinal Cord Injury, Advanced Materials 33, 2102428, (2021).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2021"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 204,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "Y. Zhang, Z. Qu, . Jiang, Y. Liu, R. Narayanan, D. Williams, X. Zuo, L. Wang, H. Yan, H. Liu* & C. Fan, Prescribing Silver Chirality with DNA Origami, J. Am. Chem. Soc 143, 8639- 8646, (2021).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2021"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 203,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "S. Jiang, N. Pal, F. Hong, N. E. Fahmi, H. Hu, M. Vrbanac, H. Yan*, N. G. Walter*, Y. Liu*, Regulating DNA Self-Assembly Dynamics with Controlled Nucleation, ACS Nano 15, 5384-5396, (2021).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2021"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 202,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "S. Dey, C. Fan*, K. V. Gothelf*, J. Li*, C. Lin*, L. Liu, N. Liu*, M. A. D. Nijenhuis, B. Sacca*, F. C. Simmel*, H. Yan* & P. Zhan, DNA Origami, Nat. Rev. Methods Primers 1, 13, (2021).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2021"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 201,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "S. Jiang, Z. Ge, S. Mou, H. Yan*, C. Fan*, Designer DNA Nanostructures for Therapeutics, Chem 7, 1156-1179, (2020).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2020"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 200,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "G. Yao', F. Zhang', F. Wang', T. Peng, H. Liu, E. Poppleton, P. Sulc, S. Jiang, L. Liu, C. Gong, X. Jing, X. Liu, L. Wang, Y. Liu, C. Fan*, H. Yan*, Meta-DNA Structures, Nat. Chem. 12, 1067-1075, (2020).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2020"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 199,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "C.R. Simmons, T. MacCulloch, F. Zhang, Y. Liu, N. Stephanopoulos & H. Yan, A Self- Assembled Rhombohedral DNA Crystal Scaffold with Tunable Cavity Sizes and High Resolution Structural Detail, Angew. Chem. Int. Ed. 59, 18619-18626, (2020).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2020"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 198,
+      "pdf_pages": [
+        7
+      ],
+      "raw_text": "S. Jiang, F. Zhang & H. Yan, Complex assemblies and crystals guided by DNA, Nat. Mater. 19, 694-700, (2020).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2020"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 197,
+      "pdf_pages": [
+        7,
+        8
+      ],
+      "raw_text": "J. Georges, X. Qi, X. Liu, Y. Zhou, E. C. Woolf, A. Valeri, Z. Al-Atrache, E. Belykh, B. Feuerstein, M. Preul, A. C. Scheck, M. Reiser, T. Anderson, J. Gopez, D. Appelt, S. Yocom, J. Eschbacher, H. Yan, P. Nakaji, A Fluorescent Aptamer Provides Rapid and Specific Ex Vivo Diagnosis of Central Nervous System Lymphoma from Rodent Xenograft Biopsies, J. Neurosurg. in press, (2020).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2020"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 196,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "J. Li', J. Dai', S. Jiang', M. Xie', T. Zhai, L. Guo, S. Cao, S. Xing, Z. Qu, Y. Zhao, F. Wang, Y. Yang, L. Liu, X. Zuo, L. Wang*, H. Yan*, C. Fan*, Encoding quantized fluorescence states with fractal DNA frameworks, Nat. Commun. 11, 2185, (2020).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2020"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 195,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "X. Qi, X. Liu, L. Matiski, R. Rodriguez Del Villar, T. Yip, F. Zhang, S. Sokalingam, S. Jiang, L. Liu, H. Yan, Y. Chang, RNA Origami Nanostructures for Potent and Safe Anti-Cancer Immunotherapy, ACS Nano 14, 4727-4740, (2020).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2020"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [
+        "10.4049/jimmunol.202.supp.70.22"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 194,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "F. Hong, D. Ma, K, Wu, L.A. Mina, R.C. Luiten, Y. Liu, H. Yan*, A.A. Green*, Precise and Programmable Detection of Mutations Using Ultraspecific Riboregulators, Cell 180, 1018-1032, (2020).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2020"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 193,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "G. Yao, J. Li, Q. Li, X. Chen, X. Liu, F. Wang, Z. Qu, Z. Ge, R.P. Narayanan, D. Williams, H. Pei, X. Zuo, L. Wang, H. Yan, B.L. Feringa*, C. Fan*, Programming nanoparticle valence bonds with single-stranded DNA encoders, Nature Materials 19, 781-788, (2020).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2020"
+      ],
+      "year_scope": "later_or_boundary_verification_pending",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 192,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "Z. Zhao, C. Wang, H. Yan,* Y. Liu*, Soft Robotics Programmed with Double Crosslinking DNA Hydrogels, Advanced Functional Materials 1905911, (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 191,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "C. Zhang*, Z. Wang, Y. Liu, J. Yang, X. Zhang, Y. Li, L. Pan, Y. Ke*, H. Yan*, Nicking- Assisted Reactant Recycle to Implement Entropy-Driven DNA Circuit, J. Am. Chem. Soc. 141, 17189-17197 (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 190,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "X. Jing, F. Zhang, P. Pan, X. Dai, J. Li, L. Wang, H. Yan, C. Fan, Solidifying framework nucleic acids with silica, Nature Protocols 14, 2416-2436, (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/s41596-019-0184-0"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 189,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "Y. Zhou, X. Qi, Y. Liu, F. Zhang, H. Yan*, DNA Nanoscaffold-Assisted Selection of Femtomolar Bivalent Aptamers for Human \u03b1-Thrombin with Potent Anticoagulant Activity, ChemBioChem 20, 2494-2503, (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 188,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "X. Wang, A. Chandrasekaran, R. Arun, Z. Shen, Y. Ohayon, T. Wang, M. Kizer, R. Sha, C. Mao, H. Yan, X. Zhang, S. Liao, B. Ding, B. Chakraboty, N. Jonoska, D. Niu, H. Gu, J. Chao, X. Gao, Y. Li, T. Ciengshin, N. Seeman, Paranemic Crossover DNA: There and Back Again, Chemical Reviews, 119, 6273-6289, (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 187,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "X. Zhou, S. Mandal, S. Jiang, S. Lin, J. Yang, Y. Liu, D. Whitten, N. Woodbury*, H.Yan*, Efficient Long-rnage, Directional Energy Transfer through DNA-Templated Dye Aggregates, J. Am. Chem. Soc. 141, 8473-8481 (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 186,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "S. Mandal, X. Zhou, S. Lin, H. Yan*, N. Woodbury*, Directional Energy Transfer through DNA-Templated J-aggregates, Bioconjugate Chemistry 30, 1870-1879 (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 185,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "Z. Ge, Z. Su, C. R. Simmons, J. Li, S. Jiang, W. Li, Y. Yang, Y. Liu*, W. Chiu, C. Fan*, H. Yan*, Rodox Engineering of Cytochrome c using DNA Nanostructure-Based Charge Encapsulation and Spatial Control, ACS Applied Materials & Interfaces 11, 13874-13880 (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 184,
+      "pdf_pages": [
+        8
+      ],
+      "raw_text": "Z. Ge, J. Fu, M. Liu, S. Jiang, A. Andreoni, X. Zuo, Y. Liu, H. Yan*, C. Fan*, Constructing Submonolayer DNA Origami Scaffold on Gold Electrode for Wiring of Redox Enzymatic Cascade Pathways, ACS Applied Materials & Interfaces 11, 13881-13887 (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/acsami.8b12374"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 183,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "L. Xin, M. Lu, S. Both, M. Pfeifer, M. Urban, C. Zhou, H. Yan, T. Weiss, N. Liu, K. Lindfors, Watching a Single Fluorofphore Molecule Walk into a Plasmonic Hotspot, ACS Photonics 6, 985-993 (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 182,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "Y. Xu, S. Jiang, C. Simmons, R. Narayanan, F. Zhang, A. Aziz, H. Yan, N. Stephanopoulos*, Tunable Nanoscale Cages from Self-Assembling DNA and Protein Building Blocks, ACS Nano 13, 3545\u20133554, (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 181,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "H. Jun, F. Zhang, T. Shepherd, S. Ratanalert, X. Qi, H. Yan, M. Bathe, Autonomously designed free-form 2D DNA origami, Science Advances, 5, eaav0655 (2019).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2019"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1126/sciadv.aav0655"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 180,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "D. Jiang, Z. Ge, H. Im, C. England, D. Ni, J. Hu, L. Zhang, C. Kutyreff, Y. Yan, Y. Liu, S. Cho, J. Engle, J. Shi, P. Huang, C. Fan*, H. Yan*, W. Cai*, DNA-origami nanostructures can exhibit preferential renal uptake and alleviate acute kidney injury, Nature Biomed. Eng. 2, 865-877 (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/s41551-018-0317-8"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 179,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "X. Qi, F. Zhang*, Z. Su', S. Jiang, D. Han, B. Ding, Y. Liu, W. Chiu, P. Yin, H. Yan*, Programing Molecular Topologies from Single-stranded Nucleic Acids, Nature Communications 9, 4579 (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 178,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "F. Hong, S. Jiang, X. Lan, R. Narayanan, P. Sulc, F. Zhang*, Y. Liu*, H. Yan*, Layered- Crossover Tiles with Precisely Tunable Angles for 2D and 3D DNA Crystal Engineering, J. Am. Chem. Soc. 140, 14670-14676 (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 177,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "X. Lan, T. Liu, Z. Wang, A. Govorov, H. Yan, Y. Liu, DNA-Guided Plasmonic Helix with Switchable Chirality, J. Am. Chem. Soc. 140, 11763-11770 (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/jacs.8b06526"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 176,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "F. Zhang, C. Simmons, J. Gates, Y. Liu, H. Yan*, Self-Assembly of a 3D DNA Crystal Structure with Rationally Designed Six-Fold Symmetry, Angew Chem Int Ed. 57, 12504- 12507 (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 175,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "X. Liu, F. Zhang, X. Ling, M. Pan, P. Liu, W. Li, B. Zhu, J. Li, H. Chen, L. Wang, J. Lin, Y. Liu, D. Zhao, H. Yan*, C. Fan*, Complex Silica Composite Nanomaterials Templated with DNA Origami, Nature, 559, 593-598, (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/s41586-018-0332-7"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 174,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "Z. Ge, Z. Su, C. R. Simmons, J. Li, S. Jiang, W. Li, Y. Yang, Y. Liu, W. Chiu, C. Fan, H. Yan* ACS Appl. Mater. Interfaces, , Redox Engineering of Cytochrome c using DNA Nanostructure-Based Charged Encapsulation and Spatial Control, DOI:10.1021/acsami.8b07101 (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 173,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "Li, A. Johnson-Buck, Y. Yang, W. Shih, H. Yan, N. Walter, Exploring the speed limit of toehold exchange with a cartwheeling DNA acrobat, Nature Nanotechnology 13, 723-729, (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 172,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "S. Li, Q. Jiang, C. Song, Y. Tian, J. Wang, S. Liu, Y. Zhang, Y. Zou, G. Anderson, J. Han, Y. Chang, Y. Liu, H. Yan*, G. Nie*, B. Ding, Y. Zhao*, A DNA nanorobot functions as a cancer therapeutic in response to a molecular trigger in vivo, Nature Biotechnology, 36, 258-264 (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/nbt.4071"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 171,
+      "pdf_pages": [
+        9
+      ],
+      "raw_text": "E. Boulais, N.Sawaya, R. Veneziano, A. Andreoni, S. Lin, N. Woodbury, H. Yan*, M. Bathe* Programmed coherent coupling in a DNA-based excitonic circuit, Nature Materials, 17, 159-166 (2018).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2018"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 170,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "D. Han, X. Qi, C. Myhrvold, B. Wang, M. Dai, S. Jiang, M. Bates, Y. Liu, B. An*, F. Zhang*, H. Yan*, P. Yin* Single-stranded DNA and RNA Origami, Science, 358, 1402 (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1126/science.aao2648"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 169,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "F. Zhang, H. Yan* DNA Self-assembly scaled up, Nature, 552, 34 (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 168,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "Y.R. Yang; J. Fu, S. Wootten, X. Qi, M. Liu, H. Yan, Y. Liu* 2D Enzyme Cascade Network with Efficient Substrate Channeling by Swinging Arms. ChemBioChem. DOI: 10.1002/cbic.201700613 (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1002/cbic.201700613"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 167,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "J. Li, A. A. Green, H. Yan, C. Fan, Engineering nucleic acid structures for programmable molecular circuitry and intracellular biocomputation, Nature Chem. DOI:10.1038/nchem.20405, in press (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/nchem.2852"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 166,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "C. Simmons, F. Zhang, T. MacCulloch, N. Fahmi, N. Stephanopoulos, Y. Liu, N. Seeman, H. Yan, Tuning the Cavity Size and Chirality of Self-Assembling 3D DNA Crystals. J. Am. Chem. Soc. 139, 11254-11260 (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 165,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "D. Mieritz, X. Li, A. Volosin, M. Liu, H. Yan, N. Walter, D. Seo, Tracking Single DNA Nanodevices in Herarchically Meso-Macroporous Antimony-Doped Tin Oxide Demonstrates Finite Confinement, Langmuir 33, 6410-6418 (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 164,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "H. Zhang, A. Carey, K. Jeon, M. Liu, T. Murell, J. Locsin, S. Lin, H. Yan, N. Woodbury, D. Seo, A Highly Stable and Scalable Photosynthetic Reaction Center-Graphene Hybrid Electrode System for Biomimetic Solar Energy Transduction, J. Mater. Chem. A. 5, 6038\u20136041, (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 163,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "A. Carey, H. Zhang, M. Liu, D. Sharaf, N. Akram, H. Yan, S. Lin, N. Woodbury*, D. Seo*, Enhancing Photocurrent Generation in Photosynthetic Reaction Center-based Photoelectrochemical Cells with Biomimetic DNA Antenna, ChemSusChem 10, 4457- 4460 (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 162,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "S. Jiang, F. Hong, H. Hu, H. Yan*, Y. Liu*, Understanding the Elementary Steps in DNA Tile-based Self-assembly, ACS Nano. 11, 9370-9381 (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 161,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "H. Fan, F. Zhang, Y. Liu*, H. Yan*, DNA Origami, Scaffolds for Creating Higher Order Structures, Chemical Reviews, Chemical Review, in press (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/acs.chemrev.6b00825"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 160,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "F. Zhang, F. Hong, H. Yan*, DNA Origami Tiles: Nanoscale Mazes, Nature. Nanotechnology. 12, 189-190 (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 159,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "Y. Dong, Y. Yang, Y. Zhang, D. Wang, X. Wei, S. Banerjee, Y. Liu, Z. Yang, H. Yan*, D. Liu*, Cuboid Vesicles Formed by Frame-guided Assembly on DNA Origami Scaffolds, Angew Chem Int Ed. 156, 1586-1589, (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1002/ange.201610133",
+        "10.1002/anie.201610133"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 158,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "A. Andreoni, S. Lin, H. Liu, R. E. Blankenship, H. Yan, N. Woodbury, Orange Carotenoid Protein as a Control Element in an Antenna System based on a DNA Nanostructure Nano Letters, 17, 1174-1180 (2017).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2017"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 157,
+      "pdf_pages": [
+        10
+      ],
+      "raw_text": "F. Hong, S. Jiang, T. Wang, Y. Liu*, H. Yan*, 3D Framework DNA origami with Layered Crossovers, Angew Chem Int Ed. 128, 13024\u201313027, (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1002/ange.201607050",
+        "10.1002/anie.201607050"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 156,
+      "pdf_pages": [
+        10,
+        11
+      ],
+      "raw_text": "A. Carey, H. Zhang, D. Mieritz, A. Volosin, A. Gardiner, R. Cogdell, H. Yan, D. Seo, S. Lin, N. Woodbury*, Photocurrent generation by photosynthetic purple bacterial reaction centers interfaced with a porous antimony-doped tin oxide (ATO) electrode, ACS Appl. Matter. Interfaces 8, 25104\u201325110, (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 155,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "J. Fu*, Y. Yang, S. Dhakal, Z. Zhao, M. Liu, T. Zhang, N. Walter, H. Yan, Assembly of Multi-Enzyme Complexes on DNA Nanostructures, Nature Protocols 11, 2243\u20132273, (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 154,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "C. Simmons, F. Zhang, J. Birktoft, X. Qi, D. Han, Y. Liu, R. Sha, H. Abdallah, C. Hernandez, Y. Ohayon, N. Seeman*, H. Yan*, Construction and Structure Determination of a Three-dimensional DNA Crystal, J. Am. Chem. Soc. 138, 10047\u201310054, (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 153,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "R. Veneziano, S. Ratanalert, K. Zhang, F. Zhang, H. Yan, W. Chiu, M. Bathe*, Designer nanoscale DNA assemblies programmed from the top down, Science 10.1126/science.aaf4388 (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1126/science.aaf4388"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 152,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "F. Zhang*, S. Jiang, W. Li, A. Hunt, Y. Liu*, H. Yan*, Self-assembly of Complex DNA Tessellations using low symmetry multi-arm DNA tiles, Angew Chem Int Ed. 55, 8860\u20138863 (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 151,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "G. Ke, M. Liu, S. Jiang, X. Qi, Y. R. Yang, S. Wootten, F. Zhang, Z. Zhu, Y. Liu*, C. J. Yang*, H. Yan*, Directional Regulation of Enzyme Pathways via the Control of Substrate Channeling on a DNA Origami Scaffold, Angew Chem Int Ed., 55, 7483-7486 (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 150,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "M. Liu; J. Fu; X. Qi; S. Wootten; N. Woodbury; Y. Liu*; H. Yan*, A three-enzyme pathway with an optimized geometric arrangement to facilitate substrate transfer, ChemBioChem, 17, 1097-1101 (2016). (Featured as inside cover of the Journal)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 149,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "S. Dokal, M. Adendorff, M. Liu, H. Yan*, M. Bathe*, N. Walter*, Rational design of DNA-actuated enzyme nanoreactors guided by single molecule analysis, Nano Scale 8, 3125- 3137 (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 148,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "W. Li, F. Zhang, H. Yan*, Y. Liu*, DNA Based Arithmetic Function: Half Adder Based on DNA Strand Displacement, Nanoscale 8, 3775-3784 (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 147,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "Z. Zhao, J. Fu. S. Dokal, A. Johnson-Buck, M. Liu, Y. Liu, N. Woodbury, N. Walter, H. Yan*, Nancaged Enzymes with Enhanced Catalytic Activity and Increased Stability Against Protease Digestion, Nature Communications 7, 10619 (2016).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 146,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "C. Zhang, J. Yang, S. Jiang, Y. Liu*, H. Yan*, DNAzyme-based Logic Gate-mediated DNA Self-assembly, Nano Letters, 16, 736\u2013741, (2016)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2016"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/acs.nanolett.5b04608"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 145,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "F. Zhang, S. Jiang, S. Wu, Y. Li, C. Mao, Y. Liu*, H. Yan*, Complex wireframe DNA origami nanostructures with multi-arm junction vertices, Nature Nanotechnology, 10, 779-784 (2015). (Featured as Front Cover of the Journal)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2015"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/nnano.2015.162"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 144,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "Y. Yang, Y. Liu, H. Yan*, DNA nanostructures as programmable biomolecular scaffolds, Bioconjugate Chemistry, 26, 1381-1395 (2015). (Featured as Front Cover of the Journal)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2015"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 143,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "J. F. Georges, X. Liu, J. Eschbacher, J. Nichols, M. A. Mooney, A. Joy, R. F. Spetzler, B. G. Feuerstein, M. C. Preu, T. Anderson, H. Yan, P. Nakaji*, Use of a Conformational Switching Aptamer for Rapid and Specific Ex Vivo Identification of Central Nervous System Lymphoma in a Xenograft Model. PloS one, 10(4), e0123607 (2015).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2015"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 142,
+      "pdf_pages": [
+        11
+      ],
+      "raw_text": "K. Pan, D. N. Kim, F. Zhang, M. Adendorff, H. Yan, M. Bathe*, Lattice-free prediction of three-dimensional structure of programmed DNA assemblies. Nature Communications, 5, 5578 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/ncomms6578"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 141,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "P. Dutta, S. Levenberg, A. Loskutov, D. Jun, R. Saer, J. Beatty, S. Lin, Y. Liu, N. Woodbury*, H. Yan*, A DNA-Directed Light-Harvesting/Reaction Center System, J. Am. Chem. Soc., 136, 16618-16625 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 140,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "A. Samanta, Y. Zhou, S. Zou, H. Yan, Y. Liu*, Fluorescence Quenching of Quantum Dots by Gold Nanoparticles: a Potential Long Range Spectroscopic Ruler, Nano Letters, 14, 5052\u2013 5057 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nl501709s"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 139,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "F. Zhang, J. Nangreave, Y. Liu, H. Yan*, Structural DNA Nanotechnology: State of the Art and Future Perspective, J. Am. Chem. Soc., 136, 11198\u201311211 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/ja505101a"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 138,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "D. Wang, S. Capehart, S. Pal, M. Liu, L. Zhang, J. Schuck, Y. Liu, H. Yan, M. Francis, J. De Yoreo*, Hierarchical Assembly of Plasmonic Nanostructures using Virus Capsid Scaffolds on DNA Origami Templates, ACS Nano, 8, 7896\u20137904 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nn5015819"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 137,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "J. Flory, C. Simmons, S. Lin, T. Jonhson, A. Andreoni, J. Zook, G. Chirlanda, Y. Liu, H. Yan, and P. Fromme, Low Temperature Assembly of Functional 3D DNA-PNA-Protein Complexes, J. Am. Chem. Soc., 136, 8283-8295 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 136,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "A. Johnson-Buck, S. Jiang, H. Yan, and N. G. Walter, DNA-Cholesterol Barges as Programmable Membrane-Exploring Agents, ACS Nano, 8, 5641-5649 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nn500108k"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 135,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "L. Liang, J. Li, Q. Li, Q. Huang, J. Shi, H. Yan, and C. Fan, Single-particle Tracking and Modulation of Cell Entry Pathways of a Tetrahedral DNA Nanostructure in Live Cells, Angew Chem Int Ed., 53, 7745-7750 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 134,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "J. Fu, Y. R. Yang, A. Johnson-Buck, Y. Liu, N. G. Walter, N. W. Woodbury, and H. Yan, Multi-enzyme Complexes on DNA Scaffolds Capable of Substrate Channeling with an Artificial Swinging Arm, Nature Nanotechnology, 9, 531-536 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 133,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "S. Jiang, H. Yan, and Y. Liu, Kinetics of DNA Tile Dimerization, ACS Nano., 8, 5826- 5832 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 132,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "W. Li, Y. Yang, S. Jiang, H. Yan, and Y. Liu, Controlled Nucleation and Growth of DNA Tile Arrays within Prescribed DNA Origami Frames and Their Dynamics, J. Am. Chem. Soc., 136, 3724-3727 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/ja411446q"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 131,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "P. Dutta, S. Lin, A. Loskutov, S. Levenberg, D. Jun, R. Saer, J. Beatty, Y. Liu, H. Yan, and N. Woodbury, Regengineering the Optical Absorption Cross-section of Photosynthetic Reaction Centers, J. Am. Chem. Soc., 136, 4599-4604 (2014).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2014"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 130,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "D. Han, S. Jiang, A. Samanta, Y. Liu, and H. Yan, Unidirectional Scaffold-Strand Arrangement in DNA Origami, Angew Chem Int Ed., 52, 9031-9034 (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1002/ange.201302177",
+        "10.1002/anie.201302177"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 129,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "Q. Mei, R. H. Johnson, X. Wei, F. Su, Y. Liu, L. Kelbauskas, S. Lindsay, D. R. Meldrum, and H. Yan, On-chip Isotachophoresis Separation of Functional DNA Origami Capture Nanoarrays from Cell Lysate, Nano Research, 6, 712-719 (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1007/s12274-013-0347-1"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 128,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "M. Liu, J. Fu, C. Hejesen, Y. Yang, N. W. Woodbury, K. Gothelf, Y. Liu, and H. Yan, A DNA Tweezer-Actuated Enzyme Nanoreactor, Nature Comm., 4:2127 (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 127,
+      "pdf_pages": [
+        12
+      ],
+      "raw_text": "S. Pal, P. Dutta, H. Wang, Z. Deng, S. Zou, H. Yan, and Y. Liu, Quantum Efficiency Modification of Organic Fluorophores Using Gold Nanoparticles on DNA Origami Scaffolds, J. Phys. Chem. C, 117, 12735\u201312744, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/jp312422n"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 126,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "W. Li, Y. Yang, H. Yan, and Y. Liu, 3-Input Majority Logic Gate and Multiple Input Logic Circuit Based on DNA Strand Displacement, Nano Letters, 13, 2980\u20132988, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 125,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "A. Johnson-Buck, J. Nangreave, S. Jiang, H. Yan, and N. Walter, Multifactorial Modulation of Binding and Dissociation Kinetics on Two-Dimensional DNA Nanostructures, Nano Letters, 13, 2754\u20132759, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nl400976s"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 124,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "F. Zhang, Y. Liu, and H. Yan, Complex Archimedean Tiling Self-assembled from DNA Nanostructures, J. Am. Chem. Soc., 135, 7458\u20137461, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 123,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "X. Wei, J. Nangreave, S. Jiang, H. Yan, and Y. Liu, Mapping the Thermal Behavior of DNA Origami Nanostructures, J. Am. Chem. Soc., 135, 6165\u20136176, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/ja4000728"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 122,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "J. Flory, S. Shinde, S. Lin, Y. Liu, H. Yan, G. Ghirlanda, and P. Fromme, PNA-peptide Assembly in a 3D DNA Nanocage at Room Temperature, J. Am. Chem. Soc., 135, 6985\u20136993, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 121,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "Y. Yang, Z. Zhao, F. Zhang, J. Nangreave, Y. Liu, and H. Yan, Self-assembly of DNA Rings from Scaffold Free DNA Tiles, Nano Letters, 13, 1862\u20131866, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 120,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "O. Schulz, Z. Zhao, A. Ward, M. Koenig, F. Koberling, Y. Liu, J. Enderlein, H. Yan and R. Ros, Tip Induced Fluorescence Quenching for Nanometer Optical and Topographical Resolution, Optical Nanoscopy, 2:1, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 119,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "Z. Deng, S. Pal, A. Samanta, H. Yan, and Y. Liu, DNA Functionalization of Colloidal II-VI Semiconductor Nanowires, Chemical Sciences, 3, 2234\u20132240, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 118,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "X. Liu, Y. Liu, and H. Yan, Functionalized DNA Nanostructures for Nanomedicine, Israel Journal of Chemistry, Special Issue on Supramolecular Chemistry for Materials and Medicine, (eds: Steven C. Zimmerman, Alanna Schepartz) Invited review, 53, 555-566, (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 117,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "A. Johnson-Buck, J. Nangreave, D. Kim, M. Bathe, H. Yan, and       N. Walter, Super- Resolution Fingerprinting Detects Chemical Reactions and Idiosyncrasies of Single DNA Pegboards, Nano Letters, 13, 728-733 (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nl304415b"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 116,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "D. Han, S. Pal, Y. Yang, S. Jiang, J. Nangreave, Y. Liu, and H. Yan. DNA Gridiron Nanostructures Based on Four-Arm Junctions, Science, 339, 1412-1415 (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1126/science.1232252"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 115,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "Z. Zhao, Y. Liu, and H. Yan, DNA Origami Templated Self-assembly of Discrete Length Single Wall Carbon Nanotubes, Org. Biomol. Chem., 11, 596-598 (2013).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2013"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1039/c2ob26942b"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 114,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "Z. Deng, A. Sanmanta, J. Nangreave, H. Yan, and Y. Liu, Robust DNA Functionalized Core/Shell Quantum Dots with Fluorescent Emission Spanning from UV-Vis to Near IR and Compatible with DNA Directed Self-Assembly, J. Am. Chem. Soc., 134, 17424-17427 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/ja3081023"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 113,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "Y. Yang, D. Han, J. Nangreave, Y. Liu, and H. Yan, DNA Origami with Double-Stranded DNA As a Unified Scaffold, ACS Nano, 6, 8209-8215 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nn302896c"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 112,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "N. Lu, H. Pei, Z. Ge, C. R. Simmons, H. Yan, and C. Fan, Charge Transport within A Three-Dimensional DNA nanostructure Framework, J. Am. Chem. Soc., 134, 13148-13151 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 111,
+      "pdf_pages": [
+        13
+      ],
+      "raw_text": "Q. Jiang, C. Song, J. Nangreave, X. Liu, L. Lin, D. Qiu, Z. Wang, G. Zou, X. Liang, H. Yan, and B. Ding, DNA Origami as a Carrier for Circumvention of Drug Resistance, J. Am. Chem. Soc., 134, 13396-13403 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/ja304263n"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 110,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "X. Liu, Y. Xu, T. Yu, C. Craig, Y. Liu, H. Yan, and Y. Chang, A DNA Nanostructure Platform for Directed Assembly of Synthetic Vaccines, Nano Letters, 12, 4254-4259 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 109,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "J. Fu, M. Liu, Y. Liu, and H. Yan, Spatially-Interactive Biomolecular Networks Organized by Nucleic Acid Nanostructures, Acc. Chem. Res. 45, 1215-1226 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/ar200295q"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 108,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "F. Zhang, J. Nangreave, Y. Liu, and H. Yan, Reconfigurable DNA Origami to Generate Quasi-Fractal Patterns, Nano Letters, 12, 3290\u20133295 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nl301399z"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 107,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "A. V. Pinheiro, J. Nangreave, S, Jiang, H. Yan, and Y. Liu, Steric Crowding and the Kinetics of DNA Hybridization within a DNA Nanostructure System, ACS Nano, 6, 5521\u20135530 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 106,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "J. Fu and H. Yan, Controlled Drug Release by a Nanorobot, Nature Biotechnol. 30, 407\u2013 408 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 105,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "J. Fu, M. Liu, Y. Liu, N. W. Woodbury, and H. Yan, Interenzyme Substrate Diffusion for an Enzyme Cascade Organized on Spatially Addressable DNA Nanostructures, J. Am. Chem. Soc. 134, 5516\u20135519 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/ja300897h"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 104,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "Z. Li, L. Wang, H. Yan, and Y. Liu, Effect of DNA Hairpin Loops on the Twist of Planar DNA Origami Tiles, Langmuir, 28, 1959\u20131965 (2012).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "1959",
+        "1965",
+        "2012"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/la2037873"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 103,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "A. Pinheiro, D. Han, W. M. Shih, and H. Yan, Challenges and Opportunities for Structural DNA Nanotechnology. Nature Nanotechnology. 6, 763-772, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/nnano.2011.187"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 102,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "S. Pal, Z. Deng, Y. Liu, and H. Yan, DNA Origami Directed Self-assembly of Anisotropic Plasmonic Nanostructures. J. Am. Chem. Soc. 133, 17606-17609, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 101,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "P. Dutta, R. Varghese, S. Lin, H. Yan, and Y. Liu. DNA Directed Artificial Light Harvesting Systems. J. Am. Chem. Soc. 133, 11985-11993, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 100,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "C. R. Simmons , D.Schmitt , X. Wei , D. Han , A. M. Volosin , D. M Ladd , D. Seo, Y. Liu, and H. Yan, Size-selective Incorporation of DNA Nanocages into Nanoporous Antimony-doped Tin Oxide Materials, ACS Nano, 5, 6060-6068, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 99,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "Z. Zhao, Y. Liu, and H. Yan, Organizing DNA Origami Tiles into Larger Structures Using Pre-formed Scaffold Frames, Nano Letters, 11, 2997-3002, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nl201603a"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 98,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "T. Torring, N. V. Voigt, J. Nangreave, H. Yan, and K. Gothelf, DNA Origami: A Quantum Leap for Self-assembly of Complex Structures, Chem. Soc. Rev, 40, 5636-5646, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1039/c1cs15057j"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 97,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "X. Liu, H. Yan, Y. Liu, and Y. Chang, Targeted Cell-Cell Interactions by DNA Nanoscaffold- Templated Multivalent Bi-specific Aptamers, Small, 7, 1673-1682, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 96,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "D. Han*, S. Pal, J. Nangreave, Z. Deng, Y. Liu, and H. Yan, DNA Origami with Complex Curvatures in Three-dimensional Space, Science, 332, 342-346 2011. (Featured as cover story of the April 15 issue of Science) This work was highlighted by National Science Foundation news release with video story (http://www.nsf.gov/news/news_summ.jsp?cntn_id=119245&org=NSF&from=news)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1126/science.1202998"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 95,
+      "pdf_pages": [
+        14
+      ],
+      "raw_text": "S.Pal, R. Varghese, H. Yan, and Y. Liu, Site Specific Synthesis and in-situ Immobilization of Fluorescent Silver Nanoclusters on DNA Nanoscaffolds Using Tollens Reaction, Angew Chem Int Ed, 50, 4176-4179, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 94,
+      "pdf_pages": [
+        14,
+        15
+      ],
+      "raw_text": "Z. Deng, L. Tong, S. Lin, M. Flores, J. Cheng, H. Yan, and Y. Liu, High Quality Manganese- Doped Zinc Sulfide Quantum Rods with Tunable Dual-Color and Multi-Photon Emissions, J. Am. Chem. Soc, 133, 5389-5396, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 93,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "J. Nangreave, H. Yan, and Y. Liu, DNA Nanostructures as Models for Evaluating the Role of Enthalpy and Entropy in Polyvalent Binding, J. Am. Chem. Soc, 133, 4490-4497, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 92,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "Q. Mei, X. Wei, F. Su, Y. Liu, C. Youngbull, R. Johnson, S. Lindsay, H. Yan, and D. Meldrum, Stability of DNA Origami Nanoarrays in Cell Lysate Nano Letters, 11, 1477-1482, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nl1040836"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 91,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "Z. Zhao, Y. Liu, and H. Yan, Encapsulation of Gold Nanoparticles in a DNA Origami Cage, Angew Chem Int Ed, 50, 2041-2044, 2011.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2011",
+        "2041",
+        "2044"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1002/ange.201006818",
+        "10.1002/anie.201006818"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 90,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "B. Ding, H. Wu, W. Xu, Z. Zhao, Y. Liu, H. Yu, and H. Yan, Interconnecting Gold islands with DNA Origami Nanotubes, Nano Letters, 10, 5065-5069, 2010.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nl1033073"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 89,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "D. Han, S. Pal, Y. Liu, and H. Yan, Folding and Cutting DNA into Reconfigurable Topological Nanostructures, Nature Nanotechnology, 5, 712\u2013717, 2010.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/nnano.2010.193"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 88,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "Z. Li, M. Liu, L. Wang, J. Nangreave, H. Yan, and Y. Liu, Molecular Behavior of DNA Origami in Higher Order Self-assembly, J. Am. Chem. Soc, 138, 13545\u201313552, 2010.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/ja106292x"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 87,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "Z. Deng, H. Yan, and Y. Liu, Controlled Colloidal Growth of Ultra-Thin Single-Crystal ZnS Nanowires with Magic-Size Diameter, Angew. Chem. Int. Ed. 49, 8695-8698, 2010.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 86,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "H. Pei, N. Lu, Y. Wen, S. Song, Y. Liu, H. Yan, and C. Fan, A DNA Nanostructure-based Biomolecular Probe Carrier Platform for Electrochemical Biosensing, Advanced Materials, 22, 4754\u20134758, 2010.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 85,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "J. Nangreave, D. Han, Y. Liu, and H. Yan, DNA Origami: A History and Current Perspective, Curr Opin Chem Biol, 14, 608\u2013615, 2010.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1016/j.cbpa.2010.06.182"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 84,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "N. Stephanopoulos; M. Liu; G. Tong; Z. Li; Y. Liu; H. Yan; and M. Francis, Immobilization and One-Dimensional Arrangement of Virus Capsids With Nanoscale Precision Using DNA Origami, Nano Lett. 10, 2714-2720, 2010.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nl1018468"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 83,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "K. Lund, A. J. Manzo, N. Dabby, N. Michelotti, A. Johnson-Buck, J. Nangreave, Steven Taylor, R. Pei, M. N. Stojanovic, N. G. Walter, E. Winfree, and H. Yan, Molecular Robots Guided by Prescriptive Landscapes, Nature 465, 206-210 (2010).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/nature09012"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 82,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "Z. Deng, O. Schulz, S. Lin, B. Ding, X. Liu, X. Wei, R. Ros, H. Yan, and Y. Liu, Aqueous Synthesis of Zinc-Blende CdTe/CdS Magic-Core/Thick-Shell Tetrahedral Shaped Nanocrystals with Emission Tunable to Near-Infrared, J. Am. Chem. Soc. 132, 5592-5593 (2010).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 81,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "S. Pal, Z. Deng, B. Ding, H. Yan, and Y. Liu, DNA Origami Directed Self-assembly of Discrete Silver Nanoparticle Architectures, Angew Chem Int Ed 49, 2700-2704 (2010).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1002/ange.201000330",
+        "10.1002/anie.201000330"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 80,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "B. Ding, Z. Deng, H. Yan, S. Cabrini, R. Zukerman, and J. Borker, Gold Nanoparticles Self- similar Chain Structure Organized by DNA Origami, J. Am. Chem. Soc. 132, 3248-3249, (2010).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 79,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "R. Chhabra, J. Sharma, Y. Liu, S. Rinker, and H. Yan, DNA Self-assembly for Nanomedicine, Advanced Drug Delivery Reviews 62, 617-625 (2010).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 78,
+      "pdf_pages": [
+        15
+      ],
+      "raw_text": "Z. Zhao, H. Yan, and Y. Liu, A Route to Scale up DNA Origami using DNA Tiles as Folding Staples, Angew Chem Int Ed 49, 1414-1417 (2010).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1002/ange.200906225",
+        "10.1002/anie.200906225"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 77,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "S. Williams, K. Lund, C. Lin, P. Wonka, S. Lindsay, and H. Yan, Tiamat: A Three Dimensional Editing Tool for Complex DNA Structures, DNA Computing: Lecture Notes in Computer Science, 5347, 90-101 (2010).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2010"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 76,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "Z. Deng, H. Yan, and Y. Liu, Band Gap Engineering of Quaternary Alloyed ZnCdSSe Quantum Dots via a Facile Phosphine-Free Colloidal Method, J. Am. Chem. Soc. 131, 17744 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 75,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "R. Chhabra, J. Sharma, H. Wang, S. Lin, H. Yan, S. Zou, S. Lindsay, and Y. Liu, Distance- dependent Interactions between Gold Nanoparticles and Fluorescent Molecules with DNA as Tunable Spacers, Nanotechnology, 20, 485201 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 74,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "Y. Ke, S. Douglas, M. Liu, J. Sharma, A. Cheng, A. Leung, Y. Liu, W. Shih, and H. Yan, Multilayer DNA Origami Packed On a Square Lattice, J. Am. Chem. Soc. 131, 15903-15908 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/ja906381y"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 73,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "L. A. Stearns, R. Chhabra, J. Sharma, Y. Liu, W. T. Petuskey, H. Yan, and J. C. Chaput, Template-Directed Nucleation and Growth of Inorganic Nanoparticles on DNA Scaffolds, Angew. Chem. Int. Ed. 45, 8494-8496 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 72,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "Z. Li, B. Wei, J. Nangreave, C. Lin, Y. Liu, Y. Mi, and H. Yan, A Replicable Tetrahedral Nanostructure Self-assembled from a Single DNA Strand, J. Am. Chem. Soc. 131, 13093-13098 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 71,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "S. Pal, J. Sharma, H. Yan, and Y. Liu, Stable Silver Nanoparticle-DNA Conjugates for Directed Self-assembly of Core-Satelite Silver Nanoclusters, Chemical Communication. 6059- 6061 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 70,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "Y. Liu and H. Yan, Designer Curvature, Science 325, 685-686 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 69,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "Y. Liu and H. Yan, Coordinating Corners, Nature Chemistry 1, 339-340 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 68,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "J. Nangreave, H. Yan, and Y. Liu, Studies of Thermal Stability of Multivalent DNA Hybridization in a Nanostructured System, Biophys. J. 97, 563-571 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 67,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "A. E. Gerdon, S.-S. Oh, W. Hsieh, Y. Ke, H. Yan, and H. T. Soh, Controlled Delivery of DNA Origami on Patterned Surface, Small 5, 1942-1946 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "1942",
+        "1946",
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1002/smll.200900442"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 66,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "C. Andersen, M. Knudsen, R. Chhabra, Y. Liu, H. Yan, and K. Gothelf, Distance Dependent Interhelical Couplings of Organic Rods Incorporated in DNA 4-Helix Bundles, Bioconjugation Chemistry 20, 1538-1546 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 65,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "Y. Ke, J. Sharma, M. Liu, K. Jahn, Y. Liu, and H. Yan, Scaffolded DNA Origami of a DNA Tetrahedron Molecular Container, Nano. Lett. 9, 2445-2447 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1021/nl901165f"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 64,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "C. Lin and H. Yan, Engaging Enzyme Cascades on DNA Scaffolds, Nature Nanotechnology 4, 211-212 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 63,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "C. Lin, Y. Liu, and H. Yan, Designer DNA Nanoarchitectures, Biochemistry, 48, 1663-1674 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 62,
+      "pdf_pages": [
+        16
+      ],
+      "raw_text": "J. Sharma, R. Chhabra, A. Cheng, J. Brownell, Y. Liu, and H. Yan, Control of Self-Assembly of DNA Tubules Through Integration of Gold Nanoparticles, Science, 323, 112-116 (2009). Highlighted by National Science Foundation (http://www.nsf.gov/news/news_summ.jsp?cntn_id=112939&org=OLPA&from=news)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 61,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "C. Lin, Y. Ke, Z. Li, J. Wang, Y. Liu, and H. Yan, Mirror Image DNA Nanostructures for Chiral Supramolecular Assemblies, Nano Letters. 9, 433-436 (2009).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2009"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 60,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "C. Lin, S. Rinker, X. Wang, Y. Liu, N. C. Seeman, and H. Yan, In-vivo Cloning of DNA Nanostructures, Proc. Natl. Acad. Sci. 105, 17626-17635 (2008). See commentary from Nature news (http://www.nature.com/news/2008/081007/full/news.2008.1157.html) and PNAS (http://www.pnas.org/content/105/46/17593)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 59,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "Z. Li, Y. Ke, C. Lin, H. Yan, and Y. Liu, Subtractive Assembly of DNA Nanoarchitectures Driven by Fuel Strand Displacement, Chem. Comm 4318-4320 (2008).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 58,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "C. Lin, J. Nangreave, Z. Li, H. Yan, and Y. Liu, Signal Amplification on a DNA Tile Based Biosensor with Enhanced Sensitivity, Nanomedicine 3, 521-528 (2008).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 57,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "Y. Xu, Q. Wang, P. He, Q. Dong, F. Liu, Y. Liu, L. Lin, H. Yan, and X. Zhao, Cell Nucleus Penetration by Quantum Dots Induced by Nuclear Staining Organic Fluorophore and UV- Irradiation, Advanced Materials 20, 3468-3473 (2008).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 56,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "J. Sharma, R. Chhabra, C. S. Anderson, K. V. Gothelf, H. Yan, and Y. Liu, Toward Reliable Gold Nanoparticle Patterning on Self-assembled DNA Nanoscaffold, J. Am. Chem. Soc 130, 7820-2821 (2008).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 55,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "C. S. Anderson, H. Yan, and K. V. Gothelf, Bridging One Helical Turn in dsDNA by Templated Dimerization of Molecular Rods, Angew Chem Int Ed 47, 5569-5572 (2008).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 54,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "J. Sharma, Y. Ke, C. Lin, R. Chhabra, Q. Wang, J. Nangreave, Y. Liu, and H. Yan, DNA Tile Directed Self-assembly of Quantum Dots into Two-dimensional Nanopatterns, Angew Chem Int Ed 47, 5157-5159 (2008).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 53,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "S. Rinker, Y. Ke, Y. Liu, and H. Yan, Self-assembled DNA Nanostructures for distance dependent multivalent ligand-protein binding, Nature Nanotechnology 3, 418-422 (2008).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [
+        "10.1038/nnano.2008.164"
+      ],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 52,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "Y. Ke, S. Lindsay, Y. Chang, Y. Liu, and H. Yan, Self-assembled Water-soluble Nucleic Acid Probe Tiles for Label Free RNA Detection, Science 319, 180-183 (2008). This paper has been highlighted by Reuters and many other news agencies and was commented by       high       profile      journals       such     as       Nature      Biotechnology (http://www.nature.com/nbt/journal/v26/n3/full/nbt0308-299.html),      Nature      Methods (http://www.nature.com/nmeth/journal/v5/n3/full/nmeth0308-222.html).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 51,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "J. Sharma, R. Chhabra, H. Yan, and Y. Liu, A Facile In situ Generation of Dithiocarbamate Ligands for Stable Gold Nanoparticle-Oligonucleotide Conjugates Chemical Communication 18, 2140-2142 (2008).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 50,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "Q. Wang, Y. Liu, Y. Ke, and H. Yan, Quantum Dots Bioconjugation During Core-Shell Synthesis, Angew Chem Int Ed. 47, 316-319 (2008).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2008"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 49,
+      "pdf_pages": [
+        17
+      ],
+      "raw_text": "C. Lin, X. Wang, Y. Liu, N. C. Seeman, and H. Yan, Rolling Circle Enzymatic Replication of a Complex Multi-crossover DNA Nanostructure, J. Am. Chem. Soc. 129, 14475-14481 (2007).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2007"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 48,
+      "pdf_pages": [
+        17,
+        18
+      ],
+      "raw_text": "R. Chhabra, J. Sharma, Y. Ke, Y. Liu, S. Rinker, S. Lindsay, and H. Yan, Spatially Addressable Multi-protein Nanoarrays Templated by Aptamer Tagged DNA Nanoarchitectures, J. Am. Chem. Soc. 129, 10304-10305 (2007). This paper was highlighted by the editor of Nature Nanotechnology as \u201cResearch Highlight\u201d: http://www.nature.com/nnano/reshigh/2007/0807/full/nnano.2007.287.html",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2007"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 47,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "Q. Wang, Y. Liu, and H. Yan, Layer-by-layer Growth of Superparamagnetic and Fluorecently Barcoded Nanospheres, Nanotechnology 18, 40, 405026 (2007).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2007"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 46,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "C. Lin, Y. Liu, M. Mertig, J. Gu, and H. Yan, Functional DNA Nanotube Arrays: Bottom-up Meets Top-down, Angew. Chem. Int. Ed. 46, 6089-6092 (2007). This paper was chosen by the editors as \u201cHot Paper\u201d: http://www3.interscience.wiley.com/cgi-bin/jabout/26737/2002_hotpaper.html",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2007"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 45,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "Q. Wang, Y. Liu, and H. Yan, Mechanism of a Self-templating Synthesis of Monodispersed Hollow Silica Nanospheres with Tunable Size and Shell Thickness, Chemical Communication 2339-2341 (2007)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2007"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 44,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "Q. Wang, Y. Xu, X. Zhao, Y. Chang, Y. Liu, L. Jiang, J. Sharma, D.-K. Seo, and H. Yan, A Facile One-step In situ Functionalization of Quantum Dots with Preserved Photoluminescence for Bioconjugation, J. Am. Chem. Soc. 129, 6380-6381, (2007).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2007"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 43,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "B. Williams, K. Lund, Y. Liu, H. Yan, and J. Chaput, Self-assembled Peptide Nanoarrays: An Approach to Studying Protein-protein Interactions, Angew. Chem. Int. Ed. 46, 3051-3054 (2007).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2007"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 42,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "C. Lin, Y. Liu, and H. Yan, Self-assembled Combinatorial Encoding Nanoarrays for Multiplexed Biosensing, Nano Lett. 7, 507-512 (2007).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2007"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 41,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "J. Sharma, R. Chhabra, H. Yan, and Y. Liu, pH-driven Conformational Switch of \u201ci-motif\u201d DNA for Reversible Assembly of Gold Nanoparticles. Chemical Communication 477-479 (2007)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2007"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 40,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "C. Lin, M. Xie, J. Chen, Y. Liu, and H. Yan, Rolling Circle Amplification of a DNA Nano- junction, Angew. Chem. Int. Ed. 45, 7537-7539 (2006). This paper was chosen by the editors as \u201cHot Paper\u201d: http://www3.interscience.wiley.com/cgi-bin/jabout/26737/2002_hotpaper.html",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 39,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "C. Lin, E. Katilius, Y. Liu, and H. Yan, Self-assembled Signaling Aptamer Nanoarrays for Protein Detection, Angew. Chem. Int. Ed. 45, 5296-5301 (2006).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 38,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "C. Lin, Y. Liu, S. Rinker, and H. Yan, DNA Tile Based Self-assembly: Building Complex Nano-architectures, ChemPhysChem 7, 1641-1647 (2006).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 37,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "K. Lund, Y. Liu, and H. Yan, Combinatorial Self-assembly of DNA Nanostructures, Organic and Biomolecular Chemistry 4, 3402-3403 (2006) Chosen by the editors as the Inside Cover image.",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 36,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "S. Rinker, Y. Liu, and H. Yan, Two Dimensional LNA/DNA Arrays: Estimating the Helicity of LNA/DNA Hybrid Duplex, Chemical Communication 2675-2677 (2006).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 35,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "R. Chhabra, J. Sharma, Y. Liu, and H. Yan, Addressable Molecular Tweezers for DNA Templated Coupling Reactions, Nano Lett. 6, 978-983 (2006).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 34,
+      "pdf_pages": [
+        18
+      ],
+      "raw_text": "L. Lin, H. Wang, Y. Liu, H. Yan, and S. Lindsay, Recognition Imaging with a DNA Aptamer, Biophysical J. 90, 4236-4238 (2006).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 33,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "K. Lund, B. Williams, Y. Ke, Y. Liu, and H. Yan, DNA Nanotechnology: a Rapidly Evolving Field, Current Nanoscience 2, 113-122 (2006).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 32,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "Y. Ke, Y. Liu, J. Zhang, and H. Yan, A Study of DNA Tube Formation Mechanisms Using 4-, 8- and 12-Helix DNA Nanostructures, J. Am. Chem. Soc. 128, 4414-4421 (2006).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 31,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "J. Zhang, Y, Liu, Y. Ke, and H. Yan, Periodic Square-like Gold Nanoparticle Arrays Templated by a DNA Nanogrids on a Surface, Nano Lett. 6, 248-251 (2006). Featured in physorg.com: (http://www.physorg.com/news11996.html)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 30,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "H. Yan and B. Xu, Towards Rapid DNA Sequencing: Detecting Single-Stranded DNA with a Solid-State Nanopore, Small 2, 310-312 (2006).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 29,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "J. Sharma, R. Chhabra, Y. Liu, Y. Ke, and H. Yan, DNA Templated Self-assembly of Two- Dimensional and Periodical Gold Nanoparticle Arrays, Angew. Chem. Int. Ed. 45, 730-735 (2006).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2006"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 28,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "K. Lund, Y. Liu, S. Lindsay, and H. Yan, Self-assembling Molecular Pegboard, J. Am. Chem. Soc.127, 17606-17607 (2005).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 27,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "Y. Liu, Y. Ke, and H. Yan, Self-assembly of Symmetric Finite Size DNA Nanoarrays, J. Am. Chem. Soc. 127, 17140-17141 (2005).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 26,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "Y. Liu, C. Lin, H. Li, and H. Yan Aptamer Directed Self-assembly of Proteins on a DNA Nanostructure, Angew. Chem. Int. Ed. 44, 4333 (2005). Featured in physorg.com: (http://www.physorg.com/printnews.php?newsid=4616)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 25,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "S. H. Park, P. Yin, Y. Liu, J. Reif, T. H. LaBean, and H. Yan, Programmable DNA Self- assemblies for Nanoscale Organization of Ligands and Proteins. Nano Lett. 5, 729 (2005).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 24,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "S. H. Park, R. Barish, H. Li , J. H. Reif , G. Finkelstein, H. Yan, and T. H. LaBean, Three Helix Bundle DNA Tiles Self-assemble into 2D Lattice or 1D Templates for Silver Nanowires, Nano Lett. 5, 693 (2005).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 23,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "Y. Liu, and H. Yan, Modular Self-assembly of DNA Lattice with Tunable Periodicity, Small 1,327-330 (2005).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 22,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "H. Yan, Nucleic Acid Nanotechnology, Science, 306, 2048-2049 (2004). B. At Duke University",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2004",
+        "2048",
+        "2049"
+      ],
+      "year_scope": "pre2020_or_mixed_year_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 21,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "J. H. Reif, T. H. LaBean, S. Sahu, H. Yan and P. Yin, Design, Simulation, and Experimental Demonstration of Self-assembled DNA Nanostructures and Motors. In: UPP2004, LNCS 3566, ed. by J.P. Banatre, Springer-Verlag Berlin Heidelberg, pp. 173-187, (2005).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 20,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "S.H. Park, H. Yan, J.H. Reif, T. H. LaBean, and G. Finkelstein, Electronic Nanostructures Templated on Self-assembled DNA Scaffolds, Nanotechnology 15, S525-S527 (2004).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2004"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 19,
+      "pdf_pages": [
+        19
+      ],
+      "raw_text": "H. Yan, P. Yin, S. H. Park, H. Li, L. Feng, X. Guan, D. Liu, J. H. Reif, and T. H. LaBean, Self-Assembled DNA Structures for Nanoconstruction, AIP Proceedings 725 (DNA-Based Molecular Electronics), 43-52. (2004).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2004"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 18,
+      "pdf_pages": [
+        19,
+        20
+      ],
+      "raw_text": "P. Yin, H. Yan, X.J. Guan, A.J. Turberfield, and J. H. Reif, An Autonomous Unidirectional DNA Walker, Angew. Chem. Int. Ed. 43, 4906-4911 (2004). Featured in Technology Research News, TRNMag.com: (http://www.trnmag.com/Stories/2004/ 110304/DNA_machines_take_a_walk_110304.htm)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2004"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 17,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "H. Li, S. H. Park, J. H. Reif, T. H. LaBean, and H. Yan, DNA Templated Self-Assembly Of Protein And Nanoparticle Linear Arrays, J. Am. Chem. Soc. 126, 418 (2004).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2004"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 16,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "H. Yan, L. Feng, T. H. LaBean, and J. H. Reif, Parallel Molecular Computation of Pair-wise Exclusive-Or (XOR) Using DNA \u201cString Tile\u201d Self-Assembly, J. Am. Chem. Soc. 125, 14246 (2003).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2003"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 15,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "H. Yan, S. H. Park, G. Finkelstein, J. H. Reif and T. H. LaBean, DNA Templated Self- assembly of Protein Arrays and Highly Conductive Nanowires, Science, 301, 1882 (2003). Featured in Technology Research News, TRNMag.com: DNA forms nano waffles (http://www.trnmag.com/Stories/2003/102203/DNA_forms_nano_waffles_102203.html)",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2003"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 14,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "L. Feng, S. H. Park, J. H. Reif, and H. Yan, A Two-State DNA Lattice Switched By DNA Nanoactuator, Angew. Chem. Int. Ed. 42, 4342 (2003). Featured by an interview with BBC radio program Discovery Today (Oct. 29, 2003). Editor\u2019s choice of Science magazine, MATERIALS SCIENCE: DNA Makes a Move (http://www.sciencemag.org/content/vol302/issue5642/twil.shtml).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2003"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 13,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "H. Yan, T. H. LaBean, L. Feng, and J. H. Reif, Directed Nucleation Assembly of DNA tile Complexes for Barcode Patterned Lattices, Proc. Natl. Acad. Sci. U.S.A. 100, 8103 (2003). Featured in Technology Research News, TRNMag.com: DNA makes nano barcode (http://www.trnmag.com/Stories/2003/070203/DNA_makes_nano_barcode_070203.html) C. At New York University",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2003"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 12,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "N.C. Seeman, B. Ding , S. Liao , T. Wang, W.B. Sherman, P.E. Constantinou, J. Kopatsch, C. Mao, R. Sha, F. Liu, H. Yan and P.S. Lukeman, Experiments in Structural DNA Nanotechnology: Arrays and Devices , Proc. SPIE; Nanofabrication: Technologies, Devices and Applications 5592, 71-81 (2005).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 11,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "Sha, R., Zhang, X., Liao, S., Constantinou, P.E., Ding, B., Wang, T., Garibotti, A.V., Zhong, H., Israel, L.B., Wang, X., Wu, G., Chakraborty, B., Chen, J., Zhang, Y., Mao, C., Yan, H., Kopatsch, J., Zheng, J., Lukeman, P.S., Sherman, W.B. and Seeman, N.C., Motifs and Methods in Structural DNA Nanotechnology, Proc. Intl. Conf. Nanomaterials, NANO 2005, July 13-15, 2005, Mepco Schlenk Engineering College, Srivakasi, India, V. Rajendran, ed., pp. 3-10 (2005).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 10,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "R. Sha, X. Zhang, S. Liao, P. Constantinou, B. Ding, T. Wang, A. V. Garibotti, H. Zhong, L. B. Israel, X. Wang, G. Wu, B. Chakraborty, J. Chen, Y. Zhang, H. Yan, Z Shen, W. SHen, P.Sa- Ardyen, J. Kopatsch, J. Zheng, P. Lukeman, W.B. Sherman, C. Mao, N. Jonoska, and N. C. Seeman, Structural DNA Nanotechnology: Molecular Construction and Composition. In: UC2005, LNCS 3699, ed. by C.S. Calude et al. Springer-Verlag Berlin Heidelberg, pp. 20-31 (2005).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2005"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 9,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "Z. Shen, H. Yan, T. Wang, and N. C. Seeman, Paranemic Crossover DNA: A Generalized Holliday Structure with Applications in Nanotechnology, J. Am. Chem. Soc. 126, 1666 (2004).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2004"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 8,
+      "pdf_pages": [
+        20
+      ],
+      "raw_text": "H. Yan and N. C. Seeman, Edge-Sharing DNA Triangles And One-Dimensional Self- Assembly, J. Supramol. Chem., 1, 229-237 (2003).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2003"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 7,
+      "pdf_pages": [
+        21
+      ],
+      "raw_text": "X. Zhang, H. Yan, Z. Shen and N. C. Seeman, Paranemic Cohesion of Topologically-Closed DNA Molecules, J. Am. Chem. Soc. 124, 12940-12941 (2002).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2002"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 6,
+      "pdf_pages": [
+        21
+      ],
+      "raw_text": "H. Yan, X. Yang, Z. Shen and N. C. Seeman, A Robust Sequence-dependent Rotary DNA Device, Nature, 415, 62-65 (2002).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2002"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 5,
+      "pdf_pages": [
+        21
+      ],
+      "raw_text": "T. H. LaBean, H. Yan, J. Kopatsch, F. Liu, E. Winfree, J. H. Reif and N. C. Seeman, The Construction, Analysis, Ligation and Self-assembly of DNA Triple Crossover Molecules, J. Am. Chem. Soc. 122, 1848-1860 (2000).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "2000"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 4,
+      "pdf_pages": [
+        21
+      ],
+      "raw_text": "N.C. Seeman, H. Wang, X. Yang, F. Liu, C. Mao, W. Sun, L. Wenzler, Z. Shen, R. Sha, H. Yan, M.H. Wong, P. Sa-Ardyen, B. Liu, H. Qiu, X. Li, J. Qi, S.M. Du, Y. Zhang, J.E. Mueller, T.-J. Fu, Y. Wang, and J. Chen, New Motifs in DNA Nanotechnology, Nanotechnology 9, 257- 273 (1998). D. At Shandong University",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "1998"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 3,
+      "pdf_pages": [
+        21
+      ],
+      "raw_text": "Y. Ma, Q. Wang, H. Yan, X. Ji and Q. Qiu, Zeolite-Catalyzed Esterification. Synthesis of Acetates, Benzoates And Phthalates, Appl. Catal. 139, 51-57 (1996).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "1996"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 2,
+      "pdf_pages": [
+        21
+      ],
+      "raw_text": "Q. Wang, Y. Ma, X. Ji, H. Yan, and Q. Qiu. Zeolite-Catalyzed Friedel-Crafts Acylation of Aromatics. Synthesis Of 4-Acyl Anisole With A HY Catalyst, Chin. Chem. Lett. 7, 99-102 (1996).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "1996"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    },
+    {
+      "number": 1,
+      "pdf_pages": [
+        21
+      ],
+      "raw_text": "Q. Wang, Y. Ma, X. Ji, H. Yan and Q. Qiu, Regioselective Acylation of Anisole with Carboxylic-Acid Over HZSM-5 Catalyst, J. Chem. Soc. Chem. Comm. 22, 2307-2308 (1995).",
+      "raw_text_note": "Includes source publicity/subsection text until next numbered entry; not a parsed authoritative citation.",
+      "year_tokens": [
+        "1995"
+      ],
+      "year_scope": "earlier_methodological_lead",
+      "title_match_candidates": [],
+      "identity_status": "pending; normalized title substring is a candidate only"
+    }
+  ],
+  "limitations": [
+    "Source numbering skips228\u2013231, visually verified PDFp5; do not fabricate missing entries.",
+    "Heading includes proceedings and submitted manuscripts: publication types/dates need individual verification.",
+    "Book chapters, patents and invited presentations are separate sections not enumerated by this extraction.",
+    "CV is not an exhaustive laboratory or author-history closure claim."
+  ]
+}

@@ -33,6 +33,8 @@ export function isSimulationApiPath(path) {
 export function needsAssemblySimulation(path, method = 'GET') {
   const route = path.split('?')[0]
   if (!isSimulationApiPath(route)) return false
+  // Region selection is job-owned UI metadata, not a simulation preparation.
+  if (/^\/(oxdna|md)\/jobs\/[^/]+\/submodel(?:-estimate)?$/.test(route)) return false
   if (route.startsWith('/simulate/')) return false
   if (route.startsWith('/exp/')) return method === 'POST' && route === '/exp/jobs'
   // FEM result/lifecycle endpoints use the immutable job snapshot.

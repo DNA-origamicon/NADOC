@@ -1,0 +1,33 @@
+[
+  {
+    "id": "ACCESS-a556b23d8f",
+    "doi": "10.1021/acsnano.6b07291",
+    "url": "https://repository.lib.ncsu.edu/bitstreams/927d8232-85bf-402e-811b-b15c31dc336d/download",
+    "kind": "download",
+    "reason": "Related 2016 Estrich dissertation needed to compare tetrahedral variants. NC State serves a bot-verification page instead of the public PDF; this is not evidence of missing CU subscription access.",
+    "automatic_attempts": [
+      "Paced direct bitstream retrieval returned non-PDF; payload rejected.",
+      "Public DSpace API content endpoint returned non-PDF; payload rejected.",
+      "Independent web opening displayed NC State Libraries Verifying you are not a bot. Exact-title searches found no alternative PDF; no interactive browser tool is available in this session."
+    ],
+    "status": "received",
+    "created": "2026-11-05T18:51:24.273911+00:00",
+    "events": [
+      {
+        "at": "2026-11-05T20:08:50.294177+00:00",
+        "action": "file_received; agent verification required"
+      },
+      {
+        "at": "2026-11-05T20:09:27.882832+00:00",
+        "action": "Title,author,institution,year verified against requested dissertation; related source,not ACS supplement. Original Downloads file untouched."
+      }
+    ],
+    "file": {
+      "local_file": "assets/human-assisted/ACCESS-a556b23d8f-438497c62f1b.pdf",
+      "sha256": "438497c62f1b38634ed79d16f8b8444d1d13ed8ff03197d21b22c7d724ec61c4",
+      "bytes": 8445785,
+      "source_url": "https://repository.lib.ncsu.edu/bitstreams/927d8232-85bf-402e-811b-b15c31dc336d/download",
+      "review_status": "identity_verified_as_Estrich2016_dissertation; scientific_source_review_pending"
+    }
+  }
+]

@@ -1,0 +1,176 @@
+{
+  "pages": [
+    {
+      "page": 1,
+      "transcribed": 13,
+      "expected_named_entries": 13,
+      "source_types": {
+        "invited": 11,
+        "keynote": 1,
+        "contributed": 1
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 2,
+      "transcribed": 18,
+      "expected_named_entries": 18,
+      "source_types": {
+        "invited": 4,
+        "contributed": 2,
+        "poster": 12
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 3,
+      "transcribed": 16,
+      "expected_named_entries": 16,
+      "source_types": {
+        "poster": 8,
+        "keynote": 2,
+        "invited": 5,
+        "contributed": 1
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 4,
+      "transcribed": 12,
+      "expected_named_entries": 12,
+      "source_types": {
+        "poster": 8,
+        "award_address": 1,
+        "keynote": 1,
+        "invited": 1,
+        "contributed": 1
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 5,
+      "transcribed": 15,
+      "expected_named_entries": 15,
+      "source_types": {
+        "invited": 5,
+        "poster": 7,
+        "keynote": 2,
+        "contributed": 1
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 6,
+      "transcribed": 14,
+      "expected_named_entries": 14,
+      "source_types": {
+        "poster": 10,
+        "keynote": 1,
+        "invited": 3
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 7,
+      "transcribed": 12,
+      "expected_named_entries": 12,
+      "source_types": {
+        "poster": 12
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 8,
+      "transcribed": 11,
+      "expected_named_entries": 11,
+      "source_types": {
+        "poster": 7,
+        "keynote": 1,
+        "invited": 3
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 9,
+      "transcribed": 16,
+      "expected_named_entries": 16,
+      "source_types": {
+        "keynote": 2,
+        "contributed": 2,
+        "invited": 4,
+        "poster": 8
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 10,
+      "transcribed": 14,
+      "expected_named_entries": 14,
+      "source_types": {
+        "poster": 10,
+        "invited": 4
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 11,
+      "transcribed": 17,
+      "expected_named_entries": 17,
+      "source_types": {
+        "poster": 13,
+        "keynote": 1,
+        "invited": 2,
+        "contributed": 1
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    },
+    {
+      "page": 12,
+      "transcribed": 11,
+      "expected_named_entries": 11,
+      "source_types": {
+        "poster": 7,
+        "keynote": 1,
+        "contributed": 1,
+        "invited": 2
+      },
+      "audit_method": "Complete page text inspected; p1 additionally rendered. Extracted text has font substitutions (ti as R, tt as g), retained rather than silently repaired. Administrative introductory remarks/session headers excluded; named TBA entries retained. Title and listed-author presence asserted."
+    }
+  ],
+  "total_transcribed": 169,
+  "distinct_program_leads": 167,
+  "repeated_appearance_count": 2,
+  "source_page_total": 12,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11627
+  },
+  "counts": {
+    "publication_versions": 6041,
+    "canonical_work_keys": 6040,
+    "provisional_work_keys_not_reconciled": 6039,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 1168,
+      "unreviewed": 4624,
+      "fulltext_reviewed": 58,
+      "design_sources_reviewed": 191
+    },
+    "relevance": {
+      "uncertain": 5777,
+      "background_or_review": 25,
+      "design_bearing": 232,
+      "not_origami": 7
+    },
+    "catalog_eligibility": {
+      "unresolved": 6029,
+      "excluded": 11,
+      "eligible": 1
+    },
+    "design_groups": 138,
+    "design_source_reviews": 61,
+    "discovery_runs": 49
+  }
+}

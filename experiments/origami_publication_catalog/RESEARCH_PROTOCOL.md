@@ -5,7 +5,47 @@ The deliverables are a screened literature registry, a reconciled design catalog
 source-file evidence, and an explicit account of remaining gaps. This protocol
 directs future research; it does not certify the existing backlog as reviewed.
 
+## Discovery priority — user clarification, November 5, 2026
+
+Prioritize publication histories and citation/source review for Carlos Castro,
+Hendrik Dietz, Shawn Douglas, William Shih, Hao Yan, Peng Yin, Andrew Turberfield,
+Mark Bathe, Tim Liedl, Lulu Qian, Friedrich Simmel, Philip Tinnefeld, Jonathan
+Doye, Thomas LaBean, and Paul Rothemund. These are priority seeds, not a scope cap.
+FNANO programs are supplementary leads only after other search methods demonstrate
+diminishing returns. Defer further FNANO enumeration and preserve acquired evidence
+and unfinished queues. Do not infer diminishing returns from a single empty search;
+record routes, reviewed yields and remaining coverage before returning to FNANO.
+
 ## Scope and units
+
+### Rapid source triage — user clarification, November 5, 2026
+
+Exclude patents from the active census and design-processing queue regardless of
+sequence availability. Preserve prior evidence and IDs with an explicit user-scope
+exclusion; do not mislabel their molecular relevance or remove linked journal work.
+
+This is the mandatory FIRST screening step, before article/design deep review,
+variant reconstruction, citation expansion for that record, or source-completeness
+audits. Screen readily available sources for a staple table/list containing at
+least 100 DNA sequence entries. Qualifying lists proceed; absent/smaller lists
+leave the active processing queue. If a qualifying table cannot be found, record
+`no_qualifying_table_found` with sources checked and move to the next record.
+Do not pursue additional access routes, author histories, theses, or human download
+requests solely to rescue that record. Existing readily accessible supplements and
+direct public supplement links may be checked using the resumable downloader.
+Do not repeatedly revisit deferred records; reopen only when new source evidence
+arrives or the user requests it. This supersedes earlier exhaustive source-retrieval
+and unresolved-source followup instructions for records failing this gate.
+Record unknown availability or extraction failures separately, then move on. Missing local files
+are not proof of no supplement. Inspect table context: scaffold line wraps and many
+small independent tables must not be summed into a fictitious 100-staple list.
+Image tables may receive a quick visual check; do not launch extended OCR or
+transcription work at this gate. Candidate sequence counts are not verified
+strand counts, design completeness, or a literature-relevance decision. Record
+threshold, file hashes, page ranges, disposition and pilot yield; retain deferred
+records as an audit trail, not an active source-recovery queue. Patent scope
+exclusion overrides earlier queues. A passing table is necessary for further
+processing, not sufficient proof that a design is complete or reproducible.
 
 Use first online publication dates, resolving boundary cases against primary
 metadata. Reconcile preprints, conference abstracts, and journal versions while
@@ -67,7 +107,9 @@ named candidates and acquired sources, then rotate across years, publishers, and
 low-signal records. Do not indefinitely defer records lacking sequence keywords.
 
 1. Select and persist the batch keys. Inspect prior decisions and available files.
-2. Read title/abstract for triage, then relevant article sections and supplements.
+2. Apply the mandatory first source gate above. If no qualifying table is found,
+   note the result and move on. For passing records, read relevant article sections
+   and supplements.
    Resolve uncertain cases with full text or leave them unresolved. Before a final
    background-only exclusion, inspect accessible methods/results and supplement
    context where origami use is plausible.

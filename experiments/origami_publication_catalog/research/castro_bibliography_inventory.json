@@ -1,0 +1,379 @@
+{
+  "entries": [
+    {
+      "source_line": 149,
+      "listed_year": 2020,
+      "citation": "Arroyo-Curr\u00e1s N.,\u00a0 Sadeia, M., Ng, A.K., Fyodorova, Y., Williams, N., Afif, T., Huang, C.-M., Ogden, N., Andresen Eguiluz, R.C., Su, H.-J., Castro, C.E., Plaxco, K.W., Lukeman, P.S. An electrochemical biosensor exploiting binding-induced changes in electron transfer of electrode-attached DNA origami to detect hundred nanometer-scale targets. Nanoscale, 12:13907-13911 (2020)",
+      "boundary_check": true,
+      "identity_status": "primary_bibliographic_match",
+      "lead_key": "authorlead:castro:9f88d85e4987a5de",
+      "target_key": "10.1039/d0nr00952k",
+      "review_note": "Publisher abstract reports triangular origami attached to gold electrodes with redox reporters and target recognition sites separated by about40nm. First published18Jun2020: this journal version is outside cutoff; earlier public version and exact design/source identity remain unverified."
+    },
+    {
+      "source_line": 150,
+      "listed_year": 2020,
+      "citation": "Asghari Adib, A., Sheikhi, A., **Shahhosseini, M., Simeunovic, A.,\u00a0 Wu, S., Castro, C.E., Zhao, R., Khademhosseini, A., Hoelzle, D. Direct-write 3D printing and characterization of a GelMA-based biomaterial for intracorporeal tissue engineering. Biofabrication, 12(4): 045006 (2020)",
+      "boundary_check": true,
+      "identity_status": "primary_bibliographic_match",
+      "lead_key": "authorlead:castro:cfc8494a9ecbb534",
+      "target_key": "10.1088/1758-5090/ab97a1",
+      "review_note": "PubMed author/title/DOI matches OSU citation, with displayed21Jul2020 date. Abstract concerns GelMA/Laponite/methylcellulose tissue-scaffold printing, not a DNA design; retain provisional scope pending main text. Secondary search reports28May2020; earliest publisher date not verified. IOP browser access blocked by robots."
+    },
+    {
+      "source_line": 151,
+      "listed_year": 2020,
+      "citation": "DeLuca, M., Shi, Z., Castro, C.E., Arya, G. Dynamic DNA Nanotechnology: Toward Functional Nanoscale Devices. Nanoscale Horizons, 5, 182-201 (2020)",
+      "boundary_check": true,
+      "identity_status": "primary_bibliographic_match",
+      "lead_key": "authorlead:castro:30d9a9727567ad3c",
+      "target_key": "10.1039/c9nh00529c",
+      "review_note": "Publisher labels Review Article and explicitly gives first published15Oct2019 despite2020 issue. Abstract describes review of dynamic-device design, behavior characterization/prediction and challenges. In-date literature/citation seed; no new design inferred from the review abstract."
+    },
+    {
+      "source_line": 153,
+      "listed_year": 2019,
+      "citation": "Emily M. McWilliams, Christopher R. Lucas, Timothy Chen, Bonnie K. Harrington, Ronni Wasmuth, Amanda Campbell, Kerry A. Rogers, Carolyn M. Cheney, Xiaokui Mo, Leslie A. Andritsos, Farrukh T. Awan, Jennifer Woyach, William E. Carson III,Jonathan Butchar, Susheela Tridandapani, Erin Hertlein, Carlos E. Castro, Natarajan Muthusamy, and John C. Byrd,\u00a0\"Anti-BAFF-R Antibody VAY-736 Demonstrates Promising Pre-Clinical Activity in CLL and Enhances Effectiveness of Ibrutinib.\" Blood Advances. (2019) Accepted",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:3aaa2818b2c9038d"
+    },
+    {
+      "source_line": 154,
+      "listed_year": 2019,
+      "citation": "Halley, P.D.,\u00a0Patton, R.A., Chowdhury, A., Byrd, J.C., Castro, C.E., \"Low-cost, simple, and scalable self-assembly of DNA origami nanostructures.\" in revision",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:1d9fb6f4d0dfed1b"
+    },
+    {
+      "source_line": 155,
+      "listed_year": 2019,
+      "citation": "Zhao, D.,\u00a0Le, J., Darcy, M., Poirier, M.G.,\u00a0Castro, C.E., Bundschuh, R., \"Quantitative Modeling of Concomitant Nucleosome Unwrapping.\" in revision",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:6c76e47a4603d19b"
+    },
+    {
+      "source_line": 158,
+      "listed_year": 2018,
+      "citation": "Ke, Y., Castro, C.E., Choi, J.H., \"\u3010113\u2020Structural DNA Nanotechnology: Artificial Nanostructures for Biomedical Research\u2020www.annualreviews.org\u3011.\" Annual Review of Biomedical Engineering. (2018)",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:f3463e6b120fae63"
+    },
+    {
+      "source_line": 159,
+      "listed_year": 2018,
+      "citation": "Huang, C.M., Kucinic, A., Le, J.V., Castro, C.E.,* and Su, H.-J.,* \"\u3010114\u2020Uncertainty Quantification of a DNA Origami Mechanism Using a Coarse-Grained Model and Kinematic Variance Analysis\u2020pubs.rsc.org\u3011.\"\u00a0Nanoscale. (2018)",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:db921fb4fcafe9b0"
+    },
+    {
+      "source_line": 160,
+      "listed_year": 2018,
+      "citation": "Zhou, L., Marras, A.E., Huang, C-M., Castro, C.E.,* Su, H-J.,* \"\u3010115\u2020Paper origami-inspred Design and Actuation of DNA Nanorobots with Complex Motions.\u2020www.onlinelibrary.wiley.com\u3011\"\u00a0Small.\u00a0(2018)",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:08d76a033f6485e1"
+    },
+    {
+      "source_line": 161,
+      "listed_year": 2018,
+      "citation": "Marras, A.E., Shi, Ze, Lindell, M., Zhou, L., Su, H-J., Arya, G.,* Castro, C.E.,* \"\u3010116\u2020Cation-activated avidity for rapid reconfiguration of DNA nanodevices\u2020pubs.acs.org\u3011.\"\u00a0ACS Nano.\u00a0(2018).",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:a894842a1d6b8062"
+    },
+    {
+      "source_line": 162,
+      "listed_year": 2018,
+      "citation": "Lauback, S., Mattioli, K.R., Marras, A.E., Armstrong, M., Rudibaugh, T., Sooryakumar, R.,* Castro, C.E.,* \"\u3010117\u2020Real-time Magnetic Control of DNA Nanodevices\u2020www.nature.com\u3011.\"\u00a0Nature Communications.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:8f65ae26dcefaf2a"
+    },
+    {
+      "source_line": 167,
+      "listed_year": 2018,
+      "citation": "Lei, D., Marras, A.E., Liu, J., Huang, C-M., Zhou, L., Castro, C.E., Su, H-J., Ren, G., \"\u3010122\u20203D Structural Dynamics of DNA origami Mechanisms and Machines Using Individual Particle Electron Tomography\u2020www.nature.com\u3011.\"\u00a0Nature Communications.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:f4ce07da3214484f"
+    },
+    {
+      "source_line": 174,
+      "listed_year": 2017,
+      "citation": "Wang, P., Chatterjee, G., Yan, H., LaBean, T.H., Turberfield, A.J., Castro, C.E., Seelig, G., and Ke, Y. \u3010126\u2020Practical aspects of structural and dynamic DNA nanotechnology\u2020www.cambridge.org\u3011.\u00a0MRS Bulletin.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:d0e369bae6b99ed5"
+    },
+    {
+      "source_line": 175,
+      "listed_year": 2017,
+      "citation": "Castro,C.E., Dietz, H., H\u00f6gberg, B. \u3010127\u2020DNA origami devices for molecular-scale precision measurements\u2020www.cambridge.org\u3011.\u00a0MRS Bulletin.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:f245996eb92e0642"
+    },
+    {
+      "source_line": 176,
+      "listed_year": 2017,
+      "citation": "Akbari, E., Mollica, M., Lucas, C.R., Bushman, S., Patton, R.A., Shahhosseini, M., Song, J.W., Castro, C.E., \"\u3010128\u2020Engineering Cell Surface Function with DNA Origami\u2020onlinelibrary.wiley.com\u3011.\"\u00a0Advanced Materials.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:fd427466d467c121"
+    },
+    {
+      "source_line": 178,
+      "listed_year": 2017,
+      "citation": "Hudoba, M., Luo, Y., Zacharias, A., Poirier, M.G., Castro, C.E., \"\u3010130\u2020A Dynamic DNA origami device for measuring compressive depletion forces\u2020pubs.acs.org\u3011.\"\u00a0ACS Nano.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:b32cc6849e2e7b6d"
+    },
+    {
+      "source_line": 179,
+      "listed_year": 2017,
+      "citation": "Shi, Z., Castro, C.E., Arya, G. \"\u3010131\u2020Conformational Dynamics of Mechanically Compliant DNA Nanostructures from Coarse-Grained Molecular Dynamics Simulations\u2020pubs.acs.org\u3011.\" ACS Nano",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:7f394b228c6a6c0d"
+    },
+    {
+      "source_line": 180,
+      "listed_year": 2017,
+      "citation": "Zhou, L., Su, H-J., Marras, C-M., Castro, C.E., \"\u3010132\u2020Projection kinematic analysis of DNA origami mechanisms based on a two-dimensional TEM image\u2020www.sciencedirect.com\u3011.\" Mechanisms and Machine Theory.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:5601e0383025eec0"
+    },
+    {
+      "source_line": 181,
+      "listed_year": 2017,
+      "citation": "Liang, B., Nagarajan, A., Hudoba, M.W., Alvarez, R., Castro, C.E., Soghrati, S., \"\u3010133\u2020Automated Quantification of the Impact of Defects on the Mechanical Behavior of DNA Origami Nanoplates\u2020biomechanical.asmedigitalcollection.asme.org\u3011.\" ASME Journal of Biomechanical Engineering.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:e3282ddac380992a"
+    },
+    {
+      "source_line": 183,
+      "listed_year": 2016,
+      "citation": "Le, J., Luo, Y., Darcy, M., Lucas, C.R., Goodwin, M., Poirier, M.G., Castro, C.E., \"\u3010134\u2020Probing Nucleosome Stability with a DNA Origami Nanocaliper\u2020pubs.acs.org\u3011.\" ACS Nano.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:15a39a5ca746ff62"
+    },
+    {
+      "source_line": 184,
+      "listed_year": 2016,
+      "citation": "Marras, A.E., Zhou, L., Kolliopoulos, V., Su, H., Castro, C.E., \"\u3010135\u2020Directing folding pathways for multi-component DNA origami nanostructures with complex topology\u2020iopscience.iop.org\u3011.\"\u00a0New Journal of Physics.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:f088c23460ad041d"
+    },
+    {
+      "source_line": 185,
+      "listed_year": 2016,
+      "citation": "Kearney, C.J., Lucas, C.R., O\u2019Brien, F.J.,\u00a0Castro, C.E., \"\u3010136\u2020DNA Origami: Folded DNA-Nanodevices That Can Direct and Interpret Cell Behavior.\u2020onlinelibrary.wiley.com\u3011\"\u00a0Advanced Materials.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:d9ec9c5f66ade6c2"
+    },
+    {
+      "source_line": 186,
+      "listed_year": 2016,
+      "citation": "Halley, P.D.*, Lucas, C.R.*, McWilliams, E.M., Webber, M.J., Patton, R., Kural, C., Lucas, D.M., Byrd, J.C., Castro, C.E. \"\u3010137\u2020Daunorubicin-Loaded DNA Origami Nanostructures Circumvent Drug Resistance Mechanisms in a Leukemia Model\u2020onlinelibrary.wiley.com\u3011.\"\u00a0Small. (*co-first author)",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:d9118c81efe6c3c4"
+    },
+    {
+      "source_line": 188,
+      "listed_year": 2015,
+      "citation": "Zhou, L., Marras, A.E., Castro, C.E.,\u00a0Su, H. \"\u3010138\u2020Design and Modeling of Compliant DNA Origami Mechanisms\u2020mechanismsrobotics.asmedigitalcollection.asme.org\u3011.\"\u00a0Journal of Mechanisms and Robotics.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:7ee8848878ca6038"
+    },
+    {
+      "source_line": 189,
+      "listed_year": 2015,
+      "citation": "Zhou, L., Marras, A.E., Su, H., Castro, C.E. \"\u3010139\u2020Direct design of an energy landscape with bistable DNA origami mechanisms\u2020pubs.acs.org\u3011.\"\u00a0Nano Letters.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:853839f294421478"
+    },
+    {
+      "source_line": 190,
+      "listed_year": 2015,
+      "citation": "Castro, C.E., Su, H., Marras, A.E., Zhou, L., Johnson, J. \"\u3010140\u2020Mechanical Design of DNA nanostructures\u2020pubs.rsc.org\u3011.\"\u00a0Nanoscale.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:722632eb11b00c24"
+    },
+    {
+      "source_line": 191,
+      "listed_year": 2015,
+      "citation": "Marras, A.E., Zhou, L., Su, H., Castro, C.E. \"\u3010141\u2020Programmable motion of DNA origami mechanisms\u2020www.pnas.org\u3011.\"\u00a0Proceedings of the National Academy of Sciences.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:5ada33f612015a4d"
+    },
+    {
+      "source_line": 194,
+      "listed_year": 2014,
+      "citation": "Gupta, C., Liao, W. C., Gallego-Perez, D., Castro, C. E., & Lee, L. J. \"\u3010142\u2020DNA translocation through short nanofluidic channels under asymmetric pulsed electric field\u2020scitation.aip.org\u3011.\"\u00a0Biomicrofluidics.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:efac8650d6ac6d64"
+    },
+    {
+      "source_line": 195,
+      "listed_year": 2014,
+      "citation": "Zhou, L., Marras, A.E., Su, H., Castro, C.E. \"\u3010143\u2020DNA origami compliant nanostructures with tunable mechanical properties\u2020pubs.acs.org\u3011.\"\u00a0ACS Nano.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:3824bbf96cb07060"
+    },
+    {
+      "source_line": 198,
+      "listed_year": 2013,
+      "citation": "Wu, Y., Kwak, K.J., Agarwal, K., Marras, A.E., Wang, C., Mao, Y, Huang, X., Ma, J., Yu, B., Lee, R. Vachani, A., Marcucci, G., Byrd, J., Muthusamy, N., Otterson, G., Huang, K., Castro, C.E., Paulaitis, M., Nano-Sinkam, S.P., Lee, L.J., \"\u3010144\u2020Detection of Extracellular RNAs in Cancer and Viral Infection via Tethered Cationic Lipoplex Nanoparticles Containing Molecular Beacons.\u2020pubs.acs.org\u3011\"\u00a0Analytical Chemistry.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:1a0f209e734e059b"
+    },
+    {
+      "source_line": 199,
+      "listed_year": 2013,
+      "citation": "Nguyen, V., Lilly, B., Castro, C.E. \"\u3010145\u2020The exoskeletal structure and tensile loading behavior of an ant neck joint\u2020www.sciencedirect.com\u3011.\"\u00a0Journal of Biomechanics.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:da8565862800edd0"
+    },
+    {
+      "source_line": 202,
+      "listed_year": 2012,
+      "citation": "Marras, A.E.,\u00a0Su, J., Castro, C. E. Design of DNA Origami Machines and Mechanisms.\u00a0ASME International Mechanical Engineering Congress and Exposition (IMECE 2012), Houston, Texas, Nov 9-15",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:01f863975b51b6ed"
+    },
+    {
+      "source_line": 203,
+      "listed_year": 2012,
+      "citation": "Su, H., Castro, C.E., Marras, A.E., Hudoba, M. Design and Fabrication of DNA Origami Mechanisms and Machines.\u00a0Second ASME/IEE International Conference on Reconfigurable Mechanisms and Robots (ReMAR\u00a02012), Tianjin, China, July 9-11, 2012",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:cc17c70e13f46100"
+    },
+    {
+      "source_line": 208,
+      "listed_year": 2011,
+      "citation": "Castro, C.E., Kilchherr F., Kim, D., Lin Shiao, E., Wauer, T., Wortmann, P., Bathe, M., Dietz, HA, \"\u3010146\u2020Primer to Scaffolded DNA Origami\u2020www.nature.com\u3011.\"\u00a0Nature Methods.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:214b332ca3216466"
+    },
+    {
+      "source_line": 209,
+      "listed_year": 2011,
+      "citation": "Castro, C.E., Dong, J., Lindquist, S., Boyce, M.C., Lang, M.J., \"Physical Properties of Polymorphic Prion Proteins.\"\u00a0Biophysical Journal",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:58c3d696a196ae85"
+    },
+    {
+      "source_line": 210,
+      "listed_year": 2011,
+      "citation": "Jungmann, R., Scheible, M., Kuzyk, A., Pardatscher, G., Castro, C.E., and Simmel F.C., \"DNA origami-based nanoribbons: assembly, length distribution, and twist.\"\u00a0Nanotechnology",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:c472bdb7e5a2dd39"
+    },
+    {
+      "source_line": 211,
+      "listed_year": 2011,
+      "citation": "Wang, L., Castro, C.E., and Boyce, M.C. Growth strain-induced membrane morphology of white blood cells.\u00a0Soft Matter. 7:11319-11324 (2011)",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:73b907c63b28e275"
+    },
+    {
+      "source_line": 212,
+      "listed_year": 2011,
+      "citation": "Tam, J.M., Castro, C.E., Heath, R.J., Mansour, M.K., Cardenas, M.L., Xavier, R., Lang, M.J., Vyas, J.M. (2011) \u3010147\u2020Use of an Optical Trap for Study of Host-Pathogen Interactions for Dynamic Live Cell Imaging\u2020app.jove.com\u3011\u00a0J Vis Exp.",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:cd97b5a01eb2004a"
+    },
+    {
+      "source_line": 214,
+      "listed_year": 2010,
+      "citation": "Tam, J., Castro, C.E., Heatsh, R.J., Cardenas, M.J., Xavier, R., Lang, M.J., Vyas, J.M., \"Control and Manipulation of Pathogens with an Optical Trap for Live Cell Imaging of Intercellular Interactions.\"\u00a0PLoS One",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:4754ee5006966a90"
+    },
+    {
+      "source_line": 215,
+      "listed_year": 2010,
+      "citation": "Dong, J., Castro, C.E., Boyce, M.C., Lang, M.J., and Lindquist, S., \"Optical trapping with high forces reveals unexpected behaviors of prion fibrils.\"\u00a0Nature Structural & Molecular Biology",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:2b8029bbff7531f3"
+    },
+    {
+      "source_line": 216,
+      "listed_year": 2010,
+      "citation": "Palmer, J.S., Castro, C.E.,\u00a0Arslan, M., Boyce, M.C. Constitutive Models for the Force- Extension Behavior for Biological Filaments.\u00a0Proceedings of the IUTAM symposium on Molecular, Cellular, and Tissue Biomechanics. IUTAM Bookseries, Volume 16",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:8d31989b158f21bf"
+    },
+    {
+      "source_line": 219,
+      "listed_year": 2009,
+      "citation": "Kim, S.T., Takeuchi, K., Zhen-Yu, J.S., Touma, M., Castro, C.E., Fahmy, A., Vibhuti, D., Kappes, D., Lang, M.J., Wagner, G., Reinherz, E., \"The \u03b1\u03b2 T cell receptor is an anisotropic mechanosensor.\"\u00a0Journal of Biological Chemistry",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:ccfbb60bf6449ad1"
+    },
+    {
+      "source_line": 222,
+      "listed_year": 2008,
+      "citation": "Villarreal, M.G., S\u00e1nchez Pe\u00f1a, M.L., Castro, C.E., Castro, J.M., Cabrera-Rios, M. Using data clustering to aid the solution of multiple criteria optimization problems through data envelopment analysis,\u00a0Intelligent Data Analysis \u2013 An International Journal\u00a012(1):89-101",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:b4e6675457716683"
+    },
+    {
+      "source_line": 225,
+      "listed_year": 2007,
+      "citation": "Brau, R. Ferrer, J.M., Lee, H., Castro, C.E.,\u00a0Tam, B.K., Tarsa, P.B., Matsudaira, P, Boyce, M.C., Kamm, R.D., Lang, M.J. Passive and active microrheology with optical tweezers,\u00a0Journal of Optics A: Pure and Applied Optics;\u00a09: S103-S112",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:9b95a734c1487289"
+    },
+    {
+      "source_line": 226,
+      "listed_year": 2007,
+      "citation": "Castro, C.E., Cabrera Rios, M., Lilly, B., Castro, J.M. Multiple Criteria Optimization with Variability Considerations in Injection Molding.\u00a0Polymer Engineering and Science.\u00a047(4):400-409",
+      "boundary_check": false,
+      "identity_status": "pending",
+      "lead_key": "authorlead:castro:1ffce430191a634c"
+    }
+  ],
+  "total": 45,
+  "pre2020_section_entries": 42,
+  "boundary2020_entries": 3,
+  "evidence": {
+    "local_file": "research/castro_publications_web_capture.json",
+    "sha256": "2cb039b13d111334819b0308079889903a932a7f50e81b3d781e5f8a48cba881",
+    "url": "https://mae.osu.edu/nbl/publications",
+    "locator": "Web-reader capture lines148\u2013226:2020 boundary plus2019\u20132007 bibliography; nested news links excluded"
+  }
+}

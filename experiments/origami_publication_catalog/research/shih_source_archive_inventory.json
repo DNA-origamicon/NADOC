@@ -1,0 +1,298 @@
+[
+  {
+    "ordinal": 26,
+    "archive": {
+      "local_file": "assets/research-20261105/shih-source-26.zip",
+      "sha256": "807b33e5f7e21ed0a10180844e5033978e92d2dac286a9966124ee4ceba9615e",
+      "url": "https://www.shih.hms.harvard.edu/_files/archives/495212_169515a16796406299d139ce731a39dd.zip",
+      "locator": "Author-linked ZIP; content inventory does not certify design completeness"
+    },
+    "members": [
+      {
+        "member": "HahnJ_nar_2019/HahnJ_nar_2019_SI.pdf",
+        "bytes": 11929251,
+        "sha256": "31c74056a8b1c5e553a4c097525bc75a946a2f14ea8a0ab66b9f6eb0cb276d50",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/26/HahnJ_nar_2019_SI.pdf",
+        "text_file": "assets/research-20261105/shih-extracted/26/HahnJ_nar_2019_SI.txt",
+        "text_sha256": "d3046e8597050384b32ea86e06ac89f64eb0ea0aac22fdd01a309e078d4771f3"
+      },
+      {
+        "member": "__MACOSX/HahnJ_nar_2019/._HahnJ_nar_2019_SI.pdf",
+        "bytes": 1274,
+        "sha256": "c33d6f17c37ec7257b2e0f10cd7c8b16e2c7433a953b584b016fc526db966f53",
+        "metadata": true
+      },
+      {
+        "member": "HahnJ_nar_2019/HahnJ_nar_2019.pdf",
+        "bytes": 2248400,
+        "sha256": "5514e8b6b543c5507e76ae137e2b016ee938abf8ec6af73ccadcb29d74ae30b7",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/26/HahnJ_nar_2019.pdf",
+        "text_file": "assets/research-20261105/shih-extracted/26/HahnJ_nar_2019.txt",
+        "text_sha256": "559372eedb1189601df015fb4178f6d914073815f56873dfc2f0dab4a8cc9867"
+      },
+      {
+        "member": "__MACOSX/HahnJ_nar_2019/._HahnJ_nar_2019.pdf",
+        "bytes": 1788,
+        "sha256": "5517c6798173fad686f9cf271ca3721b0140f0276409b6a43d2885aa1147ca76",
+        "metadata": true
+      },
+      {
+        "member": "__MACOSX/._HahnJ_nar_2019",
+        "bytes": 177,
+        "sha256": "4e1c8393d64880cb60c2f0ce969e9f39da39cd7e2d4c134b88c6e2457eaed4f4",
+        "metadata": true
+      }
+    ],
+    "scientific_files": 2,
+    "content_status": "scientific_files_present_unreviewed"
+  },
+  {
+    "ordinal": 32,
+    "archive": {
+      "local_file": "assets/research-20261105/shih-source-32.zip",
+      "sha256": "cb1e2ba73f7e5e86c16ef1b2e8b95cb55efefd079b2629a5c35d0b57f7d1c90a",
+      "url": "https://www.shih.hms.harvard.edu/_files/archives/495212_a76c9809873045b892b62a95addb6e0b.zip",
+      "locator": "Author-linked ZIP; content inventory does not certify design completeness"
+    },
+    "members": [
+      {
+        "member": "KriegE_acie_2018/KriegE_acie_2018_SI.pdf",
+        "bytes": 10500547,
+        "sha256": "58b38550acda5c1ea0710f91c720305f7c57b5695619348fb06da72ed29d4e7a",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/32/KriegE_acie_2018_SI.pdf",
+        "text_file": "assets/research-20261105/shih-extracted/32/KriegE_acie_2018_SI.txt",
+        "text_sha256": "bb220043eecad7784c88f25fd8188c0544415250466b51c7522badff29203495"
+      },
+      {
+        "member": "__MACOSX/KriegE_acie_2018/._KriegE_acie_2018_SI.pdf",
+        "bytes": 898,
+        "sha256": "02fe2dc4ab5c20a26e15a3c4cad6c6b585bbef05f823e8ae8149212857b47e85",
+        "metadata": true
+      },
+      {
+        "member": "KriegE_acie_2018/KriegE_acie_2018.pdf",
+        "bytes": 2505153,
+        "sha256": "021634ec37dcc2b3e4a80747a9e01cb6df7108a389e999c48b93bc09b81b064e",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/32/KriegE_acie_2018.pdf",
+        "text_file": "assets/research-20261105/shih-extracted/32/KriegE_acie_2018.txt",
+        "text_sha256": "126b1168b10a00cb656461fa5787c6b5f1242ce43fa6f2f717661a904d2584c3"
+      },
+      {
+        "member": "__MACOSX/KriegE_acie_2018/._KriegE_acie_2018.pdf",
+        "bytes": 831,
+        "sha256": "ac02afd5ddfeab4a040de6dfe8ad747dc1cb394d4c9668c16761cf8a14489d0c",
+        "metadata": true
+      },
+      {
+        "member": "__MACOSX/._KriegE_acie_2018",
+        "bytes": 178,
+        "sha256": "734f4c630beddc53e02a7e4bffdf0798b5b25b57e274b6a9b20d92fa612467a6",
+        "metadata": true
+      }
+    ],
+    "scientific_files": 2,
+    "content_status": "scientific_files_present_unreviewed"
+  },
+  {
+    "ordinal": 34,
+    "archive": {
+      "local_file": "assets/research-20261105/shih-source-34.zip",
+      "sha256": "8e954e1faf70849d45a808875c057e5d9bfe0ffdb18208347fd230257a69f155",
+      "url": "https://www.shih.hms.harvard.edu/_files/archives/495212_33c5a9222515464caa3671d5a6564002.zip",
+      "locator": "Author-linked ZIP; content inventory does not certify design completeness"
+    },
+    "members": [
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData7.xlsx",
+        "bytes": 59704,
+        "sha256": "1464bfb925657f33e9c7dcc1d12898050e96d6f300c6058b926a11bccc82ab48",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData7.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData7.xlsx",
+        "bytes": 697,
+        "sha256": "434fd919d444ef4f5b5553c4d759652beafaadbdbcb2197b35f8b49a7485e801",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SI.pdf",
+        "bytes": 16344074,
+        "sha256": "70fdbf350c14cba285f0b7a466c0b4baac334a660324d5ce3f0372109c22333c",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SI.pdf",
+        "text_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SI.txt",
+        "text_sha256": "875f1f60c40572e6b92fae71024bfd561db752dc7b9e721a9eb76abf8a9ac61f"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SI.pdf",
+        "bytes": 859,
+        "sha256": "7ed8fc2f4ad68db57db3e3f0b2d019d114dc1ce226728a2656ec425e861b9506",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData6.xlsx",
+        "bytes": 58973,
+        "sha256": "331a0cf4a851206d40b887a6aa179a5b52c5a87eb2245565eeb8b836624a7cb4",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData6.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData6.xlsx",
+        "bytes": 697,
+        "sha256": "e93ccb5a1d463f65ac0ff907f26168029d9d3fd46f586e257f70692694ae4180",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData1.xlsx",
+        "bytes": 61740,
+        "sha256": "05066829648aa92f873a1868f3406056ab03b0e289a0b05940374a85c5d27124",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData1.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData1.xlsx",
+        "bytes": 697,
+        "sha256": "2462f943034f2ed91e9c187b26192ea9f9a6e89617975084c971bd5fde1ffe16",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData3.xlsx",
+        "bytes": 60111,
+        "sha256": "0f9c95d3d6256390c0c7c26501590a9801c80ee2222d915d6dd83a16a4bddd14",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData3.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData3.xlsx",
+        "bytes": 697,
+        "sha256": "1d09c66bccc944806806196c16d97606757152e84c86af55af5b7140584de183",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData2.xlsx",
+        "bytes": 60398,
+        "sha256": "c697f7d6c35d9c385213d777e04fac6a112a1a17757f2aa700c41f170953c3ab",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData2.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData2.xlsx",
+        "bytes": 697,
+        "sha256": "27b8b7a8d21956a3691fed37fb24664ce175077aa19f5cd546260d4de491bcbc",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData5.xlsx",
+        "bytes": 55687,
+        "sha256": "c1a4760186fb6fe02c7d9d324938e08c59fc15b0a8820915a9ac140cd2062868",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData5.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData5.xlsx",
+        "bytes": 697,
+        "sha256": "6ee19b1c160edb71cafd36cc2de9c31f703fc82a54df4349ab7a68f17af5105a",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData10.xlsx",
+        "bytes": 58138,
+        "sha256": "1d0fa0493cdae1e254e5154686b84ba9d1ad15b57c188b424901d89d7720cf1c",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData10.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData10.xlsx",
+        "bytes": 697,
+        "sha256": "7dfd78c4a1c9972f3bb97eca7c1c992a391852b35d14290c67ff6a9b25da573c",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData9.xlsx",
+        "bytes": 58201,
+        "sha256": "db1d32e7c2c9033d8eb6da0bf78a6722ae1278f9a4dc396bef1f968c148145fe",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData9.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData9.xlsx",
+        "bytes": 697,
+        "sha256": "31140eea262900a16757d1dfd5ffa10f00001c6e0548a2d279eafd058216d5d2",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017.pdf",
+        "bytes": 1397219,
+        "sha256": "a1b351e312160f5ccb08b2a20ae11ea59d9e3084fa568ab1ac07f683d1d8718e",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017.pdf",
+        "text_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017.txt",
+        "text_sha256": "599225bc5c460d1567217309d92374d6c870b04cdbf9d028715845a5b6edb992"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017.pdf",
+        "bytes": 621,
+        "sha256": "a8ffeac436195db73d9c7fba6748948f6de91edf5f8618eda3f81d3149adea53",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData8.xlsx",
+        "bytes": 57981,
+        "sha256": "b7b4cc07b3dc78524b02fbd61f92eb8382401973688a643416a8b0037d5384f0",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData8.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData8.xlsx",
+        "bytes": 697,
+        "sha256": "cae5dba67bd5a0f78fe75dd377fb7526028537eaa6f0f0fa7e7878b3d993bf99",
+        "metadata": true
+      },
+      {
+        "member": "PonnuswamyN_ncomm_2017/PonnuswamyN_ncomm_2017_SuppData4.xlsx",
+        "bytes": 63897,
+        "sha256": "0f0022eb681367c95d886e5f8ac8ba31f59414ae26863251cfc167431e99a8f8",
+        "metadata": false,
+        "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SuppData4.xlsx"
+      },
+      {
+        "member": "__MACOSX/PonnuswamyN_ncomm_2017/._PonnuswamyN_ncomm_2017_SuppData4.xlsx",
+        "bytes": 697,
+        "sha256": "7bc62d7a9637cdbfc09cfab1069747bc3ed3d8eac006684fca45f83f2fe6d01e",
+        "metadata": true
+      },
+      {
+        "member": "__MACOSX/._PonnuswamyN_ncomm_2017",
+        "bytes": 178,
+        "sha256": "6be60bea352277ff68f055e9bb000b613518cb550690be5a8242f5ab5da9db10",
+        "metadata": true
+      }
+    ],
+    "scientific_files": 12,
+    "content_status": "scientific_files_present_unreviewed"
+  },
+  {
+    "ordinal": 44,
+    "archive": {
+      "local_file": "assets/research-20261105/shih-source-44.zip",
+      "sha256": "a0558ec5e989f56e168a08eadf86cc6c456d7a6a1e5c31386ae888936131c2ce",
+      "url": "https://www.shih.hms.harvard.edu/_files/archives/495212_7e7722f6f2674368889d3571241a5ad7.zip",
+      "locator": "Author-linked ZIP; content inventory does not certify design completeness"
+    },
+    "members": [
+      {
+        "member": "__MACOSX/._TellecheaA_ijlew_2015",
+        "bytes": 178,
+        "sha256": "6ff1bbf4d2188e649d01bdc6f461efc35b4bc029d044bd95578e1581533fcb2c",
+        "metadata": true
+      }
+    ],
+    "scientific_files": 0,
+    "content_status": "empty_scientific_content"
+  }
+]

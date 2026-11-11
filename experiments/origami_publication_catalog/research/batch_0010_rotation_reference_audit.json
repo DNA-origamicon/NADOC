@@ -1,0 +1,32 @@
+{
+  "sources": [
+    {
+      "source": "10.1360/972012-1626",
+      "expected": 90,
+      "saved": 90
+    },
+    {
+      "source": "10.1515/nanoph-2013-0011",
+      "expected": 22,
+      "saved": 22
+    },
+    {
+      "source": "10.1140/epje/i2013-13101-5",
+      "expected": 49,
+      "saved": 49
+    },
+    {
+      "source": "10.2142/biophys.53.153",
+      "expected": 16,
+      "saved": 16
+    }
+  ],
+  "total_references": 177,
+  "unique_targets": 177,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5599,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 10464
+  }
+}

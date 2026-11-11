@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-05",
+  "initialization_replay_preserved_all_ledger_bytes": true,
+  "acs_audit_exit_code": 0,
+  "acs_audit_stdout": "269/269 document files verified; 0 documents and 0 metadata files missing\n",
+  "acs_audit_stderr": "",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 4985,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 7238
+  },
+  "focused_tests": {
+    "ledger_and_acquisition": 7,
+    "crossref_discovery": 4,
+    "asset_restore": 4,
+    "result": "passed"
+  },
+  "query_audits": [
+    {
+      "run_id": "crossref-uncapped-origami-20261105",
+      "saved_page_count": 4,
+      "retrieved_records": 3262,
+      "provider_totals": [
+        3262,
+        3262,
+        3262,
+        3262
+      ],
+      "new_doi_records": 2326,
+      "short_final_page": true
+    },
+    {
+      "run_id": "crossref-uncapped-scaffolded-20261105",
+      "saved_page_count": 1,
+      "retrieved_records": 415,
+      "provider_totals": [
+        415
+      ],
+      "new_doi_records": 399,
+      "short_final_page": true
+    }
+  ],
+  "reviewed_csv_rows": 100
+}

@@ -1,0 +1,188 @@
+{
+  "pages": [
+    {
+      "page": 1,
+      "transcribed": {
+        "keynote": 2,
+        "invited": 4,
+        "contributed": 1,
+        "poster": 6
+      },
+      "source_labels": {
+        "keynote": 2,
+        "invited": 4,
+        "contributed": 1,
+        "poster": 6
+      },
+      "counts_match": true
+    },
+    {
+      "page": 2,
+      "transcribed": {
+        "poster": 14,
+        "keynote": 1,
+        "invited": 2
+      },
+      "source_labels": {
+        "poster": 14,
+        "keynote": 1,
+        "invited": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 3,
+      "transcribed": {
+        "invited": 4,
+        "keynote": 1,
+        "poster": 11
+      },
+      "source_labels": {
+        "invited": 4,
+        "keynote": 1,
+        "poster": 11
+      },
+      "counts_match": true
+    },
+    {
+      "page": 4,
+      "transcribed": {
+        "poster": 7,
+        "keynote": 2,
+        "invited": 5
+      },
+      "source_labels": {
+        "poster": 7,
+        "keynote": 2,
+        "invited": 5
+      },
+      "counts_match": true
+    },
+    {
+      "page": 5,
+      "transcribed": {
+        "poster": 8,
+        "keynote": 1,
+        "invited": 4,
+        "contributed": 1
+      },
+      "source_labels": {
+        "poster": 8,
+        "keynote": 1,
+        "invited": 4,
+        "contributed": 1
+      },
+      "counts_match": true
+    },
+    {
+      "page": 6,
+      "transcribed": {
+        "poster": 8,
+        "keynote": 2,
+        "invited": 4,
+        "contributed": 1
+      },
+      "source_labels": {
+        "poster": 8,
+        "keynote": 2,
+        "invited": 4,
+        "contributed": 1
+      },
+      "counts_match": true
+    },
+    {
+      "page": 7,
+      "transcribed": {
+        "invited": 1,
+        "poster": 15
+      },
+      "source_labels": {
+        "invited": 1,
+        "poster": 15
+      },
+      "counts_match": true
+    },
+    {
+      "page": 8,
+      "transcribed": {
+        "keynote": 2,
+        "invited": 4,
+        "contributed": 2,
+        "poster": 7
+      },
+      "source_labels": {
+        "keynote": 2,
+        "invited": 4,
+        "contributed": 2,
+        "poster": 7
+      },
+      "counts_match": true
+    },
+    {
+      "page": 9,
+      "transcribed": {
+        "poster": 10,
+        "keynote": 2,
+        "invited": 4,
+        "contributed": 1
+      },
+      "source_labels": {
+        "poster": 10,
+        "keynote": 2,
+        "invited": 4,
+        "contributed": 1
+      },
+      "counts_match": true
+    },
+    {
+      "page": 10,
+      "transcribed": {
+        "keynote": 1,
+        "contributed": 1,
+        "invited": 1
+      },
+      "source_labels": {
+        "keynote": 1,
+        "contributed": 1,
+        "invited": 1
+      },
+      "counts_match": true
+    }
+  ],
+  "total_transcribed": 140,
+  "source_page_total": 10,
+  "withdrawn_program_entries": 1,
+  "scope": "All10 pages transcribed; unnamed award address p8 unresolved; no abstract-book or counterpart closure",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5598,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 10024
+  },
+  "counts": {
+    "publication_versions": 5598,
+    "canonical_work_keys": 5597,
+    "provisional_work_keys_not_reconciled": 5596,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 716,
+      "unreviewed": 4700,
+      "fulltext_reviewed": 40,
+      "design_sources_reviewed": 142
+    },
+    "relevance": {
+      "uncertain": 5411,
+      "background_or_review": 12,
+      "design_bearing": 173,
+      "not_origami": 2
+    },
+    "catalog_eligibility": {
+      "unresolved": 5591,
+      "excluded": 6,
+      "eligible": 1
+    },
+    "design_groups": 134,
+    "design_source_reviews": 57,
+    "discovery_runs": 39
+  }
+}

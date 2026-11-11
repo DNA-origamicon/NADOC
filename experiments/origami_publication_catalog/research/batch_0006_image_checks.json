@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-05",
+  "reviewer": "Codex visual inspection",
+  "items": [
+    {
+      "doi": "10.1021/am501599f",
+      "source": "assets/sources/acs-expansion-20261104/3940942-am501599f_si_001.pdf",
+      "pdf_page": 4,
+      "render": "pdftoppm -f 4 -singlefile -scale-to 1400 -png SOURCE OUTPUT",
+      "observed": "Rectangular scaffold/staple schematic and TEM panels visible. Poppler syntax errors retained by source index; other pages not certified."
+    },
+    {
+      "doi": "10.1021/nl5003069",
+      "source": "assets/sources/acs-expansion-20261104/3945133-nl5003069_si_002.pdf",
+      "pdf_page": 2,
+      "render": "pdftoppm -f 2 -singlefile -scale-to 1400 -png SOURCE OUTPUT",
+      "observed": "Eight extended-staple rows and explicit two-versus-eight strand variant rule visible; complete core mapping unverified."
+    },
+    {
+      "doi": "10.1021/nl5009635",
+      "source": "assets/sources/acs-expansion-20261104/3934906-nl5009635_si_001.pdf",
+      "pdf_page": 4,
+      "render": "pdftoppm -f 4 -singlefile -scale-to 1400 -png SOURCE OUTPUT",
+      "observed": "caDNAno-style routing and explicit square-lattice block caption visible; base-level diagram too fine at preview scale for complete mapping."
+    }
+  ]
+}

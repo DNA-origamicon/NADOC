@@ -1,0 +1,63 @@
+{
+  "evidence": {
+    "local_file": "assets/research-20261105/shih-extracted/34/PonnuswamyN_ncomm_2017_SI.pdf",
+    "sha256": "70fdbf350c14cba285f0b7a466c0b4baac334a660324d5ce3f0372109c22333c",
+    "url": "https://www.shih.hms.harvard.edu/_files/archives/495212_33c5a9222515464caa3671d5a6564002.zip",
+    "locator": "SI Figs41\u201348 at PDF/printedpp40\u201347, individually visually inspected; DN5 enlarged with pdftoppm at600dpi but source remains low resolution"
+  },
+  "objects": [
+    {
+      "name": "DN1",
+      "figure": 41,
+      "pdf_page": 40,
+      "note": "Fig41,p40: staggered open strip of numbered helix circles, auxiliary circles on one side; long flattened colored strand paths with deletions/insertions. No closed barrel geometry is directly encoded by the flat cross-section alone."
+    },
+    {
+      "name": "DN2",
+      "figure": 42,
+      "pdf_page": 41,
+      "note": "Fig42,p41: similar staggered open-strip cross-section and visibly shorter flattened routing thanDN1. Exact shared strand/sequence identity not verified."
+    },
+    {
+      "name": "DN3",
+      "figure": 43,
+      "pdf_page": 42,
+      "note": "Fig43,p42: broader staggered strip with two isolated protruding numbered circles near center; colored paths include crosslinks across central gap and red deletion marks."
+    },
+    {
+      "name": "DN4",
+      "figure": 44,
+      "pdf_page": 43,
+      "note": "Fig44,p43: narrower staggered cross-section strip with auxiliary circles and elongated flattened routing. Small axis labels limit exact numerical transcription."
+    },
+    {
+      "name": "DN5",
+      "figure": 45,
+      "pdf_page": 44,
+      "note": "Fig45,p44: very small ring-like cross-section icon above long narrow routing panel. Enlarged600dpi crop remains pixelated; exact labels and connectivity cannot be verified. The prior mainFig2 appearance must not be called planar: a rectangular projection does not establish planarity."
+    },
+    {
+      "name": "DN6",
+      "figure": 46,
+      "pdf_page": 45,
+      "note": "Fig46,p45: numbered0\u201323 cross-section arranged in a compact ring/bundle-like pattern around an empty region; flattened paths show terminal scaffold returns and multiple strand crossovers. Full topology/native lattice assignment still requires verification."
+    },
+    {
+      "name": "DN7",
+      "figure": 47,
+      "pdf_page": 46,
+      "note": "Fig47,p46: numbered0\u201347 cross-section with filled/unfilled circles arranged in a multirow staggered pattern; flattened colored strands and blue returns are visible. Fig2 rod-like appearance is insufficient to infer final arrangement from this unrolled diagram."
+    },
+    {
+      "name": "DN8",
+      "figure": 48,
+      "pdf_page": 47,
+      "note": "Fig48,p47: twelve separated six-circle cross-section groups numbered through71, with long connections between routing blocks; mainFig2 depicts an octahedral frame. Local bundle layout does not on its own resolve catalog eligibility or final inter-bundle routing."
+    }
+  ],
+  "limitations": "Visual review, not reconstruction or validation of native connectivity. Source sequence mappings, variant identities and full lattice decisions remain open.",
+  "render_commands": [
+    "pdftoppm -f 40 -l 47 -scale-to 1600 -png SI.pdf /tmp/layout",
+    "pdftoppm -f 44 -singlefile -r 600 -x 500 -y 850 -W 4000 -H 500 -png SI.pdf /tmp/dn5-detail"
+  ]
+}

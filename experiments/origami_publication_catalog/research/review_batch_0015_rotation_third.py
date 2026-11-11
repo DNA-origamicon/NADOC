@@ -1,0 +1,26 @@
+"""Primary cross-design review and thesis/review metadata, with date limits."""
+import json
+import ledger as L
+from review_batch_0001 import evidence
+
+def main():
+ pubs={p['registry_key']:p for p in L.read('publication_reviews')}
+ key='10.5897/ajb2015.14697';p=pubs[key]
+ ev=evidence(L.ROOT/'assets/research-20261105/amoako2015-biotin.pdf','https://academicjournals.org/journal/AJB/article-full-text-pdf/381C21354153.pdf','Header; folding methods; Results and Discussion pp2259–2262; Fig1,3–5 captions')
+ note='Primary article specifies square-lattice six-layer72-helix cross,12helices wide, approximate12×24×38nm. Folding uses M13mp18 and178staples. Two strands at each opposite long-axis end carry8nt ATGCATGC extensions with3-prime biotin; four modified strands total. Streptavidin links monomers into longer assemblies, not distinct core designs. Authors report removing end sequences to suppress stacking; exact removal/replacement identities are not supplied in inspected passages. Main supports geometry and modification intent, but complete staple set, exact scaffold sequence/length and native routing remain unverified. Header confirms15July2015.'
+ p.update(title=p['legacy_record']['publication'],publication_type=['journal_article'],review_stage='fulltext_reviewed',relevance='design_bearing',design_contributions=['new_design'],catalog_eligibility='unresolved',access='available',rationale=note,unresolved_questions=['Locate complete178staple set, modified identities, exact scaffold and native routing.','Reconcile core/assembly lineage and follow all citations/author routes.'],reviewer='Codex primary named main-text sections',run_id='B0015',date=L.DATE)
+ if ev not in p['evidence']:p['evidence'].append(ev)
+ L.upsert('publication_reviews',p,'Record explicit square-lattice core and unresolved source completeness')
+ d=dict(design_id='RDE0042',publication_keys=[key],named_objects=['Six-layer72-helix cross'],identity_status='Provisional source family; upstream overlap unresolved',lattice_decision='Square lattice explicitly stated in Results and Discussion; native geometry not independently verified',catalog_eligibility='unresolved',core_variant_composition=note,source_completeness='not_verified',source_files=[ev],evidence=[ev],relationships=[],variant_links=[],outstanding_checks=p['unresolved_questions'],legacy_record={},review_stage='source_reviewed',review_run='B0015',run_id='B0015',date=L.DATE)
+ L.upsert('design_evidence',d,'Add provisional literature design family; no molecular authoring')
+ rows=[('epmc:1835','dissertation','design_bearing','batch_0015_remaining_search.json','Oxford archive primary search record abstract and bibliography','Oxford repository identifies Snodin DPhil thesis and abstract describes simulated384bp origami assembly and2D/3D structural analysis. Broad design relevance includes simulated objects, not proof of new experimental synthesis. Repository citation/copyright year2016 and deposit29February2016 conflict with legacy2015; first public availability and identity/version links remain unresolved. Repository DOI10.5287/ora-zrppgagom is an identity lead; stable epmc key preserved. Full thesis not acquired; direct repository open returned403.'),('10.2174/1381612821666150531165551','review','background_or_review','batch_0015_remaining_primary.json','Bentham primary publisher search result abstract','Publisher abstract identifies a review of scaffold design, folding conditions, functionalization and drug-carrier applications. No design-level claim is drawn from this abstract. Full text and bibliography pending; legacyJanuary1 date is not primary verified.')]
+ for key,typ,rel,file,loc,note in rows:
+  p=pubs[key];e=evidence(L.HERE/file,'https://doi.org/'+key if not key.startswith('epmc') else 'https://ora.ox.ac.uk/objects/uuid:86b2d03e-3cad-423c-8db0-3d56c65ccc20',loc)
+  if e not in p['evidence']:p['evidence'].append(e)
+  p.update(title=p['legacy_record']['publication'],publication_type=[typ],review_stage='metadata_screened',relevance=rel,design_contributions=['uncertain'] if rel=='design_bearing' else [],catalog_eligibility='unresolved',access='partial',rationale=note,unresolved_questions=['Acquire and inspect full text; reconcile dates/version identity and design sources.','Follow complete bibliography, forward citations and author histories.'],reviewer='Codex primary repository/publisher metadata only',run_id='B0015',date=L.DATE)
+  L.upsert('publication_reviews',p,'Record limited primary metadata without full-source inference')
+ b=next(b for b in L.read('batches') if b['batch_id']=='B0015');b['completed_actions'].append('AJB cross main-text review plus thesis/drug-review primary metadata;23of25 first passes; provisional RDE0042 added.')
+ b.update(after_counts=L.counts(),validation=[L.validate()],next_queue=['JoVE52486 and G-quadruplex chapter remain unreviewed','FNANO2010 enumeration;234CV identities; full thesis and prior source/citation followups'])
+ L.upsert('batches',b,'Save23of25 first-pass coverage')
+ L.atomic(L.HERE/'batch_0015_rotation_third_audit.json',json.dumps(dict(reviewed_keys=['10.5897/ajb2015.14697']+[r[0] for r in rows],first_pass_count=23,input_count=25,validation=L.validate(),counts=L.counts()),indent=2)+'\n');print(L.validate())
+if __name__=='__main__':main()

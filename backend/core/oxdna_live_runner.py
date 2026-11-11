@@ -24,9 +24,12 @@ real oxpy ones.
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from pathlib import Path
 from shutil import rmtree
+
+from backend.core.trajectory_priority import foreground_work
 
 
 # ── In-memory session registry (single active session policy) ─────────────────
@@ -115,6 +118,11 @@ class LiveSession:
         self._field_oxdna = float(field_oxdna)
         self._field_dir = list(field_dir)
         self._n_bursts = 0
+        self._published_bursts = 0
+        self._frame_id = 0
+        self._published_at = None
+        self._step_ms = self._capture_ms = 0.0
+        self._published_step_ms = 0.0
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.status = "starting"
@@ -132,25 +140,29 @@ class LiveSession:
         # self._session mid-loop and the finally still tears down whatever engine is
         # current — `with` would bind the ORIGINAL session and double-exit it.
         try:
-            self._session.__enter__()
-            try:
-                # Field on at the requested magnitude + direction, then a first
-                # capture so the display has a frame before the first burst lands.
-                self._session.set_field(
-                    field_oxdna=self._field_oxdna, field_dir=self._field_dir
-                )
-                self.status = "running"
-                self._capture_frame()
-                while not self._stop.is_set():
-                    self._apply_pending_reconfig()
-                    if self._stop.is_set():
-                        break
-                    self._apply_pending_field()
-                    self._session.run(self._burst)
-                    self._n_bursts += 1
+            # Interactive Live takes priority over resumable trajectory backfill.
+            with foreground_work():
+                self._session.__enter__()
+                try:
+                    # Field on at the requested magnitude + direction, then a first
+                    # capture so the display has a frame before the first burst lands.
+                    self._session.set_field(
+                        field_oxdna=self._field_oxdna, field_dir=self._field_dir
+                    )
+                    self.status = "running"
                     self._capture_frame()
-            finally:
-                self._session.__exit__(None, None, None)
+                    while not self._stop.is_set():
+                        self._apply_pending_reconfig()
+                        if self._stop.is_set():
+                            break
+                        self._apply_pending_field()
+                        started = time.perf_counter()
+                        self._session.run(self._burst)
+                        self._step_ms = (time.perf_counter() - started) * 1000
+                        self._n_bursts += 1
+                        self._capture_frame()
+                finally:
+                    self._session.__exit__(None, None, None)
         except Exception as exc:  # noqa: BLE001 — surfaced via /frame, not swallowed
             if not self._stop.is_set():
                 self.error = f"{type(exc).__name__}: {exc}"
@@ -209,6 +221,7 @@ class LiveSession:
                     self._field_dir = list(f_dir)
 
     def _capture_frame(self) -> None:
+        started = time.perf_counter()
         try:
             positions = self._frame_builder(self._session)
         except Exception as exc:  # noqa: BLE001 — a bad read shouldn't kill the loop
@@ -216,6 +229,13 @@ class LiveSession:
             return
         with self._lock:
             self._latest = positions
+            # Publish identity and coordinates atomically. A reader during frame
+            # construction must not see old coordinates tagged as a new burst.
+            self._published_bursts = self._n_bursts
+            self._frame_id += 1
+            self._published_at = time.perf_counter()
+            self._capture_ms = (self._published_at - started) * 1000
+            self._published_step_ms = self._step_ms
 
     # ── Control / readout ─────────────────────────────────────────────────────
     def set_field(self, *, field_oxdna: float | None = None, field_dir=None) -> None:
@@ -269,7 +289,14 @@ class LiveSession:
                 "ready": latest is not None,
                 "positions": latest or [],
                 "n_positions": len(latest) if latest else 0,
-                "n_bursts": self._n_bursts,
+                "n_bursts": self._published_bursts,
+                "frame_id": self._frame_id,
+                "timing": {
+                    "step_ms": self._published_step_ms,
+                    "capture_ms": self._capture_ms,
+                    "age_ms": (time.perf_counter() - self._published_at) * 1000
+                    if self._published_at is not None else None,
+                },
                 "status": self.status,
                 "error": self.error,
                 **self._backend_info(),

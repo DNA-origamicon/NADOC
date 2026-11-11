@@ -1,7 +1,7 @@
 """Isolated S-shaped Sweep tour: Free Draw, point edits and desktop history.
 
-Demo uses steady_fast with visible review holds; validation uses all four
-controller profiles. The browser, native viewer and temporary part belong to
+Demo and validation use all four controller profiles; Demo adds review holds.
+The browser, native viewer and temporary six-helix part belong to
 this run. Only evidence remains after its workspace is removed.
 """
 import argparse
@@ -12,6 +12,7 @@ import socket
 import subprocess
 import tempfile
 import uuid
+import hashlib
 
 from tools.vr_workflows.tour_catalog import ROOT
 
@@ -48,17 +49,27 @@ def main():
             'NADOC_VR_DEMO': '0' if args.validate else '1',
             'NADOC_VR_DEMO_HOLD': os.environ.get('NADOC_VR_DEMO_HOLD', '3')}
         command = ['npx', 'playwright', 'test', '--config', 'playwright.vr-sweep.config.js',
-            'vr_sweep.spec.js', '--workers=1', '--output', str(output/'playwright')]
-        if not args.validate or os.environ.get('NADOC_VR_FRAME_AUDIT') == '1':
-            command.append('--headed')
-        result = subprocess.run(command, cwd=ROOT/'frontend', env=env)
-        (output/'result.json').write_text(json.dumps({
-            'passed': result.returncode == 0, 'validation': args.validate,
-            'workspace': 'temporary, removed on exit',
-            'evidence': str(output/'sweep-evidence')}, indent=2)+'\n')
-        print(output, flush=True)
-        if result.returncode:
-            raise SystemExit(result.returncode)
+            'vr_sweep.spec.js', '--workers=1', '--output', str(output/'playwright'), '--headed']
+        try:
+            result = subprocess.run(command, cwd=ROOT/'frontend', env=env)
+        finally:
+            # SteamVR can reopen its dashboard when the owned viewer exits.
+            # Dismiss through its shipped command on success, failure or stop.
+            from tools.vr_workflows.sweep_view import dismiss_dashboard
+            dismiss_dashboard(output/'teardown')
+    bridge_key = hashlib.sha256(str(ROOT/'frontend').encode()).hexdigest()[:12]
+    bridge_file = Path(tempfile.gettempdir())/f'nadoc-viewer-test-{bridge_key}-{frontend_port}.json'
+    cleanup = {'workspace_removed': not Path(workspace).exists(),
+               'browser_credentials_removed': not bridge_file.exists()}
+    (output/'result.json').write_text(json.dumps({
+        'passed': result.returncode == 0 and all(cleanup.values()), 'validation': args.validate,
+        'workspace': workspace, 'cleanup': cleanup,
+        'evidence': str(output/'sweep-evidence')}, indent=2)+'\n')
+    print(output, flush=True)
+    if result.returncode:
+        raise SystemExit(result.returncode)
+    if not all(cleanup.values()):
+        raise RuntimeError('Sweep tour cleanup incomplete: '+str(cleanup))
 
 
 if __name__ == '__main__':

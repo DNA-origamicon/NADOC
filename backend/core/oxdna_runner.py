@@ -1014,6 +1014,9 @@ def job_overall_fraction(
             stage_dir = job.stage_dir(workspace_dir, st.name)
             lines = _stage_energy_lines_fast(stage_dir)
             live = lines / max(1, expected_energy_lines(specs[idx]))
+            if job.submodel:
+                from backend.core.oxdna_submodel import attempt_fraction
+                live = attempt_fraction(specs[idx], st.completed_steps, lines)
             # …plus whatever earlier attempts banked, which this attempt's energy.dat
             # knows nothing about.
             banked = (st.completed_steps or 0) / max(1, specs[idx].steps)
@@ -1048,6 +1051,9 @@ def job_progress(
             # THIS attempt's fraction — the ETA rate must be derived from it alone,
             # since started_at is this attempt's start.
             attempt_frac = min(1.0, lines / max(1, expected_energy_lines(specs[idx])))
+            if job.submodel:
+                from backend.core.oxdna_submodel import attempt_fraction
+                attempt_frac = attempt_fraction(specs[idx], st.completed_steps, lines)
             banked = (st.completed_steps or 0) / max(1, specs[idx].steps)
             stage_frac = min(1.0, banked + attempt_frac * (1.0 - banked))
 
@@ -1076,7 +1082,7 @@ def job_progress(
 
             def _seconds(j: int, steps_remaining: float) -> float:
                 cls = _rate_class(specs[j].kind)
-                r = rate_by_class.get(cls) or _default_stage_rate(specs[j], job.backend)
+                r = rate_by_class.get(cls) or ((job.submodel or {}).get("md_steps_per_second") if cls == "md" else None) or _default_stage_rate(specs[j], job.backend)
                 return steps_remaining / r if r > 0 else 0.0
 
             eta_seconds = max(
@@ -1097,14 +1103,19 @@ def job_progress(
                 live_rate
                 if live_rate and live_rate > 0
                 else rate_by_class.get(_rate_class(specs[idx].kind))
+                or ((job.submodel or {}).get("md_steps_per_second") if specs[idx].sim_type == "MD" else None)
                 or _default_stage_rate(specs[idx], job.backend)
             )
+            if job.submodel and specs[idx].sim_type == "MC" and not rate_by_class.get("mc"):
+                # No defensible MC calibration yet: do not reuse full-system defaults.
+                eta_seconds = None
+                cur_rate = None
             if cur_rate and cur_rate > 0:
                 next_frame_eta_seconds = max(0.0, steps_to_next / cur_rate)
 
             # ── Live health snapshot (advisory; cards tick mid-stage) ─────────────
             design = _load_snapshot_design(job.job_dir(workspace_dir))
-            if design is not None:
+            if design is not None and not job.submodel:
                 live_health = _live_health_snapshot(
                     design,
                     stage_dir,
@@ -1700,6 +1711,10 @@ async def run_job(
     """Async coroutine — runs all stages until completion, failure, or cancel."""
     jd = job.job_dir(workspace_dir)
     logger.info("[%s] oxdna run_job starting; job_dir=%s", job.job_id, jd)
+
+    if job.submodel:
+        from backend.core.oxdna_submodel_runner import run as run_submodel
+        return await run_submodel(job, workspace_dir, specs)
 
     config = job.run_config or {}
     if config.get("kind") == "surface_deposition" and config.get("surface_anchor_mapping_version") != 2:
@@ -2311,6 +2326,9 @@ def start_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -
     """Launch the complete protocol independently of the API server."""
     if is_running(job.job_id):
         return
+    from backend.core.oxdna_submodel import preflight
+    preflight(job, workspace_dir, specs)
+    job.save(workspace_dir)
     (job.job_dir(workspace_dir) / _STOP_MARKER).unlink(missing_ok=True)
     runtime.launch_detached(
         job, workspace_dir, "backend.core.oxdna_worker", Path(__file__).resolve().parents[2],

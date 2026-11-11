@@ -6,6 +6,7 @@ without importing job runners and route registration.
 from __future__ import annotations
 from typing import Annotated, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
+from backend.api.simulation_submodel import SubmodelBox
 from backend.core.md_ensemble import NAMD_SEED_MAX
 from backend.core.md_presets import DEFAULT_PRESET
 from backend.core.md_protocols import EQUILIBRIUM_AWARE_PROTOCOL
@@ -26,6 +27,7 @@ MAX_PRODUCTION_NS = 10_000.0
 
 
 class CreateJobRequest(BaseModel):
+    submodel: SubmodelBox | None = None
     protocol: str = Field(
         EQUILIBRIUM_AWARE_PROTOCOL, description="Protocol preset name"
     )

@@ -15,6 +15,110 @@ or authorization; current user instructions and `CLAUDE.md` take precedence.
 
 Production promotion remains deferred where native qualification failed or plateau criteria remain false. The electrode/PEG evidence and current-state details below retain those limits. Focused development checks are authorized by the task; broad suites and scientific campaigns follow current [repository policy](../CLAUDE.md), superseding the older blanket heavy-test sentence in the retained invariants.
 
+## NAMD execution admission and analysis contention (2026-11-10)
+
+`namd_runner.run_job` holds foreground demand through admission and execution,
+so disposable trajectory backfill yields as it already does for preparation.
+`WorkloadBusy` at workflow reservation is a cancellable wait, not a failed job.
+Explicit analysis finishes normally; the reservation rechecks host/GPU capacity
+before launching. Actual memory/unsupported-configuration failures still fail
+admission. Cancellation releases foreground demand and records a clean user stop.
+No reservation records are forcibly removed and no native simulation is needed
+for the regression: runner tests use actual scheduling leases plus a real
+interruptible analysis subprocess and a stubbed engine. All 20 focused runner
+tests passed; FAST 20,703 passed / 90 skipped with the pre-existing CPD packet
+contract failure. Aggregate 192 s, no individual timing violators; FULL deferred.
+No user job inputs changed and no native dynamics launched.
+
+## Launch estimates and confirmations (2026-11-10)
+
+Duration alone never opens a launch confirmation: relaxation stages can be skip
+accelerated. The shared NAMD/oxDNA confirmation now triggers only for predicted
+output above 10 GiB, titled “Large output”. RAM/VRAM admission and low-disk checks
+remain independent. ETA is still descriptive wherever displayed.
+
+NAMD relaxation captures and saves the selected submodel before either estimator
+runs. Sizing uses the preparation crop, including whole residues and bonded
+support; solvent, ions and fixed-shell buffers count toward resource budgets.
+Cache identity includes box pose and shell width. Submodels quote offload, and
+preparation RAM also budgets the full source topology transient. Production
+forecasts use the prepared PSF/cell and expose saved-package memory ceilings;
+actual production admission is checked again at launch.
+
+Read-only R1 comparison: full 505,099 vs cropped 172,522 solvated atom upper bound,
+with cropped RAM 1,705 MiB, VRAM 1,171 MiB and output 1.592 GiB. These are planning
+budgets, not measured usage; no dynamics were run for this estimator check.
+Verification: five focused backend tests, 10,199 frontend tests, one isolated
+Run-button browser check and 25 smoke tests passed. FAST: 20,699 passed /
+90 skipped, with the pre-existing CPD packet-contract failure. Aggregate 194 s,
+zero individual budget violators; FULL remains deferred. Browser and scratch
+artifacts were removed; source unchanged.
+
+## Job wizard identification (2026-11-10)
+
+NAMD and oxDNA wizard headers show `Job ID: <full ID>` for existing jobs,
+including editable copies and read-only settings. NAMD seeded-draft setup also
+shows its existing ID. Fresh-job dialogs omit the label until an ID exists; a
+production parent ID must never be presented as the new job’s own ID. Shared
+rendering lives in `frontend/src/ui/job_wizard_identity.js`.
+
+## NAMD submodels (2026-11-10)
+
+Copied relaxation jobs must take `design_source_path` from the source job before
+falling back to `prep_params`: older prepared jobs can have a valid job path but
+null/stale request metadata. Losing that path lets a background list refresh
+switch the active submodel editor to another job and abandon a drag. Preserve
+explicitly selected pathless legacy jobs during refresh; document switches still
+clear selection. Both job lists recover pathless NAMD records by matching the
+active project ID, so existing copies remain accessible after reopening. A
+conflicting nonempty path or unknown project never matches this fallback. Regression: `tests/test_md_job_copy.py`, `preferredMdSelection`
+unit coverage, and opt-in `frontend/e2e/submodel_edit.spec.js` (real wizard,
+copy menu, mouse transforms, shell input, refresh during drag, switch/reopen).
+
+New production requests (including continuations/submodels) default to 1 ps⁻¹;
+do not inherit an old parent's custom damping unless explicitly requested anew.
+Editing a frozen job's submodel geometry starts a fresh setup, clears selection,
+and preserves the old job's box. NAMD creation already saves the box atomically:
+the controller adopts the persisted result instead of issuing a second PUT.
+Shell input typing must survive unrelated paints until change/commit. Job status
+updates refresh the editor's mutability even when selection has not changed.
+The central damping pilot completed 2×50 ps at 4 fs for full/fixed/buffer
+0.1/1/5 ps⁻¹. Buffer 1 brought RMSF closer to full (0.684 vs 0.712 Å;
+fixed 0.605 Å), but pairing remained lower and RMSD drifted. Do not promote an
+optimal buffer/default from this short, differently prepared full/crop comparison.
+Protocol/results: `experiments/namd_submodel_damping/README.md`.
+
+The 3 nm gradient follow-up uses a shared full-relax DNA checkpoint, solvent-only
+crop preparation, smoothstep NAMD k=0→0.5 over 0–2.7 nm, and a fixed outer 0.3 nm
+plus cut support. Two 50 ps seeds each for fixed/uniform/gradient completed at
+4 fs. Gradient core RMSF 0.697 Å vs full 0.712 Å; pairing 94.76% vs 96.14%; RMSD
+still drifts. The user selected uniform k=0.1 kcal/mol/Å² heavy-atom restraints and a 3 nm
+default for new jobs. The outer 0.3 nm plus cut-support residues remain fixed.
+No width-convergence claim. Metrics include shell-depth/per-residue profiles and
+sampled RAM/VRAM. See `experiments/namd_submodel_gradient/README.md`.
+
+Explicit-solvent DNA preparation now crops the CHARMM topology to whole mobile
+nucleotides plus a user-sized restrained shell and mandatory bonded support. Native
+fixed atoms require NVT and CPU/GPU offload; production retains 4 fs HMR.
+Submodel edits invalidate unstarted prepared inputs; production inherits the
+frozen region. Source designs remain intact. Short native relax/production trials
+passed for duplex and Submodel_tests; managed production and atomistic playback
+also passed. These establish execution, not equilibration or shell convergence.
+The four completed trial copies are now published in normal workspace jobs,
+associated with their source filenames; original evidence remains isolated.
+Submodel controls sit at the bottom of the box cards. Use as zoom volume copies
+the current inner box and rotation to the existing independent zoom inset; no
+shell or molecular document edits are involved.
+Submodel controls open on Define/Edit, guidance is a button tooltip, and active
+NAMD submodels suppress the solvent-cell overlay in favor of mobile-box dimensions.
+Water and ions remain mobile everywhere. Version-2 packages record the uniform
+shell recipe; version-1 jobs and descendants keep their legacy fixed shell.
+Production shell references use the parent checkpoint, preserving restart velocities.
+The managed uniform-shell pilot completed 42 ps relaxation plus 20 ps at 4 fs
+HMR; marker audits and browser views passed. Atomistic scalar-map snapshots now
+preserve the zero-color fallback, including NAMD T–T propensity maps.
+See [implementation and evidence](../docs/simulation_submodel.md#namd-submodels-2026-11-10).
+
 ## Unattended oxDNA chains (2026-10-02)
 
 Local production children auto-start inside `unattended_chain_spawn`; ordinary

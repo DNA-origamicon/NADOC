@@ -1,0 +1,41 @@
+{
+  "reviewed_keys": [
+    "10.1021/acs.bioconjchem.8b00418",
+    "10.1021/acsnano.8b02720",
+    "10.1021/acs.langmuir.8b01933"
+  ],
+  "first_pass_count": 8,
+  "input_count": 25,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11645
+  },
+  "counts": {
+    "publication_versions": 6041,
+    "canonical_work_keys": 6040,
+    "provisional_work_keys_not_reconciled": 6039,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 1167,
+      "unreviewed": 4616,
+      "fulltext_reviewed": 58,
+      "design_sources_reviewed": 200
+    },
+    "relevance": {
+      "uncertain": 5769,
+      "background_or_review": 25,
+      "design_bearing": 240,
+      "not_origami": 7
+    },
+    "catalog_eligibility": {
+      "unresolved": 6029,
+      "excluded": 11,
+      "eligible": 1
+    },
+    "design_groups": 139,
+    "design_source_reviews": 62,
+    "discovery_runs": 49
+  }
+}

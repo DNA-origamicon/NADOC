@@ -1,0 +1,194 @@
+{
+  "run_id": "SEQ0001",
+  "selection": "First10previouslyunreviewed records with recordedPDFsupplements in registry order; availability-biased pilot,not representative corpus yield.",
+  "records": [
+    {
+      "registry_key": "10.1038/nnano.2009.5",
+      "run_id": "SEQ0001",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "PDF3-11: explicitly named Origami Helper Strands list;208 candidate strings, named rows inspected. Qualifying large staple list.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC2836238-41565_2009_BFnnano20095_MOESM188_ESM.pdf",
+          "sha256": "ef45f7e8acbe413aa7885bc4ca78856df1b49210975bda23c67e7affa0e17e46",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fnnano.2009.5/MediaObjects/41565_2009_BFnnano20095_MOESM188_ESM.pdf",
+          "locator": "PDF3-11: explicitly named Origami Helper Strands list;208 candidate strings, named rows inspected. Qualifying large staple list. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    },
+    {
+      "registry_key": "10.1038/nnano.2010.160",
+      "run_id": "SEQ0001",
+      "decision": "defer_below_threshold",
+      "threshold": 100,
+      "note": "PDF2 TableS1 visually inspected:6/10-strand cube variants and aptamer controls, well below100 entries. Image table explains zero text matches; not an absence claim.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC2934861-41565_2010_BFnnano2010160_MOESM302_ESM.pdf",
+          "sha256": "7e9ec8797c509dad7c94baae44364276d2a56d0939e10f9f3cda3de6dcbd9e34",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fnnano.2010.160/MediaObjects/41565_2010_BFnnano2010160_MOESM302_ESM.pdf",
+          "locator": "PDF2 TableS1 visually inspected:6/10-strand cube variants and aptamer controls, well below100 entries. Image table explains zero text matches; not an absence claim. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    },
+    {
+      "registry_key": "10.1038/nmeth.2835",
+      "run_id": "SEQ0001",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "PDF14-18 Table1 microtubule analog staple list alone has213 candidate entries; table heading and structure-strand rows inspected. Exclude scaffold text onPDF2/35/36 from gate count.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC4153392-41592_2014_BFnmeth2835_MOESM233_ESM.pdf",
+          "sha256": "fd03c087791e52f38864aa52ad514be125c2db0220d124fa57efc93d587a3129",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fnmeth.2835/MediaObjects/41592_2014_BFnmeth2835_MOESM233_ESM.pdf",
+          "locator": "PDF14-18 Table1 microtubule analog staple list alone has213 candidate entries; table heading and structure-strand rows inspected. Exclude scaffold text onPDF2/35/36 from gate count. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    },
+    {
+      "registry_key": "10.1038/nnano.2014.58",
+      "run_id": "SEQ0001",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "PDF8-14 Robot staple sequences:285 candidate strings; numbered core rows inspected. Scaffold onPDF6-7 excluded.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/PMC4012984-41565_2014_BFnnano201458_MOESM9_ESM.pdf",
+          "sha256": "c62795132f12896e8bb4cc826971d8850ba5254ea41d4c9fc842e5ec085c349f",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fnnano.2014.58/MediaObjects/41565_2014_BFnnano201458_MOESM9_ESM.pdf",
+          "locator": "PDF8-14 Robot staple sequences:285 candidate strings; numbered core rows inspected. Scaffold onPDF6-7 excluded. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    },
+    {
+      "registry_key": "10.1038/ncomms4691",
+      "run_id": "SEQ0001",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "PDF38-42 first oligonucleotide list has207 candidate strings with Sequence/Length columns; table caption identifies42helix bundle. Scaffold diagrams onPDF1-3/31 excluded.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC3997801-41467_2014_BFncomms4691_MOESM86_ESM.pdf",
+          "sha256": "fd51bb7a08c2862716bdc06059507ae26f323d018572cc810a49d0ebaef30242",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms4691/MediaObjects/41467_2014_BFncomms4691_MOESM86_ESM.pdf",
+          "locator": "PDF38-42 first oligonucleotide list has207 candidate strings with Sequence/Length columns; table caption identifies42helix bundle. Scaffold diagrams onPDF1-3/31 excluded. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    },
+    {
+      "registry_key": "10.1038/nnano.2014.102",
+      "run_id": "SEQ0001",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "PDF2-12 nanotube staple list has named Tube1-171 entries; multiline sequence fragments inflate raw counts. Named strand indexing,not554wholePDF matches,supports gate.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC4082467-41565_2014_BFnnano2014102_MOESM286_ESM.pdf",
+          "sha256": "184555d9bb144a5c9de8bd3dd53035c2b7abec8f97080c5cafa0eada20108605",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fnnano.2014.102/MediaObjects/41565_2014_BFnnano2014102_MOESM286_ESM.pdf",
+          "locator": "PDF2-12 nanotube staple list has named Tube1-171 entries; multiline sequence fragments inflate raw counts. Named strand indexing,not554wholePDF matches,supports gate. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    },
+    {
+      "registry_key": "10.1038/ncomms6615",
+      "run_id": "SEQ0001",
+      "decision": "defer_no_qualifying_list",
+      "threshold": 100,
+      "note": "PDF44-57 Tables1-37 contain many small dye-labelled oligo configurations; wholePDF221strings must not be pooled as one staple list. Inspected headings andPDF44rows; no qualifying100-entry staple table found in indexed supplement.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/PMC4275599-41467_2014_BFncomms6615_MOESM1147_ESM.pdf",
+          "sha256": "f42a811c2dae862456602caf3531e67d7f2f86b566e1e8927cd932c89449f4d5",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms6615/MediaObjects/41467_2014_BFncomms6615_MOESM1147_ESM.pdf",
+          "locator": "PDF44-57 Tables1-37 contain many small dye-labelled oligo configurations; wholePDF221strings must not be pooled as one staple list. Inspected headings andPDF44rows; no qualifying100-entry staple table found in indexed supplement. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    },
+    {
+      "registry_key": "10.1038/nmat4269",
+      "run_id": "SEQ0001",
+      "decision": "defer_no_qualifying_list",
+      "threshold": 100,
+      "note": "PDF15/17/23/28: repeated short ARE functional oligos,8candidate strings/5unique. Indexed supplement has no qualifying staple list; retain literature relevance as unresolved.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC4617181-41563_2015_BFnmat4269_MOESM7_ESM.pdf",
+          "sha256": "5f532770956b62bb34f5b914aabcad47df0e400dd3bad457cb5add2d39026ac2",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fnmat4269/MediaObjects/41563_2015_BFnmat4269_MOESM7_ESM.pdf",
+          "locator": "PDF15/17/23/28: repeated short ARE functional oligos,8candidate strings/5unique. Indexed supplement has no qualifying staple list; retain literature relevance as unresolved. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    },
+    {
+      "registry_key": "10.1038/ncomms9102",
+      "run_id": "SEQ0001",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "PDF12-16 Table1 origami-track staple list has210candidate strings; start/end/sequence/length columns and core rows inspected. LaterTable2 distinct3Dtrack.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC4560816-41467_2015_BFncomms9102_MOESM1085_ESM.pdf",
+          "sha256": "c284e7446c50374cd386ccc36de1c2bf776433e04f578917e1f7b421d9b749c3",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms9102/MediaObjects/41467_2015_BFncomms9102_MOESM1085_ESM.pdf",
+          "locator": "PDF12-16 Table1 origami-track staple list has210candidate strings; start/end/sequence/length columns and core rows inspected. LaterTable2 distinct3Dtrack. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    },
+    {
+      "registry_key": "10.1038/ncomms9052",
+      "run_id": "SEQ0001",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "PDF28-30 Table1 cross-shaped origami staples has198candidate strings in two named-entry columns;Table3/4biotin variants separate.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/PMC4560778-41467_2015_BFncomms9052_MOESM1003_ESM.pdf",
+          "sha256": "2687ce8a0234437b784e8e3827597a31270c03be2403ee371994b96b43ac6c34",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms9052/MediaObjects/41467_2015_BFncomms9052_MOESM1003_ESM.pdf",
+          "locator": "PDF28-30 Table1 cross-shaped origami staples has198candidate strings in two named-entry columns;Table3/4biotin variants separate. Rapid source gate only; no complete article or sequence verification."
+        }
+      ],
+      "source_coverage": "Recorded available PDF supplements only; other linked/native/spreadsheet sources not exhausted.",
+      "date": "2026-11-05"
+    }
+  ],
+  "patents_excluded": [
+    "epmc:1842",
+    "epmc:1391",
+    "epmc:1259"
+  ],
+  "results": {
+    "pilot_records": 10,
+    "prioritize": 7,
+    "defer": 3
+  },
+  "extraction_seconds": 4.319388187985169,
+  "limitations": "Elapsed extraction time excludes human inspection and workflow implementation. No comparable baseline timing; no measured end-to-end speedup claim. No designs certified or counted.",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6158,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 15910
+  }
+}

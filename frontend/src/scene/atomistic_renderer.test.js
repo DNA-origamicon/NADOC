@@ -1097,3 +1097,25 @@ it.each(['ballstick', 'stick', 'vdw'])('moves protein atoms and bonds together i
   meshes.forEach((m,i) => Array.from(m.instanceMatrix.array).forEach((v,j) => expect(v).toBeCloseTo(original[i][j], 6)))
   ar.dispose()
 })
+
+it('preserves a scalar map’s zero-value fallback when copying and repainting it', async () => {
+  const { photoproductColorMap } = await import('../ui/oxdna_display.js')
+  const scene = new THREE.Scene(), ar = initAtomisticRenderer(scene)
+  ar.setMode('vdw')
+  ar.setColorMode('cpk')
+  ar.update({ atoms: [
+    { serial: 0, element: 'C', helix_id: 'h', bp_index: 0, direction: 'FORWARD', x: 1, y: 2, z: 3 },
+    { serial: 1, element: 'C', x: 4, y: 5, z: 6 },
+  ], bonds: [] })
+  const map = photoproductColorMap({ ready: true, base_likelihoods: [] }).colorByKey
+  ar.applyScalarColors(map)
+  const mesh = scene.getObjectByName('atomSpheres'), actual = new THREE.Color()
+  mesh.getColorAt(0, actual); expect(actual.getHex()).toBe(map.defaultHex)
+  mesh.getColorAt(1, actual); expect(actual.getHex()).toBe(ELEMENTS.C.color)
+  const before = mesh.instanceColor.version
+  map.defaultHex = 0x00ff00
+  ar.applyScalarColors(map)
+  expect(mesh.instanceColor.version).toBeGreaterThan(before)
+  mesh.getColorAt(0, actual); expect(actual.getHex()).toBe(0x00ff00)
+  ar.clearScalarColors(); ar.dispose()
+})

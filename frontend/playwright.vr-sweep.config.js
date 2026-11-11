@@ -11,7 +11,8 @@ export default defineConfig({
   testDir: './e2e',
   globalTeardown: './e2e/global-teardown.js',
   testMatch: ['vr_sweep.spec.js', 'vr_sweep_edit.spec.js'],
-  timeout: 360_000,
-  globalTimeout: 420_000,
+  // Demo now includes four profiles with review holds outside measured motion.
+  timeout: 600_000,
+  globalTimeout: 660_000,
   use: { ...isolated.use, headless: true, trace: 'off' },
 })

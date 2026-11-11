@@ -1,0 +1,2200 @@
+{
+  "evidence": {
+    "local_file": "assets/sources/pre2020-expansion/supplements/PMC4560816-41467_2015_BFncomms9102_MOESM1085_ESM.pdf",
+    "sha256": "c284e7446c50374cd386ccc36de1c2bf776433e04f578917e1f7b421d9b749c3",
+    "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms9102/MediaObjects/41467_2015_BFncomms9102_MOESM1085_ESM.pdf",
+    "locator": "Tables1/2 PDF12-20 position inventory; Table3 PDF21 functional strands; Figure7 PDF7 cross-section and Table2 PDF20 visually inspected. Figure9/11 captions read, routing not audited."
+  },
+  "tables": [
+    {
+      "table": 1,
+      "rows": [
+        {
+          "start": "25[119]",
+          "end": "20[119]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "33[112]",
+          "end": "12[119]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "23[84]",
+          "end": "25[97]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "23[77]",
+          "end": "19[90]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "7[6]",
+          "end": "4[21]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "41[98]",
+          "end": "2[98]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "2[55]",
+          "end": "39[55]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "12[139]",
+          "end": "29[153]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "35[63]",
+          "end": "6[56]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "37[35]",
+          "end": "34[28]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "29[10]",
+          "end": "30[10]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "27[112]",
+          "end": "18[119]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "14[196]",
+          "end": "28[175]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "27[10]",
+          "end": "28[10]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "25[77]",
+          "end": "20[77]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "23[119]",
+          "end": "19[132]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "16[160]",
+          "end": "25[160]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "0[62]",
+          "end": "41[76]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "20[181]",
+          "end": "23[174]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "36[104]",
+          "end": "6[98]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "37[168]",
+          "end": "0[161]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "41[140]",
+          "end": "4[140]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "20[97]",
+          "end": "20[98]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "8[118]",
+          "end": "35[111]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "21[6]",
+          "end": "17[27]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "30[181]",
+          "end": "29[199]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "18[132]",
+          "end": "14[119]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "23[56]",
+          "end": "20[56]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "20[55]",
+          "end": "23[55]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "1[161]",
+          "end": "41[181]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "18[196]",
+          "end": "23[188]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "6[76]",
+          "end": "8[77]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "6[55]",
+          "end": "35[62]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "27[98]",
+          "end": "16[98]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "12[76]",
+          "end": "8[63]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "35[10]",
+          "end": "36[10]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "16[27]",
+          "end": "12[6]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "2[97]",
+          "end": "41[97]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "25[63]",
+          "end": "27[69]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "39[10]",
+          "end": "0[14]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "30[76]",
+          "end": "16[77]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "13[6]",
+          "end": "14[6]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "41[126]",
+          "end": "2[119]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "18[41]",
+          "end": "23[34]",
+          "section": "Core staple strands",
+          "pdf_page": 12
+        },
+        {
+          "start": "25[161]",
+          "end": "20[161]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "1[3]",
+          "end": "2[6]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "22[199]",
+          "end": "20[189]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "34[199]",
+          "end": "9[196]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "9[21]",
+          "end": "8[6]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "2[76]",
+          "end": "39[76]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "13[35]",
+          "end": "27[34]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "3[84]",
+          "end": "39[97]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "15[6]",
+          "end": "16[6]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "41[147]",
+          "end": "2[140]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "37[112]",
+          "end": "8[119]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "2[160]",
+          "end": "40[147]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "29[112]",
+          "end": "16[119]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "35[147]",
+          "end": "39[160]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "25[98]",
+          "end": "18[98]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "34[160]",
+          "end": "12[161]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "4[174]",
+          "end": "2[161]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "17[6]",
+          "end": "18[6]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "23[161]",
+          "end": "19[174]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "6[160]",
+          "end": "34[161]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "31[112]",
+          "end": "11[132]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "7[126]",
+          "end": "4[119]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "25[10]",
+          "end": "26[10]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "31[126]",
+          "end": "33[132]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "30[69]",
+          "end": "14[56]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "4[153]",
+          "end": "41[160]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "31[10]",
+          "end": "32[10]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "20[118]",
+          "end": "23[118]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "5[6]",
+          "end": "6[6]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "28[104]",
+          "end": "14[98]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "3[6]",
+          "end": "4[6]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "24[132]",
+          "end": "27[132]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "41[84]",
+          "end": "2[77]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "30[153]",
+          "end": "14[161]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "8[139]",
+          "end": "37[132]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "30[160]",
+          "end": "16[161]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "4[196]",
+          "end": "37[188]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "27[70]",
+          "end": "18[77]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "33[10]",
+          "end": "34[10]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "16[118]",
+          "end": "27[111]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "16[153]",
+          "end": "13[160]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "7[28]",
+          "end": "10[35]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "11[133]",
+          "end": "14[140]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "41[35]",
+          "end": "0[42]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "16[196]",
+          "end": "25[188]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "12[196]",
+          "end": "13[181]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "27[42]",
+          "end": "28[56]",
+          "section": "Core staple strands",
+          "pdf_page": 13
+        },
+        {
+          "start": "15[49]",
+          "end": "18[56]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "23[98]",
+          "end": "22[84]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "37[49]",
+          "end": "8[56]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "10[160]",
+          "end": "34[147]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "16[34]",
+          "end": "25[34]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "23[35]",
+          "end": "18[42]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "35[98]",
+          "end": "8[98]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "9[49]",
+          "end": "12[56]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "40[41]",
+          "end": "37[34]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "28[199]",
+          "end": "15[196]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "11[6]",
+          "end": "10[21]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "38[199]",
+          "end": "5[196]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "0[197]",
+          "end": "2[182]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "25[56]",
+          "end": "19[69]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "27[168]",
+          "end": "33[174]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "27[35]",
+          "end": "15[48]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "10[196]",
+          "end": "31[188]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "23[140]",
+          "end": "20[140]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "31[84]",
+          "end": "35[97]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "25[147]",
+          "end": "16[140]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "39[119]",
+          "end": "6[119]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "18[69]",
+          "end": "16[56]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "16[97]",
+          "end": "28[84]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "10[97]",
+          "end": "31[104]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "30[104]",
+          "end": "12[98]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "8[196]",
+          "end": "33[188]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "33[133]",
+          "end": "12[140]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "34[174]",
+          "end": "8[161]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "7[63]",
+          "end": "2[56]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "16[76]",
+          "end": "25[76]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "3[42]",
+          "end": "41[55]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "19[6]",
+          "end": "20[6]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "32[104]",
+          "end": "10[98]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "20[139]",
+          "end": "23[132]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "14[55]",
+          "end": "9[48]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "25[35]",
+          "end": "22[28]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "7[91]",
+          "end": "40[84]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "18[174]",
+          "end": "15[174]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "2[118]",
+          "end": "0[105]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "30[199]",
+          "end": "13[196]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "3[21]",
+          "end": "41[34]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "20[160]",
+          "end": "24[147]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "18[90]",
+          "end": "27[97]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "2[132]",
+          "end": "41[139]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "22[27]",
+          "end": "24[10]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "20[76]",
+          "end": "24[63]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "2[139]",
+          "end": "39[139]",
+          "section": "Core staple strands",
+          "pdf_page": 14
+        },
+        {
+          "start": "0[41]",
+          "end": "39[34]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "24[199]",
+          "end": "20[182]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "37[133]",
+          "end": "8[140]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "12[118]",
+          "end": "31[111]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "25[140]",
+          "end": "17[153]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "10[55]",
+          "end": "31[62]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "29[84]",
+          "end": "14[77]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "36[199]",
+          "end": "7[196]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "40[199]",
+          "end": "41[199]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "39[35]",
+          "end": "6[28]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "2[181]",
+          "end": "39[199]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "36[139]",
+          "end": "10[140]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "15[56]",
+          "end": "13[76]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "13[28]",
+          "end": "16[35]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "24[174]",
+          "end": "18[161]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "32[48]",
+          "end": "37[48]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "41[182]",
+          "end": "1[197]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "10[34]",
+          "end": "30[35]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "31[63]",
+          "end": "10[56]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "32[83]",
+          "end": "7[90]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "14[174]",
+          "end": "10[161]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "35[112]",
+          "end": "10[119]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "0[104]",
+          "end": "41[118]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "27[133]",
+          "end": "18[140]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "32[199]",
+          "end": "11[196]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "9[6]",
+          "end": "10[6]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "6[97]",
+          "end": "4[84]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "9[161]",
+          "end": "5[174]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "37[10]",
+          "end": "38[10]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "27[175]",
+          "end": "17[196]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "33[28]",
+          "end": "12[28]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "36[76]",
+          "end": "10[77]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "39[77]",
+          "end": "6[77]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "6[196]",
+          "end": "35[188]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "39[56]",
+          "end": "0[63]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "41[56]",
+          "end": "4[56]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "41[77]",
+          "end": "4[77]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "39[98]",
+          "end": "4[98]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "41[119]",
+          "end": "3[132]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "39[140]",
+          "end": "7[139]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "39[161]",
+          "end": "6[161]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "41[161]",
+          "end": "4[161]",
+          "section": "Core staple strands",
+          "pdf_page": 15
+        },
+        {
+          "start": "4[55]",
+          "end": "40[42]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 15
+        },
+        {
+          "start": "8[55]",
+          "end": "4[42]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 15
+        },
+        {
+          "start": "12[55]",
+          "end": "31[48]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 16
+        },
+        {
+          "start": "16[55]",
+          "end": "25[55]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 16
+        },
+        {
+          "start": "18[55]",
+          "end": "26[42]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 16
+        },
+        {
+          "start": "4[76]",
+          "end": "36[77]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 16
+        },
+        {
+          "start": "8[76]",
+          "end": "32[77]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 16
+        },
+        {
+          "start": "10[76]",
+          "end": "31[83]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 16
+        },
+        {
+          "start": "14[76]",
+          "end": "29[69]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 16
+        },
+        {
+          "start": "18[76]",
+          "end": "23[76]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 16
+        },
+        {
+          "start": "4[97]",
+          "end": "37[104]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 16
+        },
+        {
+          "start": "8[97]",
+          "end": "33[104]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 16
+        },
+        {
+          "start": "12[97]",
+          "end": "29[104]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 16
+        },
+        {
+          "start": "14[97]",
+          "end": "12[77]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 16
+        },
+        {
+          "start": "18[97]",
+          "end": "23[97]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 16
+        },
+        {
+          "start": "4[118]",
+          "end": "39[118]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 16
+        },
+        {
+          "start": "6[118]",
+          "end": "37[111]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 16
+        },
+        {
+          "start": "10[118]",
+          "end": "33[111]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 16
+        },
+        {
+          "start": "14[118]",
+          "end": "29[111]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 16
+        },
+        {
+          "start": "18[118]",
+          "end": "25[118]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 16
+        },
+        {
+          "start": "4[139]",
+          "end": "40[126]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 16
+        },
+        {
+          "start": "10[139]",
+          "end": "8[126]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 16
+        },
+        {
+          "start": "14[139]",
+          "end": "30[126]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 16
+        },
+        {
+          "start": "16[139]",
+          "end": "25[139]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 16
+        },
+        {
+          "start": "18[139]",
+          "end": "23[139]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 16
+        },
+        {
+          "start": "4[160]",
+          "end": "37[167]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 16
+        },
+        {
+          "start": "8[160]",
+          "end": "5[153]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 16
+        },
+        {
+          "start": "12[160]",
+          "end": "9[160]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 16
+        },
+        {
+          "start": "14[160]",
+          "end": "27[167]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 16
+        },
+        {
+          "start": "18[160]",
+          "end": "23[160]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 16
+        }
+      ],
+      "entry_count": 210,
+      "unique_position_pairs": 210,
+      "duplicate_pairs": []
+    },
+    {
+      "table": 2,
+      "rows": [
+        {
+          "start": "10[48]",
+          "end": "69[41]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "10[97]",
+          "end": "27[97]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "11[35]",
+          "end": "56[42]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "11[84]",
+          "end": "8[77]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "12[62]",
+          "end": "57[69]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "12[83]",
+          "end": "45[90]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "14[41]",
+          "end": "52[28]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "14[62]",
+          "end": "23[55]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "15[21]",
+          "end": "25[34]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "15[84]",
+          "end": "55[90]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "16[122]",
+          "end": "53[104]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "16[62]",
+          "end": "53[62]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "17[28]",
+          "end": "19[41]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "17[70]",
+          "end": "23[76]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "19[91]",
+          "end": "22[84]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "2[69]",
+          "end": "35[55]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "2[76]",
+          "end": "37[76]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "21[56]",
+          "end": "21[55]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "21[77]",
+          "end": "21[76]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "22[83]",
+          "end": "19[83]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "23[35]",
+          "end": "20[35]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "23[77]",
+          "end": "25[97]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "23[98]",
+          "end": "18[91]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "25[35]",
+          "end": "14[42]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "25[42]",
+          "end": "31[55]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "25[56]",
+          "end": "14[63]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "25[77]",
+          "end": "50[70]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "25[98]",
+          "end": "15[122]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "26[104]",
+          "end": "23[97]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "27[56]",
+          "end": "12[63]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "27[77]",
+          "end": "12[84]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "28[62]",
+          "end": "45[62]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "28[69]",
+          "end": "11[83]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "29[91]",
+          "end": "46[98]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "30[97]",
+          "end": "35[97]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "31[56]",
+          "end": "29[62]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "31[77]",
+          "end": "44[77]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "33[35]",
+          "end": "31[34]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "33[56]",
+          "end": "6[63]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "33[77]",
+          "end": "6[84]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "33[98]",
+          "end": "31[97]",
+          "section": "Core staple strands",
+          "pdf_page": 17
+        },
+        {
+          "start": "35[56]",
+          "end": "3[69]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "35[77]",
+          "end": "4[77]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "35[98]",
+          "end": "33[97]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "36[90]",
+          "end": "1[90]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "37[35]",
+          "end": "1[48]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "37[56]",
+          "end": "33[55]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "37[77]",
+          "end": "2[77]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "37[98]",
+          "end": "38[98]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "39[21]",
+          "end": "33[34]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "4[48]",
+          "end": "38[35]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "4[76]",
+          "end": "35[76]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "4[97]",
+          "end": "40[98]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "40[48]",
+          "end": "38[56]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "40[97]",
+          "end": "10[98]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "41[70]",
+          "end": "33[76]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "42[34]",
+          "end": "27[34]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "42[90]",
+          "end": "39[97]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "42[97]",
+          "end": "59[104]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "43[70]",
+          "end": "31[76]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "43[77]",
+          "end": "60[84]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "44[62]",
+          "end": "65[62]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "44[76]",
+          "end": "28[70]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "46[34]",
+          "end": "23[34]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "46[97]",
+          "end": "52[91]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "47[42]",
+          "end": "27[55]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "47[70]",
+          "end": "27[76]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "47[91]",
+          "end": "29[90]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "49[56]",
+          "end": "54[63]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "49[70]",
+          "end": "25[76]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "49[84]",
+          "end": "54[77]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "50[55]",
+          "end": "46[42]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "50[69]",
+          "end": "16[70]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "51[49]",
+          "end": "24[42]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "53[91]",
+          "end": "48[84]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "54[34]",
+          "end": "16[21]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "54[62]",
+          "end": "48[49]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "54[76]",
+          "end": "49[69]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "54[90]",
+          "end": "65[83]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "54[97]",
+          "end": "16[84]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "56[111]",
+          "end": "69[104]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "56[69]",
+          "end": "69[62]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "58[34]",
+          "end": "47[34]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "58[48]",
+          "end": "62[35]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "59[42]",
+          "end": "25[55]",
+          "section": "Core staple strands",
+          "pdf_page": 18
+        },
+        {
+          "start": "6[34]",
+          "end": "42[35]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "6[62]",
+          "end": "9[62]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "6[83]",
+          "end": "41[69]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "60[69]",
+          "end": "58[49]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "60[83]",
+          "end": "43[69]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "62[104]",
+          "end": "44[91]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "62[34]",
+          "end": "71[41]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "64[62]",
+          "end": "49[55]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "64[83]",
+          "end": "69[83]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "65[70]",
+          "end": "56[77]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "65[98]",
+          "end": "69[97]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "66[27]",
+          "end": "56[22]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "66[48]",
+          "end": "63[48]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "66[97]",
+          "end": "63[90]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "67[70]",
+          "end": "47[69]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "67[77]",
+          "end": "67[69]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "68[41]",
+          "end": "66[28]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "7[49]",
+          "end": "6[35]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "9[28]",
+          "end": "28[35]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "9[63]",
+          "end": "61[69]",
+          "section": "Core staple strands",
+          "pdf_page": 19
+        },
+        {
+          "start": "1[28]",
+          "end": "35[34]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 19
+        },
+        {
+          "start": "1[49]",
+          "end": "37[34]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 19
+        },
+        {
+          "start": "1[70]",
+          "end": "1[69]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 19
+        },
+        {
+          "start": "1[91]",
+          "end": "36[91]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 19
+        },
+        {
+          "start": "1[28]",
+          "end": "35[34]",
+          "section": "Staple strands in foothold row A",
+          "pdf_page": 19
+        },
+        {
+          "start": "38[34]",
+          "end": "43[34]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 19
+        },
+        {
+          "start": "38[55]",
+          "end": "5[48]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 19
+        },
+        {
+          "start": "38[76]",
+          "end": "38[77]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 19
+        },
+        {
+          "start": "38[97]",
+          "end": "8[98]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 19
+        },
+        {
+          "start": "38[34]",
+          "end": "43[34]",
+          "section": "Staple strands in foothold row B",
+          "pdf_page": 19
+        },
+        {
+          "start": "63[28]",
+          "end": "58[35]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 19
+        },
+        {
+          "start": "63[49]",
+          "end": "43[48]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 19
+        },
+        {
+          "start": "63[70]",
+          "end": "63[69]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 19
+        },
+        {
+          "start": "63[91]",
+          "end": "58[98]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 19
+        },
+        {
+          "start": "63[28]",
+          "end": "58[35]",
+          "section": "Staple strands in foothold row C",
+          "pdf_page": 19
+        },
+        {
+          "start": "70[34]",
+          "end": "64[21]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 19
+        },
+        {
+          "start": "70[55]",
+          "end": "70[56]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 19
+        },
+        {
+          "start": "70[76]",
+          "end": "65[69]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 20
+        },
+        {
+          "start": "70[97]",
+          "end": "57[104]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 20
+        },
+        {
+          "start": "70[34]",
+          "end": "64[21]",
+          "section": "Staple strands in foothold row D",
+          "pdf_page": 20
+        },
+        {
+          "start": "69[105]",
+          "end": "70[98]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 20
+        },
+        {
+          "start": "69[42]",
+          "end": "70[35]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 20
+        },
+        {
+          "start": "69[63]",
+          "end": "66[49]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 20
+        },
+        {
+          "start": "69[84]",
+          "end": "70[77]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 20
+        },
+        {
+          "start": "69[105]",
+          "end": "70[98]",
+          "section": "Staple strands in foothold row E",
+          "pdf_page": 20
+        },
+        {
+          "start": "53[105]",
+          "end": "54[98]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 20
+        },
+        {
+          "start": "53[42]",
+          "end": "54[35]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 20
+        },
+        {
+          "start": "53[63]",
+          "end": "53[55]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 20
+        },
+        {
+          "start": "53[84]",
+          "end": "53[83]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 20
+        },
+        {
+          "start": "53[105]",
+          "end": "54[98]",
+          "section": "Staple strands in foothold row F",
+          "pdf_page": 20
+        },
+        {
+          "start": "19[105]",
+          "end": "19[104]",
+          "section": "Staple strands in foothold row G",
+          "pdf_page": 20
+        },
+        {
+          "start": "19[42]",
+          "end": "53[41]",
+          "section": "Staple strands in foothold row G",
+          "pdf_page": 20
+        },
+        {
+          "start": "19[63]",
+          "end": "19[62]",
+          "section": "Staple strands in foothold row G",
+          "pdf_page": 20
+        },
+        {
+          "start": "19[84]",
+          "end": "21[97]",
+          "section": "Staple strands in foothold row G",
+          "pdf_page": 20
+        },
+        {
+          "start": "23[14]",
+          "end": "26[21]",
+          "section": "Staple strands for stators",
+          "pdf_page": 20
+        },
+        {
+          "start": "23[56]",
+          "end": "16[63]",
+          "section": "Staple strands for stators",
+          "pdf_page": 20
+        },
+        {
+          "start": "27[14]",
+          "end": "30[21]",
+          "section": "Staple strands for stators",
+          "pdf_page": 20
+        },
+        {
+          "start": "27[35]",
+          "end": "11[48]",
+          "section": "Staple strands for stators",
+          "pdf_page": 20
+        },
+        {
+          "start": "31[14]",
+          "end": "34[21]",
+          "section": "Staple strands for stators",
+          "pdf_page": 20
+        },
+        {
+          "start": "31[35]",
+          "end": "7[48]",
+          "section": "Staple strands for stators",
+          "pdf_page": 20
+        },
+        {
+          "start": "35[14]",
+          "end": "37[27]",
+          "section": "Staple strands for stators",
+          "pdf_page": 20
+        },
+        {
+          "start": "35[35]",
+          "end": "37[55]",
+          "section": "Staple strands for stators",
+          "pdf_page": 20
+        }
+      ],
+      "entry_count": 147,
+      "unique_position_pairs": 141,
+      "duplicate_pairs": [
+        {
+          "start": "1[28]",
+          "end": "35[34]",
+          "count": 2
+        },
+        {
+          "start": "38[34]",
+          "end": "43[34]",
+          "count": 2
+        },
+        {
+          "start": "63[28]",
+          "end": "58[35]",
+          "count": 2
+        },
+        {
+          "start": "70[34]",
+          "end": "64[21]",
+          "count": 2
+        },
+        {
+          "start": "69[105]",
+          "end": "70[98]",
+          "count": 2
+        },
+        {
+          "start": "53[105]",
+          "end": "54[98]",
+          "count": 2
+        }
+      ]
+    }
+  ],
+  "limitations": "Position-pair inventory, not complete sequence extraction. Six repeated pairs in Table2; E/F duplicates confirmed in PDF20 image. Do not deduplicate silently or infer missing recipes. Wrapped sequences and chemical modifications require source verification."
+}

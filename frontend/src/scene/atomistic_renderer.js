@@ -1098,12 +1098,15 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
      * ramp as the beads.  Accepts a Map or a plain object; repaints in place.
      */
     applyScalarColors(map) {
-      const next = map instanceof Map ? new Map(map)
+      // Some maps assign zero to unscored nucleotides. Preserve that fallback
+      // when taking a snapshot; a plain Map copy silently loses it.
+      const next = map instanceof Map ? (map.clone?.() ?? new Map(map))
         : (map && typeof map === 'object' ? new Map(Object.entries(map)) : null)
       // Representation rebuilds already paint the held scalar map. Both the
       // shared controls and simulation owner reapply it; identical values must
       // not repaint every atom and bond twice (~125 ms on P1 Alpine).
       if (_colorsCurrent() && (next === colors.scalar || (next && colors.scalar && next.size === colors.scalar.size
+          && next.defaultHex === colors.scalar.defaultHex
           && [...next].every(([key, color]) => colors.scalar.get(key) === color)))) return
       colors.scalar = next
       _applyColors(_state.lastSel)

@@ -1,0 +1,1147 @@
+{
+  "evidence": {
+    "local_file": "assets/research-20261105/ultrafast-si.pdf",
+    "sha256": "e5fdb7c4ab702b05a444163de05dc72bb684ee05a118bdf81c6e7098b2c57a87",
+    "url": "https://ndownloader.figshare.com/files/20731413",
+    "locator": "SI section4 PDF13\u201315; TablesS2 PDF17\u201321 andS3 PDF21\u201322 (PDF22 visually inspected); refs24\u201326. Main text not acquired."
+  },
+  "unmodified_count": 188,
+  "unmodified": [
+    {
+      "name": "P1A1",
+      "sequence": "CTTAAATCCCGGCGGTTGTG",
+      "pdf_page": 17,
+      "length": 20
+    },
+    {
+      "name": "P1A2",
+      "sequence": "CAAGGGGCAACTCATGGTCATAGCTAAGGGAGAGA",
+      "pdf_page": 17,
+      "length": 35
+    },
+    {
+      "name": "P1A3",
+      "sequence": "TGGGCACTAAAAAAGAGTCTGTCCTTTGATTTCAAACTTAC",
+      "pdf_page": 17,
+      "length": 41
+    },
+    {
+      "name": "P1A4",
+      "sequence": "TCAATGCTCAGTACCAGGGAGACTCGATTGGCCCA",
+      "pdf_page": 17,
+      "length": 35
+    },
+    {
+      "name": "P1A5",
+      "sequence": "ATACAGAACCCTTCTGACGTCTGAAAGAGCCA",
+      "pdf_page": 17,
+      "length": 32
+    },
+    {
+      "name": "P1A6",
+      "sequence": "TTTAAATGTTTGCTGAGATTTAGGACCCACGCGAA",
+      "pdf_page": 17,
+      "length": 35
+    },
+    {
+      "name": "P1A7",
+      "sequence": "GAAGGTATTATCACCCAGCAAAATCACCTTACCATTAGC",
+      "pdf_page": 17,
+      "length": 39
+    },
+    {
+      "name": "P1A8",
+      "sequence": "AGAGTTCGTAAAGCTGATCTCATAAGGATTGACTGCCAGTTTGAGGCAG",
+      "pdf_page": 17,
+      "length": 49
+    },
+    {
+      "name": "P1A9",
+      "sequence": "TGTGATAAATTTAGCCGGAACGAGATATATTCTCA",
+      "pdf_page": 17,
+      "length": 35
+    },
+    {
+      "name": "P1A10",
+      "sequence": "TACGCCAATTTAGAGCTTAATCTCACCCACCATAAGAAA",
+      "pdf_page": 17,
+      "length": 39
+    },
+    {
+      "name": "P1A11",
+      "sequence": "GTTGCGTCGGATTCTCGTAGCATTCCTCGTAA",
+      "pdf_page": 17,
+      "length": 32
+    },
+    {
+      "name": "P1A12",
+      "sequence": "AGGCTTGCCCTGACTTTAATC",
+      "pdf_page": 17,
+      "length": 21
+    },
+    {
+      "name": "P1B1",
+      "sequence": "TTTGACCAAAAGAAATACGTAATGCCACAGACTTTCATC",
+      "pdf_page": 17,
+      "length": 39
+    },
+    {
+      "name": "P1B2",
+      "sequence": "AATTGTTTCATTCCATATTCAAAAAGCTATCAATTG",
+      "pdf_page": 17,
+      "length": 36
+    },
+    {
+      "name": "P1B3",
+      "sequence": "AGGTTACTAGCCTTAAATCAAGATTTTGCACAGCATTGGAGGCAG",
+      "pdf_page": 17,
+      "length": 45
+    },
+    {
+      "name": "P1B4",
+      "sequence": "TAGTACTAAAGTACGGTGCCGAAAGATTTTTGATTGTAATTTTGTTGGGT",
+      "pdf_page": 17,
+      "length": 50
+    },
+    {
+      "name": "P1B5",
+      "sequence": "CTTCAAAGCTGTAGCCAAATGGTCAATAAGCAAGGCATAAAAA",
+      "pdf_page": 17,
+      "length": 43
+    },
+    {
+      "name": "P1B6",
+      "sequence": "ATCCATGTAATAGATTAAGCACGTATAACGTGCGCTAGTTT",
+      "pdf_page": 17,
+      "length": 41
+    },
+    {
+      "name": "P1B7",
+      "sequence": "AAAAATAGGAGCCGGGCTCAGCAAATCGTTAAAAGGAGGCC",
+      "pdf_page": 17,
+      "length": 41
+    },
+    {
+      "name": "P1B8",
+      "sequence": "ATCCTTTGCAACAGGAAAAACGCT",
+      "pdf_page": 17,
+      "length": 24
+    },
+    {
+      "name": "P1B9",
+      "sequence": "GTCGAGGACCCGCCGCACCTTTTACATCCGCTGAGCAT",
+      "pdf_page": 17,
+      "length": 38
+    },
+    {
+      "name": "P1B10",
+      "sequence": "GAAAATTCGCAGGCGCTCAGATGCCGGGTTAATCTCCAAAGAGAACCTG",
+      "pdf_page": 17,
+      "length": 49
+    },
+    {
+      "name": "P1B11",
+      "sequence": "TAGCGAGTCTTTACTCGATGATGTACCCCTTCCTGCTG",
+      "pdf_page": 17,
+      "length": 38
+    },
+    {
+      "name": "P1B12",
+      "sequence": "TAGTATCAAATTCTTACAGGCGTTTTAGCGAAACG",
+      "pdf_page": 17,
+      "length": 35
+    },
+    {
+      "name": "P1C1",
+      "sequence": "ATCTAGCCAGCAGCATCCCAGCGGTGCCGGTAATAATTTCGTAAA",
+      "pdf_page": 17,
+      "length": 45
+    },
+    {
+      "name": "P1C2",
+      "sequence": "AGCCAACGTGGCACCAGAATCTTACCAACGCTACC",
+      "pdf_page": 17,
+      "length": 35
+    },
+    {
+      "name": "P1C3",
+      "sequence": "TGCTTCTGTAAACGAATTA",
+      "pdf_page": 17,
+      "length": 19
+    },
+    {
+      "name": "P1C4",
+      "sequence": "TTCCTCGCACGCTGATGGATTATTTACACAGAGATGTGGCAC",
+      "pdf_page": 17,
+      "length": 42
+    },
+    {
+      "name": "P1C5",
+      "sequence": "AGGAGGCTTTAACGCCAAACGAACTGCTCAT",
+      "pdf_page": 17,
+      "length": 31
+    },
+    {
+      "name": "P1C6",
+      "sequence": "AAGTTTGACCATAACAAAGTTTTGTCGAAGGAATGACAACAGGA",
+      "pdf_page": 17,
+      "length": 44
+    },
+    {
+      "name": "P1C7",
+      "sequence": "CGTAGGCGCATAACTGACCAACTTTGTTGCGCGATACATTGCAAAAG",
+      "pdf_page": 17,
+      "length": 47
+    },
+    {
+      "name": "P1C8",
+      "sequence": "AGACAATCGCCATTAAAAAAGAATCAGCAGA",
+      "pdf_page": 17,
+      "length": 31
+    },
+    {
+      "name": "P1C9",
+      "sequence": "TAAATACCCGGATATCATCAACGGTCAATCATAAGACCATCGATAC",
+      "pdf_page": 17,
+      "length": 46
+    },
+    {
+      "name": "P1C10",
+      "sequence": "CGCCAGCCAGAAAGCGTACTGAGTATGGTGCT",
+      "pdf_page": 17,
+      "length": 32
+    },
+    {
+      "name": "P1C11",
+      "sequence": "AAAAGTTTGAGTAACATTATCATAATTG",
+      "pdf_page": 17,
+      "length": 28
+    },
+    {
+      "name": "P1C12",
+      "sequence": "AAGAGGTAGTACCTTGAGAAAGGCCGGACAATGCCATAGTAG",
+      "pdf_page": 17,
+      "length": 42
+    },
+    {
+      "name": "P1D1",
+      "sequence": "AGGACGTCAGACTGTAGC",
+      "pdf_page": 17,
+      "length": 18
+    },
+    {
+      "name": "P1D2",
+      "sequence": "TCGCCGGCTGGAGGTTTCTTTGCTCACTTTTGGGTAGCTACT",
+      "pdf_page": 17,
+      "length": 42
+    },
+    {
+      "name": "P1D3",
+      "sequence": "AGTGAATTTTCCTCAAACCCTCAGAGCCACCGAACCCACAC",
+      "pdf_page": 18,
+      "length": 41
+    },
+    {
+      "name": "P1D4",
+      "sequence": "GCCACGAAACGTTCGCCACGTGCATCCGTAATGGGATAGGGCC",
+      "pdf_page": 18,
+      "length": 43
+    },
+    {
+      "name": "P1D5",
+      "sequence": "TACTGTGTCGAAATCCGCAAAGTATAGCAAC",
+      "pdf_page": 18,
+      "length": 31
+    },
+    {
+      "name": "P1D6",
+      "sequence": "TCATCGTAACATTCCAAGAACATAGCCCCCT",
+      "pdf_page": 18,
+      "length": 31
+    },
+    {
+      "name": "P1D7",
+      "sequence": "ACCACCCTTAGATGAGTGACCTGTCGTGCCAGAAT",
+      "pdf_page": 18,
+      "length": 35
+    },
+    {
+      "name": "P1D8",
+      "sequence": "ACGGAACGTCATTTAGTGATGAAGGCATAAAACTGGTGCCCCGGAA",
+      "pdf_page": 18,
+      "length": 46
+    },
+    {
+      "name": "P1D9",
+      "sequence": "AGAGAGAAATAACAAGCGTTTGCCATAAGTA",
+      "pdf_page": 18,
+      "length": 31
+    },
+    {
+      "name": "P1D10",
+      "sequence": "CACGGGGGTAATAGTAAAACAGTTAGACGTTAGCCCTCAACAACCCAG",
+      "pdf_page": 18,
+      "length": 48
+    },
+    {
+      "name": "P1D11",
+      "sequence": "TGAGATCGGCTATAATATACCGACAGGGAAAGAGCGAAAGGAGCGGCAGT",
+      "pdf_page": 18,
+      "length": 50
+    },
+    {
+      "name": "P1D12",
+      "sequence": "TACGCGGGATACGAGGGCAACGGAATTATACCAAG",
+      "pdf_page": 18,
+      "length": 35
+    },
+    {
+      "name": "P1E1",
+      "sequence": "ATAGAGCCGCACTCCAAGTC",
+      "pdf_page": 18,
+      "length": 20
+    },
+    {
+      "name": "P1E2",
+      "sequence": "AACAAAATCACCATCAATAACCCTCAATAAAT",
+      "pdf_page": 18,
+      "length": 32
+    },
+    {
+      "name": "P1E3",
+      "sequence": "ACTAAATGGGCTTGAGATTGGCT",
+      "pdf_page": 18,
+      "length": 23
+    },
+    {
+      "name": "P1E4",
+      "sequence": "CAGAACAATATATCGGCCATCAAACACAGTTGAAAGGAA",
+      "pdf_page": 18,
+      "length": 39
+    },
+    {
+      "name": "P1E5",
+      "sequence": "CCGAGCTCGAACTTGACGAAAGGTAAGAGGCATTTATTT",
+      "pdf_page": 18,
+      "length": 39
+    },
+    {
+      "name": "P1E6",
+      "sequence": "AAAAATTAAAGCCTATTATTCTGAAGTTGATAGATTGCAAACCCTC",
+      "pdf_page": 18,
+      "length": 46
+    },
+    {
+      "name": "P1E7",
+      "sequence": "GAGAACAAGCAAAACCAAATCAATATTTCGTCACTACAAGGATTTT",
+      "pdf_page": 18,
+      "length": 46
+    },
+    {
+      "name": "P1E8",
+      "sequence": "TGCACGACAATTGCGAATGCCCCCTCGGCTGGCCA",
+      "pdf_page": 18,
+      "length": 35
+    },
+    {
+      "name": "P1E9",
+      "sequence": "TACGTATCATGACTTGCGGGAGGTATCCTGAACCACCACTTGATATAT",
+      "pdf_page": 18,
+      "length": 48
+    },
+    {
+      "name": "P1E10",
+      "sequence": "CATTATATTTTATCTTCTGACCTAAAGATGATCAATATA",
+      "pdf_page": 18,
+      "length": 39
+    },
+    {
+      "name": "P1E11",
+      "sequence": "TGATCGGGAAAGCTAACTCACATTTATTAATGCTT",
+      "pdf_page": 18,
+      "length": 35
+    },
+    {
+      "name": "P1E12",
+      "sequence": "GAGTCAACTAATTTAGGCAAGTAATCCTGAACAGA",
+      "pdf_page": 18,
+      "length": 35
+    },
+    {
+      "name": "P1F1",
+      "sequence": "CATAACAGTTGATTACTCGGT",
+      "pdf_page": 18,
+      "length": 21
+    },
+    {
+      "name": "P1F2",
+      "sequence": "GCAGCAACAATATCGAAGAACAGTAATAACATCACACC",
+      "pdf_page": 18,
+      "length": 38
+    },
+    {
+      "name": "P1F3",
+      "sequence": "TAGCATTTTGGGGCGCGGATGGCTTAGATCC",
+      "pdf_page": 18,
+      "length": 31
+    },
+    {
+      "name": "P1F4",
+      "sequence": "AATATCGGCACGCGCGGGCCGGAAGCATAAAAGCT",
+      "pdf_page": 18,
+      "length": 35
+    },
+    {
+      "name": "P1F5",
+      "sequence": "GCTTTGAGGACTAATACGAAGAAAACGAAAGAGGCCCCAGCGGATT",
+      "pdf_page": 18,
+      "length": 46
+    },
+    {
+      "name": "P1F6",
+      "sequence": "ATCAAGATTGTTTGTATTCCTGATTATCATTTAATAAACTTT",
+      "pdf_page": 18,
+      "length": 42
+    },
+    {
+      "name": "P1F7",
+      "sequence": "AAAGTCTTTCCTTATAAGAGTGTACACAGACAGTAAATGAG",
+      "pdf_page": 18,
+      "length": 41
+    },
+    {
+      "name": "P1F8",
+      "sequence": "ATTCTAGCGATGTGTAAAAATGAATCGGCCAAAAA",
+      "pdf_page": 18,
+      "length": 35
+    },
+    {
+      "name": "P1F9",
+      "sequence": "ACGAGGAGAGGCGGTTTGATGGTGGGGCCCACCCT",
+      "pdf_page": 18,
+      "length": 35
+    },
+    {
+      "name": "P1F10",
+      "sequence": "CATTGAAGACAGTTCATGAGGAAGTTGGGTAAATAC",
+      "pdf_page": 18,
+      "length": 36
+    },
+    {
+      "name": "P1F11",
+      "sequence": "CGGAGAGCGGGAGAAATAAAGCCTCAGAATT",
+      "pdf_page": 18,
+      "length": 31
+    },
+    {
+      "name": "P1F12",
+      "sequence": "AGCAATACTTCATCACGCAAATATCGCCAGTA",
+      "pdf_page": 18,
+      "length": 32
+    },
+    {
+      "name": "P1G1",
+      "sequence": "AGGACGTTAAGAACGGTTTAATTTCAACGAGAAACCAA",
+      "pdf_page": 18,
+      "length": 38
+    },
+    {
+      "name": "P1G2",
+      "sequence": "TACCAGAATCAAGTTTGCCTTATTTAAAAACTAATAAGACCGCCATGC",
+      "pdf_page": 18,
+      "length": 48
+    },
+    {
+      "name": "P1G3",
+      "sequence": "ATAACGGTAATTTTCACACCGATAGAAAGAG",
+      "pdf_page": 18,
+      "length": 31
+    },
+    {
+      "name": "P1G4",
+      "sequence": "CTTGGTAACGCCAGGGTACGACGTGGAT",
+      "pdf_page": 18,
+      "length": 28
+    },
+    {
+      "name": "P1G5",
+      "sequence": "AAAACCGCCACCCTCAGATTTTAACGATACAGTCACCGGGATA",
+      "pdf_page": 18,
+      "length": 43
+    },
+    {
+      "name": "P1G6",
+      "sequence": "CATTTAAACTCCATATAGATTCATCAGTGAACAAGAAACTCATC",
+      "pdf_page": 18,
+      "length": 44
+    },
+    {
+      "name": "P1G7",
+      "sequence": "CCTACATATCTAAAGCATCACCTCAAATTTGC",
+      "pdf_page": 18,
+      "length": 32
+    },
+    {
+      "name": "P1G8",
+      "sequence": "AACTGTAAAACGACGGCTAAGTTGCGC",
+      "pdf_page": 19,
+      "length": 27
+    },
+    {
+      "name": "P1G9",
+      "sequence": "AAGTTTTGACGCTCAAATCCGGTATTCTAATAA",
+      "pdf_page": 19,
+      "length": 33
+    },
+    {
+      "name": "P1G10",
+      "sequence": "TTAGAACGCAATTAAGACAAATACATACATAAA",
+      "pdf_page": 19,
+      "length": 33
+    },
+    {
+      "name": "P1G11",
+      "sequence": "CTATGAGTAATGTGTAGAAAAGGGTTAA",
+      "pdf_page": 19,
+      "length": 28
+    },
+    {
+      "name": "P1G12",
+      "sequence": "GTCCTTTCATGCATGTCCCAGTAAAGTGCCCGTATAAAAGGAGGTAATC",
+      "pdf_page": 19,
+      "length": 49
+    },
+    {
+      "name": "P1H1",
+      "sequence": "GACACGTAGATCCTTATTACG",
+      "pdf_page": 19,
+      "length": 21
+    },
+    {
+      "name": "P1H2",
+      "sequence": "TCCCGGGCGAAAGCCACCGTCTTTCCAGAGCCGAA",
+      "pdf_page": 19,
+      "length": 35
+    },
+    {
+      "name": "P1H3",
+      "sequence": "AATACCGATCATCAGATTATACTTCTGAATGATGACATAAAT",
+      "pdf_page": 19,
+      "length": 42
+    },
+    {
+      "name": "P1H4",
+      "sequence": "AACAAAATCGGCACGCTGCGCGTAACAGGGCGTTT",
+      "pdf_page": 19,
+      "length": 35
+    },
+    {
+      "name": "P1H5",
+      "sequence": "CAGAGCGGGGTCATTGCGTCTGGCCGGTTGAGCAGTCTTGCCCCC",
+      "pdf_page": 19,
+      "length": 45
+    },
+    {
+      "name": "P1H6",
+      "sequence": "CTACAATTTTTTTGAAGAAAAAGCTTTAAAACAGAAATAAAGAAAAAT",
+      "pdf_page": 19,
+      "length": 48
+    },
+    {
+      "name": "P1H7",
+      "sequence": "AGTTCTGTCCCCCCCGAGGCGCTGGCAAGTGTTTG",
+      "pdf_page": 19,
+      "length": 35
+    },
+    {
+      "name": "P1H8",
+      "sequence": "GCAGCAGAGGTCGTCGCAATTGCG",
+      "pdf_page": 19,
+      "length": 24
+    },
+    {
+      "name": "P1H9",
+      "sequence": "GAGCGTCCACTACCTCCGTAATTTTAGTTACAAAATCGCCGT",
+      "pdf_page": 19,
+      "length": 42
+    },
+    {
+      "name": "P1H10",
+      "sequence": "CTCCTGCAGGG",
+      "pdf_page": 19,
+      "length": 11
+    },
+    {
+      "name": "P1H11",
+      "sequence": "GAATTGCCAGAATTCAACTATTACACCCAAATACCAGAACGAGTAG",
+      "pdf_page": 19,
+      "length": 46
+    },
+    {
+      "name": "P1H12",
+      "sequence": "AATCAAGAATTGAGTTAAATAGCATTTTTTGTTATCCCTAGCAAGCGCC",
+      "pdf_page": 19,
+      "length": 49
+    },
+    {
+      "name": "P2A1",
+      "sequence": "GGTGGCTCCAACGGCATTTCGCACTCAATCCACGCCATCCA",
+      "pdf_page": 19,
+      "length": 41
+    },
+    {
+      "name": "P2A2",
+      "sequence": "TTCATTTACCATATTGCGGAACAAAGAA",
+      "pdf_page": 19,
+      "length": 28
+    },
+    {
+      "name": "P2A3",
+      "sequence": "ATTAGAGCATTTTTGCGAGCTGAAAAGGTCTA",
+      "pdf_page": 19,
+      "length": 32
+    },
+    {
+      "name": "P2A4",
+      "sequence": "ACCTTATGCGATTTTGGGAAGACAACATTAA",
+      "pdf_page": 19,
+      "length": 31
+    },
+    {
+      "name": "P2A5",
+      "sequence": "TGTGCGGTTGCGGTATGCTCA",
+      "pdf_page": 19,
+      "length": 21
+    },
+    {
+      "name": "P2A6",
+      "sequence": "TCACAGAGAGTAACCCAAGCTATCCCAGCGCACGGAAATTGCAAC",
+      "pdf_page": 19,
+      "length": 45
+    },
+    {
+      "name": "P2A7",
+      "sequence": "ATATAAAATTCATATGGTTTATTACCGAGGAA",
+      "pdf_page": 19,
+      "length": 32
+    },
+    {
+      "name": "P2A8",
+      "sequence": "CGTGTGAATTATTAAGAGGGAGAAACAATAAACGTCAGACTCG",
+      "pdf_page": 19,
+      "length": 43
+    },
+    {
+      "name": "P2A9",
+      "sequence": "ACCGAGGCTGGCTGACCTTTCATTAGGTAGAAACCAGTC",
+      "pdf_page": 19,
+      "length": 39
+    },
+    {
+      "name": "P2A10",
+      "sequence": "GGGGTTTATATCGCATATGCATTGACCATTAGATA",
+      "pdf_page": 19,
+      "length": 35
+    },
+    {
+      "name": "P2A11",
+      "sequence": "AGGAAGCGCAGCGATCCCGTGCCGCCGGAACGTAAACGATGCTGATACG",
+      "pdf_page": 19,
+      "length": 49
+    },
+    {
+      "name": "P2A12",
+      "sequence": "TTATCAGCTTGCTTACACTAT",
+      "pdf_page": 19,
+      "length": 21
+    },
+    {
+      "name": "P2B1",
+      "sequence": "CAACCGCATCG",
+      "pdf_page": 19,
+      "length": 11
+    },
+    {
+      "name": "P2B2",
+      "sequence": "TTATTCGGTCGGGTATTAGCCGTTTTTTCGATTTA",
+      "pdf_page": 19,
+      "length": 35
+    },
+    {
+      "name": "P2B3",
+      "sequence": "ATCCTGAAAACAAACCTTTTTTAATGGACGCGAGAGGTTTGA",
+      "pdf_page": 19,
+      "length": 42
+    },
+    {
+      "name": "P2B4",
+      "sequence": "AATCAAATTAGTACCGCCACCGAGTAACGCGTCATCCGGAACCGCGCCTAAC",
+      "pdf_page": 19,
+      "length": 52
+    },
+    {
+      "name": "P2B5",
+      "sequence": "CGCGCAGTATATTCGACAATGAATATACAGTA",
+      "pdf_page": 19,
+      "length": 32
+    },
+    {
+      "name": "P2B6",
+      "sequence": "TATTAAATCATACAAAATCATAGCGTCAAATTAT",
+      "pdf_page": 19,
+      "length": 34
+    },
+    {
+      "name": "P2B7",
+      "sequence": "AAAGGAAGCTTGATGTTGAAACCTG",
+      "pdf_page": 19,
+      "length": 25
+    },
+    {
+      "name": "P2B8",
+      "sequence": "TTGCAAAGACAAAAGGGAATGAAATAGCAAGCAGCACC",
+      "pdf_page": 19,
+      "length": 38
+    },
+    {
+      "name": "P2B9",
+      "sequence": "TGTACGGAGGGAAGTGAGCGCTTTAAGAATAGAAAAGAAACGCAAA",
+      "pdf_page": 19,
+      "length": 46
+    },
+    {
+      "name": "P2B10",
+      "sequence": "CCAGAGCGCCATACAGCGCCATGTTGATTCAGAAGCTAACAG",
+      "pdf_page": 19,
+      "length": 42
+    },
+    {
+      "name": "P2B11",
+      "sequence": "TTTGCGGGCCTCTGTGGTGCT",
+      "pdf_page": 19,
+      "length": 21
+    },
+    {
+      "name": "P2B12",
+      "sequence": "TATTTGCCGTTGCACATCTGCCCTTCACCGGTGTA",
+      "pdf_page": 19,
+      "length": 35
+    },
+    {
+      "name": "P2C1",
+      "sequence": "GTAATCAGAAACGAGCCTTTAGTGCCTTCTCAGAACGA",
+      "pdf_page": 20,
+      "length": 38
+    },
+    {
+      "name": "P2C2",
+      "sequence": "TTTTCATAACATCCATATATTTTAAATGGACAGTCGGTCAGG",
+      "pdf_page": 20,
+      "length": 42
+    },
+    {
+      "name": "P2C3",
+      "sequence": "GTTTACCAGACGACTCAGAAGAGTCTGGAAAAGCCCAAA",
+      "pdf_page": 20,
+      "length": 39
+    },
+    {
+      "name": "P2C4",
+      "sequence": "CAGACCAGTTACAAAATAAAGGCTTCAGTAGGAGTATTATTAATGC",
+      "pdf_page": 20,
+      "length": 46
+    },
+    {
+      "name": "P2C5",
+      "sequence": "GCAACTGGCGAAAGGGGAGTAAAGTTGCCGGAGTGAGACCGGTCCAAAC",
+      "pdf_page": 20,
+      "length": 49
+    },
+    {
+      "name": "P2C6",
+      "sequence": "GCAAGACTGGATAGCGTGAATCCCCTGTATGCGC",
+      "pdf_page": 20,
+      "length": 34
+    },
+    {
+      "name": "P2C7",
+      "sequence": "AGCTACTT",
+      "pdf_page": 20,
+      "length": 8
+    },
+    {
+      "name": "P2C8",
+      "sequence": "GGTGATAAGAACTGGCATGATAATAACAGCCCTTTAATATC",
+      "pdf_page": 20,
+      "length": 41
+    },
+    {
+      "name": "P2C9",
+      "sequence": "TCCCATGCGTTCTTTGCCGATTTTCAGGTTTACGG",
+      "pdf_page": 20,
+      "length": 35
+    },
+    {
+      "name": "P2C10",
+      "sequence": "CCCCTTTTCTTGTGTGAAATTGTTAAAGCACTTGT",
+      "pdf_page": 20,
+      "length": 35
+    },
+    {
+      "name": "P2C11",
+      "sequence": "TAAAAGGAATGGCTATTAGTCGAACTGAAAAA",
+      "pdf_page": 20,
+      "length": 32
+    },
+    {
+      "name": "P2C12",
+      "sequence": "TTTTTAGATGATATGACCGGAAGCAAACGCTTAATAGCTATA",
+      "pdf_page": 20,
+      "length": 42
+    },
+    {
+      "name": "P2D1",
+      "sequence": "CACCGGAATCATTTCAAAATTATTT",
+      "pdf_page": 20,
+      "length": 25
+    },
+    {
+      "name": "P2D2",
+      "sequence": "CGGTGTACAGACCAACAAAGCTAACGGAAAAAATCTACG",
+      "pdf_page": 20,
+      "length": 39
+    },
+    {
+      "name": "P2D3",
+      "sequence": "ACTGTATCACCGTACTCCAGTTAACTGAATTCCGCCACTACGTGAAAATC",
+      "pdf_page": 20,
+      "length": 50
+    },
+    {
+      "name": "P2D4",
+      "sequence": "AACAGACAATAGTTTATCCGCTGGTAAATGTGCAG",
+      "pdf_page": 20,
+      "length": 35
+    },
+    {
+      "name": "P2D5",
+      "sequence": "ACGGAGCCGTTAATCAGTGAGGCCTTG",
+      "pdf_page": 20,
+      "length": 27
+    },
+    {
+      "name": "P2D6",
+      "sequence": "GATAAAATCAGAGCCGGGACATCCCTTACACTAAA",
+      "pdf_page": 20,
+      "length": 35
+    },
+    {
+      "name": "P2D7",
+      "sequence": "GCAAACCACGGTTTTGTCACAATCAAAAGTAACCG",
+      "pdf_page": 20,
+      "length": 35
+    },
+    {
+      "name": "P2D8",
+      "sequence": "AAAAGAATTTCTTAAACATTACGAGACCAAAA",
+      "pdf_page": 20,
+      "length": 32
+    },
+    {
+      "name": "P2D9",
+      "sequence": "GAACGCCTCCATATTATTTTA",
+      "pdf_page": 20,
+      "length": 21
+    },
+    {
+      "name": "P2D10",
+      "sequence": "AATAATAACCGGCGCAGAGAGTAATCTCGCCT",
+      "pdf_page": 20,
+      "length": 32
+    },
+    {
+      "name": "P2D11",
+      "sequence": "ACCATCGATAGGCCGGAAATTAGAGCGTCACCGACT",
+      "pdf_page": 20,
+      "length": 36
+    },
+    {
+      "name": "P2D12",
+      "sequence": "AATAAACCAGAATCTTTTCATAATCAGGA",
+      "pdf_page": 20,
+      "length": 29
+    },
+    {
+      "name": "P2E1",
+      "sequence": "ACCAACATGGCGCGTAACGATCTTACAACATTTTG",
+      "pdf_page": 20,
+      "length": 35
+    },
+    {
+      "name": "P2E2",
+      "sequence": "TGAGCAAAGCGTAAGTATAGCCCGGTTCGGAACCAGAATCCCTCAGAAAC",
+      "pdf_page": 20,
+      "length": 50
+    },
+    {
+      "name": "P2E3",
+      "sequence": "TACATCAAACTGAAAAAGAGACGCATACCAGTCGG",
+      "pdf_page": 20,
+      "length": 35
+    },
+    {
+      "name": "P2E4",
+      "sequence": "GCGACCCACCAAGTAGAATCATTAAAGGTGAAAATA",
+      "pdf_page": 20,
+      "length": 36
+    },
+    {
+      "name": "P2E5",
+      "sequence": "TTTGGACATTCTGGCCAATTGGCAGGCCTGCA",
+      "pdf_page": 20,
+      "length": 32
+    },
+    {
+      "name": "P2E6",
+      "sequence": "AAACGGACGACGTCGGTGACGCAACAGCGAGTATAGTTATTTTGATGGGG",
+      "pdf_page": 20,
+      "length": 50
+    },
+    {
+      "name": "P2E7",
+      "sequence": "CTGTCATACCGGCCCTGGCCCTGAGAAGA",
+      "pdf_page": 20,
+      "length": 29
+    },
+    {
+      "name": "P2E8",
+      "sequence": "ACAGTGCGACTTTACAAACAAAAGCCAAGTCAATACTATCATTTCC",
+      "pdf_page": 20,
+      "length": 46
+    },
+    {
+      "name": "P2E9",
+      "sequence": "CCTAGTTTCCTTTCACCACTTGTAGCAGCACCGACAGTATCGGCCTACCG",
+      "pdf_page": 20,
+      "length": 50
+    },
+    {
+      "name": "P2E10",
+      "sequence": "AGCGGGAGCTAAACAGGAGTTTTTACAATAGATTT",
+      "pdf_page": 20,
+      "length": 35
+    },
+    {
+      "name": "P2E11",
+      "sequence": "TAAAGGAAGCTCTGGAACTGCGAACGAGTAGGCATAAACTGTAATGTCA",
+      "pdf_page": 20,
+      "length": 49
+    },
+    {
+      "name": "P2E12",
+      "sequence": "GAGGGAATCCTGAGAAGTGGCCGATAAAACATATT",
+      "pdf_page": 20,
+      "length": 35
+    },
+    {
+      "name": "P2F1",
+      "sequence": "GAAGGGATAGCGAGATAGTTCCGGCCAGGAAGAAGAATGAGGT",
+      "pdf_page": 20,
+      "length": 43
+    },
+    {
+      "name": "P2F2",
+      "sequence": "AGCACCCTCAAATCCTCCAGGAAGGGTCATTCCTTTAATTGTACAGGTG",
+      "pdf_page": 20,
+      "length": 49
+    },
+    {
+      "name": "P2F3",
+      "sequence": "TATTTTAACCTCAAAAGCTGCATTGCCTGGGGTGCCTAAATCCTTAGAC",
+      "pdf_page": 20,
+      "length": 49
+    },
+    {
+      "name": "P2F4",
+      "sequence": "TGCCCGCTTTCCAGGTGTTGTTC",
+      "pdf_page": 20,
+      "length": 23
+    },
+    {
+      "name": "P2F5",
+      "sequence": "AGACCGGCAAACGCGGTCCGTTTT",
+      "pdf_page": 20,
+      "length": 24
+    },
+    {
+      "name": "P2F6",
+      "sequence": "TGAGGAAAACAGCCTGATTGCTTTGTTGC",
+      "pdf_page": 21,
+      "length": 29
+    },
+    {
+      "name": "P2F7",
+      "sequence": "ACATTACAAAGGATTAAGGTGCCGTCGAGAGGACATGAAACAA",
+      "pdf_page": 21,
+      "length": 43
+    },
+    {
+      "name": "P2F8",
+      "sequence": "TTTGACCGCCAGGAAAGCTAATCAGAGCAAACAAA",
+      "pdf_page": 21,
+      "length": 35
+    },
+    {
+      "name": "P2F9",
+      "sequence": "GCGGTCAGTATAGAAGATTAGCCCTTAAAGGGATTTTAG",
+      "pdf_page": 21,
+      "length": 39
+    },
+    {
+      "name": "P2F10",
+      "sequence": "TGAAAGCCCAAAAGAAACCGACATTAGGGAGG",
+      "pdf_page": 21,
+      "length": 32
+    },
+    {
+      "name": "P2F11",
+      "sequence": "TTAAAGAGATCTATGACCGCTAAATCGGTTGTCCC",
+      "pdf_page": 21,
+      "length": 35
+    },
+    {
+      "name": "P2F12",
+      "sequence": "CGGAATTACCGTGTCGCAAGACAAAGAAAACAGTAAACAAAC",
+      "pdf_page": 21,
+      "length": 42
+    },
+    {
+      "name": "P2G1",
+      "sequence": "ACAGTGCTTTACCGAACGAACTGGTTGCTAGCGGTAAC",
+      "pdf_page": 21,
+      "length": 38
+    },
+    {
+      "name": "P2G2",
+      "sequence": "TTTGCGTATTGACAATTCCACACAAAATTGGG",
+      "pdf_page": 21,
+      "length": 32
+    },
+    {
+      "name": "P2G3",
+      "sequence": "CGGATCGGATGTGCTGCAAGGCGATCAGTGCCAGGTGGAGCC",
+      "pdf_page": 21,
+      "length": 42
+    },
+    {
+      "name": "P2G4",
+      "sequence": "CGACACGCCAAATTACCGCGCCCAAAATCCAAGCC",
+      "pdf_page": 21,
+      "length": 35
+    },
+    {
+      "name": "P2G5",
+      "sequence": "GCCGCTACCACCACTGCCGTATCCGCTCGGCGCCAGCTGGTC",
+      "pdf_page": 21,
+      "length": 42
+    },
+    {
+      "name": "P2G6",
+      "sequence": "CTTAGCATCAGACGATCCACAACTATCTTTCCCAG",
+      "pdf_page": 21,
+      "length": 35
+    },
+    {
+      "name": "P2G7",
+      "sequence": "TGCCTATAATAGGTATTATAGGATAAAAGCATAGTAAGAGCATCGA",
+      "pdf_page": 21,
+      "length": 46
+    },
+    {
+      "name": "P2G8",
+      "sequence": "GCAGTTGGTAAAAAGGCGGCCGCGTGGTGGGTGGTAGCAGGCTGCA",
+      "pdf_page": 21,
+      "length": 46
+    },
+    {
+      "name": "P2G9",
+      "sequence": "GTCAGACCTCAAGAGAAGGAT",
+      "pdf_page": 21,
+      "length": 21
+    },
+    {
+      "name": "P2G10",
+      "sequence": "GTCTGAGCAAAAGAAGATAATGGGAAGGAG",
+      "pdf_page": 21,
+      "length": 30
+    },
+    {
+      "name": "P2G11",
+      "sequence": "GGACAAATCACCTCAATATGAAAATTTGACGCTCA",
+      "pdf_page": 21,
+      "length": 35
+    },
+    {
+      "name": "P2G12",
+      "sequence": "GTACGAACGTTATTAATCTGTTTACTTTTTAATTAAAGCGA",
+      "pdf_page": 21,
+      "length": 41
+    },
+    {
+      "name": "P2H1",
+      "sequence": "TTTCAATGATAAATTAATGC",
+      "pdf_page": 21,
+      "length": 20
+    },
+    {
+      "name": "P2H2",
+      "sequence": "TCAGTGAGAATCAAATCAGATATAGAACAGCCCTCAGAGTACCGTTAATC",
+      "pdf_page": 21,
+      "length": 50
+    },
+    {
+      "name": "P2H3",
+      "sequence": "TTCAAATTGAATTAATTAATT",
+      "pdf_page": 21,
+      "length": 21
+    },
+    {
+      "name": "P2H4",
+      "sequence": "TTTAAGCAAATTCACAAAGTATTAAGAGGCTCGGA",
+      "pdf_page": 21,
+      "length": 35
+    },
+    {
+      "name": "P2H5",
+      "sequence": "ATATAATACACGTACTACACCAGCTAACACCATTCACCAGTCACA",
+      "pdf_page": 21,
+      "length": 45
+    },
+    {
+      "name": "P2H6",
+      "sequence": "TCACGCGTGGGAACAAATGTCACTGCGCGCCGCGG",
+      "pdf_page": 21,
+      "length": 35
+    },
+    {
+      "name": "P2H7",
+      "sequence": "GGACGTCACCCGGTCGCAGTTTCATGTGCACGTTT",
+      "pdf_page": 21,
+      "length": 35
+    },
+    {
+      "name": "P2H8",
+      "sequence": "GGAACAAGACGCCGCCCCAG",
+      "pdf_page": 21,
+      "length": 20
+    }
+  ],
+  "modified_named_rows": 22,
+  "modified_groups": {
+    "biotin": 12,
+    "npbind": 8,
+    "dye": 2
+  },
+  "modified_sequence_status": "Not transcribed: PDF22 wrapped polyA bases overlap row boundaries; visual inspection confirms row identities but exact base assignment needs source verification.",
+  "limitations": "210 named table rows do not certify a complete synthesis set. Full p8064 sequence, native routing, strand-to-route assignment and parent variant mapping remain unverified."
+}

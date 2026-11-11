@@ -2153,11 +2153,23 @@ def _alias_skipped_stage_outputs(
 
 
 async def run_job(job: MdJob, workspace_dir: Path) -> None:
+    """Give a requested run priority over disposable trajectory backfill."""
+    from backend.core.trajectory_priority import foreground_work
+    try:
+        with foreground_work():
+            return await _run_job_admitted(job, workspace_dir)
+    except asyncio.CancelledError:
+        apply_user_stop(job)
+        job.save(workspace_dir)
+        raise
+
+
+async def _run_job_admitted(job: MdJob, workspace_dir: Path) -> None:
     """Reserve the worst planned stage plus health analysis for the entire workflow."""
     if job.protocol == "gold_qualification_v1":
         return await _run_job_reserved(job, workspace_dir)
     from backend.core.namd_resources import configuration_memory, health_memory_mib
-    from backend.core.memory_budget import reserve, reclaim_discretionary_memory, MemoryBudgetExceeded
+    from backend.core.memory_budget import reserve, reclaim_discretionary_memory, MemoryBudgetExceeded, WorkloadBusy
     try:
         package = job.package_dir(workspace_dir)
         manifest = json.loads((package / 'manifest.json').read_text())
@@ -2188,7 +2200,24 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         lease.engine_ram_mib = max(e.ram_mib for e in estimates)
         lease.health_ram_mib = health
         lease.fallback_box = manifest.get('box_ang')
-        lease.__enter__()
+        notified = False
+        while True:
+            try:
+                lease.__enter__()
+                break
+            except WorkloadBusy:
+                # Analysis can acquire its lease between preparation and execution,
+                # or while a prepared job is idle. This is contention, not OOM.
+                # Foreground demand preempts disposable backfill; explicit analysis
+                # finishes normally. Reservation rechecks RAM/VRAM on each attempt.
+                if not notified:
+                    logger.info('[%s] Waiting for trajectory analysis before NAMD launch', job.job_id)
+                    job.status = MdStatus.running
+                    job.error = None
+                    job.failure_kind = None
+                    job.save(workspace_dir)
+                    notified = True
+                await asyncio.sleep(.1)
     except (MemoryError, ValueError, OSError, KeyError) as exc:
         job.status = MdStatus.failed
         job.error = f'Memory admission refused before launch: {exc}'

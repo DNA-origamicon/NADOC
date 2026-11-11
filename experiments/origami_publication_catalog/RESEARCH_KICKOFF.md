@@ -26,13 +26,24 @@ Implement the durable screening and discovery ledgers described in the protocol,
 preserving existing evidence and stable IDs. Then perform real literature review.
 Start with unresolved named candidates and downloaded ACS supplements, while
 rotating through the full backlog so low-keyword records are not neglected.
+First exclude patents. Before detailed article/design review, check readily
+available sources for a staple table/list with at least 100 DNA sequence entries.
+If none is found, record no_qualifying_table_found and the sources checked, then
+move on. Keep unavailable or unextractable sources explicit; do not equate them
+with proven absence. Do not pursue extra access routes or human requests solely
+to rescue these records. Reopen only on new source evidence or user instruction.
+Passing this gate does not certify a complete design or catalog eligibility.
+
 Record supported classifications, design-level evidence, and unresolved cases.
 Distinguish broad literature relevance from the existing catalog's narrower
 lattice and source eligibility rules; do not silently expand that catalog scope.
 
 Finish bibliographic discovery without arbitrary relevance caps. Follow backward
-and forward citations, examine pre-2020 FNANO programs and abstracts, and search
-the publication histories of relevant authors and laboratories. These routes
+and forward citations and search the publication histories of Carlos Castro,
+Hendrik Dietz, Shawn Douglas, William Shih, Hao Yan, Peng Yin, Andrew Turberfield,
+Mark Bathe, Tim Liedl, Lulu Qian, Friedrich Simmel, Philip Tinnefeld, Jonathan Doye,
+Thomas LaBean, and Paul Rothemund. Defer FNANO programs and abstracts until other
+search methods demonstrate diminishing returns. These routes
 have NOT already been exhaustively run. Treat conference records as leads with
 their own publication type and reconcile them to journal articles and preprints.
 Never treat an attendee list or an abstract as proof of a complete design.

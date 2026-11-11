@@ -351,8 +351,6 @@ export function diskWarningMessage(forecast) {
 
 /** A run writing more than this much data is worth confirming before it starts. */
 export const BIG_RUN_BYTES = 10 * 1024 ** 3
-/** A run predicted to take longer than this many hours is worth confirming too. */
-export const BIG_RUN_HOURS = 24
 
 /** Human duration from hours: "45 min", "6.5 h", "2.1 days". */
 function formatHours(hours) {
@@ -363,8 +361,8 @@ function formatHours(hours) {
 }
 
 /**
- * Pure: describe a run that is big enough (bytes) or long enough (hours) to be
- * worth an explicit Proceed/Cancel, or null when it is neither.
+ * Pure: describe output large enough to warrant an explicit Proceed/Cancel.
+ * Duration never triggers confirmation: relaxation stages can be skip accelerated.
  *
  * This is deliberately separate from {@link diskWarningMessage}: that one fires
  * only when the disk would actually run *short*, which a roomy archive drive
@@ -378,11 +376,23 @@ export function bigRunSummary(forecast) {
   if (!forecast) return null
   const bytes = Number(forecast.predicted_bytes) || 0
   const hours = Number(forecast.est_hours) || null
-  const bigDisk = bytes > BIG_RUN_BYTES
-  const bigTime = hours !== null && hours > BIG_RUN_HOURS
-  if (!bigDisk && !bigTime) return null
+  if (bytes <= BIG_RUN_BYTES) return null
 
   const lines = []
+  lines.push('Confirmation reason: output exceeds 10 GiB.')
+  if (forecast.n_atoms) lines.push(`Simulated system: ${Number(forecast.n_atoms).toLocaleString()} atoms, including solvent and ions.`)
+  if (forecast.submodel) {
+    const r = forecast.submodel
+    lines.push(`Submodel: ${Number(r.mobile_solute_atoms).toLocaleString()} core + ${Number(r.shell_solute_atoms).toLocaleString()} shell atoms retained from ${Number(r.source_solute_atoms).toLocaleString()} source solute atoms; shell ${r.shell_nm} nm.`)
+    lines.push('Restrained and fixed shell atoms are included in the compute and memory budgets.')
+  }
+  const memory = forecast.memory
+  if (Number.isFinite(memory?.current_host_mb)) {
+    lines.push(`RAM budget: ${formatBytes(memory.current_host_mb * 1024 ** 2)}${Number.isFinite(memory.host_budget_mb) ? `; available working budget: ${formatBytes(memory.host_budget_mb * 1024 ** 2)}` : ''}.`)
+    lines.push(`VRAM budget: ${formatBytes(memory.current_vram_mb * 1024 ** 2)}${Number.isFinite(memory.vram_budget_mb) ? `; available working budget: ${formatBytes(memory.vram_budget_mb * 1024 ** 2)}` : ''}.`)
+    lines.push('Memory figures are conservative admission budgets, not expected usage.')
+    if (memory.scope) lines.push(memory.scope)
+  }
   if (forecast.length_ns) lines.push(`Simulated time: ${forecast.length_ns.toLocaleString()} ns`)
   lines.push(`Trajectory + restart data: about ${formatBytes(bytes)}`)
   const free = Number(forecast.free_bytes)
@@ -395,10 +405,12 @@ export function bigRunSummary(forecast) {
     lines.push(`${forecast.completion?.available ? 'Estimated time until results' : 'Estimated compute time'}: ${dur}${rate}`)
     if (forecast.completion?.available) lines.push(`Planning range: ${formatHours(forecast.completion.low_hours)}–${formatHours(forecast.completion.high_hours)}`)
   }
+  if (forecast.completion?.calibrated_compute === false) lines.push('Timing is an uncalibrated planning estimate for this configuration.')
   if (forecast.timing_note) lines.push(forecast.timing_note)
   return {
     bytes,
     hours,
+    title: 'Large output — start it?',
     message: `${lines.join('\n')}\n\n` +
       (forecast.completion?.available ? 'The range includes preparation and processing; retries and contention add time. ' : 'Compute time uses available timing evidence; startup, analysis and transfers add time. ') +
       'Completion is not guaranteed. The run checkpoints as it goes and can be ' +
@@ -407,7 +419,7 @@ export function bigRunSummary(forecast) {
 }
 
 /**
- * Confirm a run that is large on disk or long in wall-clock before launching it.
+ * Confirm a run with large disk output before launching it.
  * Resolves true immediately for ordinary runs and for a missing/failed forecast —
  * like every other pre-flight here, a forecast must never block a launch by itself.
  *
@@ -451,7 +463,7 @@ export async function confirmBigRunOk(forecast) {
   const summary = bigRunSummary(forecast)
   if (!summary) return true
   return showConfirm({
-    title: 'This is a large run — start it?',
+    title: summary.title,
     message: summary.message,
     confirmLabel: 'Start run',
     cancelLabel: 'Cancel',

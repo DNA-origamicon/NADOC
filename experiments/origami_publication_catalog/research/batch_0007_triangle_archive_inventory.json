@@ -1,0 +1,22 @@
+{
+  "archive": "assets/sources/acs-expansion-20261104/3617409-nn506014s_si_006.zip",
+  "sha256": "39512a16a8fa5d16dd60af8990b4a13109df953dc6befe715db10ca1ee2e525c",
+  "members": [
+    {
+      "name": "triangle-design-files/ET_SameSide_StapleOrder.xls",
+      "bytes": 63488,
+      "sha256": "f48240db847c368cb7aa0662ba2de0d5f84358f10381539ce3ad8628e2fbab31"
+    },
+    {
+      "name": "__MACOSX/triangle-design-files/._ET_SameSide_StapleOrder.xls",
+      "bytes": 82,
+      "sha256": "21da0de695051925e4ac74fefc8f4bd8c2bd3cd93b7169d7f7737e620a8459c2"
+    },
+    {
+      "name": "triangle-design-files/Sameside-sharp-triangle-bridged.json",
+      "bytes": 379804,
+      "sha256": "225bd95acd13b6383c40180211c822c5369277f2beacc47bf9c694f20d0493bf"
+    }
+  ],
+  "scope": "Archive member identity/integrity only; no source routing/sequence completeness audit and no extracted/created molecular structure"
+}

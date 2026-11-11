@@ -1,0 +1,94 @@
+{
+  "references": [
+    {
+      "label": "1",
+      "raw": "Kick, B.; Praetorius, F.; Dietz, H.; Weuster-Botz, D. Nano Lett. 2015, 15, 4672-6."
+    },
+    {
+      "label": "2",
+      "raw": "Douglas, S. M.; Marblestone, A. H.; Teerapittayanon, S.; Vazquez, A.; Church, G. M.; Shih, W. M. Nucleic Acids Res. 2009, 37, 5001-6."
+    },
+    {
+      "label": "3",
+      "raw": "Gerling, T.; Wagenbauer, K. F.; Neuner, A. M.; Dietz, H. Science 2015, 347, 1446-52."
+    },
+    {
+      "label": "4",
+      "raw": "Bruetzel, L. K.; Gerling, T.; Sedlak, S. M.; Walker, P. U.; Zheng, W.; Dietz, H.; Lipfert, J. Nano Lett. 2016, 16, 4871-9."
+    },
+    {
+      "label": "5",
+      "raw": "Sobczak, J. P.; Martin, T. G.; Gerling, T.; Dietz, H. Science 2012, 338, 1458-61."
+    },
+    {
+      "label": "6",
+      "raw": "Stahl, E.; Martin, T. G.; Praetorius, F.; Dietz, H. Angew. Chem., Int. Ed. Engl. 2014, 53, 12735-40."
+    },
+    {
+      "label": "7",
+      "raw": "Blanchet, C. E.; Spilotros, A.; Schwemmer, F.; Graewert, M. A.; Kikhney, A.; Jeffries, C. M.; Franke, D.; Mark, D.; Zengerle, R.; Cipriani, F.; Fiedler, S.; Roessle, M.; Svergun, D. I. J. Appl. Crystallogr. 2015, 48, 431-443."
+    },
+    {
+      "label": "8",
+      "raw": "Panine, P.; Finet, S.; Weiss, T. M.; Narayanan, T. Adv. Colloid Interface Sci. 2006, 127, 9-18."
+    },
+    {
+      "label": "9",
+      "raw": "Guinier, A., La diffraction des rayons X aux tr\u00e9s petits angles: application a l'\u00e9tude de ph\u00e9nom\u00e8nes ultramicroscopiques. Annales de Physique: Paris, 1939."
+    },
+    {
+      "label": "10",
+      "raw": "Atkins, P. W.; de Paula, J., Atkins\u2019 Physical Chemistry. Oxford University Press: USA, 2002."
+    },
+    {
+      "label": "11",
+      "raw": "Kilchherr, F.; Wachauf, C.; Pelz, B.; Rief, M.; Zacharias, M.; Dietz, H. Science 2016, 353."
+    },
+    {
+      "label": "12",
+      "raw": "Yang, W. Y.; Gruebele, M. Nature 2003, 423, 193-7."
+    },
+    {
+      "label": "13",
+      "raw": "Kubelka, J.; Hofrichter, J.; Eaton, W. A. Curr. Opin. Struct. Biol. 2004, 14, 76-88."
+    },
+    {
+      "label": "14",
+      "raw": "Lehner, D.; Lindner, H.; Glatter, O. Langmuir 2000, 16, 1689-1695."
+    },
+    {
+      "label": "15",
+      "raw": "Tirado, M. M.; Mart\u00ednez, C. L.; la Torre, J. G. d. J. Chem. Phys. 1984, 81, 2047-2052."
+    },
+    {
+      "label": "16",
+      "raw": "McKinney, S. A.; Declais, A. C.; Lilley, D. M.; Ha, T. Nat. Struct. Biol. 2003, 10, 93- 7."
+    },
+    {
+      "label": "17",
+      "raw": "Joo, C.; McKinney, S. A.; Lilley, D. M.; Ha, T. J. Mol. Biol. 2004, 341, 739-51."
+    },
+    {
+      "label": "18",
+      "raw": "Overmars, F. J.; Altona, C. J. Mol. Biol. 1997, 273, 519-24."
+    },
+    {
+      "label": "19",
+      "raw": "Yu, J.; Ha, T.; Schulten, K. Nucleic Acids Res. 2004, 32, 6683-95."
+    },
+    {
+      "label": "20",
+      "raw": "Wang, W.; Nocka, L. M.; Wiemann, B. Z.; Hinckley, D. M.; Mukerji, I.; Starr, F. W. Sci. Rep. 2016, 6, 22863."
+    },
+    {
+      "label": "21",
+      "raw": "Hyeon, C.; Thirumalai, D. Biophys. J. 2012, 102, L11-3."
+    }
+  ],
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5873,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11251
+  }
+}

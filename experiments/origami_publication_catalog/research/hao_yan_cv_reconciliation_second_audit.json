@@ -1,0 +1,45 @@
+{
+  "cv_entries": 239,
+  "resolved_entries": [
+    167,
+    88,
+    159,
+    130,
+    91
+  ],
+  "remaining_entries": 234,
+  "mixed_edition_entry": 157,
+  "new_edition_merges": 0,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11987
+  },
+  "counts": {
+    "publication_versions": 6041,
+    "canonical_work_keys": 6039,
+    "provisional_work_keys_not_reconciled": 6037,
+    "versions_with_explicit_version_relation": 4,
+    "review_stages": {
+      "metadata_screened": 1184,
+      "unreviewed": 4570,
+      "fulltext_reviewed": 67,
+      "design_sources_reviewed": 220
+    },
+    "relevance": {
+      "uncertain": 5729,
+      "background_or_review": 31,
+      "design_bearing": 267,
+      "not_origami": 14
+    },
+    "catalog_eligibility": {
+      "unresolved": 6021,
+      "excluded": 19,
+      "eligible": 1
+    },
+    "design_groups": 141,
+    "design_source_reviews": 64,
+    "discovery_runs": 50
+  }
+}

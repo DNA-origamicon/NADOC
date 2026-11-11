@@ -1,5 +1,143 @@
 # Image evaluation — 2026-10-27
 
+## Gerling flanking-frame and sequence audit — 2026-11-06
+
+Audited all 453 TT joins (276 standard, 177 forced) in the existing failed-job
+design. All use upstream as half A: half ordering is not this design's remaining
+forced/standard difference. Effective geometry (not stored, rederived phase fields)
+puts forced source radial azimuths 17.1429 degrees behind corresponding standard
+motifs. Both paths share placement; eight new sequenced parity cases confirm
+atom identity for matched endpoints across A/C/G/T pairs and both directions.
+
+All 67 forced-insert hits are REVERSE exits: a normal ~0.156 nm P–O5′ bond of the
+next paired nucleotide beyond the destination crosses TT[1]'s sugar. Exact next-
+base association: A 34/34, C 16/16, G 17/17 pierced; T 0/22. All 88 FORWARD forced
+joins are clear. Standard insert hits (26) involve extensions; the other 144 hits
+also involve extensions. Current full count stays 237; eliminating only this class
+would leave 170 extension-associated hits. No job resubmission/override.
+
+After a proper 24-sugar-atom fit of the two flanking base pairs to same-direction
+standard motifs, flank RMSD is 0.163–0.182 nm; insert RMSD is 0.147–0.165 nm (F)
+or 0.459–0.487 nm (R), max atom deviation 0.701 nm. The R forced middle C3′–C5′
+anchor span is only 0.07465 nm; current TT linear closure divides it into 0.01866 nm
+intra-link bonds. Standard TT middle links are ~0.0353 nm. Rigid TT moves cannot
+repair that compression; upper-length checks and same-insert clash exclusions
+do not establish chemically sound linker geometry.
+
+36 isolated editor-recorded displacement/rotation trials on a new 2HB with the
+Gerling local sequence: -10 degrees around ring-local y, pivot at TT[1] O3′, clears
+G/C piercing with no external clashes; max movement 0.10755 nm, longest insert
+bond unchanged 0.28255 nm. A case clears piercing but clashes increase 1→2.
+21 registers × four next-base choices (84 cases): total hits 194→194, seven cases
+gain piercings, 23 gain external clashes. Candidate NOT promoted; no production
+geometry changed. Candidate construction uses real Extrude/Nick/Force Ligation/
+Extra Bases/Sequence/Move commands and passes independent replay after JSON round
+trip. Original full Gerling legacy input fails agent publication proof (missing
+empty construction root); read-only diagnosis only, no derivative part published.
+
+Evidence under `.development-artifacts/gerling_seed_topology_20261105/`:
+`junction_audit.html`, `junction_summary.csv`, `junction_frame_audit.json` (every
+insert atom in both flanking sugar frames and every bridge), `junction_review.png`
+(visually checked G-positive/A-negative controls), `junction_review_process.json`,
+`local_adjustment_trials.json`, `phase_sequence_sweep.json`. Reproduction scripts
+are adjacent. Focused placement tests: 17 passed, including eight new sequenced
+parity cases. No frontend behavior changed in this follow-up.
+
+## Paired forced-ligation schematic bows — 2026-11-06
+
+Unique adjacent reciprocal strand transitions now classify the lower BP left and
+the higher BP right in native caDNAno forced-ligation drawing and hit targets.
+Pairing requires matching directed tracks and matching adjacent BP order on both
+helices; ambiguous, unpaired, and periodic seam transitions retain prior behavior.
+Gerling has 75 pairs (75 left / 75 right) and 27 unpaired forced TT joins.
+
+This fixes a schematic defect, not molecular placement: all 75 pairs already have
+opposed atomistic bow vectors (cosine about -0.669415, angle about 132 degrees).
+Read-only fast-build recheck gives 237 piercings before and after, identical atom
+coordinate hashes, and 391364 bonds. Do not infer a molecular bow flip from the
+schematic left/right rule. No saved design or job was modified.
+
+Validation: full frontend suite 10127 passed, 1 skipped; native pathview exercised
+in a private browser page with existing Gerling JSON, API calls blocked, actual
+leftward curve observed, no browser errors, and screenshot visually inspected.
+Temporary screenshot removed after inspection. Evidence is under
+`.development-artifacts/gerling_seed_topology_20261105/`: `paired_bow_browser.json`,
+`paired_bow_audit_20261106.json`, `paired_bow_piercing_recheck.json`, and
+`paired_bow_frontend.log`.
+
+## Gerling extra-T atomistic bond audit — 2026-11-05
+
+**Placement parity follow-up (same day):** user requested that forced ligations
+follow standard crossover placement. Forced insert junctions now skip preliminary
+direct closure, receive the shared post-closure 45° clockwise downstream gamma
+rotation, and enable v7 clearance even without standard TT crossover records.
+Directed forced endpoints must occur in the actual consecutive-domain walk before
+receiving the gamma step. Existing native/trajectory override guards are retained.
+No pose tables, phase constants, or saved designs changed. The earlier
+coordinate-hash invariance below applies to the bond-only fix, not this follow-up.
+
+Gerling now has 237 uncapped ring intersections in both build modes (294 after the
+bond-only fix). Forced insert-related hits: 67 across 67/177 junctions, all sugar;
+standard insert-related hits: 26 across 15/276 junctions, all pyrimidine. All 453
+insert destinations receive gamma, including all 177 forced destinations. The
+structure still fails seed preparation; no resubmission or override was performed.
+Evidence: `after_placement_parity.json` in the audit directory below.
+
+Exact geometric equivalence has an endpoint-frame condition: forced records encode
+upstream/downstream, and their existing adapter uses upstream as half A. Matched
+standard records with that ordering agree atom-for-atom for 1xT/2xT in both
+directions and exact/fast modes: a 21-base-repeat scan checked all 48 editor-valid
+cases (BP6,7,11,12,22,23; 2 sequences × 2 directions × 2 build modes), with zero
+coordinate delta. The other 120 combinations were rejected as invalid standard
+crossover sites and are not claimed as parity evidence (`phase_sweep.json`).
+The standard placer itself is NOT invariant to
+reversing half A/B: a TT audit with downstream as half A differed by 2.462259 nm
+(FORWARD source) or 1.708447 nm (REVERSE source), across 45 atoms. Changing that
+convention would also change existing standard crossover geometry; this follow-up
+does not choose a new bow/frame or claim universal equivalence for arbitrary
+forced spans. See `half_order_audit.json` and `test_forced_ligation_placement.py`.
+Follow-up validation: nine new placement tests and six standard v7 tests passed;
+FAST 20565 passed / 90 skipped / the same unrelated CPD comparison-schema failure.
+Aggregate timing guard failed at 194 s/90 s, zero individual violators. Broad FULL
+debt remains deferred. Scoped Ruff/diff checks passed; the inspected placement
+plot was removed. No molecular golden or test guard was changed.
+
+Alpine preparation of WITH_EXTRA_T (job `0695583ec45b`) failed locally at
+the ring gate; no Slurm submission occurred. The uncapped old model had 382
+ring intersections, not the error message's reporting limit of 200. All 177
+TT-bearing forced ligations incorrectly retained a direct O3′–P bond alongside
+the insert path (5.51–9.87 Å, O3′ degree 3 / P degree 5). Atomistic bond building
+now excludes the exact directed forced-ligation endpoint pair when inserts are
+present; zero-insert ligations retain their direct bond. Placement sets are
+deliberately unchanged: connectivity repair is not molecular-placement approval.
+
+The saved job rebuild loses exactly 177 bonds (391541 → 391364), with identical
+coordinate hashes in both exact and fast builds. Uncapped intersections fall
+382 → 294. Among TT insert-related hits, standard crossovers have 26 hits across
+15/276 junctions; forced ligations have 110 across 110/177 junctions. Other hits
+involve ordinary residues/extensions. The no-extra-T workspace variant had zero
+ring hits in the initial audit; this does not certify other bond/geometry checks.
+
+Placement comparison: both kinds share measured endpoint projection, proportional
+2xT linker closure and promoted v6 directional residue poses. The post-closure
+45° clockwise downstream gamma branch rotation is applied to 276 standard
+endpoints and zero forced endpoints. Forced ligations also miss the suppression
+of preliminary direct crossover closure. The v7 phosphate-clearance entry condition
+checks standard TT crossovers only: it runs on this mixed Gerling design (140
+atoms moved in exact mode, zero in fast mode), but would skip a forced-only design.
+These were the geometry differences at the bond-only stage; the explicit parity
+follow-up above supersedes that implementation state. No saved design/job was
+changed or resubmitted.
+Read-only evidence: `.development-artifacts/gerling_seed_topology_20261105/`
+(`bond_audit.json`, `compare_paths.py`, `after_fix_comparison.json`).
+Validation: forced-ligation suite 34 passed (18 new insert-path/valence cases),
+standard 2xT defaults/auditor suite 6 passed, scoped Ruff clean. FAST: 20556 passed,
+90 skipped, 1 unrelated CPD comparison-schema failure; aggregate runtime guard
+also failed at 190 s/90 s, with zero per-test violators. FULL remains deferred.
+Slow-test triage found no task-specific timing offender; no test guards or
+classifications changed. Existing-model bond close-ups were visually inspected;
+the temporary plot was removed, and no shared app state was mutated.
+
 Corrected Gerling files (2026-10-28):
 `workspace/Gerling2018_FigS1_p7560_LOOP_OVERHANGS_WITH_EXTRA_T.nadoc` and
 `workspace/Gerling2018_FigS1_p7560_LOOP_OVERHANGS_WITHOUT_EXTRA_T.nadoc`.

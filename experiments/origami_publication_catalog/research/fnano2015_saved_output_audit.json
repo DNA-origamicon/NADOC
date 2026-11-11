@@ -1,0 +1,14 @@
+{
+  "status": "passed",
+  "reopened_publication_records": 130,
+  "reopened_conference_edges": 130,
+  "all_titles_dates_identities_match_transcription": true,
+  "source_pages": 14,
+  "exclusions": "No named presentation excluded; unnamed award address p12 unresolved",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5457,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 9049
+  }
+}

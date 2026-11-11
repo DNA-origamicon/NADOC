@@ -1,0 +1,13 @@
+{
+  "source_pdf": {
+    "local_file": "assets/research-20261105/cassinelli-2017-thesis.pdf",
+    "locator": "Title page2016; pp63\u201365,69\u201370,113\u2013114,134: chain-armor construction and follow-up",
+    "sha256": "b6cfe9b46c124314e8c28077579e5402ce261c2990e9b8e80c686acc8dffd6e0",
+    "url": "https://edoc.ub.uni-muenchen.de/21476/1/Cassinelli_Valentina.pdf"
+  },
+  "page": 63,
+  "render": "pdftoppm -f63 -singlefile -scale-to1300 -png",
+  "observed": "24-oligonucleotide SST nanotube and22mer wording visibly printed; p70 text says28mer; discrepancy unresolved",
+  "parser_warning": "Expected optional content group list, not found or not Array",
+  "scope": "One rendered page, not whole PDF image integrity"
+}

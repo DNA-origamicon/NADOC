@@ -1,0 +1,513 @@
+[
+  {
+    "number": 1,
+    "dois": [
+      "10.1016/0022-5193(82)90002-9"
+    ],
+    "text": "Seeman NC (1982) Nucleic acid junctions and lattices. J Theor Biol 99(2):237–247Article CAS Google Scholar"
+  },
+  {
+    "number": 2,
+    "dois": [
+      "10.1038/nature01406"
+    ],
+    "text": "Seeman NC (2003) DNA in a material world. Nature 421(6921):427–431Article Google Scholar"
+  },
+  {
+    "number": 3,
+    "dois": [
+      "10.1021/nl000182v"
+    ],
+    "text": "Seeman NC (2000) DNA nicks and nodes and nanotechnology. Nano Lett 1(1):22–26Article Google Scholar"
+  },
+  {
+    "number": 4,
+    "dois": [
+      "10.1038/28998"
+    ],
+    "text": "Winfree E, Liu F, Wenzler LA, Seeman NC (1998) Design and self-assembly of two-dimensional DNA crystals. Nature 394(6693):539–544Article CAS Google Scholar"
+  },
+  {
+    "number": 5,
+    "dois": [
+      "10.1021/ja055614o"
+    ],
+    "text": "Liu Y, Ke Y, Yan H (2005) Self-assembly of symmetric finite-size DNA nanoarrays. J Am Chem Soc 127(49):17140–17141Article CAS Google Scholar"
+  },
+  {
+    "number": 6,
+    "dois": [
+      "10.1126/science.1120367"
+    ],
+    "text": "Goodman RP, Schaap IAT, Tardin CF, Erben CM, Berry RM, Schmidt CF, Turberfield AJ (2005) Rapid chiral assembly of rigid DNA building blocks for molecular nanofabrication. Science 310(5754):1661–1665Article CAS Google Scholar"
+  },
+  {
+    "number": 7,
+    "dois": [
+      "10.1038/nature08274"
+    ],
+    "text": "Zheng J, Birktoft JJ, Chen Y, Wang T, Sha R, Constantinou PE, Ginell SL, Mao C, Seeman NC (2009) From molecular to macroscopic via the rational design of a self-assembled 3D DNA crystal. Nature 461(7260):74–77Article CAS Google Scholar"
+  },
+  {
+    "number": 8,
+    "dois": [
+      "10.1038/nature04586"
+    ],
+    "text": "Rothemund PW (2006) Folding DNA to create nanoscale shapes and patterns. Nature 440(7082):297–302Article CAS Google Scholar"
+  },
+  {
+    "number": 9,
+    "dois": [
+      "10.1038/464158a"
+    ],
+    "text": "Sanderson K (2010) What to make with DNA origami. Nature 464:158–189Article CAS Google Scholar"
+  },
+  {
+    "number": 10,
+    "dois": [
+      "10.1038/nchem.957"
+    ],
+    "text": "Zhang DY, Seelig G (2011) Dynamic DNA nanotechnology using strand-displacement reactions. Nat Chem 3(2):103–113Article CAS Google Scholar"
+  },
+  {
+    "number": 11,
+    "dois": [
+      "10.1038/nrm2352"
+    ],
+    "text": "Steitz TA (2008) A structural understanding of the dynamic ribosome machine. Nat Rev Mol Cell Biol 9(3):242–253Article CAS Google Scholar"
+  },
+  {
+    "number": 12,
+    "dois": [
+      "10.1007/s11434-006-2223-9"
+    ],
+    "text": "Qian L, Wang Y, Zhang Z, Zhao J, Pan D, Zhang Y, Liu Q, Fan C, Hu J, He L (2006) Analogic China map constructed by DNA. Chin Sci Bull 51(24):2973–2976Article CAS Google Scholar"
+  },
+  {
+    "number": 13,
+    "dois": [
+      "10.1021/nn800215j"
+    ],
+    "text": "Andersen ES, Dong M, Nielsen MM, Jahn K, Lind-Thomsen A, Mamdouh W, Gothelf KV, Besenbacher F, Kjems J (2008) DNA origami design of dolphin-shaped structures with flexible tails. ACS Nano 2(6):1213–1218Article CAS Google Scholar"
+  },
+  {
+    "number": 14,
+    "dois": [
+      "10.1038/nature07971"
+    ],
+    "text": "Andersen ES, Dong M, Nielsen MM, Jahn K, Subramani R, Mamdouh W, Golas MM, Sander B, Stark H, Oliveira CL, Pedersen JS, Birkedal V, Besenbacher F, Gothelf KV, Kjems J (2009) Self-assembly of a nanoscale DNA box with a controllable lid. Nature 459(7243):73–76Article CAS Google Scholar"
+  },
+  {
+    "number": 15,
+    "dois": [
+      "10.1039/b907800b"
+    ],
+    "text": "Kuzuya A, Komiyama M (2009) Design and construction of a box-shaped 3D-DNA origami. Chem Commun 28:4182–4184Article Google Scholar"
+  },
+  {
+    "number": 16,
+    "dois": [
+      "10.1021/ja904252e"
+    ],
+    "text": "Endo M, Hidaka K, Kato T, Namba K, Sugiyama H (2009) DNA prism structures constructed by folding of multiple rectangular arms. J Am Chem Soc 131(43):15570–15571Article CAS Google Scholar"
+  },
+  {
+    "number": 17,
+    "dois": [
+      "10.1021/nl901165f"
+    ],
+    "text": "Ke Y, Sharma J, Liu M, Jahn K, Liu Y, Yan H (2009) Scaffolded DNA origami of a DNA tetrahedron molecular container. Nano Lett 9(6):2445–2447Article CAS Google Scholar"
+  },
+  {
+    "number": 18,
+    "dois": [
+      "10.1038/nature08016"
+    ],
+    "text": "Douglas S, Dietz H, Liedl T, Hogberg B, Graf F, Shih W (2009) Self-assembly of DNA into nanoscale three-dimensional shapes. Nature 459(7245):414–418Article CAS Google Scholar"
+  },
+  {
+    "number": 19,
+    "dois": [
+      "10.1093/nar/gkp436"
+    ],
+    "text": "Douglas SM, Marblestone AH, Teerapittayanon S, Vazquez A, Church GM, Shih WM (2009) Rapid prototyping of 3D DNA-origami shapes with caDNAno. Nucleic Acids Res 37(15):5001–5006Article CAS Google Scholar"
+  },
+  {
+    "number": 20,
+    "dois": [
+      "10.1126/science.1174251"
+    ],
+    "text": "Dietz H, Douglas SM, Shih WM (2009) Folding DNA into twisted and curved nanoscale shapes. Science 325(5941):725–730Article CAS Google Scholar"
+  },
+  {
+    "number": 21,
+    "dois": [
+      "10.1021/ja906381y"
+    ],
+    "text": "Ke Y, Douglas SM, Liu M, Sharma J, Cheng A, Leung A, Liu Y, Shih WM, Yan H (2009) Multilayer DNA origami packed on a square lattice. J Am Chem Soc 131(43):15903–15908Article CAS Google Scholar"
+  },
+  {
+    "number": 22,
+    "dois": [
+      "10.1038/nnano.2010.193"
+    ],
+    "text": "Han D, Pal S, Liu Y, Yan H (2010) Folding and cutting DNA into reconfigurable topological nanostructures. Nat Nanotechnol 5(10):712–717Article CAS Google Scholar"
+  },
+  {
+    "number": 23,
+    "dois": [
+      "10.1126/science.1202998"
+    ],
+    "text": "Han D, Pal S, Nangreave J, Deng Z, Liu Y, Yan H (2011) DNA origami with complex curvatures in three-dimensional space. Science 332(6027):342–346Article CAS Google Scholar"
+  },
+  {
+    "number": 24,
+    "dois": [
+      "10.1038/nnano.2010.107"
+    ],
+    "text": "Liedl T, Hogberg B, Tytell J, Ingber DE, Shih WM (2010) Self-assembly of three-dimensional prestressed tensegrity structures from DNA. Nat Nanotechnol 5(7):520–524Article CAS Google Scholar"
+  },
+  {
+    "number": 25,
+    "dois": [
+      "10.1021/ja8030196"
+    ],
+    "text": "Jungmann R, Liedl T, Sobey TL, Shih W, Simmel FC (2008) Isothermal assembly of DNA origami structures using denaturing agents. J Am Chem Soc 130(31):10062–10063Article CAS Google Scholar"
+  },
+  {
+    "number": 26,
+    "dois": [
+      "10.1021/ja902569x"
+    ],
+    "text": "Hogberg B, Liedl T, Shih WM (2009) Folding DNA origami from a double-stranded source of scaffold. J Am Chem Soc 131(26):9154–9155Article CAS Google Scholar"
+  },
+  {
+    "number": 27,
+    "dois": [
+      "10.1021/nl902535q"
+    ],
+    "text": "Pound E, Ashton JR, Becerril HA, Woolley AT (2009) Polymerase chain reaction based scaffold preparation for the production of thin, branched DNA origami nanostructures of arbitrary sizes. Nano Lett 9(12):4302–4305Article CAS Google Scholar"
+  },
+  {
+    "number": 28,
+    "dois": [
+      "10.1039/c2sc20446k"
+    ],
+    "text": "Ke Y, Bellot G, Voigt NV, Fradkov E, Shih WM (2012) Two design strategies for enhancement of multilayer-DNA-origami folding: underwinding for specific intercalator rescue and staple-break positioning. Chem Sci 3(8):2587–2597Article CAS Google Scholar"
+  },
+  {
+    "number": 29,
+    "dois": [
+      "10.1038/nmeth0311-192"
+    ],
+    "text": "Bellot G, McClintock MA, Lin C, Shih WM (2011) Recovery of intact DNA nanostructures after agarose gel-based separation. Nat Methods 8(3):192–194Article CAS Google Scholar"
+  },
+  {
+    "number": 30,
+    "dois": [
+      "10.1002/wnan.173"
+    ],
+    "text": "Jungmann R, Scheible M, Simmel FC (2012) Nanoscale imaging in DNA nanotechnology. WIREs Nanomed Nanobiotechnol 4(1):66–81Article CAS Google Scholar"
+  },
+  {
+    "number": 31,
+    "dois": [
+      "10.1039/c1cc13654b"
+    ],
+    "text": "Alloyeau D, Ding B, Ramasse Q, Kisielowski C, Lee Z, Jeon K-J (2011) Direct imaging and chemical analysis of unstained DNA origami performed with a transmission electron microscope. Chem Commun 47(33):9375–9377Article CAS Google Scholar"
+  },
+  {
+    "number": 32,
+    "dois": [
+      "10.1002/smll.200701320"
+    ],
+    "text": "Kuzyk A, Yurke B, Toppari JJ, Linko V, Törmä P (2008) Dielectrophoretic trapping of DNA origami. Small 4(4):447–450Article CAS Google Scholar"
+  },
+  {
+    "number": 33,
+    "dois": [
+      "10.1002/smll.200900683"
+    ],
+    "text": "Linko V, Paasonen S-T, Kuzyk A, Törmä P, Toppari JJ (2009) Characterization of the conductance mechanisms of DNA origami by AC impedance spectroscopy. Small 5(21):2382–2386Article CAS Google Scholar"
+  },
+  {
+    "number": 34,
+    "dois": [
+      "10.1088/0957-4484/20/17/175102"
+    ],
+    "text": "Edson PB, Bobadilla AD, Rangel NL, Zhong H, Norton ML, Sinitskii A, Seminario JM (2009) Current-voltage-temperature characteristics of DNA origami. Nanotechnology 20(17):175102Article Google Scholar"
+  },
+  {
+    "number": 35,
+    "dois": [
+      "10.1063/1.3127362"
+    ],
+    "text": "Alfredo DB, Edson PB, Norma LR, Hong Z, Michael LN, Alexander S, Jorge MS (2009) DNA origami impedance measurement at room temperature. J Chem Phys 130(17):171101Article Google Scholar"
+  },
+  {
+    "number": 36,
+    "dois": [
+      "10.1021/ja3017939"
+    ],
+    "text": "Song J, Arbona J-M, Zhang Z, Liu L, Xie E, Elezgaray J, Aime J-P, Gothelf KV, Besenbacher F, Dong M (2012) Direct visualization of transient thermal response of a DNA origami. J Am Chem Soc 134(24):9844–9847Article CAS Google Scholar"
+  },
+  {
+    "number": 37,
+    "dois": [
+      "10.1021/ja204546h"
+    ],
+    "text": "Rajendran A, Endo M, Katsuda Y, Hidaka K, Sugiyama H (2011) Photo-cross-linking-assisted thermal stability of DNA origami structures and its application for higher-temperature self-assembly. J Am Chem Soc 133(37):14488–14491Article CAS Google Scholar"
+  },
+  {
+    "number": 38,
+    "dois": [
+      "10.1021/nl203503s"
+    ],
+    "text": "Kauert DJ, Kurth T, Liedl T, Seidel R (2011) Direct mechanical measurements reveal the material properties of three-dimensional DNA origami. Nano Lett 11(12):5558–5563Article CAS Google Scholar"
+  },
+  {
+    "number": 39,
+    "dois": [
+      "10.1039/b811332g"
+    ],
+    "text": "Ke Y, Nangreave J, Yan H, Lindsay S, Liu Y (2008) Developing DNA tiles for oligonucleotide hybridization assay with higher accuracy and efficiency. Chem Commun 43:5622–5624Article Google Scholar"
+  },
+  {
+    "number": 40,
+    "dois": [
+      "10.1126/science.1150082"
+    ],
+    "text": "Ke Y, Lindsay S, Chang Y, Liu Y, Yan H (2008) Self-assembled water-soluble nucleic acid probe tiles for label-free RNA hybridization assays. Science 319(5860):180–183Article CAS Google Scholar"
+  },
+  {
+    "number": 41,
+    "dois": [
+      "10.1021/nl1040836"
+    ],
+    "text": "Mei Q, Wei X, Su F, Liu Y, Youngbull C, Johnson R, Lindsay S, Yan H, Meldrum D (2011) Stability of DNA origami nanoarrays in cell lysate. Nano Lett 11(4):1477–1482Article CAS Google Scholar"
+  },
+  {
+    "number": 42,
+    "dois": [
+      "10.1021/la2037873"
+    ],
+    "text": "Li Z, Wang L, Yan H, Liu Y (2012) Effect of DNA hairpin loops on the twist of planar DNA origami tiles. Langmuir 28(4):1959–1965Article CAS Google Scholar"
+  },
+  {
+    "number": 43,
+    "dois": [
+      "10.1039/c2cc32204h"
+    ],
+    "text": "Zhang H, Chao J, Pan D, Liu H, Huang Q, Fan C (2012) Folding super-sized DNA origami with scaffold strands from long-range PCR. Chem Commun 48(51):6405–6407Article CAS Google Scholar"
+  },
+  {
+    "number": 44,
+    "dois": [
+      "10.1021/nn302896c"
+    ],
+    "text": "Yang Y, Han D, Nangreave J, Liu Y, Yan H (2012) DNA origami with double-stranded DNA as a unified scaffold. ACS Nano 6(9):8209–8215Article CAS Google Scholar"
+  },
+  {
+    "number": 45,
+    "dois": [
+      "10.1073/pnas.0700930104"
+    ],
+    "text": "Douglas SM, Chou JJ, Shih WM (2007) DNA-nanotube-induced alignment of membrane proteins for NMR structure determination. Proc Natl Acad Sci U S A 104(16):6644–6648Article CAS Google Scholar"
+  },
+  {
+    "number": 46,
+    "dois": [
+      "10.1021/nl103427w"
+    ],
+    "text": "Jungmann R, Steinhauer C, Scheible M, Kuzyk A, Tinnefeld P, Simmel FC (2010) Single-molecule kinetics and super-resolution microscopy by fluorescence imaging of transient binding on DNA origami. Nano Lett 10(11):4756–4761Article CAS Google Scholar"
+  },
+  {
+    "number": 47,
+    "dois": [
+      "10.1088/0957-4484/22/27/275301"
+    ],
+    "text": "Jungmann R, Scheible M, Kuzyk A, Pardatscher G, Carlos EC, Simmel FC (2011) DNA origami-based nanoribbons: assembly, length distribution, and twist. Nanotechnology 22(27):275301Article Google Scholar"
+  },
+  {
+    "number": 48,
+    "dois": [
+      "10.1039/c0sm01259a"
+    ],
+    "text": "Kim KN, Sarveswaran K, Mark L, Lieberman M (2011) Comparison of methods for orienting and aligning DNA origami. Soft Matter 7(10):4636–4643Article CAS Google Scholar"
+  },
+  {
+    "number": 49,
+    "dois": [
+      "10.1021/ja106292x"
+    ],
+    "text": "Li Z, Liu M, Wang L, Nangreave J, Yan H, Liu Y (2010) Molecular behavior of DNA origami in higher-order self-assembly. J Am Chem Soc 132(38):13545–13552Article CAS Google Scholar"
+  },
+  {
+    "number": 50,
+    "dois": [
+      "10.1002/chem.201090084"
+    ],
+    "text": "Endo M, Sugita T, Katsuda Y, Hidaka K, Sugiyama H (2010) Programmed-assembly system using DNA jigsaw pieces. Chem Eur J 16(18):5362–5368Article CAS Google Scholar"
+  },
+  {
+    "number": 51,
+    "dois": [
+      "10.1021/nn1031627"
+    ],
+    "text": "Rajendran A, Endo M, Katsuda Y, Hidaka K, Sugiyama H (2011) Programmed two-dimensional self-assembly of multiple DNA origami jigsaw pieces. ACS Nano 5(1):665–671Article CAS Google Scholar"
+  },
+  {
+    "number": 52,
+    "dois": [
+      "10.1002/anie.201005911"
+    ],
+    "text": "Liu W, Zhong H, Wang R, Seeman NC (2010) Crystalline two-dimensional DNA-origami arrays. Angew Chem Int Ed 50(1):264–267Article Google Scholar"
+  },
+  {
+    "number": 53,
+    "dois": [
+      "10.1039/c0cc05306f"
+    ],
+    "text": "Endo M, Sugita T, Rajendran A, Katsuda Y, Emura T, Hidaka K, Sugiyama H (2011) Two-dimensional DNA origami assemblies using a four-way connector. Chem Commun 47(11):3213–3215Article CAS Google Scholar"
+  },
+  {
+    "number": 54,
+    "dois": [
+      "10.1002/anie.200906225"
+    ],
+    "text": "Zhao Z, Yan H, Liu Y (2010) A route to scale up DNA origami using DNA tiles as folding staples. Angew Chem Int Ed 49(8):1414–1417Article CAS Google Scholar"
+  },
+  {
+    "number": 55,
+    "dois": [
+      "10.1021/nl201603a"
+    ],
+    "text": "Zhao Z, Liu Y, Yan H (2011) Organizing DNA origami tiles into larger structures using preformed scaffold frames. Nano Lett 11(7):2997–3002Article CAS Google Scholar"
+  },
+  {
+    "number": 56,
+    "dois": [
+      "10.1038/nchem.1070"
+    ],
+    "text": "Woo S, Rothemund PWK (2011) Programmable molecular recognition based on the geometry of DNA nanostructures. Nat Chem 3(8):620–627Article CAS Google Scholar"
+  },
+  {
+    "number": 57,
+    "dois": [
+      "10.1088/0957-4484/20/23/235305"
+    ],
+    "text": "Kuzyk A, Kimmo TL, Torma P (2009) DNA origami as a nanoscale template for protein assembly. Nanotechnology 20(23):235305Article Google Scholar"
+  },
+  {
+    "number": 58,
+    "dois": [
+      "10.1002/anie.201005931"
+    ],
+    "text": "Saccà B, Meyer R, Erkelenz M, Kiko K, Arndt A, Schroeder H, Rabe KS, Niemeyer CM (2010) Orthogonal protein decoration of DNA origami. Angew Chem Int Ed 49(49):9378–9383Article Google Scholar"
+  },
+  {
+    "number": 59,
+    "dois": [
+      "10.1002/anie.201108199"
+    ],
+    "text": "Nakata E, Liew FF, Uwatoko C, Kiyonaka S, Mori Y, Katsuda Y, Endo M, Sugiyama H, Morii T (2012) Zinc-finger proteins for site-specific protein positioning on DNA-origami structures. Angew Chem Int Ed 51(10):2421–2424Article CAS Google Scholar"
+  },
+  {
+    "number": 60,
+    "dois": [
+      "10.1021/ja104702q"
+    ],
+    "text": "Numajiri K, Yamazaki T, Kimura M, Kuzuya A, Komiyama M (2010) Discrete and active enzyme nanoarrays on DNA origami scaffolds purified by affinity tag separation. J Am Chem Soc 132(29):9937–9939Article CAS Google Scholar"
+  },
+  {
+    "number": 61,
+    "dois": [
+      "10.1021/ja802853r"
+    ],
+    "text": "Sharma J, Chhabra R, Andersen CS, Gothelf KV, Yan H, Liu Y (2008) Toward reliable gold nanoparticle patterning on self-assembled DNA nanoscaffold. J Am Chem Soc 130(25):7820–7821Article CAS Google Scholar"
+  },
+  {
+    "number": 62,
+    "dois": [
+      "10.1002/anie.201000330"
+    ],
+    "text": "Pal S, Deng Z, Ding B, Yan H, Liu Y (2010) DNA-origami-directed self-assembly of discrete silver-nanoparticle architectures. Angew Chem Int Ed 49(15):2700–2704Article CAS Google Scholar"
+  },
+  {
+    "number": 63,
+    "dois": [
+      "10.1038/nature10889"
+    ],
+    "text": "Kuzyk A, Schreiber R, Fan Z, Pardatscher G, Roller E-M, Hogele A, Simmel FC, Govorov AO, Liedl T (2012) DNA-based self-assembly of chiral plasmonic nanostructures with tailored optical response. Nature 483(7389):311–314Article CAS Google Scholar"
+  },
+  {
+    "number": 64,
+    "dois": [
+      "10.1021/ja109677n"
+    ],
+    "text": "Liu H, Torring T, Dong M, Rosen CB, Besenbacher F, Gothelf KV (2010) DNA-templated covalent coupling of G4 PAMAM dendrimers. J Am Chem Soc 132(51):18054–18056Article CAS Google Scholar"
+  },
+  {
+    "number": 65,
+    "dois": [
+      "10.1038/nnano.2009.311"
+    ],
+    "text": "Maune HT, S-p H, Barish RD, Bockrath M, Goddard IIA, RothemundPaul WK, Winfree E (2010) Self-assembly of carbon nanotubes into two-dimensional geometries using DNA origami templates. Nat Nanotechnol 5(1):61–66Article CAS Google Scholar"
+  },
+  {
+    "number": 66,
+    "dois": [
+      "10.1002/smll.201001750"
+    ],
+    "text": "Eskelinen A-P, Kuzyk A, Kaltiaisenaho TK, Timmermans MY, Nasibulin AG, Kauppinen EI, Törmä P (2011) Assembly of single-walled carbon nanotubes on DNA-origami templates through streptavidin–biotin interaction. Small 7(6):746–750Article CAS Google Scholar"
+  },
+  {
+    "number": 67,
+    "dois": [
+      "10.1002/smll.200900442"
+    ],
+    "text": "Gerdon AE, Oh SS, Hsieh K, Ke Y, Yan H, Soh HT (2009) Controlled delivery of DNA origami on patterned surfaces. Small 5(17):1942–1946Article CAS Google Scholar"
+  },
+  {
+    "number": 68,
+    "dois": [
+      "10.1021/la101343k"
+    ],
+    "text": "Gao B, Sarveswaran K, Bernstein GH, Lieberman M (2010) Guided deposition of individual DNA nanostructures on silicon substrates. Langmuir 26(15):12680–12683Article CAS Google Scholar"
+  },
+  {
+    "number": 69,
+    "dois": [
+      "10.1002/anie.201106198"
+    ],
+    "text": "Yun JM, Kim KN, Kim JY, Shin DO, Lee WJ, Lee SH, Lieberman M, Kim SO (2012) DNA origami nanopatterning on chemically modified graphene. Angew Chem Int Ed 51(4):912–915Article CAS Google Scholar"
+  },
+  {
+    "number": 70,
+    "dois": [
+      "10.1038/nnano.2009.220"
+    ],
+    "text": "Kershner RJ, Bozano LD, Micheel CM, Hung AM, Fornof AR, Cha JN, Rettner CT, Bersani M, Frommer J, Rothemund PWK, Wallraff GM (2009) Placement and orientation of individual DNA shapes on lithographically patterned surfaces. Nat Nanotechnol 4(9):557–561Article CAS Google Scholar"
+  },
+  {
+    "number": 71,
+    "dois": [
+      "10.1038/nnano.2009.450"
+    ],
+    "text": "Hung AM, Micheel CM, Bozano LD, Osterbur LW, Wallraff GM, Cha JN (2010) Large-area spatially ordered arrays of gold nanoparticles directed by lithographically confined DNA origami. Nat Nanotechnol 5(2):121–126Article CAS Google Scholar"
+  },
+  {
+    "number": 72,
+    "dois": [
+      "10.1021/nl1033073"
+    ],
+    "text": "Ding B, Wu H, Xu W, Zhao Z, Liu Y, Yu H, Yan H (2010) Interconnecting gold islands with DNA origami nanotubes. Nano Lett 10(12):5065–5069Article CAS Google Scholar"
+  },
+  {
+    "number": 73,
+    "dois": [
+      "10.1021/nl200306w"
+    ],
+    "text": "Pearson AC, Pound E, Woolley AT, Linford MR, Harb JN, Davis RC (2011) Chemical alignment of DNA origami to block copolymer patterned arrays of 5 nm gold nanoparticles. Nano Lett 11(5):1981–1987Article CAS Google Scholar"
+  }
+]

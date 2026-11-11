@@ -20,6 +20,7 @@ test.afterEach(async ({ request }) => {
 
 test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes desktop history', async ({ page, request }, info) => {
   await page.setViewportSize({ width: 1600, height: 1000 })
+  page.setDefaultTimeout(30_000)
   // Observation hold outside measured controller motion: retain the real pending UI.
   if (process.env.NADOC_VR_FRAME_AUDIT !== '1') await page.route('**/api/design/sweep', async route => {
     await new Promise(resolve => setTimeout(resolve, 10_000))
@@ -34,7 +35,7 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
     }
   })
   await page.goto('/?test=1&doc=__e2e__vr-sweep&scrywrite=transactions')
-  await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
+  await page.getByRole('button', { name: 'File', exact: true }).click()
   await page.click('#menu-file-new')
   await page.fill('#new-design-name', '__e2e__VR Sweep')
   await page.getByRole('button', { name: 'Create', exact: true }).click()
@@ -57,11 +58,14 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   }, { timeout: 30_000 }).toBe(true)
   const evidence = process.env.NADOC_VR_SWEEP_EVIDENCE || path.join(process.env.SCRYWRITE_TEST_WORKSPACE, 'sweep-evidence')
   try {
-    const result = await execFileAsync(path.resolve('..', '.venv/bin/python'), ['-m', 'tools.vr_workflows.sweep_probe', status.scrywrite_socket, evidence], {
-      cwd: path.resolve('..'), encoding: 'utf8', timeout: 240_000, env: process.env, maxBuffer: 4*1024*1024,
+    const probe = execFileAsync(path.resolve('..', '.venv/bin/python'), ['-m', 'tools.vr_workflows.sweep_probe', status.scrywrite_socket, evidence], {
+      cwd: path.resolve('..'), encoding: 'utf8', timeout: 540_000, env: process.env, maxBuffer: 4*1024*1024,
     })
-    if (result.stdout) console.log(result.stdout)
-    if (result.stderr) console.log(result.stderr)
+    // Readiness/review messages must reach VR Tours while the probe is running.
+    // Buffering until completion leaves an empty headset with no explanation.
+    probe.child.stdout.on('data', chunk => process.stdout.write(chunk))
+    probe.child.stderr.on('data', chunk => process.stderr.write(chunk))
+    await probe
   } finally {
     await page.waitForTimeout(200)
     mkdirSync(evidence, { recursive: true })
@@ -74,7 +78,7 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
     return { ...state.currentDesign, feature_log: history.feature_log, axes: state.currentHelixAxes }
   })
   const design = await readDesign()
-  expect(design.helices).toHaveLength(original.helices.length + 2)
+  expect(design.helices).toHaveLength(original.helices.length + 6)
   expect(design.feature_log).toHaveLength(featureIndex + 1)
   expect(design.feature_log[featureIndex]).toMatchObject({ feature_type: 'snapshot', op_kind: 'sweep' })
   expect(design.feature_log[featureIndex].params.points_nm).toHaveLength(finalDraft.points_nm.length)
@@ -132,7 +136,7 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   await expect(page.locator('#sweep-apply')).toBeEnabled()
   await expect(page.locator('#sweep-status')).toContainText('bp per helix')
   await snapshot('desktop-edit-preview')
-  const editResponse = page.waitForResponse(response => response.url().endsWith(`/design/features/${featureIndex}/edit`)
+  const editResponse = page.waitForResponse(response => response.url().endsWith('/design/features/sweep-preview/apply')
     && response.request().method() === 'POST')
   await page.click('#sweep-apply')
   expect((await editResponse).ok()).toBe(true)
@@ -180,7 +184,7 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   expect(undoCreation.deformations).toEqual(original.deformations)
   await snapshot('desktop-undo-creation', undoCreation)
   await historyAction('redo')
-  await expect.poll(async () => (await readDesign()).helices.length).toBe(original.helices.length + 2)
+  await expect.poll(async () => (await readDesign()).helices.length).toBe(original.helices.length + 6)
   const redoCreation = await readDesign()
   assertFeature(redoCreation, design.feature_log[featureIndex].params.points_nm)
   expect(axisSamples(redoCreation)).toEqual(axisSamples(design))
@@ -191,6 +195,18 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   assertFeature(redoEdit, editedPoints)
   expect(axisSamples(redoEdit)).toEqual(axisSamples(edited))
   await snapshot('desktop-redo-edit', redoEdit)
+  // Audit the actual saved/reopened part, independently replaying its commands.
+  const savedPath = await page.evaluate(async () => {
+    const destination = window.__nadocSyncDebug.status().workspacePath
+    if (!destination?.startsWith('__e2e__')) throw new Error('Expected an isolated test part')
+    await (await import('/src/api/client.js')).saveDesignToWorkspace(destination)
+    return destination
+  })
+  const audit = await execFileAsync(path.resolve('..', '.venv/bin/python'),
+    ['-m', 'scripts.agent_structure_guard', path.resolve(process.env.SCRYWRITE_TEST_WORKSPACE, savedPath)],
+    { cwd: path.resolve('..'), encoding: 'utf8', timeout: 30_000 })
+  writeFileSync(path.join(evidence, 'saved-process-audit.json'), audit.stdout)
+  expect(JSON.parse(audit.stdout).status).toBe('verified')
   writeFileSync(path.join(evidence, 'browser-responses.json'), JSON.stringify({ errors, responses }, null, 2))
   expect(errors).toEqual([])
 })

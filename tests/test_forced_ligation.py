@@ -88,6 +88,55 @@ def _find_strand_with_5prime(design, helix_id, start_bp, direction):
 class TestForcedLigation:
     """Test forced ligation between strand ends."""
 
+    @pytest.mark.parametrize("fast_bridges", [False, True])
+    @pytest.mark.parametrize("sequence", ["", "T", "TT"])
+    @pytest.mark.parametrize("junction", ["aligned", "offset", "same_helix"])
+    def test_atomistic_insert_path_has_no_direct_bypass(
+        self, fast_bridges, sequence, junction
+    ):
+        """User-authored ligations have one backbone path, including inserts."""
+        from collections import Counter
+        from backend.core.atomistic import build_atomistic_model
+        from backend.core.models import Design
+
+        design = _make_bundle([[0, 0]] if junction == "same_helix" else [[0, 0], [0, 1]], 14)
+        ha = _hid_at(design, 0, 0)
+        hb = ha if junction == "same_helix" else _hid_at(design, 0, 1)
+        if junction == "offset":
+            design = _nick(hb, 5, "FORWARD")
+        source = _find_strand_with_3prime(design, ha, 0, "REVERSE")
+        target = _find_strand_with_5prime(design, hb, 6 if junction == "offset" else 0, "FORWARD")
+        response = client.post("/api/design/forced-ligation", json={
+            "three_prime_strand_id": source["id"],
+            "five_prime_strand_id": target["id"],
+        })
+        assert response.status_code == 201
+        fl_id = response.json()["design"]["forced_ligations"][-1]["id"]
+        response = client.patch(f"/api/design/forced-ligations/{fl_id}/extra-bases",
+                                json={"sequence": sequence})
+        assert response.status_code == 200
+        design = Design.model_validate(response.json()["design"])
+        model = build_atomistic_model(design, fast_bridges=fast_bridges)
+        fl = design.forced_ligations[-1]
+        ordinary = {(a.helix_id, a.bp_index, a.direction, a.name): a.serial
+                    for a in model.atoms if not a.crossover_id and not a.extension_id}
+        src = ordinary[(fl.three_prime_helix_id, fl.three_prime_bp,
+                        fl.three_prime_direction.value, "O3'")]
+        dst = ordinary[(fl.five_prime_helix_id, fl.five_prime_bp,
+                        fl.five_prime_direction.value, "P")]
+        inserts = {(a.extra_base_k, a.name): a.serial for a in model.atoms
+                   if a.crossover_id == fl.id}
+        bonds = {frozenset(pair) for pair in model.bonds}
+        assert (frozenset((src, dst)) in bonds) == (not sequence)
+        previous = src
+        for k in range(len(sequence)):
+            assert frozenset((previous, inserts[k, "P"])) in bonds
+            previous = inserts[k, "O3'"]
+        assert frozenset((previous, dst)) in bonds
+        degree = Counter(serial for pair in model.bonds for serial in pair)
+        assert degree[src] == 2
+        assert degree[dst] == 4
+
     def test_basic_ligation_same_helix(self):
         """Nick a strand, then forced-ligate the two fragments back together."""
         design = _make_bundle([[0, 0]])

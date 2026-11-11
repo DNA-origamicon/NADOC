@@ -274,4 +274,4 @@ def _finish_simulate_nodes(nodes, ws, design_source_path, show_all, project_id=N
                 return [n for n in nodes if n.get("project_id") == project_id]
         except Exception:  # noqa: BLE001 — list filtering must remain advisory
             pass
-    return sim_jobs.filter_nodes(nodes, design_source_path, show_all)
+    return sim_jobs.filter_nodes(nodes, design_source_path, show_all, project_id=project_id)

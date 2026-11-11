@@ -733,3 +733,103 @@ def test_cpu_job_never_pays_for_the_probe(
     asyncio.run(nr.run_job(job, tmp_path))
 
     assert probed == [], "a Compute=CPU job must not run the GPU pre-flight probe"
+
+
+@pytest.mark.parametrize('cancel_wait', [False, True])
+def test_analysis_contention_waits_cancellably_before_launch(tmp_path, monkeypatch, cancel_wait):
+    from backend.core import memory_budget as budget, trajectory_priority as priority
+    demand = tmp_path / 'demand'
+    demand.mkdir()
+    monkeypatch.setattr(priority, '_directory', lambda: demand)
+    job = _setup_package(tmp_path)
+    job.error = 'Previous launch failed'
+    launched = []
+
+    async def execute(job, workspace):
+        assert budget.simulation_active()
+        assert priority.foreground_active()
+        launched.append(True)
+    monkeypatch.setattr(nr, '_run_job_reserved', execute)
+
+    async def check():
+        with budget.analysis_activity_lease():
+            task = asyncio.create_task(nr.run_job(job, tmp_path))
+            try:
+                for _ in range(100):
+                    if priority.foreground_active() and job.error is None:
+                        break
+                    await asyncio.sleep(.01)
+                assert not task.done() and not launched
+                assert job.status == MdStatus.running and job.error is None
+                assert not budget.simulation_active()
+                if cancel_wait:
+                    task.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await task
+                    assert job.status == MdStatus.stopped and job.user_stopped
+            finally:
+                if cancel_wait and not task.done():
+                    task.cancel()
+        if not cancel_wait:
+            await asyncio.wait_for(task, 2)
+            assert launched == [True]
+        assert not priority.foreground_active()
+        assert not budget.simulation_active()
+    asyncio.run(check())
+
+
+def test_actual_memory_refusal_still_fails_after_analysis_releases(tmp_path, monkeypatch):
+    from backend.core import memory_budget as budget, trajectory_priority as priority
+    demand = tmp_path / 'demand'
+    demand.mkdir()
+    monkeypatch.setattr(priority, '_directory', lambda: demand)
+    job = _setup_package(tmp_path)
+    def refuse(self):
+        raise budget.MemoryBudgetExceeded('Insufficient RAM for test')
+    monkeypatch.setattr(budget.Reservation, '__enter__', refuse)
+    asyncio.run(nr.run_job(job, tmp_path))
+    assert job.status == MdStatus.failed
+    assert 'Insufficient RAM' in job.error
+    assert not priority.foreground_active()
+
+
+def test_namd_launch_preempts_disposable_backfill(tmp_path, monkeypatch):
+    import os
+    import subprocess
+    import sys
+    from backend.core import memory_budget as budget, trajectory_priority as priority
+    demand = tmp_path / 'demand'
+    demand.mkdir()
+    monkeypatch.setattr(priority, '_directory', lambda: demand)
+    ready = tmp_path / 'ready'
+    script = '''
+import sys, time
+from pathlib import Path
+from backend.core import trajectory_priority as priority, memory_budget as budget
+priority._directory = lambda: Path(sys.argv[1])
+with priority.interruptible_backfill(), budget.exclusive_analysis():
+    Path(sys.argv[2]).touch()
+    time.sleep(30)
+'''
+    child = subprocess.Popen([sys.executable, '-c', script, str(demand), str(ready)], env=os.environ.copy())
+    job = _setup_package(tmp_path)
+    launched = []
+    async def execute(job, workspace):
+        assert budget.simulation_active()
+        launched.append(True)
+    monkeypatch.setattr(nr, '_run_job_reserved', execute)
+    async def check():
+        for _ in range(300):
+            if ready.exists():break
+            assert child.poll() is None
+            await asyncio.sleep(.01)
+        assert ready.exists()
+        await asyncio.wait_for(nr.run_job(job, tmp_path), 3)
+    try:
+        asyncio.run(check())
+        assert child.wait(timeout=2) == priority.PREEMPTED
+        assert launched == [True]
+        assert not priority.foreground_active() and not budget.simulation_active()
+    finally:
+        if child.poll() is None:child.kill()
+        child.wait(timeout=2)

@@ -120,3 +120,26 @@ def test_copy_seed_scan_does_not_load_jobs_or_schedule_trajectories(tmp_path, mo
     monkeypatch.setattr(MdJob, "load", forbidden)
     monkeypatch.setattr(trajectory_precompute, "schedule", forbidden)
     assert MdJob.saved_seeds(tmp_path) == {17, 23}
+
+
+@pytest.mark.parametrize('request_path', [None, 'old-name.nadoc'])
+def test_copy_preserves_job_model_association_and_editable_submodel(tmp_path, monkeypatch, request_path):
+    from backend.api.simulation_submodel import SubmodelBox, SubmodelSelection, read_selection
+
+    monkeypatch.setattr(routes_md, '_workspace', lambda: tmp_path)
+    box = SubmodelBox(min_corner=(0, 0, 0), max_corner=(3, 3, 3))
+    source = routes_md._spawn_draft_job(
+        routes_md.CreateJobRequest(design_source_path=request_path, submodel=box), name='part'
+    )
+    source.design_source_path = 'current-name.nadoc'
+    source.save(tmp_path)
+    original = (source.job_dir(tmp_path) / 'job.json').read_bytes()
+    copied = MdJob.load(asyncio.run(routes_md.copy_md_job(source.job_id))['job']['job_id'], tmp_path)
+    assert copied.design_source_path == 'current-name.nadoc'
+    assert copied.prep_params['design_source_path'] == 'current-name.nadoc'
+    assert read_selection(copied.job_dir(tmp_path))['box'] == box.model_dump(mode='json')
+    moved = box.model_copy(update={'min_corner': (1, 0, 0), 'max_corner': (4, 3, 3)})
+    asyncio.run(routes_md.put_md_submodel(copied.job_id, SubmodelSelection(box=moved)))
+    assert read_selection(copied.job_dir(tmp_path))['box'] == moved.model_dump(mode='json')
+    assert read_selection(source.job_dir(tmp_path))['box'] == box.model_dump(mode='json')
+    assert (source.job_dir(tmp_path) / 'job.json').read_bytes() == original

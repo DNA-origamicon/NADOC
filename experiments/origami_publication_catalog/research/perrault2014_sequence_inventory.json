@@ -1,0 +1,1276 @@
+{
+  "source": {
+    "local_file": "assets/sources/acs-expansion-20261104/3604944-nn5011914_si_001.pdf",
+    "sha256": "baadbd744aa4459dff356d5639f375f99b791d7bd7ab190425112fb952dd3e24",
+    "url": "https://ndownloader.figshare.com/files/3604944",
+    "locator": "SI pp3\u201311 captions; pp12\u201315 full table text inventory; p13 rendered1800px confirms blue fluor handles and printed42 length; Note1 only identified, not validated"
+  },
+  "table_rows": [
+    {
+      "page": 12,
+      "start": "69[78]",
+      "end": "70[62]",
+      "sequence": "CCAGCGAGTTACTTAGCCGACTAAAGACACTCATCAGCGCTAATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "40[61]",
+      "end": "39[77]",
+      "sequence": "TTCTTAACAGGGAGTTAAATAGAAAGGAGCTTTCGATCATCATTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "33[78]",
+      "end": "34[62]",
+      "sequence": "GAAAACACCTTGCTTCTGTCATCGGGAGTGAAACATTTTCCCATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "4[61]",
+      "end": "3[77]",
+      "sequence": "CCTGCCTCGGCAAAATCCCTTATAAATCAAACAGTTGGTAATATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "67[105]",
+      "end": "58[104]",
+      "sequence": "ACCGAACATATTGAATAACTTTTCTCAGAGCCGGAACCCGTAACAAATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "0[34]",
+      "end": "27[35]",
+      "sequence": "CTCAGTGCCAGCAGAATGGTTTTAGCTACACTTAAATCCGCCACCCTTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "37[105]",
+      "end": "28[104]",
+      "sequence": "GTAGATATTTTGTTTTCACTTTTACAGACAACCAGTACATCAGATATTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "66[34]",
+      "end": "39[35]",
+      "sequence": "GGAAACGCATCGGGTAAAATTTTAACCGATGCCGACAAATTATCATTTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "9[78]",
+      "end": "10[62]",
+      "sequence": "GGCTTTTTCATTGAATCCCTAGGAATACACCAAAATTTGACGATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "16[61]",
+      "end": "15[77]",
+      "sequence": "AAACTTTAATAAGAATAAATAGTGAATTACAAAGAGATTAGAGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "12[34]",
+      "end": "22[104]",
+      "sequence": "TTTAGTAAATCACCGAAAGTTTTGTATTGGAATCGGCCTCGAGCCAGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "70[61]",
+      "end": "69[77]",
+      "sequence": "TATCAGATTTTTAAGAAAATTAACGTCAGTAATTGTTTGACCCTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "63[78]",
+      "end": "64[62]",
+      "sequence": "AATTCATTAAAGGTGAATTTTAAGACTCTCACAATACAAAGGCTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "13[105]",
+      "end": "45[35]",
+      "sequence": "CATATAAACATACTTTTTATTTTGTAATAATTACATTGGGTGGCATCTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "27[78]",
+      "end": "28[62]",
+      "sequence": "ACCCATGATCTAAAGTTTTCGGAATAGGGCAAGCCTTTAGCGATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "15[78]",
+      "end": "16[62]",
+      "sequence": "AGTACCTTTTTAAATATGCAGCAAAGCGAGGTCAGACGCGAGATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "61[105]",
+      "end": "46[104]",
+      "sequence": "TTAGAGCTCATAATCACCATTTTTGTACCAAATAAAGCATATTACCGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "22[61]",
+      "end": "21[77]",
+      "sequence": "TCCAGACATCCCATCCTAAAACAGTAGGGGTAAAGTCCAGTCGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "18[34]",
+      "end": "33[35]",
+      "sequence": "GGCTGTAATTCGAGCATAATTTTCCTTTGACCAAGCTTGAATTATTCTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "60[34]",
+      "end": "69[35]",
+      "sequence": "AAATATGAAACGGAAAATATTTTAATAGCATTAAGCCCCAACCTAAATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "19[105]",
+      "end": "4[104]",
+      "sequence": "GCCCTGTATGCGACGCCAATTTTATCACCCGGGCGAAATAAAGAACGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "21[78]",
+      "end": "22[62]",
+      "sequence": "GGAAACCTCACCAGTGAGATTATCCGCTCCCGCTTTAATTCTGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "28[61]",
+      "end": "27[77]",
+      "sequence": "ACCTCCCACGCTAACGAGCTCATCGAGAGAGGCGTCAATAGGATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "64[61]",
+      "end": "63[77]",
+      "sequence": "TATCAGGTTGATAATCAGAAAGATTCAAGAGATCTCAATAGAATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "57[78]",
+      "end": "58[62]",
+      "sequence": "CGTTTGCCCCTCAGAGCCAACGTCACCATAGCCCCAAACACCATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "24[34]",
+      "end": "70[104]",
+      "sequence": "AATAAAGGCGGACCGCCACTTTTTTGTGTCTACAACGGCGGGAGAATTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "31[105]",
+      "end": "16[104]",
+      "sequence": "AATCCTCACCGCGCGGGCCTTTTGCTGAATGGTCATTTTAACTATATTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "25[105]",
+      "end": "21[35]",
+      "sequence": "TCTGTACCTTATAGGAATCTTTTTAGATAAAGCTAATGGAGTGAGCTTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "55[105]",
+      "end": "3[35]",
+      "sequence": "CAGAGCCCAACTACAAGAATTTTAAGAGAAAACATGAATTCCAGTAATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "43[105]",
+      "end": "9[35]",
+      "sequence": "TTTTAGTCCATCACTATCGTTTTAGGGATTTCAGAGCGACACTATCATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "34[61]",
+      "end": "33[77]",
+      "sequence": "GTCACGAGACCGTATACGCCATTCAGGCGCCAGGGAACATCAATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "54[34]",
+      "end": "64[104]",
+      "sequence": "GAACTACAAAATCAGTAGCTTTTAAGGTAAAAAAGGGCGCTGATAAATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "30[34]",
+      "end": "40[104]",
+      "sequence": "ACCGAGAGGTTTTGAATACTTTTCTGAATATCAATATATCCAAAAGGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "10[61]",
+      "end": "9[77]",
+      "sequence": "GCACGTAGAATCCTGAGAAAGAAAGCGATGGTTGCTAGCGAGATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 12,
+      "start": "1[105]",
+      "end": "10[104]",
+      "sequence": "GATTTAAGTTGCGTTGTTCTTTTTCCAATAGGGTAATACCCGCCGCGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 12,
+      "start": "58[61]",
+      "end": "57[77]",
+      "sequence": "GAACGAGTACCAGTCAGGACGCATAGGCTGACGAGCTTATTAGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 13,
+      "start": "51[78]",
+      "end": "52[62]",
+      "sequence": "CCGTGGGGGGACGACGACATTGTTAAATAACCCGTATGAAAAATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 13,
+      "start": "3[78]",
+      "end": "4[62]",
+      "sequence": "AGTTTTAAGGTGCCGTAAACTTGATATTAGTGTACTAATGCCCTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 13,
+      "start": "6[34]",
+      "end": "57[35]",
+      "sequence": "AAAGAGAACAACCCAAAAGTTTTTTATGCGTTTAATTTGTCAGACTGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 13,
+      "start": "39[78]",
+      "end": "40[62]",
+      "sequence": "ATTCCTGATATCAAAATTAACAAACAATCGGAATTAGGTGAATTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 13,
+      "start": "49[105]",
+      "end": "34[104]",
+      "sequence": "AGCTTTTTTGAAGCAGAAGTTTTACATAAATCATTTGAAAAGGGGGATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 13,
+      "start": "36[34]",
+      "end": "51[35]",
+      "sequence": "GCGAAACAATAGGAACGTTTTTTGCAAATCTATCAAACTAGCCAGCTTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 13,
+      "start": "7[105]",
+      "end": "15[35]",
+      "sequence": "GAATGATTGACGTGTAGCGTTTTTACCGACTCATCTTCGAGCTTCAATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 13,
+      "start": "48[34]",
+      "end": "63[35]",
+      "sequence": "TTAGAGATTGTACATCAAATTTTACTAGCAAAACAAGAAAAGAAACGTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 13,
+      "start": "42[34]",
+      "end": "52[104]",
+      "sequence": "AGACAATTGATTCTATATTTTTTATCGTAAATGGGATATATTAACACTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 74,
+      "extracted_length": 74
+    },
+    {
+      "page": 13,
+      "start": "46[61]",
+      "end": "45[77]",
+      "sequence": "TTGACGCAGATAGAACCCTTAGTAATAAGGAAATAATCATACATTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 13,
+      "start": "52[61]",
+      "end": "51[77]",
+      "sequence": "TCTAAAGAAGGTTATCTAATAAAACATCGCAGCAACGGATTCTTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 13,
+      "start": "45[78]",
+      "end": "46[62]",
+      "sequence": "GGCAAGGACTTTTGCGGGATTAGATACACCAATAACCTACATTTTTTTTCTTCACACCACACTCCATCTA",
+      "printed_length": 70,
+      "extracted_length": 70
+    },
+    {
+      "page": 13,
+      "start": "56[90]",
+      "end": "54[77]",
+      "sequence": "ACCGCCACATCTTTGAATAAGGCTTGCCCTGGCTGAGGTGTAAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "62[90]",
+      "end": "60[77]",
+      "sequence": "TATTCATATGGTTTGGTAGCTATTTTTGAAAGGGTGAGTAATAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "44[90]",
+      "end": "42[77]",
+      "sequence": "CTGTAATCAAAGAAAGGAAAAACGCTCATCATCACTCAATACAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "50[90]",
+      "end": "48[77]",
+      "sequence": "GTTTGAGAACAAACCCACGCTGAGAGCCAGCCATTAGCGAACAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "8[90]",
+      "end": "6[77]",
+      "sequence": "TAAATATGCAAAAGACAGGGCGCGTACTAAAGGAGCCGAGAAAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "32[90]",
+      "end": "30[77]",
+      "sequence": "TGAATAAAAATTAAATTAAGTTGGGTAACTGCGCAACAAAGCAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "68[90]",
+      "end": "66[77]",
+      "sequence": "GCTCCATTTATACCGAACAAAGTCAGAGGAAAATGAGAAACGAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "20[90]",
+      "end": "18[77]",
+      "sequence": "TTTCTTTTGTCGTGAAAGTACCGACAAAAGCTTAATATAAAGAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "38[90]",
+      "end": "36[77]",
+      "sequence": "ACCTACCATTATCATCGGTTTATCAGCTTACAACTATCAGCGAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "2[90]",
+      "end": "0[77]",
+      "sequence": "GGGGTCGACGGGGTTAACAGTGCCCGTATAAAAGAATTGCCCAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "26[90]",
+      "end": "24[77]",
+      "sequence": "CGTAACGTACCGTAGTATTCTAAGAACGCACAAGCAAACCAAAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "14[90]",
+      "end": "12[77]",
+      "sequence": "CAACATGTTAATTGAAATCCAATCGCAAGTATCAAAGCTGAGAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "27[36]",
+      "end": "29[48]",
+      "sequence": "CAGAGCTTTAGTATAAGTGCCGTCGATTGCCACCTGAAT",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 13,
+      "start": "34[103]",
+      "end": "32[91]",
+      "sequence": "TGTGCTGATCGGTTTCTGGTGCCGGAAATTTTATGTGAG",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 13,
+      "start": "49[63]",
+      "end": "50[49]",
+      "sequence": "ATTAAATCCAATATCTTTAGGAGCACTTGTTAAATTTTTTA",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 13,
+      "start": "35[91]",
+      "end": "31[104]",
+      "sequence": "GAAGGGCGCAAGGCGTTACATTTAACAATTTCAATATCCCTTAG",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 13,
+      "start": "59[91]",
+      "end": "55[104]",
+      "sequence": "CAAGAGTCATTCAGTTCATAATCAAAATCACCGCCACCCACCAC",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 13,
+      "start": "30[76]",
+      "end": "35[90]",
+      "sequence": "GCCATTCTAAAATCGTCGCTATTAATTAACCAGGCTGTTGG",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 13,
+      "start": "31[63]",
+      "end": "32[49]",
+      "sequence": "TACCTTTGCATGGCTAGTACCCGTATATATACAGAACGGAT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 13,
+      "start": "59[49]",
+      "end": "55[62]",
+      "sequence": "CTCATTATAGTAAACGGCATTTTCGGTCAATGAAACTTAGCA",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 13,
+      "start": "66[76]",
+      "end": "71[90]",
+      "sequence": "ATTTTTTGGGAACGAGGCGCAGACGGTCAAATAAAAATAGC",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 13,
+      "start": "38[48]",
+      "end": "36[35]",
+      "sequence": "TAAATCCAACAAAGAGATACCGATAGTTGCATATTCGCTCAGCA",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 13,
+      "start": "42[76]",
+      "end": "47[90]",
+      "sequence": "TTCTTTGCAGAAGCCTTTATTTCAACGGTTGTAGTGCCTGA",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 13,
+      "start": "55[63]",
+      "end": "56[49]",
+      "sequence": "AGGCCGGGGCGTTGGGAAGAAAAATCTATTACCACATCGAT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 13,
+      "start": "54[76]",
+      "end": "59[90]",
+      "sequence": "CAGACCAAACCACCCTCAGAGCCGCCAGATGAACCCTTCAT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 13,
+      "start": "43[63]",
+      "end": "44[49]",
+      "sequence": "GTTTGACATTCTGACCTGAAAGCGTAAACGAGTAAATGGTC",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 13,
+      "start": "47[91]",
+      "end": "43[104]",
+      "sequence": "GTAGAAGATTGCAACTTAGCAAAATTAAGCAAAACATTAAAAAT",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 13,
+      "start": "50[48]",
+      "end": "48[35]",
+      "sequence": "ACCAATAAACATTAATTGCTGAACCTCAAAAACAGTTTAATAGA",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 13,
+      "start": "47[49]",
+      "end": "43[62]",
+      "sequence": "CCAACAGTCAATCGTAGTAGCATTAACATTTTCGCAGATTTA",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 14,
+      "start": "48[76]",
+      "end": "53[90]",
+      "sequence": "TGATAGCTTGTATCGGCCTCAGGAAGATTAATGCAAAATAC",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 14,
+      "start": "53[91]",
+      "end": "49[104]",
+      "sequence": "CGAACGACAACAGTGGGCGGATTGACCGTACCGTGCATCCAGCC",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "45[36]",
+      "end": "47[48]",
+      "sequence": "AATTCTTGTTTAGCCCAATTCTGCGAGAATACATTCTGG",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "46[103]",
+      "end": "44[91]",
+      "sequence": "CCAGCCAACTCAAACGCAAATTAACCCAAGGATATGACC",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "53[49]",
+      "end": "49[62]",
+      "sequence": "ATTGAGGCATCACCATGTGAGCGAGTAACCAGCTCAATTCGC",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 14,
+      "start": "39[36]",
+      "end": "41[48]",
+      "sequence": "TTGCGGTTTGCCCATAATACATTTGAGTCACCGTCGCTG",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "52[103]",
+      "end": "50[91]",
+      "sequence": "CGCCTGACCACCATGGCTATTAGTCTTCGCACTCTGCCA",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "51[36]",
+      "end": "53[48]",
+      "sequence": "TTCATCGGAACGCAACGTTAATATTTAACAACGAAAGGA",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "44[48]",
+      "end": "42[35]",
+      "sequence": "AATAACCACTAATAGTCTGAAATGGATTATAAGGGACGTGGCAC",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "56[48]",
+      "end": "54[35]",
+      "sequence": "AGCAGCAGTTTTCATTTGGGCTTGAGATGGATTTTAAATAAAAC",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "25[63]",
+      "end": "26[49]",
+      "sequence": "AGTATAGACGTCTTTCCAGAGCCTAATGAGGGTTCCGTACT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 14,
+      "start": "24[76]",
+      "end": "29[90]",
+      "sequence": "GTACCGCCCGTCGTCTTTCCAGACGTTGGTATTAAGCCGTT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 14,
+      "start": "57[36]",
+      "end": "59[48]",
+      "sequence": "TAGCGCCCGTAATCACCAGTAGCACCACGTTAGAACTGG",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "29[91]",
+      "end": "25[104]",
+      "sequence": "TTTATTTCTTATCCGACACTGAGTTTCGTCGCCCTCATGAATTT",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "29[49]",
+      "end": "25[62]",
+      "sequence": "CTTACCAGACTTGCTCATTTTCAGGGATATGTATCAGATATA",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 14,
+      "start": "28[103]",
+      "end": "26[91]",
+      "sequence": "AGAAGGTCATCGTCATTCCAAGAACGAGTAAATAGTTAG",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "64[103]",
+      "end": "62[91]",
+      "sequence": "TTAATGCAGTCAATATTTTAAATGCAAGCCATCGGAAAT",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "65[49]",
+      "end": "61[62]",
+      "sequence": "ACCCCGGTCATTGCAATAAGTTTATTTTGCTTATTAAAAGAA",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 14,
+      "start": "21[36]",
+      "end": "23[48]",
+      "sequence": "AACTCAAGCCGGATAATCATGGTCATCCAATCACAAGAA",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "32[48]",
+      "end": "30[35]",
+      "sequence": "TCGCCTGATTACCTGAAACGACGGCCAGTGTAGCGAGCCCGGGT",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "20[48]",
+      "end": "18[35]",
+      "sequence": "ACATACGCATTAATTATAAACAACATGTTCGTCCTGAAATAATC",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "65[91]",
+      "end": "61[104]",
+      "sequence": "CCGGAGACCGGAGAGACCAGCGCCAAAGACATATTGATTGGGAA",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "19[63]",
+      "end": "20[49]",
+      "sequence": "GTGAAATTCTTTACGAGCATGTAGAAAAGCTGTTCCACACA",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 14,
+      "start": "18[76]",
+      "end": "23[90]",
+      "sequence": "CCAACGCTGCGGGCAACAGCTGATTGCTACCAGTTGAGAAT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 14,
+      "start": "60[76]",
+      "end": "65[90]",
+      "sequence": "GTGTAGGGAATCACCGTCACCGACTTGATGCCTGAGAAAGG",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 14,
+      "start": "23[91]",
+      "end": "19[104]",
+      "sequence": "CGCCATAGAGAATATCCAGCTGCATTAATGGCGCCAGCCGCCTG",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "23[49]",
+      "end": "19[62]",
+      "sequence": "AAATAATGACGACAGCGTTGCGCTCACTGCACAATTTCCTGT",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 14,
+      "start": "22[103]",
+      "end": "20[91]",
+      "sequence": "TAATAATTTAACATTATACAAATTCTCCTTCAGGTGGTT",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "61[63]",
+      "end": "62[49]",
+      "sequence": "CTGGCATTAAAAGCCCCAAAAACAGGAATACCCACGCAGTA",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 14,
+      "start": "62[48]",
+      "end": "60[35]",
+      "sequence": "TGTTAGCCACCACGGCTGAGAGTCTGGAGCTGTCAATTATAAGC",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "15[36]",
+      "end": "17[48]",
+      "sequence": "AGCGAAAGGAAGCAAAATCAGGTCTTTAGAAATAAATAA",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "35[49]",
+      "end": "31[62]",
+      "sequence": "CGCTAGCCGTTGTAAGCAAAAGAAGATGAAAACAATTAACAG",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 14,
+      "start": "14[48]",
+      "end": "12[35]",
+      "sequence": "GATTAAGCCAGACCGATATTTTAGTTAATTCGTGTGAAAGCCTG",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "63[36]",
+      "end": "65[48]",
+      "sequence": "CAAAGAAAACGTACAATAATAACGGAAGATTGCATATGT",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "13[63]",
+      "end": "14[49]",
+      "sequence": "ATAGTCAAACACCGGAATCATAATTACTACCCTGTCAAAAA",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 14,
+      "start": "12[76]",
+      "end": "17[90]",
+      "sequence": "AAGAGTCGAAACTAAAGTACGGTGTCTTTAAGACATCATAG",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 14,
+      "start": "70[103]",
+      "end": "68[91]",
+      "sequence": "TAACTGACAGAGAATTTATCCCAATCCAATCAGCGACCT",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "17[91]",
+      "end": "13[104]",
+      "sequence": "GTCTGAGGCTGATGCCTCCTTTTGATAAGAATAATGCTTCATTC",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 14,
+      "start": "17[49]",
+      "end": "13[62]",
+      "sequence": "GGCGTTATTCAAATGAAGCAAACTCCAACGATTGCAACTATT",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 14,
+      "start": "16[103]",
+      "end": "14[91]",
+      "sequence": "GTAAATAGACTACGCGATAGCTTAGAGGAAGTTGTAGCT",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 14,
+      "start": "71[49]",
+      "end": "67[62]",
+      "sequence": "GAAGCCCGAGATAAAGAATACACTAAAACTTTTTCAACAGAG",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 15,
+      "start": "71[91]",
+      "end": "67[104]",
+      "sequence": "AGCCTTTAACACCCTAAGCGCGAAACAAAGGAAATCCTAAGGGA",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 15,
+      "start": "9[36]",
+      "end": "11[48]",
+      "sequence": "TAACCCCATAACGATTATTACAGGTAAGGCCAGGAACGG",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 15,
+      "start": "26[48]",
+      "end": "24[35]",
+      "sequence": "CAGGAGGCACCACCCGGGAGGTTTTGAAGCATTTTATGTTACAA",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 15,
+      "start": "8[48]",
+      "end": "6[35]",
+      "sequence": "GCAGATATCGTTTACCTTTCCTCGTTAGAATTAGACACCGAGTA",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 15,
+      "start": "37[63]",
+      "end": "38[49]",
+      "sequence": "TTAGACTAAGGCCGCTTTTGCGGGATCGGATTTACTCGTAT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 15,
+      "start": "7[63]",
+      "end": "8[49]",
+      "sequence": "GTTGAGAGAGTGTTTTTATAATCAGTGGAAAGATAACTAAT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 15,
+      "start": "6[76]",
+      "end": "11[90]",
+      "sequence": "AGGAAGGTTCCTCAAATGCTTTAAACAAACGTGGGGGCGCT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 15,
+      "start": "36[76]",
+      "end": "41[90]",
+      "sequence": "GAGTGAGTTTTTGCACGTAAAACAGAAAACAGTTAAGGAAT",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 15,
+      "start": "11[91]",
+      "end": "7[104]",
+      "sequence": "AGGGCGCGCGCCGCTAAGTTTTGCCAGAGGCTGCGGAAAAACGA",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 15,
+      "start": "11[49]",
+      "end": "7[62]",
+      "sequence": "TACGCCATAACGTGCAGACGACGATAAAACACATTCTCATCA",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 15,
+      "start": "10[103]",
+      "end": "8[91]",
+      "sequence": "CTTAATTGGCAAGGGGAAAGCCGGCGGTTCAGATCGTCA",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 15,
+      "start": "41[91]",
+      "end": "37[104]",
+      "sequence": "TGCGAATTAATTGTAGATGATGGCAATTCAATGGAAGAAATTGC",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 15,
+      "start": "41[49]",
+      "end": "37[62]",
+      "sequence": "AGGCTTGACAGCTTAACCACCAGAAGGAGTCGACAAGAAGTA",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 15,
+      "start": "3[36]",
+      "end": "5[48]",
+      "sequence": "GCGTCATAAAGCCATTGACAGGAGGTGGGCGGGATTATT",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 15,
+      "start": "40[103]",
+      "end": "38[91]",
+      "sequence": "AGCCTTAATAATTCTAAACAACTTTCATAAAGGGTTAGA",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 15,
+      "start": "2[48]",
+      "end": "0[35]",
+      "sequence": "TCCTCATTACATGGCAACCTATTATTCTGAGGATTAGGGTTTTG",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 15,
+      "start": "68[48]",
+      "end": "66[35]",
+      "sequence": "GTTTCCAGAGGCAAACCCACAAGAATTGAGATAGCTAACCAGAA",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 15,
+      "start": "1[63]",
+      "end": "2[49]",
+      "sequence": "ACGATTGCGAAAATCCTGTTTGATGGTTGAGGCAAAATAAA",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 15,
+      "start": "0[76]",
+      "end": "5[90]",
+      "sequence": "CAGCAGGGCGCACTAAATCGGAACCCTCGCTGGTTAGCCCG",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 15,
+      "start": "69[36]",
+      "end": "71[48]",
+      "sequence": "ACGAAATTAAACGGAACGAGGGTAGCAAAGTTTCTTACC",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 15,
+      "start": "5[91]",
+      "end": "1[104]",
+      "sequence": "AGATAGGCCCTTGAGCAGTGCAACGTCAAAAAATCAAAGCCCCC",
+      "printed_length": 44,
+      "extracted_length": 44
+    },
+    {
+      "page": 15,
+      "start": "5[49]",
+      "end": "1[62]",
+      "sequence": "CCGAAATATTTCGGTTTTGATGATACAGGCACAAACGGTCAG",
+      "printed_length": 42,
+      "extracted_length": 42
+    },
+    {
+      "page": 15,
+      "start": "4[103]",
+      "end": "2[91]",
+      "sequence": "TGGACTGTTGAGTAGCAAGCGGTCCAAAAGGGGTTTTTT",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 15,
+      "start": "33[36]",
+      "end": "35[48]",
+      "sequence": "ATTTCAATTGCTTAACGTCAGATGAAAGGATCGCAAGTC",
+      "printed_length": 39,
+      "extracted_length": 39
+    },
+    {
+      "page": 15,
+      "start": "67[63]",
+      "end": "68[49]",
+      "sequence": "GCTTTGAGTGTAAGCAGATAGCCGAACAACGGCTTGAGGAA",
+      "printed_length": 41,
+      "extracted_length": 41
+    },
+    {
+      "page": 15,
+      "start": "58[103]",
+      "end": "56[91]",
+      "sequence": "GCTGCTAATCTTGTTGAAAGAGGACACCAGAACCTCAGA",
+      "printed_length": 39,
+      "extracted_length": 39
+    }
+  ],
+  "unique_endpoint_pairs": 144,
+  "printed_length_counts": {
+    "70": 24,
+    "74": 24,
+    "42": 24,
+    "39": 24,
+    "41": 24,
+    "44": 24
+  },
+  "length_discrepancies": [
+    {
+      "page": 13,
+      "start": "56[90]",
+      "end": "54[77]",
+      "sequence": "ACCGCCACATCTTTGAATAAGGCTTGCCCTGGCTGAGGTGTAAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "62[90]",
+      "end": "60[77]",
+      "sequence": "TATTCATATGGTTTGGTAGCTATTTTTGAAAGGGTGAGTAATAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "44[90]",
+      "end": "42[77]",
+      "sequence": "CTGTAATCAAAGAAAGGAAAAACGCTCATCATCACTCAATACAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "50[90]",
+      "end": "48[77]",
+      "sequence": "GTTTGAGAACAAACCCACGCTGAGAGCCAGCCATTAGCGAACAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "8[90]",
+      "end": "6[77]",
+      "sequence": "TAAATATGCAAAAGACAGGGCGCGTACTAAAGGAGCCGAGAAAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "32[90]",
+      "end": "30[77]",
+      "sequence": "TGAATAAAAATTAAATTAAGTTGGGTAACTGCGCAACAAAGCAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "68[90]",
+      "end": "66[77]",
+      "sequence": "GCTCCATTTATACCGAACAAAGTCAGAGGAAAATGAGAAACGAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "20[90]",
+      "end": "18[77]",
+      "sequence": "TTTCTTTTGTCGTGAAAGTACCGACAAAAGCTTAATATAAAGAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "38[90]",
+      "end": "36[77]",
+      "sequence": "ACCTACCATTATCATCGGTTTATCAGCTTACAACTATCAGCGAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "2[90]",
+      "end": "0[77]",
+      "sequence": "GGGGTCGACGGGGTTAACAGTGCCCGTATAAAAGAATTGCCCAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "26[90]",
+      "end": "24[77]",
+      "sequence": "CGTAACGTACCGTAGTATTCTAAGAACGCACAAGCAAACCAAAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    },
+    {
+      "page": 13,
+      "start": "14[90]",
+      "end": "12[77]",
+      "sequence": "CAACATGTTAATTGAAATCCAATCGCAAGTATCAAAGCTGAGAAATTATCTACCACAACTCAC",
+      "printed_length": 42,
+      "extracted_length": 63
+    }
+  ],
+  "interpretation": "Twelve printed42 rows contain63bases:42base prefix plus shared21base suffix AAATTATCTACCACAACTCAC. Rendered p13 colors the added suffix blue, identified as fluorophore handle by Table1 caption. Printed length omits this handle; no sequence corrected. Not a routing, complementarity or complete variant validation.",
+  "remaining_checks": [
+    "Read colored routing map and verify scaffold/staple paths.",
+    "Identify exact handle subsets/replacements for0/12/24outer handle variants.",
+    "Verify separate fluor/lipid-conjugate oligonucleotides and scaffold sequence.",
+    "Inspect Note1 curvature derivation/code separately; no simulation performed."
+  ]
+}

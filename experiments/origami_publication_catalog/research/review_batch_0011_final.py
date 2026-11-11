@@ -1,0 +1,22 @@
+"""Close B0011 first-pass queue without claiming full source or discovery closure."""
+import json
+import ledger as L
+from review_batch_0001 import evidence
+NOTES=[('10.1073/pnas.1318602111', 'design_sources_reviewed', 'design_bearing', 'journal_article', 'https://natecermak.github.io/downloads/pub_pdfs/olcum-weighing-2014.pdf', 'olcum-2014-weighing-author.pdf', 'Main Preparation of DNA Origami; appended SI sections14–16, FigsS12/S13 and sequence-table introduction', 'Author-hosted PDF includes main article and SI. M13mp18 origami is used to bind gold particles for mass/yield measurement. Main text describes two/three binding-site variants; SI FigS13 also identifies a one-site sample. Section16 explicitly replaces HA856,901,902,851,896,897,861,906,907 with HA1057–1065 hook staples. Core geometry and per-variant subsets require visual-map tracing; the full table has not been certified. Distinguish core, binding-site modifications and particle occupancy outcomes. Scaffold/staple mixing ratio1:5 does not establish sequence completeness.'), ('10.1080/10408347.2014.910636', 'metadata_screened', 'background_or_review', 'review_article', 'https://pubmed.ncbi.nlm.nih.gov/25391721/', 'batch_0011_final_more.json', 'Primary PubMed abstract and publication type via search', 'Primary abstract explicitly describes a review of DNA nanofabrication history and electronics applications. Retain as literature background and discovery source; no original origami design is established by the inspected abstract. Full text and complete citation/design attribution review remain outstanding. Legacy January1date is not verified; precise first-publication date remains unresolved.'), ('10.1088/0034-4885/77/4/046603', 'fulltext_reviewed', 'background_or_review', 'review_article', 'https://pmc.ncbi.nlm.nih.gov/articles/4112545/', 'batch_0011_tensegrity_detail.json', 'Primary Abstract/Introduction and section5.4 Tensegrity and Design of Man-Made Structures', 'Article reviews tensegrity across cellular/molecular scales. Section5.4 attributes the100nm three-strut origami tensegrity example to Liedl et al2010 and distinguishes other DNA self-assembly examples from origami. This is review attribution, not a newly executed origami design in this article. Complete bibliography enumeration and exact primary-target reconciliation remain open.')]
+def main():
+ pubs={p['registry_key']:p for p in L.read('publication_reviews')}
+ for key,stage,rel,ptype,url,name,loc,note in NOTES:
+  path=L.ROOT/'assets/research-20261105'/name if name.endswith('.pdf') else L.HERE/name
+  p=pubs[key];p.update(review_stage=stage,relevance=rel,publication_type=[ptype],design_contributions=['uncertain'] if rel=='design_bearing' else [],catalog_eligibility='unresolved',access='partial',evidence=[evidence(path,url,loc)],rationale=note,unresolved_questions=['Inspect complete primary sources and exact core/variant compositions or review attributions.','Enumerate all references and follow forward/counterpart leads.'],reviewer='Codex named primary sections; abstract-only review explicitly identified',run_id='B0011',date=L.DATE)
+  L.upsert('publication_reviews',p,'Record last balanced-batch first passes with inspection-depth limits')
+ b=next(b for b in L.read('batches') if b['batch_id']=='B0011')
+ saved={p['registry_key']:p for p in L.read('publication_reviews')}
+ assert len(b['input_keys'])==25
+ assert all(saved[k]['review_stage']!='unreviewed' and saved[k]['run_id']=='B0011' for k in b['input_keys'])
+ b.update(status='completed',unresolved_keys=[k for k in b['input_keys'] if saved[k]['unresolved_questions']],after_counts=L.counts(),validation=[L.validate()],next_queue=['FNANO2012 transcription/abstract acquisition and conference counterparts','B0011 complete source and bibliography follow-ups; unresolved DACCAD/short-scaffold/strand-break scope','Select next balanced screening batch; continue uncapped citation and author routes'])
+ action='All25B0011 first passes saved:15ACS plus10rotating records. Source/composition and bibliography follow-ups remain open.'
+ if action not in b['completed_actions']:b['completed_actions'].append(action)
+ L.upsert('batches',b,'Complete first-pass queue only; preserve all unresolved follow-up keys')
+ out=dict(batch_id='B0011',first_pass_count=25,input_count=25,unresolved_followup_count=len(b['unresolved_keys']),complete_source_certifications=0,validation=L.validate(),counts=L.counts())
+ L.atomic(L.HERE/'batch_0011_complete_audit.json',json.dumps(out,indent=2)+'\n');print(out)
+if __name__=='__main__':main()

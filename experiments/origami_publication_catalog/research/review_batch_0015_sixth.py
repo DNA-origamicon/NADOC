@@ -1,0 +1,19 @@
+"""Distinguish nonorigami uptake controls from origami-mediated MT assemblies."""
+import json
+import ledger as L
+from review_batch_0001 import evidence
+ROWS=[
+('10.1021/acscentsci.9b00174','14994425-oc9b00174_si_001.pdf','14994425','SI contents; sectionIII Table S-I and assembly methods pp5–9; sectionXIII references p93','not_origami','Inspected assembly methods specify four oligos S1–S4 for tetrahedra and four clips1AB–4AB for cubes. Table S-I lists dye-position,HEG and other chemical modifications; these are not origami scaffold/staple constructs. Purified tetrahedron is a purification state rather than a separate designed core. The study remains methodologically relevant to interpretation of fluorescent uptake and degradation but does not establish an origami design in inspected source sections. Same-agent exclusion audit rechecked actual component lists and assembly methods. Main article and remaining SI results not fully inspected; no absence claim based solely on keyword search.'),
+('10.1021/acs.nanolett.9b01201','15052847-nl9b01201_si_001.pdf','15052847','SI preparation of6HB ppS2–S3; referencesS4; TableS1 selected entriesS5; FigS1 ten-panel captions and terminal diagram; FigS2–S4 captions','design_bearing','SI reports an original6-helix bundle folding pattern designed with reference to Douglas/Chou/Shih2007 and caDNAno crossover suggestions. M13mp18 scaffold and acceptor-bearing staples are specified; selected TableS1 rows carry TTTT+(CAA)5 extensions complementary to(TTG)5-modified microtubules. Do not infer every k-suffixed staple carries that extension: inspected15k/18k entries do not. FigS1 distributes routing across ten panels. Mono-/di-block microtubules, asters and kinesin-driven network contraction are higher-level protein/DNA assemblies and conditions, not independently established origami cores. Complete staple/map reconciliation, exact scaffold length, extension-site count, native file availability and narrow lattice eligibility remain open.')]
+def main():
+ pubs={p['registry_key']:p for p in L.read('publication_reviews')}
+ for key,name,fid,loc,rel,note in ROWS:
+  p=pubs[key];ev=evidence(L.ROOT/'assets/sources/acs-expansion-20261104'/name,'https://ndownloader.figshare.com/files/'+fid,loc)
+  if ev not in p['evidence']:p['evidence'].append(ev)
+  p.update(title=p['legacy_record']['publication'],review_stage='design_sources_reviewed',relevance=rel,design_contributions=['new_design'] if rel=='design_bearing' else [],catalog_eligibility='unresolved' if rel=='design_bearing' else 'excluded',access='partial',rationale=note,unresolved_questions=['Inspect main article, full source tables and upstream sources; reconcile all object and variant identities.','Audit source completeness/lattice where applicable; follow backward/forward citations and author histories.'],reviewer='Codex named SI methods/sequence entries; same-agent exclusion audit',run_id='B0015',date=L.DATE)
+  L.upsert('publication_reviews',p,'Record construct-based relevance and explicit source-inspection limits')
+ b=next(b for b in L.read('batches') if b['batch_id']=='B0015');b['completed_actions'].append('Inputs10–11 inspected: fluorescent uptake nonorigami exclusion and6HB microtubule assembly source;11of25 first passes.')
+ b.update(after_counts=L.counts(),validation=[L.validate()],next_queue=['acsnano.9b01561 and remaining4ACS;10rotating2015 inputs','FNANO2010 enumeration;234CV identity leads and all previous source/citation followups'])
+ L.upsert('batches',b,'Save11of25 first-pass coverage')
+ L.atomic(L.HERE/'batch_0015_sixth_audit.json',json.dumps(dict(reviewed_keys=[r[0] for r in ROWS],first_pass_count=11,input_count=25,exclusion_audit='Same-agent check of oc9b00174 Table S-I and assembly methods pp5–9; main pending',validation=L.validate(),counts=L.counts()),indent=2)+'\n');print(L.validate())
+if __name__=='__main__':main()

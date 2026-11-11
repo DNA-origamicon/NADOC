@@ -1,0 +1,1879 @@
+{
+  "evidence": {
+    "local_file": "assets/sources/acs-expansion-20261104/18533306-nl9b02786_si_001.pdf",
+    "sha256": "16246e47ed9ac68ba44dd0690a59448d4d55dce3e7344c2767a1b4a410313f60",
+    "url": "https://ndownloader.figshare.com/files/18533306",
+    "locator": "SI1-26text/captions read; TablesS1/S2 organization and selected functional rows34,41,42,46,47read. FigureS20PDF35 visually inspected; individual bases and allwrapped sequences not independently audited."
+  },
+  "named_rows": {
+    "S1": [
+      {
+        "name": "Core1",
+        "pdf_page": 26
+      },
+      {
+        "name": "Core2",
+        "pdf_page": 26
+      },
+      {
+        "name": "Core3",
+        "pdf_page": 26
+      },
+      {
+        "name": "Core4",
+        "pdf_page": 26
+      },
+      {
+        "name": "Core5",
+        "pdf_page": 26
+      },
+      {
+        "name": "Core6",
+        "pdf_page": 26
+      },
+      {
+        "name": "Core7",
+        "pdf_page": 26
+      },
+      {
+        "name": "Core8",
+        "pdf_page": 26
+      },
+      {
+        "name": "Core9",
+        "pdf_page": 26
+      },
+      {
+        "name": "Core10",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core11",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core12",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core13",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core14",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core15",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core16",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core17",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core18",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core19",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core20",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core21",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core22",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core23",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core24",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core25",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core26",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core27",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core28",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core29",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core30",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core31",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core32",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core33",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core34",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core35",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core36",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core37",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core38",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core39",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core40",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core41",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core42",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core43",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core44",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core45",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core46",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core47",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core48",
+        "pdf_page": 27
+      },
+      {
+        "name": "Core49",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core50",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core51",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core52",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core53",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core54",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core55",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core56",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core57",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core58",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core59",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core60",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core61",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core62",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core63",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core64",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core65",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core66",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core67",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core68",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core69",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core70",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core71",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core72",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core73",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core74",
+        "pdf_page": 28
+      },
+      {
+        "name": "Core75",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core76",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core77",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core78",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core79",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core80",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core81",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core82",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core83",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core84",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core85",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core86",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core87",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core88",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core89",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core90",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core91",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core92",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core93",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core94",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core95",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core96",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core97",
+        "pdf_page": 29
+      },
+      {
+        "name": "Core98",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core99",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core100",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core101",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core102",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core103",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core104",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core105",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core106",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core107",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core108",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core109",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core110",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core111",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core112",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core113",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core114",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core115",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core116",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core117",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core118",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core119",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core120",
+        "pdf_page": 30
+      },
+      {
+        "name": "Core121",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core122",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core123",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core124",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core125",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core126",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core127",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core128",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core129",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core130",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core131",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core132",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core133",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core134",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core135",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core136",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core137",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core138",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core139",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core140",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core141",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core142",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core143",
+        "pdf_page": 31
+      },
+      {
+        "name": "Core144",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core145",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core146",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core147",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core148",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core149",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core150",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core151",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core152",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core153",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core154",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core155",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core156",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core157",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core158",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core159",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core160",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core161",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core162",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core163",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core164",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core165",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core166",
+        "pdf_page": 32
+      },
+      {
+        "name": "Core167",
+        "pdf_page": 33
+      },
+      {
+        "name": "Core168",
+        "pdf_page": 33
+      },
+      {
+        "name": "Core169",
+        "pdf_page": 33
+      },
+      {
+        "name": "Core170",
+        "pdf_page": 33
+      },
+      {
+        "name": "Core171",
+        "pdf_page": 33
+      }
+    ],
+    "S2": [
+      {
+        "name": "Core1",
+        "pdf_page": 35
+      },
+      {
+        "name": "Core2",
+        "pdf_page": 35
+      },
+      {
+        "name": "Core3",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core4",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core5",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core6",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core7",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core8",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core9",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core10",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core11",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core12",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core13",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core14",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core15",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core16",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core17",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core18",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core19",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core20",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core21",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core22",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core23",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core24",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core25",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core26",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core27",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core28",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core29",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core30",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core31",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core32",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core33",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core34",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core35",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core36",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core37",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core38",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core39",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core40",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core41",
+        "pdf_page": 36
+      },
+      {
+        "name": "Core42",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core43",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core44",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core45",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core46",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core47",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core48",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core49",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core50",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core51",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core52",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core53",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core54",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core55",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core56",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core57",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core58",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core59",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core60",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core61",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core62",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core63",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core64",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core65",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core66",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core67",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core68",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core69",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core70",
+        "pdf_page": 37
+      },
+      {
+        "name": "Core71",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core72",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core73",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core74",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core75",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core76",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core77",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core78",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core79",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core80",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core81",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core82",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core83",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core84",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core85",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core86",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core87",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core88",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core89",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core90",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core91",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core92",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core93",
+        "pdf_page": 38
+      },
+      {
+        "name": "Core94",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core95",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core96",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core97",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core98",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core99",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core100",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core101",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core102",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core103",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core104",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core105",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core106",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core107",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core108",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core109",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core110",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core111",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core112",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core113",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core114",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core115",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core116",
+        "pdf_page": 39
+      },
+      {
+        "name": "Core117",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core118",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core119",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core120",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core121",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core122",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core123",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core124",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core125",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core126",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core127",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core128",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core129",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core130",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core131",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core132",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core133",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core134",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core135",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core136",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core137",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core138",
+        "pdf_page": 40
+      },
+      {
+        "name": "Core139",
+        "pdf_page": 40
+      },
+      {
+        "name": "top_OH_poly_set1_1",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set1_2",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set1_3",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set1_4",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set1_1",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set1_2",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set1_3",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set1_4",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set2_1",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set2_2",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set2_3",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set2_4",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set2_1",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set2_2",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set2_3",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set2_4",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set3_1",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set3_2",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set3_3",
+        "pdf_page": 42
+      },
+      {
+        "name": "top_OH_poly_set3_4",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set3_1",
+        "pdf_page": 42
+      },
+      {
+        "name": "bot_OH_poly_set3_2",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set3_3",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set3_4",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set4_1",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set4_2",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set4_3",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set4_4",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set4_1",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set4_2",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set4_3",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set4_4",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set5_1",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set5_2",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set5_3",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set5_4",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set5_1",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set5_2",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set5_3",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set5_4",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set6_1",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set6_2",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set6_3",
+        "pdf_page": 43
+      },
+      {
+        "name": "top_OH_poly_set6_4",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set6_1",
+        "pdf_page": 43
+      },
+      {
+        "name": "bot_OH_poly_set6_2",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_poly_set6_3",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_poly_set6_4",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_poly_set7_1",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_poly_set7_2",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_poly_set7_3",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_poly_set7_4",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_poly_set8_1",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_poly_set8_2",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set1_1",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set1_2",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set1_3",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set1_4",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_rep_set1_1",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_rep_set1_2",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_rep_set1_3",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_rep_set1_4",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set2_1",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set2_2",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set2_3",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set2_4",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_rep_set2_1",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_rep_set2_2",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_rep_set2_3",
+        "pdf_page": 44
+      },
+      {
+        "name": "bot_OH_rep_set2_4",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set3_1",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set3_2",
+        "pdf_page": 44
+      },
+      {
+        "name": "top_OH_rep_set3_3",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set3_4",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set3_1",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set3_2",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set3_3",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set3_4",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set4_1",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set4_2",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set4_3",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set4_4",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set4_1",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set4_2",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set4_3",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set4_4",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set5_1",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set5_2",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set5_3",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set5_4",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set5_1",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set5_2",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set5_3",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set5_4",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set6_1",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set6_2",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set6_3",
+        "pdf_page": 45
+      },
+      {
+        "name": "top_OH_rep_set6_4",
+        "pdf_page": 45
+      },
+      {
+        "name": "bot_OH_rep_set6_1",
+        "pdf_page": 46
+      },
+      {
+        "name": "bot_OH_rep_set6_2",
+        "pdf_page": 46
+      },
+      {
+        "name": "bot_OH_rep_set6_3",
+        "pdf_page": 46
+      },
+      {
+        "name": "bot_OH_rep_set6_4",
+        "pdf_page": 46
+      },
+      {
+        "name": "bot_OH_rep_set7_1",
+        "pdf_page": 46
+      },
+      {
+        "name": "bot_OH_rep_set7_2",
+        "pdf_page": 46
+      },
+      {
+        "name": "bot_OH_rep_set7_3",
+        "pdf_page": 46
+      },
+      {
+        "name": "bot_OH_rep_set7_4",
+        "pdf_page": 46
+      },
+      {
+        "name": "bot_OH_rep_set8_1",
+        "pdf_page": 46
+      },
+      {
+        "name": "bot_OH_rep_set8_2",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set1_1",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set1_2",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set1_3",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set1_4",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set2_1",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set2_2",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set2_3",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set2_4",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set2_5",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set2_6",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set2_7",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set2_8",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_1",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_2",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_3",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_4",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_5",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_6",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_7",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_8",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_9",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_10",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_11",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set3_12",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set6_1",
+        "pdf_page": 46
+      },
+      {
+        "name": "Zag_Poly_set6_2",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_3",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_4",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_5",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_6",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_7",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_8",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_9",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_10",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_11",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_12",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_13",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_14",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_15",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_16",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_17",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_18",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_19",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_20",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_21",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_22",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_23",
+        "pdf_page": 47
+      },
+      {
+        "name": "Zag_Poly_set6_24",
+        "pdf_page": 47
+      }
+    ]
+  },
+  "limitations": "Name/page index only. Core IDs restart between routing pools. S2 has54polymerizationoverhang and54replacement names plus48separateZag connectors; not one simultaneous mixture. Wrapped sequence bases and repeatedsite labels not resolved."
+}
