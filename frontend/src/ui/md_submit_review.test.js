@@ -208,6 +208,23 @@ describe('submit guard (double-submit prevention)', () => {
     return { card, api, onSubmitStart, onSubmitEnd, release: () => resolveSubmit?.() }
   }
 
+  it('keeps the summary to ETA, cost and speed with collapsed editable settings', async () => {
+    const { card } = mount()
+    await card.open('j1')
+    const summary = document.querySelector('[data-submit-metrics]')
+    expect(summary).not.toBeNull()
+    expect(summary.textContent).toContain('ETA')
+    expect(summary.textContent).toContain('Cost')
+    expect(summary.textContent).toContain('Estimated speed')
+    expect(summary.children).toHaveLength(3)
+    expect(document.querySelector('#mr-edit').hidden).toBe(true)
+    expect(document.querySelector('[aria-label="Estimate details"]').title).toContain('System:')
+    document.querySelector('#mr-edit-toggle').click()
+    expect(document.querySelector('#mr-edit').hidden).toBe(false)
+    expect(document.querySelector('#mr-cores').value).not.toBe('')
+    card.dispose()
+  })
+
   it('closes the card immediately on submit instead of holding it open for the upload', async () => {
     const { card, onSubmitStart, release } = mount()
     await card.open('j1')

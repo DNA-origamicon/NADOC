@@ -1,4 +1,4 @@
-import { el } from './primitives/dom.js'
+import { el, createInput, createButton } from './primitives/index.js'
 import { formatHours, formatUsd } from './md_job_wizard_runpod_model.js'
 
 export function quoteSummary(quote) {
@@ -69,11 +69,13 @@ export function initRuntimeComparison({ mount, fetchPreview, getShape, getPartit
       ['Upload Mbps', upload, v => { upload = v }], ['Download Mbps', download, v => { download = v }],
     ]) {
       const l = el('label', { text: `${label} ` })
-      const input = el('input', { attrs: { type: 'number', min: '.1', step: '1', value: String(value), style: 'width:65px' } })
+      const input = createInput({ type: 'number', size: 'sm', min: .1, step: .1, value })
+      input.style.width = '90px'
+      input.setAttribute('aria-label', label)
       input.addEventListener('change', () => { if (Number(input.value) > 0) { update(Number(input.value)); onAssumptionsChange({ upload_mbps: upload, download_mbps: download }); void refresh() } })
       l.appendChild(input); controls.appendChild(l)
     }
-    const button = el('button', { text: 'Refresh prices', attrs: { type: 'button', disabled: busy } })
+    const button = createButton({ label: 'Refresh prices', size: 'sm', disabled: busy })
     button.addEventListener('click', () => { key = ''; void refresh() })
     controls.appendChild(button); mount.appendChild(controls)
   }

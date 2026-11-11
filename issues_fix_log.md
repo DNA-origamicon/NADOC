@@ -1,5 +1,23 @@
 # Issues fix log
 
+## ISSUE-183 — Transfer inputs and compact Alpine submission review (2026-11-11)
+
+- [x] User requested standard upload/download fields and a submission popup focused
+  on ETA, cost and speed, with collapsed settings and tooltip explanations.
+- [x] Reproduced unstyled numeric transfer controls with a failing regression.
+  Shared input/button factories now supply the appearance; step 0.1 aligns with min 0.1.
+- [x] Alpine review exposes only three estimate rows by default. Settings retains
+  editable resource values and partition re-sizing; explanatory metadata and passing
+  clearance diagnostics live in the question-mark tooltip. Required clearance decisions
+  and submission errors remain visible. Numeric shortcut blocking now recognizes this dialog.
+- Root cause: raw transfer inputs bypassed shared styling; the review printed all
+  fourteen estimate/resource rows and explanatory notes at the same visual priority.
+- App verified: real wizard transfer controls; real review component with representative
+  estimates, expanded settings and cancel only. No job submission. Evidence:
+  `.development-artifacts/submit-review-20261111/`.
+- [x] 10,308 frontend tests passed / 1 skipped; 36 focused tests passed; live UI check passed; 25 smoke checks passed; lint and diff checks passed.
+  Source unchanged and scratch cleanup verified. `main.js` LOC delta: 0.
+
 ## ISSUE-182 — Numeric shortcut scope and interrupted temperature edits (2026-11-10)
 
 - [x] User requested number shortcuts disabled in popups and editable fields, and

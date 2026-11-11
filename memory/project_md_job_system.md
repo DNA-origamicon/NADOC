@@ -19,6 +19,19 @@ Prepared-input evidence and execution guards remain intact; the list no longer
 shows this advisory for expected runtime package changes such as resource reports
 and the minimized settle-restraint reference.
 
+## Transfer fields and Alpine submission review (2026-11-11)
+
+Tab 1 transfer-rate inputs now use standard dark numeric controls with visible
+values and valid 0.1 Mbps increments. The Alpine submission review shows ETA,
+allocation cost (SU) and estimated speed by default. Its collapsed Settings section
+retains partition/resource edits and re-sizing; estimate assumptions, hardware,
+walltime and successful clearance checks are in the question-mark tooltip.
+Clearance decisions requiring acknowledgment and submission errors remain visible.
+The review has dialog semantics so number shortcuts stay blocked while it is open.
+10,308 frontend tests passed / 1 skipped; 36 focused tests passed; live UI check passed; 25 smoke checks passed; lint and diff checks passed.
+Source unchanged, scratch cleanup verified, no jobs submitted. `main.js` LOC delta: 0.
+Evidence: `.development-artifacts/submit-review-20261111/` (ISSUE-183).
+
 ## Job-wizard temperature controls (2026-11-10)
 
 Temperature now lives in the NAMD and oxDNA wizard settings panels (tab 2 for

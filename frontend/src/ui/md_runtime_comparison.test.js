@@ -48,6 +48,9 @@ describe('runtime comparison', () => {
     const ui = initRuntimeComparison({ mount, fetchPreview, onAssumptionsChange,
       getShape: () => ({ stages: [{ steps: 100 }], upload_mbps: 20, download_mbps: 80 }) })
     const input = mount.querySelector('input')
+    expect(input.classList.contains('input--sm')).toBe(true)
+    expect(input.value).toBe('20')
+    expect(input.checkValidity()).toBe(true)
     input.value = '5'; input.dispatchEvent(new Event('change'))
     expect(onAssumptionsChange).toHaveBeenCalledWith({ upload_mbps: 5, download_mbps: 80 })
     expect(fetchPreview).toHaveBeenCalledWith(expect.objectContaining({ upload_mbps: 5 }))

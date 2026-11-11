@@ -276,37 +276,25 @@ export function initMdSubmitReview({
     _overlay.style.cssText =
       'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10000;display:flex;align-items:center;justify-content:center'
     const box = document.createElement('div')
+    box.setAttribute('role', 'dialog')
+    box.setAttribute('aria-modal', 'true')
+    box.setAttribute('aria-label', 'Submit job review')
     box.style.cssText =
-      `background:${_C.bg};border:1px solid ${_C.border};border-radius:6px;padding:16px;width:360px;` +
+      `background:${_C.bg};border:1px solid ${_C.border};border-radius:6px;padding:16px;width:440px;max-width:95vw;` +
       `max-height:90vh;overflow-y:auto;font-size:var(--text-xs);color:${_C.text}`
     box.innerHTML = `
       <div style="font-weight:600;font-size:13px;margin-bottom:10px">${ensemble ? `Ensemble production — ${count} replica${count === 1 ? '' : 's'}` : resume ? 'Resume from checkpoint — review' : 'Submit to Alpine — review'}</div>
       <div style="color:${_C.muted};margin-bottom:8px">${rec.design_name ?? jobId}</div>
-      ${ensemble ? `<div style="color:${_C.muted};margin-bottom:8px;line-height:1.4">Each replica runs the same per-replica resources below (shown for one). All ${count} submit as independent SLURM jobs with distinct seeds.</div>` : ''}
-      ${resume ? `<div style="color:${_C.warn};margin-bottom:8px;line-height:1.4">Resuming from the last checkpoint (skips completed segments; continues the interrupted one). Adjust walltime/resources below, then Resume.</div>` : ''}
-      <div style="background:${_C.panel};border:1px solid ${_C.border};border-radius:4px;padding:8px;margin-bottom:8px">
-        ${_row('System', s.system)}
-        ${_row('Simulation', s.totalNs)}
-        ${_row('Partition', s.partition)}
-        ${_row('Hardware', s.hardware)}
-        ${_row('Walltime per submission', s.walltime)}
-        ${_row('Time until results', s.completion)}
-        ${_row('Total allocation cost', s.totalCost)}
-        ${_row('Estimated compute', s.compute)}
-        ${_row('Planning allowance', s.planning)}
-        ${_row('QoS', s.qos)}
-        ${_row('Throughput', s.throughput)}
-        ${_row('Est. queue', s.queue)}
-        ${_row('Full compute cost', s.cost, _C.warn)}
-        ${_row('Cost with headroom', s.planningCost, _C.warn)}
+      <div data-submit-metrics style="background:${_C.panel};border:1px solid ${_C.border};border-radius:4px;padding:10px;margin-bottom:10px">
+        ${_row('ETA', s.completion !== 'unknown' ? s.completion : s.compute)}
+        ${_row('Cost', s.totalCost !== 'unknown' ? s.totalCost : s.planningCost)}
+        ${_row('Estimated speed', s.throughput)}
       </div>
-      <div style="color:${_C.dim};margin-bottom:8px">${s.safety}</div>
-      ${s.notes.length ? `<div style="color:${_C.muted};margin-bottom:8px;line-height:1.4">${s.notes.map(n => `• ${n}`).join('<br>')}</div>` : ''}
-
+      <button id="mr-details-help" class="btn btn--sm" type="button" aria-label="Estimate details" style="float:right;border-radius:50%;padding:0;width:22px;height:22px">?</button>
       <div id="mr-image-clearance"></div>
-      <button id="mr-edit-toggle" style="background:none;border:none;color:#58a6ff;cursor:pointer;padding:0;margin-bottom:6px;font-size:var(--text-xs)">${_ctx.editOpen ? '▾' : '▸'} Edit resources</button>
-      <div id="mr-edit" style="display:${_ctx.editOpen ? '' : 'none'};background:${_C.panel};border:1px solid ${_C.border};border-radius:4px;padding:8px;margin-bottom:8px">
-        <div style="color:${_C.dim};margin-bottom:6px">Change the partition to re-size on it; blank a field = keep auto value.</div>
+      <button id="mr-edit-toggle" style="background:none;border:none;color:#58a6ff;cursor:pointer;padding:0;margin-bottom:6px;font-size:var(--text-xs)">${_ctx.editOpen ? '▾' : '▸'} Settings</button>
+      <div id="mr-edit" ${_ctx.editOpen ? '' : 'hidden'} style="background:${_C.panel};border:1px solid ${_C.border};border-radius:4px;padding:8px;margin-bottom:8px">
+        <div style="color:${_C.dim};margin-bottom:6px">Compute resources</div>
         <label style="display:block;color:${_C.muted};margin-bottom:1px">Partition</label>
         <select id="mr-partition" style="width:100%;margin-bottom:6px;background:${_C.bg};border:1px solid ${_C.border};color:${_C.text};border-radius:3px;padding:3px 5px">${partOptsHtml}</select>
         ${_editField('GPUs', 'mr-gpus', r.gpus, 'number')}
@@ -325,14 +313,31 @@ export function initMdSubmitReview({
     _overlay.appendChild(box)
     document.body.appendChild(_overlay)
 
+    box.querySelector('#mr-details-help').title = [
+      `System: ${s.system}; simulation: ${s.totalNs}.`,
+      `Partition: ${s.partition}; hardware: ${s.hardware}; QoS: ${s.qos}.`,
+      `Walltime per submission: ${s.walltime}; ${s.safety}.`,
+      `Planning allowance: ${s.planning}; queue: ${s.queue}.`,
+      'SU are cluster allocation units, not dollars. ETA excludes unknown queue waits and retries.',
+      ...(ensemble ? [`Estimates are per replica; ${count} independent jobs will be submitted.`] : []),
+      ...(resume ? ['Resumes the last checkpoint, skipping completed segments.'] : []),
+      ...s.notes,
+    ].join('\n')
     const clearance = mountImageClearanceReview(box.querySelector('#mr-image-clearance'), rec.image_clearance, box.querySelector('#mr-go'))
+    if (clearance.canSubmit()) {
+      const passed = box.querySelector('#mr-image-clearance')
+      box.querySelector('#mr-details-help').title += `\n${passed.textContent}`
+      passed.hidden = true
+    }
     const errEl = box.querySelector('#mr-err')
     const editBody = box.querySelector('#mr-edit')
     const editToggle = box.querySelector('#mr-edit-toggle')
+    editToggle.setAttribute('aria-expanded', String(_ctx.editOpen))
     editToggle.onclick = () => {
-      const open = editBody.style.display !== 'none'
-      editBody.style.display = open ? 'none' : ''
-      editToggle.textContent = open ? '▸ Edit resources' : '▾ Edit resources'
+      const open = !editBody.hidden
+      editBody.hidden = open
+      editToggle.setAttribute('aria-expanded', String(!open))
+      editToggle.textContent = open ? '▸ Settings' : '▾ Settings'
       if (_ctx) _ctx.editOpen = !open
     }
     // Changing the partition re-sizes the whole request on the backend (kind/gpus/
@@ -411,7 +416,7 @@ export function initMdSubmitReview({
     const v = value == null ? '' : String(value)
     return (
       `<label style="display:block;color:${_C.muted};margin-bottom:1px">${label}</label>` +
-      `<input id="${id}" type="${type}" placeholder="${v}" ` +
+      `<input id="${id}" type="${type}" class="input input--sm" value="${v}" ` +
       `style="width:100%;margin-bottom:6px;background:${_C.bg};border:1px solid ${_C.border};color:${_C.text};border-radius:3px;padding:3px 5px">`
     )
   }
