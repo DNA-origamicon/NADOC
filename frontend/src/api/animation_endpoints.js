@@ -4,7 +4,7 @@
 // existing caller (`import { createAnimation } from '../api/client.js'`,
 // `import * as api from '../api/client.js'`) continues working unchanged.
 
-import { _request, _syncDesignAuthoringResponse, _syncFromAssemblyResponse } from './client.js'
+import { keyframeDeletionAPI, _request, _syncDesignAuthoringResponse, _syncFromAssemblyResponse } from './client.js'
 
 // ── Assembly configurations ──────────────────────────────────────────────────
 
@@ -64,8 +64,7 @@ export async function updateKeyframe(animId, kfId, patch) {
 }
 
 export async function deleteKeyframe(animId, kfId) {
-  const json = await _request('DELETE', `/design/animations/${animId}/keyframes/${kfId}`)
-  return _syncDesignAuthoringResponse(json, 'animations')
+  return keyframeDeletionAPI(false, animId, kfId)
 }
 
 export async function reorderKeyframes(animId, orderedIds) {
@@ -101,8 +100,7 @@ export async function updateAssemblyKeyframe(animId, kfId, patch) {
 }
 
 export async function deleteAssemblyKeyframe(animId, kfId) {
-  const json = await _request('DELETE', `/assembly/animations/${animId}/keyframes/${kfId}`)
-  return _syncFromAssemblyResponse(json)
+  return keyframeDeletionAPI(true, animId, kfId)
 }
 
 export async function reorderAssemblyKeyframes(animId, orderedIds) {

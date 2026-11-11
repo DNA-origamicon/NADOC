@@ -3767,3 +3767,18 @@ Evidence: `.development-artifacts/scaffold-sequence-scope-validation.json`.
   test; jitter-buffer, bounded-queue and interpolation tests. Popup Timing details
   expose remaining source/network/render stalls instead of guessing their cause.
   No native simulation settings, molecular coordinates or topology are authored.
+
+
+## Zoom volume persistence and animation output (2026-11-10)
+
+- [x] Per-entry +/- magnification was camera-local, zoom definitions disappeared
+  on document reload, and video export copied the main canvas without inset canvases.
+  Fullscreen presentation excluded overlays appended outside its viewport subtree.
+- User-requested correction: persist complete display-only inset definitions and
+  stable IDs in parts/assemblies; retain magnification through previews/playback;
+  compose ready insets into editor and photo animation frames; host DOM overlays
+  beneath the fullscreen viewport. Serialized writes protect rapid clicks against
+  stale full-document responses. Zoom remains adjustable during inset rebuilds.
+- Browser regressions verify independent lenses/limits, saved zoom, keyframe preview,
+  fullscreen hit testing and rendered export pixels. Evidence and remaining broad
+  validation debt: `.development-artifacts/zoom-volume-persistence/validation.json`.

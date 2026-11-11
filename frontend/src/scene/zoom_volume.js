@@ -1,3 +1,4 @@
+import { registerZoomVolumes } from './zoom_volume_export.js'
 import { PRESENTATION_EVENT } from './presentation_checkpoint_animation.js'
 import './zoom_volume.css'
 import * as THREE from 'three'
@@ -21,7 +22,7 @@ export function initZoomVolume(deps) {
   pane.append(section)
   const $ = key => section.querySelector(`#zoom-volume-${key}`)
   const entries = new Map()
-  let nextId = 0, disposed = false, renderer = null, boxEntryId = null
+  let nextId = 0, disposed = false, renderer = null, boxEntryId = null, restoring = false, saveGeneration = 0, pendingSaves = 0
   // One WebGL context for the entire list; per-entry canvases retain each image.
   function getInsetRenderer() {
     if (!renderer) {
@@ -46,15 +47,34 @@ export function initZoomVolume(deps) {
       button.title = `${all ? 'Hide' : 'Show'} all ${noun}`; button.setAttribute('aria-label', button.title)
     }
   }
+  function persist() {
+    if (restoring || disposed) return
+    const state = store.getState(), key = state.assemblyActive ? 'currentAssembly' : 'currentDesign', doc = state[key]
+    if (!doc || !store.setState) return
+    const volumes = [...entries.values()].map(entry => entry.snapshot())
+    const generation = ++saveGeneration
+    pendingSaves++
+    store.setState({ [key]: { ...doc, zoom_volumes: volumes } })
+    Promise.resolve(deps.api?.saveZoomVolumes?.(volumes, !!state.assemblyActive)).then(result => {
+      if (disposed || generation !== saveGeneration || store.getState()[key]?.id !== doc.id) return
+      if (result === null) throw new Error('Save refused')
+      // A concurrent full document response may predate this metadata write.
+      store.setState({ [key]: { ...store.getState()[key], zoom_volumes: volumes } })
+    }).catch(() => {
+      if (!disposed && generation === saveGeneration && store.getState()[key]?.id === doc.id) $('status').textContent = 'Zoom volume changes could not be saved. Change a setting to retry.'
+    }).finally(() => { pendingSaves = Math.max(0, pendingSaves - 1) })
+  }
   function remove(id) { entries.get(id)?.dispose(); entries.delete(id); if (boxEntryId === id) boxEntryId = null; updateVisibility() }
   function clear() { for (const id of entries.keys()) remove(id) }
-  function addEntry(initialize, name = null) {
+  function addEntry(initialize, name = null, savedId = null) {
     if (disposed) return null
-    const number = ++nextId, id = `zoom-${crypto.randomUUID()}`
+    const number = ++nextId, id = savedId ?? `zoom-${crypto.randomUUID()}`
     const entry = initZoomVolumeEntry({ ...deps, getInsetRenderer, parent: $('list'), id, name: name ?? `Zoom Volume ${number}`,
-      position: ['tr', 'tl', 'br', 'bl'][(number - 1) % 4], onDelete: () => remove(id), onVisibilityChange: updateVisibility })
-    if (!initialize(entry)) { entry.dispose(); $('status').textContent = 'Select an element first.'; return null }
-    entries.set(id, entry); updateVisibility(); $('status').textContent = ''
+      position: ['tr', 'tl', 'br', 'bl'][(number - 1) % 4], onDelete: () => { remove(id); persist() }, onVisibilityChange: updateVisibility, onChange: persist })
+    const wasRestoring = restoring; restoring = true
+    const initialized = initialize(entry); restoring = wasRestoring
+    if (!initialized) { entry.dispose(); $('status').textContent = 'Select an element first.'; return null }
+    entries.set(id, entry); updateVisibility(); $('status').textContent = ''; persist()
     return id
   }
   function capture() { return addEntry(entry => entry.capture()) }
@@ -68,6 +88,7 @@ export function initZoomVolume(deps) {
     const state = store.getState(), doc = state[state.assemblyActive ? 'currentAssembly' : 'currentDesign']
     const ids = detail?.documentId === doc?.id ? detail.zoomVolumeIds : null
     for (const [id, entry] of entries) entry.setPresentationVisible(Array.isArray(ids) ? ids.includes(id) : null)
+    detail?.waitUntil?.(settle())
   }
   window.addEventListener(PRESENTATION_EVENT, onPresentation)
   const onBox = event => setBox(event.detail)
@@ -76,17 +97,30 @@ export function initZoomVolume(deps) {
   for (const [control, key] of [['enable-all', 'enabled'], ['toggle-all', 'box']]) $(control).onclick = () => {
     const visible = ![...entries.values()].every(entry => entry.visibility(key))
     for (const entry of entries.values()) entry.setVisibility(key, visible)
-    updateVisibility()
+    updateVisibility(); persist()
   }
   updateVisibility()
   deps.assemblyRenderer?.onRebuildComplete?.(() => { if (!disposed) for (const entry of entries.values()) entry.refreshAssembly() })
+  function restoreDocument(doc) {
+    restoring = true; clear()
+    for (const value of doc?.zoom_volumes ?? []) {
+      addEntry(entry => entry.restore(value), value.name, value.id)
+      if (value.volume) boxEntryId = value.id
+    }
+    restoring = false
+  }
+  function settle() { return Promise.all([...entries.values()].map(entry => entry.settle())).then(results => results.every(Boolean)) }
+  const unregisterExport = registerZoomVolumes(deps.scene, { settle, draw: (...args) => { for (const entry of entries.values()) entry.draw(...args) } })
   const unsubscribe = store.subscribe((n, p) => {
-    if (n.assemblyActive !== p.assemblyActive || (n.assemblyActive ? n.currentAssembly?.id !== p.currentAssembly?.id : n.currentDesign?.id !== p.currentDesign?.id)) clear()
+    const doc = n[n.assemblyActive ? 'currentAssembly' : 'currentDesign'], prev = p[p.assemblyActive ? 'currentAssembly' : 'currentDesign']
+    if (n.assemblyActive !== p.assemblyActive || doc?.id !== prev?.id) restoreDocument(doc)
+    else if (!pendingSaves && doc?.zoom_volumes !== prev?.zoom_volumes && JSON.stringify(doc?.zoom_volumes ?? []) !== JSON.stringify([...entries.values()].map(entry => entry.snapshot()))) restoreDocument(doc)
   })
-  return { capture, setBox, clear, remove,
+  const initial = store.getState(); restoreDocument(initial[initial.assemblyActive ? 'currentAssembly' : 'currentDesign'])
+  return { visibleIds: () => [...entries].filter(([, entry]) => entry.visible()).map(([id]) => id), settle, capture, setBox, clear, remove,
     list: () => [...entries].map(([id, entry]) => ({ id, name: entry.name(), visible: entry.visibility('enabled') })),
     debugAtoms: () => [...entries.values()].flatMap(entry => entry.debugAtoms()),
     debug: () => ({ ...([ ...entries.values()].at(-1)?.debug() ?? {}), entries: [...entries].map(([id, entry]) => ({ id, ...entry.debug() })) }),
-    dispose() { disposed = true; window.removeEventListener(PRESENTATION_EVENT, onPresentation); window.removeEventListener('nadoc:zoom-volume-box', onBox); clear(); unsubscribe(); renderer?.dispose(); renderer?.forceContextLoss(); section.remove() },
+    dispose() { disposed = true; window.removeEventListener(PRESENTATION_EVENT, onPresentation); window.removeEventListener('nadoc:zoom-volume-box', onBox); clear(); unsubscribe(); unregisterExport(); renderer?.dispose(); renderer?.forceContextLoss(); section.remove() },
   }
 }

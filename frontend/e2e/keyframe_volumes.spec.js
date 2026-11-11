@@ -25,6 +25,12 @@ test('keyframe volume pickers drive insets and restore working visibility', asyn
   await page.locator('.right-tab-btn[data-tab="visualization"]').click()
   await page.locator('#zoom-volume-add').click()
   await expect.poll(() => page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().entries[0]?.ready)).toBe(true)
+  await page.getByRole('button', { name: 'Zoom in inset', exact: true }).click()
+  await page.getByRole('button', { name: 'Zoom in inset', exact: true }).click()
+  await expect.poll(() => page.evaluate(async () => {
+    const response = await fetch('/api/design', { headers: { 'X-NADOC-Doc': '__e2e__keyframe-volumes' } })
+    return (await response.json()).design.zoom_volumes?.[0]?.zoom_step
+  })).toBe(2)
   await page.locator('#view-volume-add-box').click()
   await expect.poll(() => page.evaluate(() => window.__nadocTest.store.getState().currentDesign.view_volumes?.length)).toBe(1)
   await page.locator('.left-tab-btn[data-tab="scene"]').click()
@@ -52,5 +58,32 @@ test('keyframe volume pickers drive insets and restore working visibility', asyn
   await row.locator('.anim-keyframe-title').click()
   await expect(page.locator('.zoom-volume-inset')).toBeVisible()
   await expect.poll(() => page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.layers().length)).toBeGreaterThan(0)
+  expect(await page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().entries[0].zoom)).toBe(1.25 ** 2)
+  await page.locator('#canvas').click({ position: { x: 10, y: 10 } })
+  await page.evaluate(async () => {
+    const api = await import('/src/api/client.js')
+    await api.createKeyframe(window.__nadocTest.store.getState().currentDesign.animations[0].id, { transition_duration_s: 0, hold_duration_s: 1 })
+  })
+  await page.locator('#anim-start-presentation-btn').click()
+  await expect(page.locator('#canvas-area')).toHaveClass(/animation-presentation-active/)
+  await expect(page.locator('.zoom-volume-inset')).toBeVisible()
+  expect(await page.evaluate(() => {
+    const inset = document.querySelector('.zoom-volume-inset'), r = inset.getBoundingClientRect()
+    return inset.contains(document.elementFromPoint(r.x + 20, r.y + 50))
+  })).toBe(true)
+  expect(await page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().entries[0].zoom)).toBe(1.25 ** 2)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#canvas-area')).not.toHaveClass(/animation-presentation-active/)
+  const exported = await page.evaluate(async () => {
+    const { settleZoomVolumes, drawZoomVolumes } = await import('/src/scene/zoom_volume_export.js')
+    const { scene, camera } = window.__NADOC_DBG__
+    await settleZoomVolumes(scene)
+    const canvas = document.createElement('canvas'); canvas.width = 1280; canvas.height = 720
+    const ctx = canvas.getContext('2d'); drawZoomVolumes(scene, ctx, 1280, 720, camera)
+    const alpha = ctx.getImageData(0, 0, 1280, 720).data.filter((_, i) => i % 4 === 3)
+    return { pixels: alpha.filter(a => a > 0).length, zoom: window.__NADOC_ZOOM_VOLUME__.debug().entries[0].zoom }
+  })
+  expect(exported.pixels).toBeGreaterThan(10000)
+  expect(exported.zoom).toBe(1.25 ** 2)
   expect(errors, errors.join('\n')).toEqual([])
 })

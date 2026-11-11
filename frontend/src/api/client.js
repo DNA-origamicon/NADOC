@@ -1,3 +1,6 @@
+import { createKeyframeActionsAPI } from './keyframe_actions.js'
+import { createZoomVolumeAPI } from './zoom_volume_endpoints.js'
+import { createKeyframeDeletionAPI } from './keyframe_deletion_endpoints.js'
 import { createPresentationCheckpointAPI } from './presentation_checkpoint_endpoints.js'
 import { passiveReadScheduler, isPassiveRead } from './passive_read_scheduler.js'
 import { TRAJECTORY_RESPONSE_BYTES } from '../scene/trajectory_memory.js'
@@ -1236,6 +1239,9 @@ export const savePresentationCheckpoint = createPresentationCheckpointAPI({ stor
   designRevisions: _designRevisions, assemblyRevisions: _assemblyRevisions, persistDesign, persistAssembly })
 
 /** Replace display-only spatial view volumes persisted with the part. */
+export const saveZoomVolumes = createZoomVolumeAPI({ store, request: _request, captureContext: captureViewVolumeContext,
+  designRevisions: _designRevisions, assemblyRevisions: _assemblyRevisions, persistDesign, persistAssembly, signalDesignChanged: _signalDesignChanged })
+
 export async function saveViewVolumes(volumes) {
   const designId = store.getState().currentDesign?.id
   const json = await _request('PUT', '/design/view-volumes', { volumes }, { suppressBusy: true })
@@ -4374,6 +4380,14 @@ export function _syncDesignAuthoringResponse(json, field) {
   return json
 }
 
+export const keyframeAction = createKeyframeActionsAPI({ store, request: _request,
+  designRevisions: _designRevisions, assemblyRevisions: _assemblyRevisions,
+  persistDesign, persistAssembly, signalDesignChanged: _signalDesignChanged })
+
+export const keyframeDeletionAPI = createKeyframeDeletionAPI({ store, request: _request,
+  designRevisions: _designRevisions, assemblyRevisions: _assemblyRevisions,
+  persistDesign, persistAssembly, signalDesignChanged: _signalDesignChanged })
+
 export async function createCameraPose(name, { position, target, up, fov, orbitMode, thumbnail }) {
   const json = await _request('POST', '/design/camera-poses', {
     name, position, target, up, fov, orbit_mode: orbitMode, thumbnail,
@@ -4585,10 +4599,10 @@ export async function patchInstanceClusterTransform(id, body) {
   return _syncFromAssemblyResponse(json)
 }
 
-export async function patchInstanceDesign(id, content, { docId } = {}) {
+export async function patchInstanceDesign(id, content, { docId, suppressBusy = false } = {}) {
   // docId lets a part-editor tab (which lives on its OWN isolated doc) write the
   // edit back into the ASSEMBLY's doc, where the assembly actually lives.
-  const json = await _request('PATCH', `/assembly/instances/${id}/design`, { content }, { docId })
+  const json = await _request('PATCH', `/assembly/instances/${id}/design`, { content }, { docId, suppressBusy })
   return _syncFromAssemblyResponse(json)
 }
 

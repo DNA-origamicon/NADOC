@@ -70,7 +70,7 @@ export function zoomSelectionSource(design, entries) {
   } }
 }
 
-export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, position = 'tr', onDelete, onVisibilityChange = () => {}, document, scene, canvas, store, api, designRenderer, assemblyRenderer, ensureAtoms, getAtomisticRenderer, getProteinGeometry, getAssemblyCluster = () => null, getRenderCamera, addFrameCallback, removeFrameCallback }) {
+export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, position = 'tr', onDelete, onVisibilityChange = () => {}, onChange = () => {}, document, scene, canvas, store, api, designRenderer, assemblyRenderer, ensureAtoms, getAtomisticRenderer, getProteinGeometry, getAssemblyCluster = () => null, getRenderCamera, addFrameCallback, removeFrameCallback }) {
   const section = document.createElement('div'); section.className = 'zoom-volume-row volume-entry'; section.dataset.zoomId = id
   section.innerHTML = `<div class="volume-entry-top">
       <input data-control="name" aria-label="Rename zoom volume" title="Rename volume">
@@ -107,7 +107,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
   }
   for (const key of ['enabled', 'box']) {
     setVisibility(key, true)
-    $(key).onclick = () => setVisibility(key, !$(key).checked)
+    $(key).onclick = () => { setVisibility(key, !$(key).checked); onChange() }
   }
   $('delete').onclick = onDelete
   for (const [label, value] of VIEW_VOLUME_REPRESENTATIONS) $('representation').add(new Option(label, value))
@@ -130,28 +130,28 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
   loadingOverlay.innerHTML = '<span class="zoom-volume-spinner" aria-hidden="true"></span><span>Loading…</span>'
   $('name').onchange = () => { $('name').value = $('name').value.trim() || 'Zoom Volume'; title.textContent = `${$('name').value} · drag to move` }
   host.setAttribute('aria-busy', 'false')
-  host.append(title, image, frozen, loadingOverlay); document.body.append(host)
+  host.append(title, image, frozen, loadingOverlay); (canvas.parentElement ?? document.body).append(host)
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   svg.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:19;overflow:hidden'
   const lines = [0, 1].map(() => { const line = document.createElementNS(svg.namespaceURI, 'line'); line.setAttribute('stroke', '#67c5ff'); line.setAttribute('stroke-width', '1.5'); svg.append(line); return line })
-  document.body.append(svg)
+  ;(canvas.parentElement ?? document.body).append(svg)
   const insetScene = new THREE.Scene(); insetScene.add(new THREE.AmbientLight(0xffffff, 2))
   const light = new THREE.DirectionalLight(0xffffff, 2); insetScene.add(light)
   const camera = new THREE.PerspectiveCamera(40, 1, .01, 10000)
   const zoomControls = document.createElement('div'); zoomControls.className = 'zoom-volume-zoom-controls'; zoomControls.dataset.zoomId = id
   zoomControls.setAttribute('role', 'group'); zoomControls.setAttribute('aria-label', 'Inset zoom')
   zoomControls.hidden = true
-  let zoomStep = 0
+  let zoomStep = 0, pendingBuild = Promise.resolve()
   const zoomButtons = [1, -1].map(direction => {
     const button = document.createElement('button'); button.type = 'button'
     button.textContent = direction > 0 ? '+' : '−'
     button.setAttribute('aria-label', direction > 0 ? 'Zoom in inset' : 'Zoom out inset')
     button.title = button.getAttribute('aria-label')
-    button.onclick = () => { zoomStep = Math.max(-8, Math.min(8, zoomStep + direction)); camera.zoom = 1.25 ** zoomStep; frame() }
+    button.onclick = () => { zoomStep = Math.max(-8, Math.min(8, zoomStep + direction)); camera.zoom = 1.25 ** zoomStep; frame(); onChange() }
     zoomControls.append(button)
     return button
   })
-  document.body.append(zoomControls)
+  ;(canvas.parentElement ?? document.body).append(zoomControls)
   const bounds = new THREE.Box3(), externalBounds = new THREE.Box3(), displayedBounds = new THREE.Box3(), box = new THREE.Box3Helper(displayedBounds, 0x67c5ff)
   box.name = 'zoom-volume-selection-box'; box.visible = false; box.userData.helper = true; box.userData.setupOnly = true; box.raycast = () => {}; scene.add(box)
   let renderer = null, targets = [], displays = [], revision = 0, disposed = false, ready = false, customPosition = null
@@ -219,7 +219,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     documentId = state.assemblyActive ? state.currentAssembly?.id : state.currentDesign?.id
     mode = state.assemblyActive
     setVisibility('enabled', true)
-    void rebuild()
+    void rebuild(); onChange()
     return true
   }
   function capture() {
@@ -236,10 +236,12 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     volume = null
     documentId = state.assemblyActive ? state.currentAssembly?.id : state.currentDesign?.id; mode = state.assemblyActive
     setVisibility('enabled', true)
-    void rebuild()
+    void rebuild(); onChange()
     return true
   }
-  async function rebuild() {
+  function rebuild() { pendingBuild = build(); return pendingBuild }
+  async function settle() { let pending; do { pending = pendingBuild; await pending } while (pending !== pendingBuild); return !(presentationVisible ?? $('enabled').checked) || !targets.length || ready }
+  async function build() {
     motionLayers = []; motionConnections = []
     externalBounds.makeEmpty()
     abort.abort(); abort = new AbortController()
@@ -378,7 +380,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
   let drag = null
   title.onpointerdown = event => { drag = { x: event.clientX, y: event.clientY, left: host.offsetLeft, top: host.offsetTop }; title.setPointerCapture(event.pointerId); event.preventDefault() }
   title.onpointermove = event => { if (drag) customPosition = { x: drag.left + event.clientX - drag.x, y: drag.top + event.clientY - drag.y } }
-  title.onpointerup = title.onpointercancel = () => { drag = null }
+  title.onpointerup = title.onpointercancel = () => { drag = null; onChange() }
   function frame() {
     const visible = (ready || loading || hasFrozenImage) && (presentationVisible ?? $('enabled').checked) && canvas.getBoundingClientRect().width > 0
     host.style.display = visible ? 'block' : 'none'; box.visible = visible && !displayedBounds.isEmpty() && $('box').checked
@@ -394,8 +396,8 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     // Keep the pair outside the inset, on the side with more viewport room.
     const controlsLeft = left + size / 2 > rect.left + rect.width / 2 ? left - 40 : left + size + 10
     zoomControls.style.left = `${controlsLeft}px`; zoomControls.style.top = `${top + 30}px`
-    zoomButtons[0].disabled = loading || !ready || zoomStep === 8
-    zoomButtons[1].disabled = loading || !ready || zoomStep === -8
+    zoomButtons[0].disabled = zoomStep === 8
+    zoomButtons[1].disabled = zoomStep === -8
     if (loading || !ready) { svg.style.display = 'none'; return }
     const currentAtomVersion = getAtomisticRenderer?.()?.positionVersion?.()
     if (motionLayers.length && (appliedMotionRevision !== motionRevision || currentAtomVersion !== atomVersion)) {
@@ -438,12 +440,58 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
   $('with-structure').onchange = () => { $('structure-controls').hidden = !$('with-structure').checked; void rebuild() }
   $('structure-transparency').oninput = updateContextOpacity
   $('position').onchange = () => { customPosition = null }
+  section.addEventListener('change', onChange)
   const unsubscribe = store.subscribe((n, p) => {
     if (!targets.length) return
     if (n.assemblyActive !== mode || (mode ? n.currentAssembly?.id : n.currentDesign?.id) !== documentId) { clear(); return }
-    if (n.currentGeometry !== p.currentGeometry || n.currentDesign !== p.currentDesign || n.currentAssembly !== p.currentAssembly) void rebuild()
+    const changed = key => { const a = n[key], b = p[key]; return a !== b && Object.keys({ ...a, ...b }).some(k => k !== 'zoom_volumes' && a?.[k] !== b?.[k]) }
+    if (n.currentGeometry !== p.currentGeometry || changed('currentDesign') || changed('currentAssembly')) void rebuild()
   })
 
+  const settingKeys = ['enabled', 'box', 'representation', 'opacity', 'coloring', 'with-structure', 'structure-transparency', 'position', 'size', 'lines']
+  const booleanKeys = new Set(['enabled', 'box', 'with-structure', 'lines'])
+  function snapshot() {
+    return { id, name: $('name').value, zoom_step: zoomStep, targets: structuredClone(targets), volume: volume ? structuredClone(volume) : null,
+      settings: Object.fromEntries(settingKeys.map(key => [key, booleanKeys.has(key) ? $(key).checked : $(key).value])), custom_position: customPosition }
+  }
+  function restore(value) {
+    targets = structuredClone(value.targets ?? []); volume = copyZoomBox(value.volume)
+    const state = store.getState(); mode = state.assemblyActive; documentId = state[mode ? 'currentAssembly' : 'currentDesign']?.id
+    $('name').value = value.name; title.textContent = `${value.name} · drag to move`
+    for (const key of settingKeys) {
+      if (value.settings?.[key] === undefined) continue
+      if (key === 'enabled' || key === 'box') setVisibility(key, value.settings[key])
+      else { if (key === 'coloring') colors(); $(key)[booleanKeys.has(key) ? 'checked' : 'value'] = value.settings[key] }
+    }
+    zoomStep = Math.max(-8, Math.min(8, Math.round(Number(value.zoom_step) || 0))); camera.zoom = 1.25 ** zoomStep
+    customPosition = value.custom_position ?? null
+    $('structure-controls').hidden = !$('with-structure').checked; updateContextOpacity()
+    void rebuild()
+    return true
+  }
+  function draw(ctx, width, height, main = getRenderCamera()) {
+    frame()
+    if (!ready || !(presentationVisible ?? $('enabled').checked)) return
+    const rect = canvas.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const scale = Math.min(width / rect.width, height / rect.height)
+    const size = parseFloat(host.style.width) * scale, titleHeight = 26 * scale
+    const corner = $('position').value
+    const x = customPosition ? (parseFloat(host.style.left) - rect.left) / rect.width * width : corner.endsWith('r') ? width - size - 12 * scale : 12 * scale
+    const y = customPosition ? (parseFloat(host.style.top) - rect.top) / rect.height * height : corner.startsWith('b') ? height - size - 40 * scale : 12 * scale
+    if ($('lines').checked) {
+      const links = zoomVolumeConnectors(displayedBounds, main, { left: 0, top: 0, width, height, right: width, bottom: height }, { left: x, top: y, right: x + size, bottom: y + size + titleHeight, width: size, height: size + titleHeight })
+      ctx.save(); ctx.strokeStyle = '#67c5ff'; ctx.lineWidth = 1.5 * scale
+      for (const line of links) { ctx.beginPath(); ctx.moveTo(line.x1, line.y1); ctx.lineTo(line.x2, line.y2); ctx.stroke() }
+      ctx.restore()
+    }
+    renderer.setSize(Math.max(1, Math.ceil(size)), Math.max(1, Math.ceil(size)))
+    fitZoomCamera(camera, main.quaternion, bounds, 1); light.position.copy(camera.position); renderer.render(insetScene, camera)
+    ctx.save(); ctx.fillStyle = '#243344'; ctx.fillRect(x, y, size, titleHeight)
+    ctx.drawImage(renderer.domElement, x, y + titleHeight, size, size)
+    ctx.strokeStyle = '#67c5ff'; ctx.lineWidth = 2 * scale; ctx.strokeRect(x, y, size, size + titleHeight)
+    ctx.fillStyle = '#e5f4ff'; ctx.font = `${12 * scale}px sans-serif`; ctx.fillText($('name').value, x + 8 * scale, y + 18 * scale, size - 16 * scale); ctx.restore()
+  }
   addFrameCallback(frame)
-  return { capture, setBox, clear, name: () => $('name').value, setPresentationVisible(value) { presentationVisible = value; frame() }, refreshAssembly() { if (!disposed && mode && targets.length) void rebuild() }, setVisibility, visibility: key => $(key).checked, debugAtoms: () => motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => e.kind === 'atom' ? [...zoomLiveAtoms(e.renderer)] : [])), debug: () => ({ zoom: camera.zoom, ready, loading, hasFrozenImage, targets, volume: volume ? structuredClone(volume) : null, motionRevision, appliedMotionRevision, motionPositions: motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => (e.cg?.backboneEntries ?? []).map(b => ({ key: baseKey(b.nuc, b.nuc.copy_k ?? 0), position: b.pos.toArray() })))), contextBaseCount, contextObjectCount, selectionConnectionCount, contextConnectionCount, contextOpacity: contextOpacity(), contextVisible: contextRoots.some(root => root.visible), bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, orientation: camera.quaternion.toArray(), triangles }), dispose() { disposed = true; clear(); unsubscribe(); unsubscribeMotion?.(); removeFrameCallback(frame); host.remove(); zoomControls.remove(); svg.remove(); section.remove(); box.removeFromParent(); box.geometry.dispose(); box.material.dispose() } }
+  return { visible: () => host.style.display !== 'none', snapshot, restore, settle, draw, capture, setBox, clear, name: () => $('name').value, setPresentationVisible(value) { presentationVisible = value; frame() }, refreshAssembly() { if (!disposed && mode && targets.length) void rebuild() }, setVisibility, visibility: key => $(key).checked, debugAtoms: () => motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => e.kind === 'atom' ? [...zoomLiveAtoms(e.renderer)] : [])), debug: () => ({ zoom: camera.zoom, ready, loading, hasFrozenImage, targets, volume: volume ? structuredClone(volume) : null, motionRevision, appliedMotionRevision, motionPositions: motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => (e.cg?.backboneEntries ?? []).map(b => ({ key: baseKey(b.nuc, b.nuc.copy_k ?? 0), position: b.pos.toArray() })))), contextBaseCount, contextObjectCount, selectionConnectionCount, contextConnectionCount, contextOpacity: contextOpacity(), contextVisible: contextRoots.some(root => root.visible), bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, orientation: camera.quaternion.toArray(), triangles }), dispose() { disposed = true; clear(); unsubscribe(); unsubscribeMotion?.(); removeFrameCallback(frame); host.remove(); zoomControls.remove(); svg.remove(); section.remove(); box.removeFromParent(); box.geometry.dispose(); box.material.dispose() } }
 }

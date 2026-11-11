@@ -14,6 +14,7 @@ Rules:
 from __future__ import annotations
 
 from backend.core.sweep_model import SweepParams
+from backend.core.zoom_volume_model import ZoomVolume
 
 import json
 import math
@@ -3254,6 +3255,7 @@ class Design(BaseModel):
     # coarser background. Display-only; never affects topology or geometry.
     representation_overrides: List[RepresentationOverride] = Field(default_factory=list)
     view_volumes: List[ViewVolume] = Field(default_factory=list)
+    zoom_volumes: List[ZoomVolume] = Field(default_factory=list)
     # Display-only viewport callouts + their global on/off switch (see Annotation).
     annotations: List[Annotation] = Field(default_factory=list)
     annotations_enabled: bool = True
@@ -4311,6 +4313,7 @@ class Assembly(BaseModel):
     assembly_helices: List[Helix] = Field(default_factory=list)
     assembly_strands: List[Strand] = Field(default_factory=list)
     view_volumes: List[ViewVolume] = Field(default_factory=list)
+    zoom_volumes: List[ZoomVolume] = Field(default_factory=list)
     annotations: List[Annotation] = Field(default_factory=list)
     annotations_enabled: bool = True
     camera_poses: List[CameraPose] = Field(default_factory=list)

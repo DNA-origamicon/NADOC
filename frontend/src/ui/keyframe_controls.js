@@ -1,7 +1,7 @@
 import './animation_sidebar.css'
 
 export function initKeyframeControls({ player, getAnimation, getAnnotations, getViewVolumes = () => [], getZoomVolumes = () => [], getPlayOptions = () => ({}), stopPreview,
-  save, onError, window: win = window }) {
+  save, capture, duplicate, onError, window: win = window }) {
   const collapsed = new Set()
   let selected = null, generation = 0, frame = null, starting = false
   let savedDisablePoses = null
@@ -82,7 +82,21 @@ export function initKeyframeControls({ player, getAnimation, getAnnotations, get
     const preview = doc.createElement('button')
     preview.type = 'button'; preview.textContent = '▶'; preview.title = 'Preview keyframe'; preview.className = 'btn btn--sm btn--icon'
     preview.addEventListener('click', () => { void show(kf.id, true) })
-    header.insertBefore(preview, header.lastElementChild)
+    const deleteButton = header.lastElementChild
+    header.insertBefore(preview, deleteButton)
+    if (duplicate) {
+      const copy = actionButton(doc, 'Duplicate keyframe', () => duplicate(kf))
+      copy.className = 'btn btn--sm btn--icon'
+      copy.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg>'
+      header.insertBefore(copy, deleteButton)
+    }
+    if (capture) {
+      const button = actionButton(doc, 'Capture keyframe', () => capture(kf))
+      button.dataset.role = 'capture-keyframe'; button.className = 'btn btn--sm'
+      button.style.marginLeft = '18px'
+      const poseRow = row.querySelector('[data-role="keyframe-pose"]')?.parentElement
+      if (poseRow) row.insertBefore(button, poseRow)
+    }
     for (const [field, title, getEntries, noun, sidebar] of [
       ['annotation_ids', 'Annotations', getAnnotations, 'Annotation', 'Annotations'],
       ['view_volume_ids', 'View Volumes', getViewVolumes, 'View Volume', 'Visualization'],
@@ -90,6 +104,16 @@ export function initKeyframeControls({ player, getAnimation, getAnnotations, get
     ]) row.append(visibilityPicker(doc, kf, field, title, getEntries, noun, sidebar))
     row.classList.toggle('is-selected', selected === kf.id)
     title.setAttribute('aria-pressed', String(selected === kf.id))
+  }
+  function actionButton(doc, label, action) {
+    const button = doc.createElement('button')
+    button.type = 'button'; button.textContent = label; button.title = label; button.setAttribute('aria-label', label)
+    button.addEventListener('click', async event => {
+      event.stopPropagation(); button.disabled = true
+      try { await action() } catch (error) { onError(error) }
+      finally { button.disabled = false }
+    })
+    return button
   }
   function visibilityPicker(doc, kf, field, title, getEntries, noun, sidebar) {
     const root = doc.createElement('details'); root.className = 'anim-annotation-picker'; root.dataset.field = field

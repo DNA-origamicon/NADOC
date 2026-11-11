@@ -110,3 +110,14 @@ describe('selected assembly part context', () => {
     expect(f.onChange.mock.lastCall[1].id).toBe('retried')
   })
 })
+
+it('lets deletion own optimistic UI without publishing a failed source edit', async () => {
+  const f = fixture()
+  await f.context.select('a')
+  const patch = f.onChange.mock.lastCall[2]
+  f.api.patchInstanceDesign.mockResolvedValue(null)
+  expect(await patch(d => { d.animations = [{ id: 'changed' }] }, { optimistic: false })).toBe(false)
+  expect(f.onChange).toHaveBeenCalledOnce()
+  expect(f.api.getInstanceDesign).toHaveBeenCalledOnce()
+  expect(f.api.patchInstanceDesign).toHaveBeenCalledWith('a', expect.any(String), { suppressBusy: true })
+})

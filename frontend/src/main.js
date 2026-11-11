@@ -5748,7 +5748,7 @@ async function main() {
   // (`animPanel` is forward-declared ~5200 lines up, next to the player it serves —
   //  four call sites read it from callbacks registered long before this line.)
   _partAnimPanel = animPanel = initAnimationPanel(store, {
-    player: animPlayer, zoomVolume,
+    player: animPlayer, zoomVolume, viewVolumes,
     captureCurrentCamera,
     api,
     exportVideo,

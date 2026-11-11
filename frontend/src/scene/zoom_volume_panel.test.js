@@ -4,13 +4,15 @@ import { initZoomVolume } from './zoom_volume.js'
 
 let panel
 const listeners = new Set(), frames = new Set()
-function setup(assembly = false) {
+function setup(assembly = false, saved = []) {
   document.body.innerHTML = '<div id="right-tab-content-visualization"></div>'
-  let state = { currentDesign: { id: 'part' }, assemblyActive: assembly, currentAssembly: { id: 'assembly' }, selection: { items: [{ kind: 'strand', id: 's1' }] }, activeInstanceId: 'i1' }
-  const store = { getState: () => state, subscribe: cb => { listeners.add(cb); return () => listeners.delete(cb) } }
+  let state = { currentDesign: { id: 'part', zoom_volumes: saved }, assemblyActive: assembly, currentAssembly: { id: 'assembly' }, selection: { items: [{ kind: 'strand', id: 's1' }] }, activeInstanceId: 'i1' }
+  const update = patch => { const previous = state; state = { ...state, ...patch }; for (const cb of [...listeners]) cb(state, previous) }
+  const store = { setState: update, getState: () => state, subscribe: cb => { listeners.add(cb); return () => listeners.delete(cb) } }
   panel = initZoomVolume({ document, scene: new THREE.Scene(), canvas: document.createElement('canvas'), store,
     designRenderer: {}, assemblyRenderer: {}, addFrameCallback: cb => frames.add(cb), removeFrameCallback: cb => frames.delete(cb) })
-  return patch => { const previous = state; state = { ...state, ...patch }; for (const cb of [...listeners]) cb(state, previous) }
+  update.state = () => state
+  return update
 }
 afterEach(() => { panel?.dispose(); panel = null; expect(listeners.size).toBe(0); expect(frames.size).toBe(0); vi.restoreAllMocks(); document.body.replaceChildren() })
 
@@ -101,4 +103,43 @@ it('updates one dedicated submodel entry without retargeting other insets', () =
   panel.dispose(); panel = null
   window.dispatchEvent(new CustomEvent('nadoc:zoom-volume-box', { detail: box }))
   expect(document.querySelectorAll('.zoom-volume-inset')).toHaveLength(0)
+})
+
+
+it('restores stable volume identities, magnification and settings after document reload and presentation selection', () => {
+  const value = { id: 'saved-zoom', name: 'Saved detail', zoom_step: 3, targets: [{ refs: [{ kind: 'strand', id: 's' }] }],
+    settings: { enabled: false, representation: 'beads', coloring: 'base', position: 'bl' } }
+  const update = setup(false, [value])
+  expect(panel.list()).toEqual([{ id: 'saved-zoom', name: 'Saved detail', visible: false }])
+  expect(panel.debug().entries[0].zoom).toBe(1.25 ** 3)
+  window.dispatchEvent(new CustomEvent('nadoc:presentation-frame', { detail: { documentId: 'part', zoomVolumeIds: ['saved-zoom'] } }))
+  expect(panel.debug().entries[0].zoom).toBe(1.25 ** 3)
+  window.dispatchEvent(new CustomEvent('nadoc:presentation-frame', { detail: null }))
+  expect(panel.list()[0].visible).toBe(false)
+  update({ currentDesign: { id: 'other' } })
+  update({ currentDesign: { id: 'part', zoom_volumes: [value] } })
+  expect(panel.debug().entries[0].zoom).toBe(1.25 ** 3)
+  expect(document.querySelector('[data-control="coloring"]').value).toBe('base')
+})
+
+
+it('saves the adjusted lens in the document immediately and retains it when selections change', () => {
+  const update = setup(); const id = panel.capture()
+  document.querySelector('.zoom-volume-zoom-controls button').click()
+  expect(update.state().currentDesign.zoom_volumes[0]).toMatchObject({ id, zoom_step: 1 })
+  update({ selection: { items: [{ kind: 'strand', id: 'replacement' }] } })
+  document.querySelector('[data-control="set"]').click()
+  expect(update.state().currentDesign.zoom_volumes[0]).toMatchObject({ id, zoom_step: 1, targets: [{ refs: [{ id: 'replacement' }] }] })
+  document.querySelector('[data-control="delete"]').click()
+  expect(update.state().currentDesign.zoom_volumes).toEqual([])
+})
+
+
+it('keeps an inset through a stale document response while its magnification saves', async () => {
+  const update = setup(); panel.capture()
+  document.querySelector('.zoom-volume-zoom-controls button').click()
+  update({ currentDesign: { ...update.state().currentDesign, zoom_volumes: [] } })
+  expect(panel.debug().entries[0].zoom).toBe(1.25)
+  await Promise.resolve(); await Promise.resolve()
+  expect(update.state().currentDesign.zoom_volumes[0].zoom_step).toBe(1)
 })

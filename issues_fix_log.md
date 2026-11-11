@@ -1360,3 +1360,20 @@ start-to-start polling. Reduced curve-allocation and per-subframe display setup
 work. Timings are available in the Live popup. Native visual confirmation remains
 MV-59; software validation details are retained under
 `.development-artifacts/live-jitter-validation.json`.
+
+
+## Zoom volume persistence and animation output (2026-11-10)
+
+Root causes: `zoomStep` existed only inside each camera controller; documents stored
+no inset definitions; animation encoders copied only the main render target; inset
+DOM lived outside the fullscreen subtree. Added display-only part/assembly metadata,
+serialized writes and stale-response protection, saved-lens restoration, scene-scoped
+export compositing/readiness, and viewport-owned overlays. Browser checks also found
+that disabling zoom during builds dropped rapid clicks; lens adjustments now remain
+available while meshes build. No molecular authoring or main.js logic was added.
+Validation: `.development-artifacts/zoom-volume-persistence/validation.json`.
+
+Persistence/export validation completed: 10,290 frontend tests passed / one skipped;
+85 focused backend checks and both browser workflows passed. Smoke: 22 passed,
+two skipped, existing assembly scaffold-mesh setup timeout. The earlier Close Session
+and Square-lattice checks passed this run. FULL backend sweep deferred; cleanup verified.

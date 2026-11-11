@@ -1453,5 +1453,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         || getSurfaceRenderer?.()?.getMode?.()   !== 'off'
   }
 
-  return { assertExportSampling: fps => assertFeatureSampling(_schedule, fps), play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep, getKeyframeRange: id => { const s = _schedule.find(s => s.kfId === id); return s ? { start: s.startT, end: s.endT } : null } }
+  return { getCapturedFeatureIndex: () => presentation.getFeatureIndex(), assertExportSampling: fps => assertFeatureSampling(_schedule, fps), play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep, getKeyframeRange: id => { const s = _schedule.find(s => s.kfId === id); return s ? { start: s.startT, end: s.endT } : null } }
 }

@@ -1,3 +1,4 @@
+import { registerZoomVolumes } from './zoom_volume_export.js'
 /**
  * exportPhotoVideo — driving the animation player frame-by-frame through a
  * photo-mode frame session.
@@ -346,4 +347,25 @@ it('waits for companion coordinates before encoding and rejects a missing ion fr
   ready(false)
   await expect(exporting).rejects.toThrow('ions / bounding box are not ready')
   expect(writeFrame).not.toHaveBeenCalled()
+})
+
+
+it('waits for zoom insets and composites each editor GIF frame before encoding', async () => {
+  const scene = {}, calls = [], player = makePlayer(.2)
+  const unregister = registerZoomVolumes(scene, { settle: async () => { calls.push('ready'); return true }, draw: () => calls.push('draw') })
+  try {
+    await exportVideo({ animation: { name: 'zoom', keyframes: [{}] }, player, scene,
+      camera: { aspect: 1, updateProjectionMatrix() {} },
+      renderer: { domElement: Object.assign(document.createElement('canvas'), { width: 100, height: 100 }), render() {} },
+      options: { format: 'gif', fps: 10 } })
+    expect(calls).toEqual(['ready', 'draw', 'ready', 'draw', 'ready', 'draw'])
+  } finally { unregister() }
+})
+
+it('waits for photo inset readiness before asking the frame session to render', async () => {
+  const photoRenderer = makePhotoRenderer(), calls = []
+  photoRenderer.session.settleOverlays = async () => { calls.push('ready') }
+  photoRenderer.session.renderFrameToCanvas.mockImplementation(() => { calls.push('render'); return document.createElement('canvas') })
+  await run({ player: makePlayer(.1), photoRenderer })
+  expect(calls).toEqual(['ready', 'render', 'ready', 'render'])
 })

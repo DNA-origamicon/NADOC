@@ -12,13 +12,52 @@ metadata:
 
 # Annotations (right sidebar → "Annotations")
 
+November 10 keyframe capture/duplicate: **Capture keyframe** above the pose selector
+creates a new saved camera pose and fills the frame with the actually visible
+annotation/view-volume/zoom-volume IDs. Part state pins the displayed feature-log
+stage (including an explicit current end); assembly state creates a configuration
+snapshot with joint values. Timing, text and trajectory settings remain intact.
+The header copy icon sits between preview and delete and inserts a deep duplicate
+with a new ID immediately below its source. Recapturing a copy creates a separate
+pose/configuration. Both actions use one undoable backend metadata publication;
+selected assembly parts use the existing source patch path. Shared modules:
+`ui/keyframe_actions.js`, `api/keyframe_actions.js`, `backend/api/keyframe_actions.py`.
+Browser coverage: `e2e/keyframe_capture.spec.js` passed. Full frontend: 10,297
+passed / one skipped (906 files); backend focused: two passed; lint passed.
+Smoke: 22 passed / two skipped / one existing Close Session progress-popup failure
+before teardown. Backend selector: FULL due to shared models; broad suite not run.
+Artifacts cleaned and summary retained in
+`.development-artifacts/keyframe-capture/validation.json`. `main.js` LOC delta: 0.
+
+November 10 keyframe deletion: `ui/keyframe_deletion.js` removes the row immediately,
+filters pending IDs from playback/list refreshes, and yields a paint before stopping
+preview/releasing trajectory caches. Deletions serialize per document; API null/false
+or exceptions restore from the current document instead of an old snapshot. Queued
+work is cancelled on context changes. Selected assembly parts use the same UI filter
+while their source patch waits for acknowledgement, so API refusal leaves the source
+unchanged. Both delete routes accept `metadata_only=true`:
+the editor receives only ID/animations/revision, while undoable publication remains.
+`api/keyframe_deletion_endpoints.js` merges metadata with revision tracking, preserving
+live geometry and rejecting responses from replaced documents; busy popups are suppressed.
+The prior latency path waited for a full molecular copy/publication/validation/response
+before removing the row, then synchronously evicted trajectory preparation caches.
+This change removes full response serialization (and the redundant part validation)
+and moves remaining publication/cleanup behind the immediate visual response. Backend
+copy/publication costs remain; no claim of a measured production-data speedup.
+Validation: final browser workflow, 27 focused frontend checks, two backend undo
+checks and lint passed. Full frontend: 10,281 passed / one skipped / one new test
+failed during an in-flight edit; fresh focused run passes that test. Smoke retained
+the two known setup/progress failures (21 passed / two skipped). Full backend
+selection was deferred for unrelated worktree changes. Evidence and cleanup:
+`.development-artifacts/keyframe-deletion/validation.json`. `main.js` LOC delta: 0.
+
 November 10 keyframe volume options: keyframes share one expandable picker for
 Annotations, View Volumes, and Zoom Volumes, with scrollable checkboxes and All/None.
 Nullable `view_volume_ids` / `zoom_volume_ids` persist on part and assembly keyframes;
 null retains working/checkpoint visibility, [] hides the channel. Preview/playback
 applies display-only subsets and stop clears overrides. View volumes retain their
-authored representation/coloring/outline settings. Zoom entries remain session-local;
-saved IDs do not recreate insets after reopening. UUIDs prevent stale keyframes from
+authored representation/coloring/outline settings. Zoom definitions, stable IDs, and zoom steps now persist in document metadata;
+saved entries restore insets after reopening (see project_mixed_representation.md). UUIDs prevent stale keyframes from
 selecting unrelated new insets. `main.js` only passes the zoom manager (LOC delta 0).
 
 November 10 sidebar polish: numeric pixel-size and font-family dropdowns sit

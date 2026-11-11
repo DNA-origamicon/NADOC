@@ -24,12 +24,14 @@ export function presentationAt(document, position) {
 }
 
 export function createPresentationAnimation({ getDocument, emit = detail => globalThis.window?.dispatchEvent(new CustomEvent(PRESENTATION_EVENT, { detail })) }) {
-  let source = null, previous = null, ready = Promise.resolve(true)
+  let featureIndex = null, source = null, previous = null, ready = Promise.resolve(true)
   return {
+    getFeatureIndex: () => featureIndex,
     start() { source = getDocument?.(); previous = null },
     show(from, to, t, annotationIds = null, viewVolumeIds = null, zoomVolumeIds = null) {
       if (!source) return
-      const state = presentationAt(source, t >= 1 ? to : from)
+      featureIndex = t >= 1 ? to : from
+      const state = presentationAt(source, featureIndex)
       const liveAnnotations = Array.isArray(annotationIds) || !Object.hasOwn(state, 'annotations')
       const current = getDocument?.()
       const live = current?.id === source.id ? current : source
@@ -57,7 +59,7 @@ export function createPresentationAnimation({ getDocument, emit = detail => glob
     settle: () => ready,
     clear() {
       if (previous !== null) emit(null)
-      previous = null; source = null; ready = Promise.resolve(true)
+      previous = null; source = null; featureIndex = null; ready = Promise.resolve(true)
     },
   }
 }

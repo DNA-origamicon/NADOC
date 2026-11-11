@@ -49,6 +49,7 @@ from backend.core.models import (
     PlateLayout,
     RepresentationOverride,
     ViewVolume,
+    ZoomVolume,
     StapleGroup,
     TubeAssignment,
     VisibilityState,
@@ -351,3 +352,32 @@ def save_assembly_annotations(body: AnnotationsSaveRequest) -> dict:
         "annotations_enabled": assembly.annotations_enabled,
         "revision": assembly_state.revision(),
     }
+
+
+class ZoomVolumesSaveRequest(BaseModel):
+    document_id: str
+    volumes: List[ZoomVolume]
+
+
+def _save_zoom_volumes(body, state):
+    if len({v.id for v in body.volumes}) != len(body.volumes):
+        raise HTTPException(422, "Zoom volume ids must be unique.")
+
+    def apply(document):
+        if document.id != body.document_id:
+            raise HTTPException(409, "The zoom volume document is no longer active.")
+        document.zoom_volumes = [v.model_copy(deep=True) for v in body.volumes]
+
+    document, revision = state.mutate_display_metadata(apply)
+    return {"zoom_volumes": [v.model_dump(mode="json") for v in document.zoom_volumes], "revision": revision}
+
+
+@router.put("/design/zoom-volumes")
+def save_zoom_volumes(body: ZoomVolumesSaveRequest):
+    return _save_zoom_volumes(body, design_state)
+
+
+@router.put("/assembly/zoom-volumes")
+def save_assembly_zoom_volumes(body: ZoomVolumesSaveRequest):
+    from backend.api import assembly_state
+    return _save_zoom_volumes(body, assembly_state)

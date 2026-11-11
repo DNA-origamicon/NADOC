@@ -219,7 +219,7 @@ def update_assembly_keyframe(
 
 
 @router.delete("/assembly/animations/{anim_id}/keyframes/{kf_id}", status_code=200)
-def delete_assembly_keyframe(anim_id: str, kf_id: str) -> dict:
+def delete_assembly_keyframe(anim_id: str, kf_id: str, metadata_only: bool = False) -> dict:
     """Remove a keyframe from an assembly animation."""
     assembly = assembly_state.get_or_create()
     anims = list(assembly.animations)
@@ -232,6 +232,11 @@ def delete_assembly_keyframe(anim_id: str, kf_id: str) -> dict:
     anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
     updated = assembly.model_copy(update={"animations": anims}, deep=True)
     assembly_state.set_assembly(updated)
+    if metadata_only:
+        # Deletion changes no molecular state. Keep the undoable publication above,
+        # but avoid traversing/validating/serializing the whole structure for the UI.
+        return {"assembly": {"id": updated.id, "animations": [a.model_dump(mode="json") for a in updated.animations]},
+                "revision": assembly_state.revision()}
     return _assembly_response(updated)
 
 
@@ -253,3 +258,7 @@ def reorder_assembly_keyframes(
     updated = assembly.model_copy(update={"animations": anims}, deep=True)
     assembly_state.set_assembly(updated)
     return _assembly_response(updated)
+
+
+from backend.api.keyframe_actions import keyframe_actions_router
+router.include_router(keyframe_actions_router("assembly", assembly_state))

@@ -264,7 +264,7 @@ def update_keyframe(anim_id: str, kf_id: str, body: PatchKeyframeBody) -> dict:
 
 
 @router.delete("/design/animations/{anim_id}/keyframes/{kf_id}", status_code=200)
-def delete_keyframe(anim_id: str, kf_id: str) -> dict:
+def delete_keyframe(anim_id: str, kf_id: str, metadata_only: bool = False) -> dict:
     """Remove a keyframe from an animation. Pushes to undo."""
     from backend.core.validator import validate_design
 
@@ -281,6 +281,11 @@ def delete_keyframe(anim_id: str, kf_id: str) -> dict:
     anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
     updated = design.model_copy(update={"animations": anims}, deep=True)
     design_state.set_design(updated)
+    if metadata_only:
+        # Deletion changes no molecular state. Keep the undoable publication above,
+        # but avoid traversing/validating/serializing the whole structure for the UI.
+        return {"design": {"id": updated.id, "animations": [a.model_dump(mode="json") for a in updated.animations]},
+                "revision": design_state.revision()}
     report = validate_design(updated)
     return _design_response(updated, report)
 
@@ -312,3 +317,7 @@ def reorder_keyframes(anim_id: str, body: ReorderKeyframesBody) -> dict:
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+from backend.api.keyframe_actions import keyframe_actions_router
+router.include_router(keyframe_actions_router("design", design_state))

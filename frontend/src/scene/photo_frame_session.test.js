@@ -1,3 +1,4 @@
+import { registerZoomVolumes } from './zoom_volume_export.js'
 /**
  * beginFrameSession — the offscreen render session behind the tiled PNG export
  * and the photo-mode video export.
@@ -225,6 +226,19 @@ describe('beginFrameSession', () => {
     expect(ctx.camera.aspect).toBe(savedAspect)
     session.dispose()
     drawAnnotations.mockReset()
+  })
+
+  it('draws saved zoom insets once after tiled photo rendering with the export camera', async () => {
+    mode.activate()
+    const draw = vi.fn((sceneContext, width, height, camera) => {
+      expect(width).toBe(4200); expect(height).toBe(2970)
+      expect(camera).toBe(ctx.camera); expect(camera.aspect).toBeCloseTo(4200 / 2970)
+      expect(camera.view?.enabled).toBe(false)
+    })
+    const unregister = registerZoomVolumes(ctx.scene, { settle: async () => true, draw })
+    const session = mode.beginFrameSession(4200, 2970)
+    try { await session.settleOverlays(); session.renderFrameToCanvas(); expect(draw).toHaveBeenCalledOnce() }
+    finally { session.dispose(); unregister() }
   })
 
   it('tiles anything above the GPU max texture size', () => {
