@@ -156,3 +156,19 @@ it('a flush captures the owning document before its commit microtask runs', asyn
   expect(c.list()).toEqual([])
   c.dispose()
 })
+
+
+it('flush waits for an autosave already in flight before allowing a checkpoint', async () => {
+  let finish
+  const { c, t } = make({ commit: () => new Promise(resolve => { finish = resolve }) })
+  c.syncFromDesign(design())
+  c.add({ text: 'Checkpoint caption' }); t.run()
+  await Promise.resolve()
+  let done = false
+  const pending = c.flush().then(() => { done = true })
+  await Promise.resolve()
+  expect(done).toBe(false)
+  expect(c.hasPendingEdits()).toBe(true)
+  finish(); await pending
+  expect(c.hasPendingEdits()).toBe(false)
+})
