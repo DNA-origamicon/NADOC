@@ -14,6 +14,8 @@
  *      scaffold at each column — otherwise a staple→cylinders override would draw
  *      the duplex cylinder over the scaffold's still-full beads.
  *
+ * Explicit strand_ids are independent, locally colored layers. Their native CG
+ * is masked by reserved strand:<id> entries without touching duplex columns.
  * The renderer consumes a per-column rep map; the UI computes column segments
  * from a strand/cluster selection. Pure / display-only.
  */
@@ -49,6 +51,9 @@ function _forEachOverrideColumn(design, cb) {
 export function resolveRepOverrides(design) {
   const columnRep = new Map()
   _forEachOverrideColumn(design, (key, rep) => columnRep.set(key, rep))
+  for (const ov of design?.representation_overrides ?? []) {
+    for (const id of ov.strand_ids ?? []) columnRep.set(`strand:${id}`, 'surface')
+  }
   return { columnRep }
 }
 
@@ -273,7 +278,7 @@ export function editOverridesForSegments(overrides, segments, rep) {
     }
   }
 
-  return out.filter(ov => ov.segments?.length || ov.protein_attachment_ids?.length)
+  return out.filter(ov => ov.segments?.length || ov.protein_attachment_ids?.length || ov.strand_ids?.length)
 }
 
 /** Assign/reset one or more protein attachments without changing DNA overrides. */
@@ -289,5 +294,5 @@ export function editOverridesForProteins(overrides, attachmentIds, rep) {
     if (target) target.protein_attachment_ids = [...(target.protein_attachment_ids ?? []), ...ids]
     else out.push({ name: '', representation: rep, segments: [], protein_attachment_ids: [...ids] })
   }
-  return out.filter(ov => ov.segments?.length || ov.protein_attachment_ids?.length)
+  return out.filter(ov => ov.segments?.length || ov.protein_attachment_ids?.length || ov.strand_ids?.length)
 }

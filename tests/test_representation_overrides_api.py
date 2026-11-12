@@ -273,3 +273,20 @@ def test_overrides_survive_import(client):
     got = client.get("/api/design").json()["design"]["representation_overrides"]
     assert len(got) == 1
     assert got[0]["segments"] == [{"helix_id": HELIX, "bp_start": 3, "bp_end": 9}]
+
+
+def test_strand_override_round_trip_and_validation(client):
+    design = design_state.get_design()
+    strand_id = design.strands[0].id
+    before = [strand.model_dump() for strand in design.strands]
+    row = {"strand_ids": [strand_id], "representation": "ballstick", "coloring": "cpk"}
+    response = client.put("/api/design/representation-overrides", json={"overrides": [row]})
+    assert response.status_code == 200, response.text
+    updated = design_state.get_design()
+    restored = Design.from_json(updated.to_json())
+    assert restored.representation_overrides[0].strand_ids == [strand_id]
+    assert restored.representation_overrides[0].coloring == "cpk"
+    assert restored.representation_overrides[0].segments == []
+    assert [strand.model_dump() for strand in updated.strands] == before
+    row["strand_ids"] = ["missing"]
+    assert client.put("/api/design/representation-overrides", json={"overrides": [row]}).status_code == 404

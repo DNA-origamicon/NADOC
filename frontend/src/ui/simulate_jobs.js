@@ -26,6 +26,7 @@ import { sidebarPanelVisible } from './display_tab_policy.js'
  * Physical-layer / display-state only (topology is never touched).
  */
 
+import { createOptimisticJobDeletion } from './simulation_job_deletion.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { getRunDir, mountDirectoryButton } from './run_location.js'
 import { renderJobList } from './jobs_panel_render.js'
@@ -983,12 +984,19 @@ export function initSimulateJobs({
       await _fetch()
     }
   }
+  const deletion = createOptimisticJobDeletion({
+    getNodes: () => _nodes,
+    update: nodes => { _fetchEpoch++; _nodes = nodes; _renderList(); _renderMaster() },
+    deselect: node => {
+      if (_sel.engine === node.engine && _sel.id === node.job_id) _deselect()
+    },
+    onError: error => showToast(`Delete failed: ${error.message}`, { severity: 'error' }),
+  })
   async function _onDelete() {
     const node = _selectedNode()
     const panel = _panelFor(node)
     if (!panel?.deleteSelected) return
-    const ok = await panel.deleteSelected()
-    if (ok) { _sel = { engine: null, id: null }; await _fetch() }
+    await deletion.remove(node, panel)
   }
   archiveActionBtn?.addEventListener('click', _onArchive)
   deleteActionBtn?.addEventListener('click', _onDelete)
@@ -1239,7 +1247,7 @@ export function initSimulateJobs({
     for (const node of nodes) {
       if (!creatingNodes.get(node.job_id)?.creating) creatingNodes.delete(node.job_id)
     }
-    return [...creatingNodes.values(), ...nodes.filter(n => !creatingNodes.has(n.job_id))]
+    return deletion.filter([...creatingNodes.values(), ...nodes.filter(n => !creatingNodes.has(n.job_id))])
   }
   window.addEventListener('nadoc:sim-job-creation', ({ detail }) => {
     _fetchEpoch++
@@ -1412,6 +1420,7 @@ export function initSimulateJobs({
   })
   // A design switch re-filters the list + drops any selection/overlay (keyed to the old design).
   function _clearDocumentJobs() {
+    deletion.reset()
     creatingNodes.clear()
     _documentGeneration++
     _endDocumentLoading?.()

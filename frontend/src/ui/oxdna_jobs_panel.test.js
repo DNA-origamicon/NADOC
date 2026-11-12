@@ -931,8 +931,10 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     api.deleteOxdnaJob.mockClear()
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
-    const delPromise = panel.deleteSelected()             // must NOT throw ReferenceError
+    const onDeleting = vi.fn(() => panel.deselectJob())
+    const delPromise = panel.deleteSelected({ onDeleting })             // must NOT throw ReferenceError
     await flush()
+    expect(onDeleting).not.toHaveBeenCalled()
     // The handler ran past descendantIds() → the confirm modal actually opened.
     const overlay = document.querySelector('.modal__overlay')
     expect(overlay).toBeTruthy()
@@ -941,6 +943,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     await delPromise
     await flush()
     expect(api.deleteOxdnaJob).toHaveBeenCalledWith('j1')
+    expect(onDeleting).toHaveBeenCalledWith(['j1'])
   })
 
   it('a completed relaxation → status line offers continuation, Flexibility map disabled (waiting for production)', async () => {

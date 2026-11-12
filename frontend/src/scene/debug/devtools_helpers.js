@@ -230,5 +230,7 @@ NADOC debug tools — window._nadocDebug
     // can drive selection / inspect arc meshes without simulating mouse
     // events on the 3D canvas.
     selectionManager, overhangLinkArcs, scene,
+    backboneEntries: () => designRenderer.getBackboneEntries(),
+    slabEntries: () => designRenderer.getSlabEntries(),
   }
 }

@@ -117,3 +117,35 @@ it('does not connect disjoint selected bases when the source adjacency omits tha
   expect(display.entries.get('zoom').cg.coneEntries).toHaveLength(0)
   display.dispose()
 })
+
+it('keeps strand-local colors visible while the strand remains selected', async () => {
+  const store = createMockStore({ currentDesign: { strands: [] }, currentGeometry: [], strandColors: { s: 0xff0000 } })
+  const displays = initViewVolumeDisplays({ scene: new THREE.Scene(), store, api: {}, ensureAtoms: async () => atoms })
+  const layer = { id: 's', strandId: 's', representation: 'ballstick', coloring: 'strand', keys: ['h:0'], baseKeys: ['h:0:FORWARD'], opacity: 1 }
+  await displays.update([layer])
+  const entry = displays.entries.get('s')
+  const before = color(entry.root)
+  entry.renderer.highlight({ strandIds: ['s'] })
+  expect(color(entry.root)).toBe(before)
+  await displays.update([{ ...layer, coloring: 'cpk' }])
+  const cpk = color(entry.root)
+  expect(cpk).not.toBe(before)
+  entry.renderer.highlight({ strandIds: ['s'] })
+  expect(color(entry.root)).toBe(cpk)
+  displays.dispose()
+})
+
+it('allows an earlier visibility subscriber to repaint during document teardown', async () => {
+  const store = createMockStore({ currentDesign: { strands: [] }, currentGeometry: [] })
+  let displays
+  // Visibility is registered before the display owner in main.js and repaints
+  // synchronously when the document is cleared, before our cleanup subscriber.
+  store.subscribe(() => displays.repaint())
+  const scene = new THREE.Scene()
+  displays = initViewVolumeDisplays({ scene, store, api: {}, ensureAtoms: async () => atoms })
+  await displays.update([{ id: 's', strandId: 's', representation: 'ballstick', keys: ['h:0'], opacity: 1 }])
+  expect(scene.children.length).toBe(1)
+  expect(() => store.setState({ currentDesign: null, currentGeometry: null })).not.toThrow()
+  expect(scene.children).toEqual([])
+  displays.dispose()
+})

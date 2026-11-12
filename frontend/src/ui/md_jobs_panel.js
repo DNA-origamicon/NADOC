@@ -3617,9 +3617,10 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   // Delete the selected NAMD job + its files. Invoked by the consolidated
   // #simulate-job-actions Delete button (dispatched by the master card on the selected
   // node). Returns true if the delete went through.
-  async function deleteSelected() {
+  async function deleteSelected({ onDeleting = () => {} } = {}) {
     if (!_selectedId) return false
-    const job = _jobs.find(j => j.job_id === _selectedId)
+    const deletingId = _selectedId
+    const job = _jobs.find(j => j.job_id === deletingId)
     if (job?.execution_target === 'alpine' && job.status === 'queued') {
       const status = await api.getClusterStatus().catch(() => null)
       if (status?.state !== 'connected') {
@@ -3627,15 +3628,15 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         return false
       }
     }
-    const label = job ? `${job.design_name} (${job.job_id})` : _selectedId
+    const label = job ? `${job.design_name} (${job.job_id})` : deletingId
     if (!window.confirm(`Delete MD job ${label} and all generated files?`)) return false
     try {
-      const d = await api.deleteMdJob(_selectedId)
+      onDeleting([deletingId])
+      const d = await api.deleteMdJob(deletingId)
       if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
-      if (_displayJobId === _selectedId) _stopMdDisplay('Native positions restored')
+      if (_displayJobId === deletingId) _stopMdDisplay('Native positions restored')
       showToast('MD job deleted', 'ok')
-      _selectedId = null
-    void submodel?.select('md', null)
+      if (_selectedId === deletingId) _deselectJob()
       await _fetchJobs()
       if (!_jobs.length && detailEl) detailEl.style.display = 'none'
       return true

@@ -2892,10 +2892,11 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
   // Delete the selected oxDNA job (cascades to its descendant subtree — warn with the
   // count). Invoked by the consolidated #simulate-job-actions Delete button (the master
   // card dispatches here on the selected node). Returns true if the delete went through.
-  async function deleteSelected() {
+  async function deleteSelected({ onDeleting = () => {} } = {}) {
     if (!_selectedId) return false
+    const deletingId = _selectedId
     const job = _selectedJob()
-    const subtree = new Set([_selectedId, ...descendantIds(_jobs, _selectedId)])
+    const subtree = new Set([deletingId, ...descendantIds(_jobs, deletingId)])
     if (_jobs.some(j => subtree.has(j.job_id) && j.execution_target === 'alpine' && j.status === 'queued')) {
       const status = await api.getClusterStatus().catch(() => null)
       if (status?.state !== 'connected') {
@@ -2903,24 +2904,27 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
         return false
       }
     }
-    const nChildren = job ? descendantIds(_jobs, _selectedId).size : 0
+    const nChildren = job ? descendantIds(_jobs, deletingId).size : 0
     const { title, message, confirmLabel } = deleteConfirmMessage(job, nChildren)
     const ok = await showConfirm({ title, message, danger: true, confirmLabel })
     if (!ok) return false
-    const r = await api.deleteOxdnaJob(_selectedId)
+    onDeleting([...subtree])
+    const r = await api.deleteOxdnaJob(deletingId)
     if (!r) {
       window.alert(api.lastErrorMessage() || 'Job deletion failed. The job has been kept.')
       return false
     }
-    const deletedIds = Array.isArray(r?.deleted) ? r.deleted : [_selectedId]
+    const deletedIds = Array.isArray(r?.deleted) ? r.deleted : [deletingId]
     const active = oxdnaDisplay?.activeJobId()
     if (active && deletedIds.includes(active)) _allDisplaysOff()
-    _selectedId = null
-    void submodel?.select('oxdna', null)
-    _hideDetail()
-    _updateButtons(null)
-    _clearRunCards()   // drop the E-field arrow / anchor glow of the deleted job
-    _emitJobSelected()
+    if (_selectedId === deletingId) {
+      _selectedId = null
+      void submodel?.select('oxdna', null)
+      _hideDetail()
+      _updateButtons(null)
+      _clearRunCards()   // drop the E-field arrow / anchor glow of the deleted job
+      _emitJobSelected()
+    }
     _fetchJobs()
     return true
   }

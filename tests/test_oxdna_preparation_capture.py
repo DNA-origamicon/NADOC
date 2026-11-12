@@ -154,10 +154,14 @@ def test_presentation_metadata_is_owned_without_changing_archive_scope():
     original.animations = [m.DesignAnimation(keyframes=[
         m.AnimationKeyframe(annotation_ids=[original.annotations[0].id])])]
     original.zoom_volumes = [m.ZoomVolume(id="detail", settings={"colors": ["red"]})]
+    original.representation_overrides = [m.RepresentationOverride(
+        strand_ids=[original.strands[0].id], representation="ballstick", coloring="cpk")]
     expected = original.model_dump(mode="json")
     owned = core().capture_archive(original)
     assert owned.model_dump(mode="json") == expected
     original.zoom_volumes[0].settings["colors"].append("blue")
+    original.representation_overrides[0].strand_ids.clear()
+    original.representation_overrides[0].coloring = "strand"
     original.animations[0].keyframes[0].annotation_ids.clear()
     assert owned.model_dump(mode="json") == expected
 

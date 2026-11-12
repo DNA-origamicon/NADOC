@@ -638,3 +638,24 @@ it('acknowledges an already settled native style without rebuilding or pausing l
     expect(seen).toHaveBeenCalledTimes(2)
   } finally { window.removeEventListener('nadoc:representation-change', seen); ui.dispose() }
 })
+
+it('F7 changes only the selected strand and repeated presses cycle its local coloring', async () => {
+  mountIds(DOM)
+  const deps = makeDeps({ currentDesign: { id: 'd', strands: [{ id: 's', domains: [{ helix_id: 'h', start_bp: 0, end_bp: 5 }] }] },
+    selection: { items: [{ kind: 'strand', id: 's' }] } })
+  deps.api.saveRepresentationOverrides.mockImplementation(async rows => {
+    deps.store.setState({ currentDesign: { ...deps.store.getState().currentDesign, representation_overrides: rows } })
+  })
+  initRepresentationSwitcher(deps)
+  document.getElementById('menu-view-detail-full').classList.add('is-checked')
+  for (const coloring of ['strand', 'base', 'cluster', 'cpk', 'strand']) {
+    await dispatchKeyEvent(fkey('F7'))
+    await vi.waitFor(() => expect(deps.api.saveRepresentationOverrides).toHaveBeenLastCalledWith([
+      { strand_ids: ['s'], segments: [], representation: 'ballstick', coloring },
+    ]))
+  }
+  expect(deps.setColoringMode).not.toHaveBeenCalled()
+  expect(deps.applyAtomisticMode).not.toHaveBeenCalled()
+  expect(deps.api.clearRepresentationOverrides).not.toHaveBeenCalled()
+  expect(document.getElementById('menu-view-detail-full').classList.contains('is-checked')).toBe(true)
+})

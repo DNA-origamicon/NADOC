@@ -14,6 +14,62 @@ beads, binding cylinders — are CLOSED, and the suspected photo-export bug was 
 photo-mode/override interaction, per-region extra bases, a test gap, and in-app verification —
 real, but none of them silently wrong geometry.
 
+## Strand-layer Close Session correction (2026-11-12)
+
+Visibility-controller subscribers run before the independent display owner.
+On document clear they request a repaint with `currentDesign === null`, while
+strand layers still exist. `paint` previously dereferenced that cleared design,
+throwing before the display cleanup subscriber and remaining session reset ran.
+It now skips repainting without a document; the same synchronous store update
+then disposes the layers and their motion hooks. Regression coverage reproduces
+this subscriber ordering and exercises F7 → F4 → Close Session on the existing
+`workspace/2hb_1xT.nadoc`, intercepting saves and checking unchanged source bytes.
+
+## Strand Full view-motion correction (2026-11-12)
+
+The independent strand Full/Beads layer now follows the native live instance
+transforms before scene buffer upload. The F7 → F4 round trip previously left
+that layer at its construction positions during expanded-spacing and unfold
+animation, while hidden native beads and selection glow moved correctly.
+`strand_display_motion.js` binds by nucleotide/copy and crossover identity,
+retains local colors/alpha, copies slab and connector transforms as well as
+beads, and rebinds on a native renderer rebuild. Shared scene hooks are released
+when the local layer is removed. No topology or saved molecular coordinates change.
+Regression: `frontend/e2e/strand_representation_motion.spec.js` reads the existing
+2hb example without saving, exercises X/U in both directions and F7/F4 while
+unfolded, compares live bead/slab matrices, checks local recoloring and restoration,
+and verifies that the source file is unchanged. The pre-fix expansion mismatch was
+1.190785 nm; the fixed test passes at a 1e-5 matrix-element tolerance. Expanded
+viewport pixels were also inspected. No production view/camera defaults changed.
+Validation: both real-browser strand regressions passed; the full frontend suite
+passed 10,383 tests (one skipped, 925 files). `main.js` LOC delta 0.
+Smoke: 22 passed, two skipped; the previously failing Square-lattice request
+capture check still fails. Lint passed; browser/test-workspace cleanup verified.
+Evidence: `.development-artifacts/strand-motion-validation.json`.
+
+## Strand-local hotkeys (2026-11-11)
+
+Selected-strand View/sidebar representation actions and F-keys now persist `strand_ids`
+plus local `coloring` instead of expanding the selection into duplex-column
+segments. Independent display layers use the selected strand's nucleotides;
+complementary strands and shared domain axes retain their display. Repeated
+F-key presses serialize saves and cycle the selected strands' supported colors,
+including when the global representation already matches. Local atom colors
+remain visible under strand selection; finer selection highlights still apply.
+Existing explicit domain/cluster segment overrides retain duplex semantics.
+Global representation changes without a selection still clear all overrides.
+The oxDNA owned-archive schema retains these display-only fields unchanged.
+Browser regression: `frontend/e2e/strand_representation_hotkeys.spec.js` verifies
+local F7 coloring, native partner visibility and an unchanged source file.
+Frontend full run: 10,379 passed, one skipped; final affected checks: 270 passed.
+Backend affected checks: 158 passed. Final FAST run: 20,763 passed, 90 skipped,
+one capture-timeout failure (four tests in that file passed on isolated retry).
+The aggregate 199 s runtime guard remains over its 90 s backstop, with zero
+per-test violators; no guards or classifications changed. FULL remains deferred.
+Smoke: 22 passed, two skipped; Square-lattice request-capture check also fails
+alone. Cleanup verified. Logs: `.development-artifacts/strand-representation-*`.
+`main.js` LOC delta 0.
+
 ## Zoom volume entry list (2026-11-10)
 
 Zoom Volumes now owns a scrollable list of independent entries. Add captures the

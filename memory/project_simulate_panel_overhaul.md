@@ -11,6 +11,15 @@ metadata:
 
 ## Topic navigation and current boundaries
 
+November 12, 2026: confirmed simulation-job deletes remove rows and selected
+job details immediately, before the backend finishes. The shared
+`simulation_job_deletion.js` controller suppresses stale polling results,
+includes oxDNA descendants, and restores rows on failure without replacing a
+new selection. Engine panels capture the deleted job ID before confirmation or
+network waits. Regression coverage: `simulation_job_deletion.test.js`,
+`simulate_jobs.test.js`, and the intercepted-request browser exercise
+`simulation_job_deletion.spec.js` (no jobs or structures authored).
+
 November 4, 2026: desktop engine tabs use the VR-style curved shoulders and
 raised selection, retaining desktop colors and typography. The selector measures
 label/badge widths on resize: narrow rails clip and fade inactive labels beneath overlapping shoulders and expand the

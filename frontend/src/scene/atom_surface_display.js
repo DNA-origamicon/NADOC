@@ -1,3 +1,4 @@
+import { strandDisplayOverrides } from './strand_representation.js'
 import { combineAtomRenderers, combineSurfaceRenderers } from './volume_render_adapter.js'
 import { initViewVolumeDisplays } from './view_volume_displays.js'
 // Atomistic + molecular-surface display controllers (extracted from main.js #86).
@@ -478,8 +479,10 @@ export function initAtomSurfaceDisplay({
       strandColors: state.coloringMode === 'cluster' ? computeAtomStrandColors(state, null) : null,
     }
     const geometry = state.currentGeometry ?? []
+    const localStrands = strandDisplayOverrides(d)
+    for (const id of localStrands.keys()) surfaceMaps.strandAlphas.set(id, 0)
     for (const n of geometry) {
-      if (!_hidden(n)) continue
+      if (!_hidden(n) && !localStrands.has(n.strand_id)) continue
       nucAlphas.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, 0)
     }
     for (const strand of d?.strands ?? []) {
@@ -506,14 +509,15 @@ export function initAtomSurfaceDisplay({
     // because cluster_transforms is replaced on every gizmo-drag patch (~60/s) while
     // only the pose moves.
     const sig = clusterDisplaySignature(newState.currentDesign)
+    const overridesChanged = newState.currentDesign?.representation_overrides !== prevState.currentDesign?.representation_overrides
     const clusterChanged = sig !== _clusterDisplaySig
     if (clusterChanged) _clusterDisplaySig = sig
-    if (!clusterChanged
+    if (!clusterChanged && !overridesChanged
         && newState.strandColors === prevState.strandColors
         && newState.strandGroups === prevState.strandGroups
         && newState.coloringMode === prevState.coloringMode
         && newState.loopStrandIds === prevState.loopStrandIds) return
-    if (clusterChanged || newState.coloringMode !== prevState.coloringMode) {
+    if (clusterChanged || overridesChanged || newState.coloringMode !== prevState.coloringMode) {
       refreshClusterDisplay(newState.currentDesign)
     }
     if (atomisticRenderer.getMode() !== 'off') _refreshAtomColors()
@@ -781,7 +785,8 @@ export function initAtomSurfaceDisplay({
   // atom's original `serial` so ballstick bonds (serial pairs) resolve without
   // renumbering — bonds are filtered to pairs whose both endpoints survive.
 
-  const volumeDisplays = initViewVolumeDisplays({ scene, store, api, ensureAtoms: _ensureAtomData, getHiddenNucs: () => _hiddenNucKeys })
+  const volumeDisplays = initViewVolumeDisplays({ scene, store, api, ensureAtoms: _ensureAtomData, getHiddenNucs: () => _hiddenNucKeys,
+    getLiveDisplay: () => ({ cg: designRenderer.getHelixCtrl?.(), extras: designRenderer.getCrossoverDisplay?.() }) })
   const volumeVdw = combineAtomRenderers(regionVdwRenderer, () => volumeDisplays.atomRenderers('vdw'))
   const volumeBallstick = combineAtomRenderers(regionBallstickRenderer, () => volumeDisplays.atomRenderers('ballstick'))
   const volumeStick = combineAtomRenderers(regionStickRenderer, () => volumeDisplays.atomRenderers('stick'))

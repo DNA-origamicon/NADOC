@@ -1612,7 +1612,7 @@ retain 12 px defaults. Validation: 10,397 frontend tests passed, 27 focused test
 lint and browser typography/export/save-reopen passed. Smoke had 23 passed/2 skipped
 and an assembly fixture timeout that passed serially. The browser fixture now waits
 for serialized metadata writes before saving its audited structure. Evidence:
-`.development-artifacts/inset-titles/validation.json`; visual follow-up MV-62.
+`.development-artifacts/inset-titles/validation.json`; visual follow-up MV-63.
 
 ## Visualization card collapse and View Actions alignment (2026-11-12)
 
@@ -1625,4 +1625,4 @@ resolved chevrons entering accessible names and Reset Camera wrapping at the
 standard width. Validation: 10,398 frontend tests passed, 18 focused tests, app
 exercise and lint passed. Smoke: 23 passed/2 skipped; assembly fixture setup timed
 out and passed its isolated retry. Evidence: `.development-artifacts/visualization-cards/validation.json`.
-Main.js LOC delta: 0; visual follow-up MV-63.
+Main.js LOC delta: 0; visual follow-up MV-64.

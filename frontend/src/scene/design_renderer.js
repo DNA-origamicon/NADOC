@@ -1,3 +1,4 @@
+import { strandDisplayOverrides } from './strand_representation.js'
 import { createClusterSelection } from './selection_tint.js'
 /**
  * Design renderer — reactive Three.js scene builder.
@@ -389,7 +390,8 @@ export function initDesignRenderer(scene, storeRef) {
     const state = storeRef.getState()
     const refHidden = state.showReferenceGeometry === false || state.simulationTabActive === true
     const hasHidden = _previewHelices.size > 0 || _hiddenCrossoverIds.size > 0 || (refHidden && refIds.size > 0)
-    const repVisible = ad => _helixCtrl?.columnRepAt?.(ad.nucA?.helix_id, ad.nucA?.bp_index) === 'full' &&
+    const localStrands = strandDisplayOverrides(design)
+    const repVisible = ad => !localStrands.has(ad.nucA?.strand_id) && !localStrands.has(ad.nucB?.strand_id) && _helixCtrl?.columnRepAt?.(ad.nucA?.helix_id, ad.nucA?.bp_index) === 'full' &&
       _helixCtrl?.columnRepAt?.(ad.nucB?.helix_id, ad.nucB?.bp_index) === 'full'
     const hasRepHidden = _xoverArcData.some(ad => !repVisible(ad))
     if (!_clusterAlphaKeys.size && !hasHidden && !hasRepHidden && !_xoverBeadsMesh._instanceAlpha) return
@@ -1238,7 +1240,8 @@ export function initDesignRenderer(scene, storeRef) {
       // footprint. Native CG yields to independently colored volume renderers.
       for (const layer of layers) {
         const rep = 'surface' // Independent volume layers supply all local representations.
-        for (const key of layer.keys ?? []) columnRep.set(key, rep)
+        if (layer.strandId) columnRep.set(`strand:${layer.strandId}`, rep)
+        else for (const key of layer.keys ?? []) columnRep.set(key, rep)
       }
       _helixCtrl.setDetailLevel(_detailLevel)
       _helixCtrl.applyRepOverrides(columnRep)
@@ -1456,6 +1459,8 @@ export function initDesignRenderer(scene, storeRef) {
       const { strandColors } = storeRef.getState()
       storeRef.setState({ strandColors: { ...strandColors, [strandId]: hexColor } })
     },
+
+    getCrossoverDisplay() { return { arcData: _xoverArcData, beadsMesh: _xoverBeadsMesh, slabsMesh: _xoverSlabsMesh, connMesh: _xoverConnMesh, slabConnMesh: _xoverSlabConnMesh } },
 
     getHelixCtrl() {
       return _helixCtrl

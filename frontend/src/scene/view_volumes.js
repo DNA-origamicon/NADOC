@@ -1,3 +1,4 @@
+import { strandRepresentationLayers } from './strand_representation.js'
 import { boxIcon, hexIcon, eyeIcon, powerIcon } from './volume_panel.js'
 import { PRESENTATION_EVENT } from './presentation_checkpoint_animation.js'
 import { createPresentationCheckpointButton } from '../ui/presentation_checkpoint_button.js'
@@ -210,7 +211,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     }))
     timing.last.membershipMs = performance.now() - started
     timing.last.pointCount = sourcePoints.length; timing.last.layerCount = layers.length
-    return layers
+    return store.getState().assemblyActive ? layers : [...strandRepresentationLayers(store.getState()), ...layers]
   }
   function applyLayers(layers, revision, waitUntil) {
     const started = performance.now()
