@@ -713,13 +713,14 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   }
   // Delete the selected SNUPI job. Invoked by the consolidated #simulate-job-actions
   // Delete button (dispatched by the master card on the selected node).
-  async function deleteSelected() {
+  async function deleteSelected({ onDeleting = () => {} } = {}) {
     if (!_selectedId) return false
-    const r = await api.deleteSnupiJob(_selectedId)
+    const deletingId = _selectedId
+    onDeleting([deletingId])
+    const r = await api.deleteSnupiJob(deletingId)
     if (r?.ok) {
-      _stopDisplays()
-      _selectedId = null
-      detail && (detail.style.display = 'none')
+      if (!_selectedId || _selectedId === deletingId) _stopDisplays()
+      if (_selectedId === deletingId) _deselectJob()
       await _fetchJobs()
       return true
     }

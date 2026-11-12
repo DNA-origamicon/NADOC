@@ -782,13 +782,14 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   // Delete the selected CanDo job. Invoked by the consolidated #simulate-job-actions
   // Delete button (dispatched by the master card on the selected node). Returns true if
   // the delete went through.
-  async function deleteSelected() {
+  async function deleteSelected({ onDeleting = () => {} } = {}) {
     if (!_selectedId) return false
-    const r = await api.deleteCandoJob(_selectedId)
+    const deletingId = _selectedId
+    onDeleting([deletingId])
+    const r = await api.deleteCandoJob(deletingId)
     if (r?.ok) {
-      if (candoDisplay?.deformJobId?.() === _selectedId) candoDisplay.stopDeform?.()
-      _selectedId = null
-      detail && (detail.style.display = 'none')
+      if (candoDisplay?.deformJobId?.() === deletingId) candoDisplay.stopDeform?.()
+      if (_selectedId === deletingId) _deselectJob()
       await _fetchJobs()
       return true
     }

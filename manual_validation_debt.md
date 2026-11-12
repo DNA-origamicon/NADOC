@@ -1540,3 +1540,16 @@ existing-geometry opacity (including crossover arcs) remain for review. Check or
 close/Apply and after history-edit cancellation.
 No deformed square-lattice extrusion is required; its existing implementation
 limitation remains GUIDE-UX-004.
+
+### MV-62 — Immediate simulation-job deletion (PENDING, 2026-11-12)
+
+- Exercise Simulations → select a stopped job → Delete for each supported engine.
+  Confirm that the row and selected-job details disappear immediately after any
+  confirmation, including oxDNA descendants; another job remains selectable while
+  backend deletion finishes. Failed deletion must restore the rows and show the
+  engine's error without clearing a newer selection.
+- Automated browser exercise: `frontend/e2e/simulation_job_deletion.spec.js`, using
+  a read-only existing fixture and intercepted job requests (no authored jobs or
+  molecular structures). Covers delayed response, stale refresh, and failure.
+- App exercise and smoke are pending: `scripts/sim_guard.py smoke` refused on
+  November 12 because a production NAMD process was running. No override used.

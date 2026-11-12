@@ -910,6 +910,31 @@ describe('consolidated Change directory / Delete (above the jobs card)', () => {
     expect(mdPanel.deleteSelected).toHaveBeenCalled()
   })
 
+  it.each([true, false])('hides a pending delete across polling and preserves the new selection (success=%s)', async success => {
+    mount()
+    const { sim, mdPanel } = make([mdNode(), mdNode({ job_id: 'md2' })])
+    sim.setActiveEngine('namd')
+    await sim.refresh()
+    sim.selectJob('md1')
+    expect(document.querySelector('#simulate-jobs-list [data-job-id="md1"]')).not.toBeNull()
+    let finish
+    mdPanel.deleteSelected.mockImplementation(({ onDeleting }) => {
+      onDeleting(['md1'])
+      return new Promise(resolve => { finish = resolve })
+    })
+    deleteBtn().click()
+    expect(sim.getSelected().id).toBeNull()
+    expect(document.querySelector('[data-job-id="md1"]')).toBeNull()
+    await sim.refresh()
+    expect(document.querySelector('[data-job-id="md1"]')).toBeNull()
+    sim.selectJob('md2')
+    finish(success)
+    await Promise.resolve(); await Promise.resolve()
+    expect(sim.getSelected().id).toBe('md2')
+    await sim.refresh()
+    expect(document.querySelector('#simulate-jobs-list [data-job-id="md1"]') !== null).toBe(!success)
+  })
+
   it('Change directory dispatches to the selected run’s engine panel with a progress callback', async () => {
     mount()
     const { sim, oxdnaPanel } = make([oxNode()])

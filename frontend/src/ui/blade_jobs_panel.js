@@ -586,13 +586,14 @@ export function initBladeJobsPanel({ bladeDisplay = null, getWorkspacePath = nul
   }
   // Delete the selected BLADE job. Invoked by the consolidated #simulate-job-actions
   // Delete button (dispatched by the master card on the selected node).
-  async function deleteSelected() {
+  async function deleteSelected({ onDeleting = () => {} } = {}) {
     if (!_selectedId) return false
-    const r = await api.deleteBladeJob(_selectedId)
+    const deletingId = _selectedId
+    onDeleting([deletingId])
+    const r = await api.deleteBladeJob(deletingId)
     if (r?.ok) {
-      if (bladeDisplay?.deformJobId?.() === _selectedId) bladeDisplay.stopDeform?.()
-      _selectedId = null
-      detail && (detail.style.display = 'none')
+      if (bladeDisplay?.deformJobId?.() === deletingId) bladeDisplay.stopDeform?.()
+      if (_selectedId === deletingId) _deselectJob()
       await _fetchJobs()
       return true
     }
