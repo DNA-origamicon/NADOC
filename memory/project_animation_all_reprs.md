@@ -22,6 +22,81 @@ All three representations are animated via the same pre-bake pipeline in `animat
 > "Trajectory keyframes". The player's private trajectory pipeline (`_bakedTrajectories`,
 > `_bakedTrajAtom`, `_bakedTrajSurf`, the fixed 40/20-frame caps) is **deleted**.
 
+## Progressive trajectory replay (2026-11-11)
+
+Reproduced `2hb_1xT.nadoc`: full playback reaches NAMD frame 50/50, then
+replay reports `Could not load trajectory be74a1436d66`. Animation release
+cancelled the controller's load signal/epoch even after loading completed.
+Progressive pages share that lifetime, so the retained frame count described a
+disposed stream. `cancelPendingLoad({preserveTrajectory:true})` now retains a
+successfully loaded trajectory; unfinished loads still abort. Full teardown and
+job switches retain their ordinary cancellation behavior. The regression test
+uses the real display controller and page loader across repeated release/prepare
+cycles, including a previously unread page, rather than a cache-only mock.
+Verified three consecutive full plays of the saved animation (13 s, frame 50/50,
+no error toast; each progressive page downloaded once). Frontend suite: 10,370
+passed, 1 skipped. Browser autosave refreshed only the embedded snapshot's gzip
+timestamp; decompressed content and all other fields matched the earlier user
+session. Diagnostic session/cache and screenshots were removed.
+
+## Compiled offline presentations (2026-11-11)
+
+`Pre-compile` and `Load` share a row (8px gap) below `Start Presentation`. Keyframe
+headers compact at 320px and wrap below that; titles show `Keyframe N` or `KN` when narrow; numeric fields reserve space for `99.9` and spinners.
+Individual compilation stays in the background, without standalone play/download UI or success text.
+Matching film icons mark full or individual compilation; video badges and a separate
+readiness rail show matching compiled clips, with stale detection after timeline/source edits. Video size has an explicitly themed select. Compilation renders one WebM
+per selected keyframe, exact entry/exit images, captions and companions into an
+import-free HTML player. Play/pause, skip, jump, replay, held endpoints and fullscreen
+work without any server or trajectory files. This is not an authored molecular part.
+
+`scene/compile_presentation.js` prepares the schedule once and reuses regular export
+readiness/compositing/encoding. Individual previews prepare preceding context but
+omit later keyframes and encode only the chosen clip; their result does not replace
+the full presentation. 720p/1080p, 1–60 FPS, minimum one-frame holds, 256 MiB video cap.
+Renderer and player flags restore on success/error/cancel. Entry images reuse the
+first sampled frame; separate exact endpoints avoid ending short of the authored pose.
+Native WebCodecs prefers supported hardware VP9/VP8, falls back automatically, and
+retains quality timing/bounded queuing. WebGL renders the shared scene serially;
+no multi-GPU scheduling or large-origami performance benchmark is claimed.
+
+Completed files save to `NADOC_WORKSPACE/compiled_presentations` (default
+`workspace/compiled_presentations`). `routes_presentations.py` streams bounded uploads
+into temporary files; `core/presentation_library.py` publishes immutable SHA-256-named
+HTML and metadata, lists only complete records, and rejects path/symlink escapes.
+Downloads are attachments with sandbox/nosniff headers, never app-origin execution.
+`Open compiled presentation…` now uses a single library modal outside sidebar mirrors,
+not an OS file picker. It lists server entries and this origin's IndexedDB copies.
+Opening fetches all videos before playback, validates data-only metadata, and rebuilds
+the trusted sandboxed player. Browser persistence is requested; storage failure is
+reported without blocking in-tab playback. No arbitrary Downloads-folder access or
+remote-machine guess is used. Downloaded standalone HTML remains the independent
+backup: local browser storage does not install the NADOC app shell for offline boot.
+
+`Play compiled` embeds video above the canvas. `Inspect in 3D` pauses it, maps the
+encoded sample or exact held endpoint into the saved animation schedule, restores
+initial camera/joints, and waits for the existing live pipeline. Orbit/zoom and normal
+app controls then remain available. Return restores video position and play/pause state.
+Cancel, unavailable frames, source changes and obsolete completions leave video usable.
+An editor action can take scene ownership without being stopped on return. Live 3D
+needs the matching source and reachable/cached data; the HTML carries a source fingerprint,
+not molecular data. Fullscreen inspection reveals the normal app and can return fullscreen.
+
+Browser verification covers selected synthetic NAMD frames with ions/box and a read-only
+existing example. A second browser profile downloads a server presentation, caches it,
+then opens/plays with networking disabled; standalone HTML also makes zero HTTP requests.
+Server tests cover complete publication, deduplication, bounded uploads, cleanup and
+path protection. Browser files/reports/workspaces and build output use failure-safe scratch.
+Library checks: 4 API tests and 2 browser workflows passed; 10,347 frontend assertions
+passed / 1 skipped, but the final native-placement audit failed. Build/lint passed.
+Follow-up fixed omitted display-field contracts and leaking test mocks. Eight native
+incidents were individually reviewed/acknowledged; placement gate is clear. 380 focused
+checks, 78 metadata checks and two offline browser workflows passed. The intermediate
+FAST rerun had 20,697 passes/45 failures; 44 schema failures subsequently passed focused
+checks. One experimental CPD preview-contract failure and deferred FULL-suite debt remain.
+See ISSUE-186 and `.development-artifacts/native-review-20261111/`.
+`main.js` LOC delta: 0.
+
 ## Local presentation mode (2026-11-10)
 
 The parts editor's Animations tab has a red **Start Presentation** button above
@@ -125,11 +200,14 @@ with ffmpeg/ffprobe. Source workspace designs are not modified.
 
 November 10, 2026: captured/updated camera poses store a small JPEG thumbnail of
 the rendered 3D canvas. Pose rows and the keyframe pose listbox display it on
-hover/focus; legacy poses need Capture/Update to acquire an image. Keyframe cards
-collapse while keeping selection, individual preview and delete available.
-Selecting a title seeks to its assigned endpoint; the adjacent preview plays
-only its transition/hold, using the same state baking and frame readiness as
-whole-animation playback. Annotation checkboxes select all/none/a subset of the
+hover/focus; legacy poses need Capture/Update to acquire an image. V, pose-list Capture
+and keyframe Capture share the saved-pose snapshot/name/thumbnail helper. Keyframe Capture
+creates a normal Pose N and selects its ID only, preserving other settings. Keyframe cards
+collapse while keeping selection, play/pause and delete available. Trajectory scrubbers
+sit below titles with bounded first/play-pause/stop/last controls underneath; collapsed
+play shares that state. Title selection seeks to the endpoint. Whole-animation controls
+also sit below their scrubber. Per-keyframe `Smooth playback` (default off) reuses Simulation
+interpolation, bounded neighbors and stage breaks; video compilation awaits the same subframes. Annotation checkboxes select all/none/a subset of the
 right-sidebar entries (now renameable/collapsible). Null selection retains legacy
 visibility; explicit IDs transiently override it without changing working notes.
 

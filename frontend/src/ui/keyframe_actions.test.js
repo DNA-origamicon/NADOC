@@ -1,22 +1,38 @@
 import { expect, it, vi } from 'vitest'
-vi.mock('../scene/annotation_overlay.js', () => ({ captureSceneAnnotations: () => [{ id: 'shown' }] }))
-import { capturedFeatureIndex, createKeyframeActions } from './keyframe_actions.js'
+import { createKeyframeActions } from './keyframe_actions.js'
+import { captureNamedPose } from './saved_pose_capture.js'
 
-it('pins the current end to a stable feature index, including empty and previewed stages', () => {
-  expect(capturedFeatureIndex({ feature_log: [{}, {}], feature_log_cursor: -1 })).toBe(1)
-  expect(capturedFeatureIndex({ feature_log: [] })).toBe(-2)
-  expect(capturedFeatureIndex({ feature_log: [{}, {}] }, 0)).toBe(0)
-})
-it.each([false, true])('captures visible subsets and the current camera without changing timing (assembly=%s)', async assembly => {
-  const api = { keyframeAction: vi.fn(async () => ({})) }
-  const actions = createKeyframeActions({ getContext: () => ({ document: { id: 'd', feature_log: [{}, {}] }, animationId: 'a', assembly }), api,
-    player: { getCapturedFeatureIndex: () => 0 }, captureCurrentCamera: () => ({ position: [1, 2, 3], orbitMode: 'turntable' }),
-    viewVolumes: { visibleIds: () => ['visible-volume'] }, zoomVolume: { visibleIds: () => ['visible-inset'] } })
+it.each([false, true])('creates a normal saved pose and selects only its ID (assembly=%s)', async assembly => {
+  const document = { id: 'd', camera_poses: [{ id: 'old' }] }
+  const captureCurrentCamera = () => ({ position: [1, 2, 3], orbitMode: 'turntable' })
+  const captureThumbnail = () => 'data:image/png;base64,YQ=='
+  const create = vi.fn(async () => ({ [assembly ? 'assembly' : 'design']: { ...document, camera_poses: [...document.camera_poses, { id: 'concurrent' }, { id: 'new' }] } }))
+  const update = vi.fn(async () => ({}))
+  const api = { [assembly ? 'createAssemblyCameraPose' : 'createCameraPose']: create,
+    [assembly ? 'updateAssemblyKeyframe' : 'updateKeyframe']: update }
+  const actions = createKeyframeActions({ getContext: () => ({ document, animationId: 'a', assembly }), api,
+    player: {}, captureCurrentCamera, captureThumbnail })
   await actions.capture({ id: 'k', text: 'keep', hold_duration_s: 3 })
-  expect(api.keyframeAction).toHaveBeenCalledWith(assembly, 'capture', 'a', 'k', expect.objectContaining({
-    annotation_ids: ['shown'], view_volume_ids: ['visible-volume'], zoom_volume_ids: ['visible-inset'], feature_log_index: 0,
-    pose: expect.objectContaining({ position: [1, 2, 3], orbit_mode: 'turntable' }),
-  }))
+  const expected = captureNamedPose(document, captureCurrentCamera, captureThumbnail)
+  expect(expected.name).toBe('Pose 2')
+  expect(create).toHaveBeenCalledWith(expected.name, expected.state)
+  expect(update).toHaveBeenCalledWith('a', 'k', { camera_pose_id: 'new' })
+})
+it('does not assign a captured pose after switching documents', async () => {
+  let document = { id: 'original' }
+  const api = { createCameraPose: vi.fn(async () => { document = { id: 'other' }; return { design: { id: 'original', camera_poses: [{ id: 'new' }] } } }), updateKeyframe: vi.fn() }
+  const actions = createKeyframeActions({ getContext: () => ({ document, animationId: 'a', assembly: false }), api, player: {}, captureCurrentCamera: () => ({}) })
+  await expect(actions.capture({ id: 'k' })).rejects.toThrow('changed')
+  expect(api.updateKeyframe).not.toHaveBeenCalled()
+})
+it('captures a selected assembly-part pose while preserving all other keyframe settings', async () => {
+  const frame = { id: 'k', camera_pose_id: 'old', annotation_ids: ['note'], zoom_volume_ids: [], feature_log_index: 4, configuration_id: 'config', joint_values: { j: 3 } }
+  const document = { camera_poses: [{ id: 'old' }], animations: [{ id: 'a', keyframes: [structuredClone(frame)] }] }
+  const actions = createKeyframeActions({ getContext: () => ({ document, animationId: 'a', patchPart: async change => change(document) }), player: {}, captureCurrentCamera: () => ({ position: [1, 2, 3] }) })
+  await actions.capture(frame)
+  const pose = document.camera_poses[1]
+  expect(pose.name).toBe('Pose 2')
+  expect(document.animations[0].keyframes[0]).toEqual({ ...frame, camera_pose_id: pose.id })
 })
 it('duplicates selected assembly-part frames deeply and inserts immediately below the source', async () => {
   const document = { animations: [{ id: 'a', keyframes: [{ id: 'one', trajectory_scope: 'lineage', binding_states: { b: .5 } }, { id: 'two' }] }] }

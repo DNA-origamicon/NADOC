@@ -55,6 +55,19 @@ def test_nested_authoring_settings_are_compared_not_only_geometry():
     assert result["issues"][0]["fields"] == ["metadata"]
 
 
+def test_zoom_volumes_survive_reload_without_changing_authoring_proof():
+    from backend.core.zoom_volume_model import ZoomVolume
+
+    design = Design(recipe_root=PartRecipeRoot(), zoom_volumes=[
+        ZoomVolume(id="inset", zoom_step=2, settings={"background": "black"})])
+    reloaded = Design.model_validate_json(design.model_dump_json())
+    assert FIELD_ROLES["zoom_volumes"] == "presentation"
+    assert reloaded.zoom_volumes == design.zoom_volumes
+    from backend.core.part_recipe_publication import preserve_document_state
+    assert preserve_document_state(design, Design()).zoom_volumes == design.zoom_volumes
+    assert assess_part_history(reloaded)["status"] == "verified"
+
+
 def test_presentation_is_explicitly_outside_authoring_proof():
     design = Design(recipe_root=PartRecipeRoot(), annotations_enabled=False)
     assert assess_part_history(design)["status"] == "verified"

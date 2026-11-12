@@ -28,3 +28,9 @@ it('aligns boundaries with transition plus hold and isolates different resolutio
   expect(result.segments.map(s => [s.start, s.duration, s.fraction])).toEqual([[0, 3, 1], [3, 6, 0], [9, 1, 0]])
   expect(result.segments[2].tracked).toBe(false)
 })
+
+it('counts only buffered exact pages, including eviction and reversed bounds', () => {
+  const state = { phase: 'frames', trajectoryFrames: 10, exact: true, readyIndices: [2, 3, 5] }
+  expect(keyframeReadiness({ ...kf, trajectory_frame_start: 2, trajectory_frame_end: 5 }, state).fraction).toBe(.75)
+  expect(keyframeReadiness({ ...kf, trajectory_frame_start: 5, trajectory_frame_end: 2 }, { ...state, readyIndices: [5] }).intervals).toEqual([[0, .25]])
+})

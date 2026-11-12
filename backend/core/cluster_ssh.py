@@ -379,6 +379,12 @@ class ClusterConnection:
             finally:
                 if process is not None:
                     process.close()
+                    # close() only sends the request. Give the peer time to free
+                    # its session slot before the next command opens a channel.
+                    try:
+                        await asyncio.wait_for(process.wait_closed(), timeout=1)
+                    except asyncio.TimeoutError:
+                        pass  # An unresponsive peer must not block cancellation.
 
         try:
             result = await asyncio.wait_for(execute(), timeout=timeout)

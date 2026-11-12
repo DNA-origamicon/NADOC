@@ -16,7 +16,7 @@ function setup() {
     getViewVolumes: () => [{ id: 'v', name: 'Detail' }], getZoomVolumes: () => [{ id: 'z', name: 'Inset' }],
     stopPreview: vi.fn(), save, onError: error => { throw error } })
   controls.decorate(row, animation.keyframes[1], 1, [])
-  return { row, player, save, capture, duplicate }
+  return { row, player, save, capture, duplicate, animation }
 }
 afterEach(() => { controls?.dispose(); vi.restoreAllMocks(); document.body.replaceChildren() })
 it('collapses controls while keeping selectable title, preview and delete in the header', async () => {
@@ -103,4 +103,21 @@ it('places capture above the pose and duplicate between preview and delete', asy
   expect(duplicate).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }))
   expect(button.disabled).toBe(true)
   await Promise.resolve(); expect(button.disabled).toBe(false)
+})
+
+it('prepares the selected trajectory range with preceding context and excludes later jobs', async () => {
+  let tick
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation(fn => { tick = fn; return 1 })
+  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
+  const { row, player, animation } = setup()
+  Object.assign(animation.keyframes[1], { is_trajectory: true, trajectory_job_id: 'selected',
+    trajectory_engine: 'namd', trajectory_frame_start: 10, trajectory_frame_end: 12,
+    trajectory_stride: 2, trajectory_show_ions: true, trajectory_show_box: true })
+  animation.keyframes[2].trajectory_job_id = 'later-job'
+  row.querySelector('[title="Preview keyframe"]').click()
+  await vi.waitFor(() => expect(tick).toBeTypeOf('function'))
+  const prepared = player.play.mock.calls[0][0]
+  expect(prepared.loop).toBe(false)
+  expect(prepared.keyframes).toEqual(animation.keyframes.slice(0, 2))
+  expect(player.pause).toHaveBeenCalledOnce()
 })

@@ -560,6 +560,9 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   let previousMode = store.getState().assemblyActive
   let previousGeometry = store.getState().currentGeometry
   const onPresentation = ({ detail }) => {
+    // Part and assembly panels share the event bus; only the owning document
+    // contributes readiness. An inactive host must not veto video capture.
+    if (detail && detail.documentId !== store.getState()[documentKey()]?.id) return
     animationVolumes = detail?.documentId === store.getState()[documentKey()]?.id ? detail.state.view_volumes ?? null : null
     body.inert = animationVolumes !== null
     if (animationVolumes !== null) transform.detach()

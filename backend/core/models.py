@@ -2369,6 +2369,7 @@ class AnimationKeyframe(BaseModel):
     # deliberately reveal/hide the ions and periodic cell between segments.
     trajectory_show_ions: bool = False
     trajectory_show_box: bool = False
+    trajectory_smooth_playback: bool = False
 
     # Spin = camera orbits the model centroid for the full keyframe duration.
     # Independent of camera_pose_id: the saved pose supplies the framing/lens,

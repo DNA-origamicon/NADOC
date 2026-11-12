@@ -431,6 +431,71 @@ def test_poll_status_controller_failure_uses_accounting_safely(failure, accounti
 # ── reconcile_remote_job ──────────────────────────────────────────────────────
 
 
+@pytest.mark.parametrize("refusals", [1, 2])
+def test_poll_status_retries_accounting_channel_refusal_once(refusals, monkeypatch):
+    from backend.core.cluster_ssh import ClusterSSHError
+
+    delays = []
+
+    async def sleep(delay):
+        delays.append(delay)
+
+    monkeypatch.setattr(ex.asyncio, "sleep", sleep)
+
+    class Conn(FakeConn):
+        attempts = 0
+
+        async def run(self, cmd, timeout=60):
+            assert cmd.startswith("timeout --kill-after=1s 8s ")
+            assert timeout == 10
+            if "squeue" in cmd:
+                return RunResult(124, "", "")
+            self.attempts += 1
+            if self.attempts <= refusals:
+                raise ClusterSSHError("SSH command channel refused: open failed", kind="network")
+            return RunResult(0, "42|RUNNING", "")
+
+    job = new_job("d", "p", name_stem="d", package_subdir="pkg")
+    job.slurm_job_id = "42"
+    conn = Conn()
+    if refusals == 1:
+        assert _run(ex.poll_status(job, conn=conn)) == ("RUNNING", "running")
+    else:
+        with pytest.raises(ClusterSSHError):
+            _run(ex.poll_status(job, conn=conn))
+    assert conn.attempts == 2
+    assert delays == [0.5]
+
+
+def test_poll_remote_jobs_transport_failure_preserves_job_without_traceback(tmp_path, monkeypatch, caplog):
+    from backend.core.cluster_ssh import ClusterSSHError
+
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "42"
+    job.status = MdStatus.queued
+    job.save(tmp_path)
+
+    async def unavailable(*args, **kwargs):
+        raise ClusterSSHError("SSH command channel refused: open failed", kind="network")
+
+    monkeypatch.setattr(ex, "reconcile_remote_job", unavailable)
+    assert _run(ex.poll_remote_jobs(tmp_path, conn=FakeConn())) == []
+    assert _run(ex.poll_remote_jobs(tmp_path, conn=FakeConn())) == []
+    assert MdJob.load(job.job_id, tmp_path).status == MdStatus.queued
+    records = [r for r in caplog.records if "remote status unavailable" in r.message]
+    assert len(records) == 1
+    assert records[0].exc_info is None
+
+    async def recovered(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(ex, "reconcile_remote_job", recovered)
+    assert _run(ex.poll_remote_jobs(tmp_path, conn=FakeConn())) == [job.job_id]
+    monkeypatch.setattr(ex, "reconcile_remote_job", unavailable)
+    _run(ex.poll_remote_jobs(tmp_path, conn=FakeConn()))
+    assert len([r for r in caplog.records if "remote status unavailable" in r.message]) == 2
+
+
 def test_reconcile_running_updates_state(tmp_path, alpine, resources):
     job = _make_prepared_job(tmp_path)
     job.slurm_job_id = "42"

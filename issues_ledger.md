@@ -1,5 +1,17 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-187 — Trajectory readiness rail loses live progress (2026-11-12)
+
+- [x] Player events dropped trajectory identity/range and compilation intercepted them
+  before the readiness rail. Forward full progress before compiler handling, publish
+  completion, poll cold preparation, and retain same-document readiness across row rebuilds.
+- [x] Report actual buffered exact frames during progressive playback; unloaded/evicted
+  pages stay dark. Blue work percentages remain distinct from green prepared frames.
+- [x] Separate compiled-video rail and keyframe badges track successful saved/loaded
+  videos; source, timing, smoothing and preceding-keyframe edits invalidate their status.
+- Verification: unit coverage plus isolated browser checks for delayed loading,
+  prepared completion, successful compilation and stale-video indicators.
+
 ## Full regression follow-up (2026-11-11)
 
 - Synced upstream after committing the existing work. Full `just test` at
@@ -25,6 +37,58 @@
   checking live process references; compact logs and summary were retained.
 - Evidence: `.development-artifacts/full-test-20261111/`. The full-suite gate
   remains red; focused validation does not clear the full-suite watermark.
+
+## ISSUE-186 — Display-schema omissions and test contamination (2026-11-11)
+
+- [x] Classified `zoom_volumes` as presentation state; strict immutable publication
+  admits only an empty ordinary list, preserving its closed scope. NAMD input
+  identity excludes this display-only field. Added missing camera thumbnail,
+  annotation formatting/name and keyframe annotation-selection fields to the
+  bounded oxDNA archive copy schema. No simulation parameters or geometry changed.
+- [x] Repair cancellation injection now restores before fixture cleanup even on
+  an unexpected exception; context reset runs in a finally block. NAMD tests patch
+  consumer-module bindings instead of global `json.loads` / `subprocess.run`.
+- [x] Reviewed all eight native-placement incidents individually. Their tracebacks
+  stop in leaked test injectors before placement comparisons or command launch;
+  every recorded source hash is unchanged. Explicit acknowledgements are retained
+  in `tools/native_placement_audit/reviews/20261112*.json`; original reports remain.
+  The explicit gate is clear. Six corner clashes and zero 26hb clashes are retained
+  as numeric evidence; no geometry oracle or golden changed.
+- Validation: intermediate `just test-smart` selected FAST: 20,697 passed,
+  45 failed, 90 skipped in 193.43 s, no new incidents and no per-test timing violators.
+  All 44 display-schema/preservation failures subsequently passed in the 380-case
+  focused run; 78 follow-up metadata checks passed. Two browser workflows passed
+  after acknowledgement (22.8 s), including server download and offline playback.
+- [ ] Remaining: `test_part_transform_frontend_contract.py::test_actual_complete_native_packet_is_accepted_by_frontend[cpd]`
+  rejects the experimental CPD packet with “incomplete or unsupported display fields”.
+  No CPD changes made: CLAUDE.md excludes that work unless explicitly requested.
+  Needs a dedicated CPD contract review; this does not keep the placement latch active.
+- Broad-suite debt remains: “DEFERRED: this change would have needed the FULL suite,
+  but no test-dedicated session is open, so only the fast suite ran. Parked in
+  .nadoc-slow-pending.” No guards, budgets or slow markers changed. Aggregate FAST
+  time exceeded 90 s across 20,832 cases; no individual case exceeded 5 s.
+- Evidence: `.development-artifacts/native-review-20261111/` (before/after logs,
+  per-incident reviews, source hashes, numeric clash records, browser result).
+
+
+## ISSUE-185 — Compiled-presentation control styling (2026-11-11)
+
+- [x] User reported the unstyled Video size selector. It now declares dark-theme
+  colors, border, padding, typography and keyboard focus; a browser regression checks it.
+- [x] New library modal is mounted outside mirrored sidebars after the browser test
+  exposed duplicate picker controls. Opening now uses one active modal.
+
+
+## ISSUE-184 — Unrelated view-volume host vetoes presentation export (2026-11-11)
+
+- [x] Reproduced with a failing host-isolation unit test while validating Compile
+  Presentation: a global presentation event for another document registered a
+  readiness promise resolving false, so video capture refused a ready frame.
+- View-volume hosts now ignore non-owning document events before contributing
+  readiness. A real document switch during pending work still invalidates it.
+- Full-app compilation and downloaded-file offline playback passed; regression
+  lives in `view_volumes.idle.test.js`.
+
 
 **Purpose.** A prioritized backlog of UX bugs / tech-debt, run as a tight per-session loop that
 mirrors the `main.js` carve-up (`main_js_carveup.md` + `main_js_extraction_log.md`). One **phase** per

@@ -1,3 +1,4 @@
+import { captureNamedPose } from './saved_pose_capture.js'
 import { attachPoseThumbnail } from './pose_thumbnail.js'
 /**
  * Camera Poses panel — sidebar list of saved camera viewpoints.
@@ -47,27 +48,26 @@ export function initCameraPanel(store, { captureCurrentCamera, captureThumbnail 
 
   // ── Capture current view ──────────────────────────────────────────────────
   captureBtn.addEventListener('click', async () => {
-    const camState = { ...captureCurrentCamera(), thumbnail: captureThumbnail() }
+    const { currentAssembly, currentDesign, assemblyActive } = store.getState()
+    const source = _partInstanceId ? _partDesign : assemblyActive ? currentAssembly : currentDesign
+    if (!source) return
+    const { name, state: camState } = captureNamedPose(source, captureCurrentCamera, captureThumbnail)
     if (_partInstanceId) {
-      const n = (_partDesign?.camera_poses?.length ?? 0) + 1
       await _modifyPartDesign(d => {
         d.camera_poses = [...(d.camera_poses ?? []), {
-          id: crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`, name: `Pose ${n}`,
+          id: crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`, name,
           position: camState.position, target: camState.target,
           up: camState.up, fov: camState.fov, thumbnail: camState.thumbnail, orbit_mode: camState.orbitMode ?? 'trackball',
         }]
       })
       return
     }
-    const { currentAssembly, currentDesign, assemblyActive } = store.getState()
     if (assemblyActive && currentAssembly) {
-      const n = (currentAssembly.camera_poses?.length ?? 0) + 1
-      await api.createAssemblyCameraPose(`Pose ${n}`, camState)
+      await api.createAssemblyCameraPose(name, camState)
       return
     }
     if (!currentDesign) return
-    const n = (currentDesign.camera_poses?.length ?? 0) + 1
-    await api.createCameraPose(`Pose ${n}`, camState)
+    await api.createCameraPose(name, camState)
   })
 
   // ── Rebuild list when design changes ─────────────────────────────────────
@@ -297,7 +297,10 @@ export function initCameraPanel(store, { captureCurrentCamera, captureThumbnail 
     updateBtn.addEventListener('pointerleave', () => { updateBtn.style.cssText = _updateStyle })
     updateBtn.addEventListener('click', async e => {
       e.stopPropagation()
-      const camState = { ...captureCurrentCamera(), thumbnail: captureThumbnail() }
+      const { currentAssembly, currentDesign, assemblyActive } = store.getState()
+    const source = _partInstanceId ? _partDesign : assemblyActive ? currentAssembly : currentDesign
+    if (!source) return
+    const { name, state: camState } = captureNamedPose(source, captureCurrentCamera, captureThumbnail)
       if (_partInstanceId) {
         await _modifyPartDesign(d => {
           const p = d.camera_poses?.find(p => p.id === pose.id)

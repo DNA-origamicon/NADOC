@@ -4241,7 +4241,7 @@ async function main() {
     isUnfoldActive:           _isUnfoldActive,
     isDeformActive,
     flashSelectionLevel:      selectionFilter.flashLevelChange,
-    captureCurrentCamera,
+    captureCurrentCamera, captureThumbnail,
     frameSelectionOrAll:      _frameSelectionOrAll,
     setMenuToggle:            _setMenuToggle,
     toggleUnfold:             _toggleUnfold,
@@ -5739,8 +5739,8 @@ async function main() {
   // (`animPanel` is forward-declared ~5200 lines up, next to the player it serves —
   //  four call sites read it from callbacks registered long before this line.)
   _partAnimPanel = animPanel = initAnimationPanel(store, {
-    player: animPlayer, zoomVolume, viewVolumes,
-    captureCurrentCamera,
+    player: animPlayer, zoomVolume, viewVolumes, controls,
+    captureCurrentCamera, captureThumbnail,
     api,
     exportVideo,
     renderer,

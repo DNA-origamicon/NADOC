@@ -575,18 +575,26 @@ export function initOxdnaDisplay({
   // stale positions (the "toggle off but sim positions stay" desync).
   let _epoch = 0
   let _loadAbort = null
+  let _completedTrajectoryLoad = null
   function _beginLoad() {
+    _completedTrajectoryLoad = null
     api.cancelTrajectoryPrefetch?.()
     trajectoryMemory.release(_previewLease); _preview?.frames.clear(); _preview?.atoms.clear(); _preview = null
     _loadAbort?.abort()
     _loadAbort = new AbortController()
     return _loadAbort.signal
   }
-  function _cancelLoad() {
+  function _cancelLoad({ preserveTrajectory = false } = {}) {
+    // A progressive trajectory keeps this signal and epoch for future page reads.
+    // Releasing animation ownership must not dispose an already-loaded stream.
+    // A new/incomplete load still takes the ordinary cancellation path below.
+    if (preserveTrajectory && _mode === 'trajectory' && _traj
+        && _loadAbort && _completedTrajectoryLoad === _loadAbort) return
     api.cancelTrajectoryPrefetch?.()
     trajectoryDownloads.cancelPending()
     _loadAbort?.abort()
     _loadAbort = null
+    _completedTrajectoryLoad = null
     _epoch++
   }
 
@@ -2063,6 +2071,7 @@ export function initOxdnaDisplay({
     _trajRange = { frameStart: range.frameStart, frameEnd: range.frameEnd }
     if (preparationOnly) {
       _active = false
+      _completedTrajectoryLoad = _loadAbort
       return { ok: true, n_frames: resp.total_n_frames ?? resp.n_frames }
     }
     // Replace setup-preview strands before showFrame's FEM move; otherwise the rebuild
@@ -2082,6 +2091,8 @@ export function initOxdnaDisplay({
     if (_stream) await _stream.ensure(0)
     showFrame(0)
     if (_stream) await _applyHeavy({ strict: true })
+    if (epoch !== _epoch || signal.aborted) return { ok: false, reason: 'superseded' }
+    _completedTrajectoryLoad = _loadAbort
     onProgress?.({ phase: 'display', done: 1, total: 1 })
     return { ok: true, n_frames: resp.total_n_frames ?? resp.n_frames, markers: resp.markers || [], stages: resp.stages || [] }
   }
@@ -2558,6 +2569,19 @@ export function initOxdnaDisplay({
     activeJobId: () => _jobId,
     alignment: () => _align,
     cancelPendingLoad: _cancelLoad,
+    trajectoryReadiness: () => {
+      const state = trajectoryPreparationProgress()
+      if (!_traj) return null
+      if (state.kind === 'cg') {
+        state.exact = true
+        state.readyIndices = Object.keys(_traj.frames).filter(i => _traj.frames[i]).map(i => sourceFrame(Number(i)))
+        state.grid = []; state.capped = !!_stream?.status().limited
+      }
+      const total = state.exact ? _traj.frames.length : state.grid.length
+      return { ...state, done: state.readyIndices.length, total,
+        phase: total > 0 && state.readyIndices.length === total ? 'ready' : 'frames' }
+    },
+    trajectoryMarkers: () => _traj?.markers ?? [],
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
       // atomSerials/nNucleotides let a caller price an all-atom prebuild: the exact
       // serial span once the topology has been fetched, the nucleotide count (which the

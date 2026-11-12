@@ -227,18 +227,23 @@ async function _captureWebM({ animation, canvas, renderer, scene, camera, player
   const tmp = Object.assign(document.createElement('canvas'), { width: w, height: h })
   const ctx = tmp.getContext('2d', { willReadFrequently: true })
   const blob = await encodeWebM({ canvas: tmp, fps, totalDur, onProgress, onPhase, signal,
-    renderFrame: async t => {
-      player.seekTo(t)
-      if (await player.settleFrame?.() === false) throw new Error('Animation frame is not ready for export')
-      renderer.render(scene, camera)
-      await settleZoomVolumes(scene)
-      _copyEditorFrame(ctx, canvas, w, h)
-      drawZoomVolumes(scene, ctx, w, h, camera)
-      _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
-    },
+    renderFrame: editorVideoFrame({ player, renderer, scene, camera, ctx, canvas, w, h }),
   })
   onPhase?.('save')
   _download(blob, `${animation.name || 'animation'}.webm`)
+}
+
+/** Shared frame composition for video export and offline presentation compilation. */
+export function editorVideoFrame({ player, renderer, scene, camera, ctx, canvas, w, h }) {
+  return async t => {
+    player.seekTo(t)
+    if (await player.settleFrame?.() === false) throw new Error('Animation frame is not ready for export')
+    renderer.render(scene, camera)
+    await settleZoomVolumes(scene)
+    _copyEditorFrame(ctx, canvas, w, h)
+    drawZoomVolumes(scene, ctx, w, h, camera)
+    _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
+  }
 }
 
 // ── GIF via gifenc ─────────────────────────────────────────────────────────────

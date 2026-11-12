@@ -16,7 +16,13 @@ export function keyframeReadiness(kf, progress = {}) {
   const low = Math.min(start, end), high = Math.max(start, end), count = high - low + 1
   const intervals = []
   if (progress.phase === 'ready') intervals.push([0, 1])
-  else if (progress.phase === 'frames' && total > 0) {
+  else if (progress.phase === 'frames' && total > 0 && progress.exact) {
+    for (const index of new Set(progress.readyIndices || [])) {
+      if (index < low || index > high) continue
+      const a = (index - low) / count, b = (index - low + 1) / count
+      intervals.push(start <= end ? [a, b] : [1 - b, 1 - a])
+    }
+  } else if (progress.phase === 'frames' && total > 0) {
     const grid = progress.grid || [], ready = new Set(progress.readyIndices || [])
     for (let i = 0; i < grid.length; i++) {
       if (!ready.has(grid[i])) continue

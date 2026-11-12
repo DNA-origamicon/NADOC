@@ -285,7 +285,7 @@ def production_rmsf(
         _parse_box_nm,
         oxdna_backbone_sites,
         read_configuration_full,
-        read_trajectory_frames_full,
+        iter_trajectory_frames_full,
         unwrap_align_to_reference,
     )
 
@@ -304,14 +304,14 @@ def production_rmsf(
         else [production_traj_path]
     )
 
-    acc: dict[tuple, dict] = {}  # key → {"pos": [bb xyz...], "a1": [a1...]}
+    acc: dict[tuple, dict] = {}  # Per-particle running moments; independent of frame count.
     n_frames = 0
     # Topology and particle identities are constant across a trajectory. Rebuilding
     # the bond graph + DFS traversal for every frame is pure repeated Python work;
     # reuse the same vectorized unwrap plan for every matching key set.
     plan_by_keys: dict[frozenset, dict] = {}
     for path in paths:
-        frames = read_trajectory_frames_full(
+        frames = iter_trajectory_frames_full(
             path,
             design,
             copies=copies,
@@ -341,12 +341,22 @@ def production_rmsf(
             a3 = np.asarray([v["a3"] for v in frame_values])
             bb_sites = oxdna_backbone_sites(cm, a1, a3)
             for k, v, bb in zip(frame_keys, frame_values, bb_sites):
-                slot = acc.setdefault(k, {"pos": [], "a1": [], "cm": [], "a3": []})
-                slot["pos"].append(bb)
-                slot["a1"].append(v["a1"])
+                slot = acc.get(k)
+                if slot is None:
+                    slot = acc[k] = {
+                        "count": 0, "pos": np.zeros(3), "m2": 0.0,
+                        "a1": np.zeros(3), "cm": np.zeros(3), "a3": np.zeros(3),
+                    }
+                slot["count"] += 1
+                count = slot["count"]
+                # Welford's variance avoids cancellation for large translations.
+                delta = bb - slot["pos"]
+                slot["pos"] += delta / count
+                slot["m2"] += float(np.dot(delta, bb - slot["pos"]))
+                slot["a1"] += (v["a1"] - slot["a1"]) / count
                 if include_average_frame:
-                    slot["cm"].append(np.asarray(v["backbone_position"], dtype=float))
-                    slot["a3"].append(np.asarray(v["a3"], dtype=float))
+                    slot["cm"] += (v["backbone_position"] - slot["cm"]) / count
+                    slot["a3"] += (v["a3"] - slot["a3"]) / count
 
     if n_frames == 0 or not acc:
         return {
@@ -366,10 +376,9 @@ def production_rmsf(
         copy = (
             key[3] if len(key) == 4 else 0
         )  # loop-copy index (0 for plain nucleotides)
-        P = np.array(slot["pos"])  # (F, 3)
-        mean_pos = P.mean(axis=0)
-        rmsf = float(np.sqrt(((P - mean_pos) ** 2).sum(axis=1).mean()))
-        a1m = np.array(slot["a1"]).mean(axis=0)
+        mean_pos = slot["pos"]
+        rmsf = float(np.sqrt(max(0.0, slot["m2"] / slot["count"])))
+        a1m = slot["a1"]
         a1m = a1m / (np.linalg.norm(a1m) + 1e-14)
         positions.append(
             {
@@ -386,8 +395,8 @@ def production_rmsf(
         )
         rmsfs.append(rmsf)
         if include_average_frame:
-            cmm = np.array(slot["cm"]).mean(axis=0)
-            a3m = np.array(slot["a3"]).mean(axis=0)
+            cmm = slot["cm"]
+            a3m = slot["a3"]
             a3m = a3m / (np.linalg.norm(a3m) + 1e-14)
             average_frame[key] = {
                 "backbone_position": cmm,
@@ -909,7 +918,7 @@ def production_metric_series(
         _parse_box_nm,
         oxdna_backbone_site,
         read_configuration_full,
-        read_trajectory_frames_full,
+        iter_trajectory_frames_full,
         unwrap_align_to_reference,
     )
 
@@ -929,13 +938,13 @@ def production_metric_series(
     twist_pf: list[float] = []
     curv_pf: list[float] = []
     bp_pf: list[float] = []
-    acc: dict[tuple, list] = {}  # key → [bb xyz, …] for the mean structure
+    acc: dict[tuple, tuple] = {}  # key → (count, running mean position)
     formed: dict[tuple, int] = {}  # (helix,bp) → frames the pair was H-bonded
     total_pair: dict[tuple, int] = {}  # (helix,bp) → frames the pair was designed
     n_frames = 0
     n_designed = 0
     for path in paths:
-        frames = read_trajectory_frames_full(path, design)
+        frames = iter_trajectory_frames_full(path, design)
         box = _parse_box_nm(path)
         for fr in frames:
             aligned = (
@@ -954,7 +963,10 @@ def production_metric_series(
                         "backbone_position": bb,
                     }
                 )
-                acc.setdefault(k, []).append(bb)
+                count, mean = acc.get(k, (0, np.zeros(3)))
+                count += 1
+                mean += (bb - mean) / count
+                acc[k] = (count, mean)
             core = _filter_to_reference_core(frame_positions, analytic_reference)
             try:
                 twist_pf.append(
@@ -993,7 +1005,7 @@ def production_metric_series(
             "helix_id": k[0],
             "bp_index": k[1],
             "direction": k[2],
-            "backbone_position": np.mean(v, axis=0),
+            "backbone_position": v[1],
         }
         for k, v in acc.items()
     ]

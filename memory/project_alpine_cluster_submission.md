@@ -20,6 +20,16 @@ Before changing restart behavior, read the Resume model detail below. User-visib
 
 - [Overview — continued detail](details/project_alpine_cluster_submission/01-overview.md)
 
+**2026-11-11 startup reconcile warnings:** Live logs showed 10 s `squeue`
+timeouts followed by channel-open refusals, while other commands still worked.
+Status queries now use remote `timeout --kill-after=1s 8s` within the 10 s SSH
+deadline and retry a channel refusal once after 0.5 s. Command cleanup waits up
+to 1 s for channel closure. Supervisor transport failures preserve saved job
+state and warn once per distinct error until recovery, without repeated tracebacks.
+The query/warning fixes load with the API; channel cleanup requires a fresh
+detached worker. An existing worker retains its authenticated session across API
+restarts; do not interrupt active transfers just to load the cleanup change.
+
 **2026-09-29 command channel cleanup:** Repeated stalled Slurm queries left SSH
 channels open after timeout, followed by `open failed` and session expiry around
 80–103 seconds after login. Commands now own their process before the exec

@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -68,7 +69,8 @@ def test_model_schema_mismatch_is_unavailable_instead_of_truncating(tmp_path,mon
         result=original(text)
         result['modes']['resident']['gpu'].pop()
         return result
-    monkeypatch.setattr(allocation.json,'loads',corrupted)
+    monkeypatch.setattr(allocation,'json',SimpleNamespace(loads=corrupted))
+    assert json.loads('{"unrelated": true}') == {'unrelated': True}
     e=MemoryEstimate(100000,True,1000,1000,True,patch_layout={},
         components={'host':{'restraints_mib':0}})
     out=allocation.prepared_allocation(tmp_path/'test.conf',{'coordinates':'a.pdb'},(100.,)*3,e)

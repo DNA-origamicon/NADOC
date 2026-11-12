@@ -1,10 +1,11 @@
 import { it, expect, vi, beforeEach } from 'vitest'
-const fake = vi.hoisted(() => ({ add: vi.fn(), cancel: vi.fn(), finalize: vi.fn(), codec: 'vp9', outputs: [] }))
+const fake = vi.hoisted(() => ({ add: vi.fn(), cancel: vi.fn(), finalize: vi.fn(), codec: 'vp9', outputs: [], hardware: false, configs: [], probes: [] }))
 vi.mock('mediabunny', () => ({
   getFirstEncodableVideoCodec: async () => fake.codec,
+  canEncodeVideo: async (codec, options) => { fake.probes.push({ codec, options }); return fake.hardware && codec === 'vp8' },
   BufferTarget: class { buffer = new ArrayBuffer(8) },
   WebMOutputFormat: class {},
-  CanvasSource: class { add = fake.add },
+  CanvasSource: class { constructor(_, config) { fake.configs.push(config) } add = fake.add },
   Output: class {
     constructor({ target }) { this.target = target; fake.outputs.push(this) }
     addVideoTrack() {}
@@ -14,7 +15,7 @@ vi.mock('mediabunny', () => ({
   },
 }))
 import { encodeWebM } from './encode_webm.js'
-beforeEach(() => { vi.clearAllMocks(); fake.codec = 'vp9'; fake.outputs.length = 0 })
+beforeEach(() => { vi.resetAllMocks(); fake.codec = 'vp9'; fake.outputs.length = 0; fake.hardware = false; fake.configs = []; fake.probes = [] })
 const options = () => ({ canvas: { width: 640, height: 480 }, fps: 10, totalDur: 0.25, renderFrame: vi.fn(async () => {}) })
 it('encodes all frames at explicit timeline timestamps, including a partial last frame', async () => {
   const opts = options(), completed = []
@@ -44,4 +45,15 @@ it('reports an unsupported encoder instead of silently recording wrong timing', 
   fake.codec = null
   await expect(encodeWebM(options())).rejects.toThrow('WebCodecs')
   expect(fake.outputs).toHaveLength(0)
+})
+
+it('prefers a supported hardware codec and retains lossless timing/backpressure', async () => {
+  fake.hardware = true
+  await encodeWebM(options())
+  expect(fake.configs[0]).toMatchObject({ codec: 'vp8', hardwareAcceleration: 'prefer-hardware', latencyMode: 'quality' })
+  expect(fake.probes).toHaveLength(2)
+})
+it('falls back to the browser encoder when hardware configurations are unsupported', async () => {
+  await encodeWebM(options())
+  expect(fake.configs[0]).toMatchObject({ codec: 'vp9', hardwareAcceleration: 'no-preference' })
 })

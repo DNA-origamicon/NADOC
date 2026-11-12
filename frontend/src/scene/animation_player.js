@@ -32,6 +32,7 @@ import * as THREE from 'three'
 
 import { clampQuatToJointBounds } from './assembly_revolute_math.js'
 import { findBinderStrand } from './overhang_strand_anim.js'
+import { trajectorySample } from './keyframe_smoothing.js'
 import { keyframeTrajSpec } from './trajectory_keyframes.js'
 import { frameAtProgress, clampRange } from './trajectory_range.js'
 
@@ -322,7 +323,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         const { start, end } = clampRange(kf.trajectory_frame_start, kf.trajectory_frame_end, nFrames)
         trajectory = { jobId: kf.trajectory_job_id, spec, engine: kf.trajectory_engine || 'oxdna',
                        frameStart: start, frameEnd: end, nFrames,
-                       ions: !!kf.trajectory_show_ions, box: !!kf.trajectory_show_box }
+                       ions: !!kf.trajectory_show_ions, box: !!kf.trajectory_show_box, smooth: !!kf.trajectory_smooth_playback }
       }
 
       segments.push({
@@ -520,14 +521,15 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         _ownsTrajectory = animation.keyframes.some(kf => !!kf.trajectory_job_id)
         const held = await trajectoryKeyframes.prepare(animation, {
           strict: true,
-          onProgress: ({ phase, done, total }) => {
+          onProgress: progress => {
+            const { phase, done, total } = progress
             const label = phase === 'load'
               ? (total > 0 && done > 0
                   ? `Loading trajectory… ${done} of ${total} frames`
                   : 'Loading trajectory…')
               : `Preparing trajectory frames ${done} of ${total}`
             onEvent?.({
-              type: 'baking_progress',
+              ...progress, type: 'baking_progress',
               stage: phase === 'load' ? 'traj_load' : 'traj_frames',
               done, total, frame: done, frames: total, label,
             })
@@ -929,11 +931,12 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
           : holdSpan > 0 ? Math.min(1, Math.max(0, (elapsed - transEnd) / holdSpan)) : 1
         const fIdx = Math.max(0, Math.min(
           nFrames - 1,
-          frameAtProgress(seg.trajectory.frameStart, seg.trajectory.frameEnd, p),
+          seg.trajectory.smooth ? trajectorySample(seg.trajectory.frameStart, seg.trajectory.frameEnd, p, trajectoryKeyframes.markers?.(seg.trajectory.engine)).frame
+            : frameAtProgress(seg.trajectory.frameStart, seg.trajectory.frameEnd, p),
         ))
         trajectoryKeyframes.show(seg.trajectory.jobId, seg.trajectory.engine, fIdx, {
           ions: seg.trajectory.ions, box: seg.trajectory.box,
-        }, seg.trajectory.spec)
+        }, seg.trajectory.spec, seg.trajectory.smooth ? { start: seg.trajectory.frameStart, end: seg.trajectory.frameEnd, progress: p } : null)
       }
       return
     }

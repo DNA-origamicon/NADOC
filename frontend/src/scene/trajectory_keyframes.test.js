@@ -205,7 +205,7 @@ describe('initTrajectoryKeyframes.prepare', () => {
     // The load phase now brackets the download: one event as it starts (0/0 — the
     // frame count isn't known until the response lands) and one closing it at 100%,
     // so the export bar isn't left mid-phase while the JSON body transfers.
-    expect(seen.map(p => p.phase)).toEqual(['load', 'load', 'frames', 'frames'])
+    expect(seen.map(p => p.phase)).toEqual(['load', 'load', 'frames', 'frames', 'ready'])
     expect(seen[0]).toMatchObject({ done: 0, total: 0, jobId: 'A' })
     expect(seen[1]).toMatchObject({ done: 100, total: 100, jobId: 'A' })
     expect(seen[3]).toMatchObject({ done: 2, total: 2, jobId: 'A' })
@@ -351,7 +351,7 @@ describe('initTrajectoryKeyframes.prepare', () => {
       // …but the phase is still ANNOUNCED, at 100%, so the export bar's download
       // slice is labelled rather than jumped silently. The heavy prebuild then
       // reports as normal — a held trajectory is not a silent bake.
-      expect(seen.map(e => e.phase)).toEqual(['load', 'frames', 'frames'])
+      expect(seen.map(e => e.phase)).toEqual(['load', 'frames', 'frames', 'ready'])
       expect(seen[0]).toMatchObject({ done: 100, total: 100, reused: true })
     })
 
@@ -682,4 +682,25 @@ it('loads the enclosing range while preserving a reverse keyframe’s authored d
     trajectory_frame_start: 12, trajectory_frame_end: 10 }
   expect(keyframeTrajSpec(kf)).toMatchObject({ frameStart: 10, frameEnd: 12 })
   expect(kf.trajectory_frame_start).toBe(12)
+})
+
+it('settles smooth subframes through the simulation controller and restores exact endpoints', async () => {
+  const ctrl = makeCtrl()
+  ctrl.ensureInterpolationFrames = vi.fn(async () => true)
+  ctrl.showInterpolatedFrame = vi.fn()
+  const tk = initTrajectoryKeyframes({ getController: () => ctrl })
+  await tk.prepare(anim(trajKf('A')))
+  tk.show('A', 'oxdna', 10, null, null, { start: 10, end: 12, progress: .25 })
+  await tk.settle()
+  expect(ctrl.showInterpolatedFrame).toHaveBeenLastCalledWith(10, 11, .5, { before: null, after: 12 })
+  ctrl.showFrame.mockClear()
+  tk.show('A', 'oxdna', 10, null, null, { start: 10, end: 12, progress: 0 })
+  await tk.settle()
+  expect(ctrl.showInterpolatedFrame).toHaveBeenLastCalledWith(10, 10, 0, { before: null, after: null })
+  ctrl.showInterpolatedFrame.mockClear()
+  tk.show('A', 'oxdna', 11)
+  await tk.settle()
+  expect(ctrl.showInterpolatedFrame).not.toHaveBeenCalled()
+  expect(ctrl.showFrame).toHaveBeenLastCalledWith(11)
+  tk.release()
 })

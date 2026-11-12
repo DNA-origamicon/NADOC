@@ -699,10 +699,25 @@ async def poll_status(job: MdJob, *, conn=None) -> tuple[str, str]:
 
     from backend.core.cluster_ssh import ClusterSSHError
 
+    async def query(command):
+        # Stop stalled scheduler clients on the login node before the local SSH
+        # deadline. A local timeout alone can leave the remote process alive.
+        command = f"timeout --kill-after=1s 8s {command}"
+        try:
+            return await conn.run(command, timeout=10)
+        except ClusterSSHError as exc:
+            # The preceding channel may still be closing. Retry only this
+            # read-only query, never submissions or other mutating commands.
+            # Match the wire message too: detached workers can predate the API.
+            if not conn.is_connected() or not str(exc).startswith("SSH command channel refused:"):
+                raise
+            await asyncio.sleep(0.5)
+            return await conn.run(command, timeout=10)
+
     queue_failed = False
     raw = None
     try:
-        sq = await conn.run(f"squeue -j {jid} --format='%i|%T' --noheader", timeout=10)
+        sq = await query(f"squeue -j {jid} --format='%i|%T' --noheader")
         queue_failed = sq.rc != 0
         if not queue_failed:
             raw = parse_state_lines(sq.stdout).get(jid)
@@ -713,9 +728,9 @@ async def poll_status(job: MdJob, *, conn=None) -> tuple[str, str]:
     # Accounting can remain available while the live Slurm controller stalls.
     # A failed query is not evidence that a job disappeared or completed.
     if raw is None:
-        sa = await conn.run(
+        sa = await query(
             f"sacct -j {jid} --format=JobIDRaw,State,ExitCode,DerivedExitCode,Elapsed,NodeList "
-            "--parsable2 --noheader", timeout=10,
+            "--parsable2 --noheader",
         )
         if sa.rc:
             raise RuntimeError(f"Alpine accounting query failed: {sa.stderr[-1000:]}")
@@ -1689,6 +1704,7 @@ async def resume_local_processing_jobs(workspace_dir: Path, *, defer_processing=
 
 
 _REMOTE_RECONCILE_LOCKS: dict[str, asyncio.Lock] = {}
+_REMOTE_RECONCILE_ERRORS: dict[str, str] = {}
 
 
 def _needs_remote_reconcile(job: MdJob, *, recover_incomplete: bool = False) -> bool:
@@ -1730,6 +1746,7 @@ async def poll_remote_jobs(
     if not getattr(conn, "is_connected", lambda: False)():
         return []
     from backend.core import alpine_deletion
+    from backend.core.cluster_ssh import ClusterSSHError
     await alpine_deletion.drain(workspace_dir, conn)
     from backend.core.alpine_download_queue import pending, recovery_order
     from backend.core.alpine_transfer_state import recover_downloads
@@ -1781,7 +1798,13 @@ async def poll_remote_jobs(
                 ):
                     continue
                 await reconcile_remote_job(latest, workspace_dir, conn=conn, defer_download=True)
+                _REMOTE_RECONCILE_ERRORS.pop(lock_key, None)
                 touched.append(job.job_id)
+        except ClusterSSHError as exc:
+            message = str(exc)
+            if _REMOTE_RECONCILE_ERRORS.get(lock_key) != message:
+                logger.warning("[%s] remote status unavailable; will retry: %s", job.job_id, exc)
+                _REMOTE_RECONCILE_ERRORS[lock_key] = message
         except Exception:  # noqa: BLE001 — one job must not kill the pass
             logger.exception("[%s] remote reconcile failed", job.job_id)
     # Reattach scheduler-owned transfers first; stopped/preserved snapshots must

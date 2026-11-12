@@ -627,3 +627,20 @@ def test_surface_batch_can_prepare_empty_initial_build_state():
     response = client.post("/api/design/features/surface-batch", json={"positions": [-2]})
     assert response.status_code == 200
     assert response.json()["-2"] == {"vertices": [], "faces": [], "vertex_nuc_ids": []}
+
+
+def test_trajectory_smooth_playback_create_patch_and_roundtrip():
+    from backend.core.models import AnimationKeyframe
+
+    assert AnimationKeyframe().trajectory_smooth_playback is False
+    design_state.set_design(_demo_design())
+    response = client.post('/api/design/animations', json={'name': 'Smooth'})
+    anim_id = response.json()['design']['animations'][-1]['id']
+    url = f'/api/design/animations/{anim_id}/keyframes'
+    response = client.post(url, json={'trajectory_smooth_playback': True})
+    assert response.status_code == 200, response.text
+    kf = response.json()['design']['animations'][-1]['keyframes'][-1]
+    assert AnimationKeyframe.model_validate_json(AnimationKeyframe(**kf).model_dump_json()).trajectory_smooth_playback
+    response = client.patch(f"{url}/{kf['id']}", json={'trajectory_smooth_playback': False})
+    assert response.status_code == 200, response.text
+    assert response.json()['design']['animations'][-1]['keyframes'][-1]['trajectory_smooth_playback'] is False

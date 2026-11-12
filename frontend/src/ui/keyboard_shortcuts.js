@@ -1,3 +1,4 @@
+import { captureNamedPose } from './saved_pose_capture.js'
 /**
  * Keyboard-shortcut registration for the design editor.
  *
@@ -53,7 +54,7 @@ export function initKeyboardShortcuts(deps) {
     extrudePanel, deformView, crossSectionMinimap, sliceHighlighter, primitiveLibrary,
     viewCube, camera, controls,
     isUnfoldActive, isDeformActive,
-    captureCurrentCamera, frameSelectionOrAll,
+    captureCurrentCamera, captureThumbnail, frameSelectionOrAll,
     setMenuToggle,
     toggleUnfold, toggleHelicalAxisLines,
     savePartToAssembly, saveAssemblyAsGuarded, setAssemblyWorkspacePath,
@@ -434,12 +435,13 @@ export function initKeyboardShortcuts(deps) {
     description: 'Capture camera pose',
     blockedInInput: true,
     handler() {
-      const { currentDesign } = store.getState()
-      if (!currentDesign) return
-      const n = (currentDesign.camera_poses?.length ?? 0) + 1
-      const camState = captureCurrentCamera()
-      api.createCameraPose(`Pose ${n}`, camState)
-      showToast(`Camera pose saved: Pose ${n}`)
+      const { currentDesign, currentAssembly, assemblyActive } = store.getState()
+      const source = assemblyActive ? currentAssembly : currentDesign
+      if (!source) return
+      const { name, state } = captureNamedPose(source, captureCurrentCamera, captureThumbnail)
+      const save = assemblyActive ? api.createAssemblyCameraPose : api.createCameraPose
+      save(name, state)
+      showToast(`Camera pose saved: ${name}`)
     },
   })
 
