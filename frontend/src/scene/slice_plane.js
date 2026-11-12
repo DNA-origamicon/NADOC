@@ -1,3 +1,4 @@
+import { createLatticeAuthoringStage } from './lattice_authoring_stage.js'
 /**
  * Slice plane — a draggable cross-section plane for extruding new helix segments.
  *
@@ -1596,7 +1597,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   window.addEventListener('keydown', e => {
     if (e.key !== 'Tab' || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey ||
-        !_visible || !_latticeMode || _readOnly || _placementMode ||
+        !_visible || !authoring.canPick() || !_latticeMode || _readOnly || _placementMode ||
         !['CANVAS', 'BODY'].includes(e.target?.tagName)) return
     e.preventDefault()
     e.stopImmediatePropagation()
@@ -1608,7 +1609,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   // ── Event handlers ──────────────────────────────────────────────────────────
 
   function _onPointerDown(e) {
-    if (!_visible) return
+    if (!_visible || !authoring.canPick()) return
     _pointerDownPos = { x: e.clientX, y: e.clientY }
 
     if (e.button === 0) {
@@ -1665,7 +1666,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   function _onPointerMove(e) {
-    if (!_visible) return
+    if (!_visible || !authoring.canPick()) return
     if (_boxDrag && e.pointerId === _boxDrag.pointerId) {
       _moveBoxDrag(e)
       e.stopImmediatePropagation()
@@ -1720,7 +1721,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   function _onPointerUp(e) {
-    if (!_visible) return
+    if (!_visible || !authoring.canPick()) return
 
     if (_boxDrag && e.pointerId === _boxDrag.pointerId) {
       _moveBoxDrag(e)
@@ -1788,7 +1789,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   function _onContextMenu(e) {
-    if (!_visible || !_latticeMode || _readOnly) return
+    if (!_visible || !authoring.canPick() || !_latticeMode || _readOnly) return
     if (_placementMode) { e.preventDefault(); return }  // no per-cell select during placement
     if (_rightDownPos) {
       const moved = Math.hypot(e.clientX - _rightDownPos.x, e.clientY - _rightDownPos.y)
@@ -1926,7 +1927,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   if (_ctxEl) {
     async function _doExtrude() {
-      if ((privateContext && !privateContext.onExtrude) || _commitInFlight) return
+      if (!authoring.canCommit() || (privateContext && !privateContext.onExtrude) || _commitInFlight) return
       const rawVal  = parseFloat(_ctxEl.querySelector('#slice-length').value)
       const unit    = _ctxEl.querySelector('#slice-unit').value
       const absVal  = Math.abs(rawVal)
@@ -2013,6 +2014,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     _updateCircleColors()
   })
 
+  const authoring = createLatticeAuthoringStage({
+    pickerNodes: [_latGroup, _planeMesh, _borderMesh, _handleGroup, _bpLabelLeft, _bpLabelRight], preview: _previewGroup,
+    getCells: () => _circleMeshes, isSelected: cell => _selected.has(`${cell.row},${cell.col}`),
+    getDirection: _extrudeDirForCell, getLengthNm: () => _previewLengthBp() * RISE, getDesign, getAxes: getHelixAxes,
+  })
+
   // ── Public API ──────────────────────────────────────────────────────────────
 
   return {
@@ -2038,6 +2045,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {boolean} [continuation] - if true, cells ending at offset are amber/selectable
      */
     show(plane, offsetNm, continuation = false, readOnly = false, { latticeType = 'HONEYCOMB', newBundle = false } = {}) {
+      authoring.restore()
       _endBoxDrag()
       _placementMode    = false
       _placementSpec    = null
@@ -2075,6 +2083,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         _setLegendVisible(false)
       }
       _updateSelectionHint()
+      authoring.sourceReady()
     },
 
     /**
@@ -2134,6 +2143,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       controls.enabled = true
     },
 
+    setAuthoringStage(stage) {
+      _endBoxDrag(); authoring.set(stage)
+      _setLegendVisible(_visible && stage !== 'length')
+      _selectionHint.style.display = _visible && stage === 'section' ? '' : 'none'
+    },
+    subscribeSource(listener) { return authoring.subscribe(listener) },
+    getAuthoringBounds(includeLength) { return authoring.bounds(includeLength) },
     isVisible() { return _visible },
     isContinuation() { return _visible && _continuationMode },
     isDeformed() { return _visible && !!_deformedFrame },
@@ -2325,6 +2341,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {object} [opts] - { plane, continuation }
      */
     showDeformed(frame, { plane = 'XY', continuation = false, refHelixId = null, defaultDirSign = 1, sourceBp = null, allowOrbit = false } = {}) {
+      authoring.restore()
       _dynBounds        = null
       _baseBounds       = null
       _deformedFrame    = frame
@@ -2340,6 +2357,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _buildLattice()
       _setDirSign(defaultDirSign)
       _setLegendVisible(true)   // forward/reverse polarity key for cell picking
+      authoring.sourceReady()
     },
 
     /** Replace the camera used for raycasting (called by cadnano_view when switching to ortho). */

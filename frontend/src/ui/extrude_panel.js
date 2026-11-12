@@ -1,3 +1,4 @@
+import { createCrossSectionWorkflow, CROSS_SECTION_HELP } from './cross_section_workflow.js'
 /**
  * Extrude tool — the floating tool panel that hosts the extrude controls and the
  * "Extrude from" plane dropdown.
@@ -21,7 +22,7 @@ import { resolveExtrudeSourcePlane } from './extrude_source_plane.js'
 import { resolveDefaultPlane, dropdownStateForMode } from './extrude_panel_logic.js'
 
 const NEW_BUNDLE_INDICATOR =
-  'NEW BUNDLE — select cells on the plane · Extrude to build · Esc to cancel'
+  'NEW BUNDLE — select cross-section · Next to set length · Esc to cancel'
 const IDLE_INDICATOR = 'NADOC · WORKSPACE'
 
 /**
@@ -31,7 +32,7 @@ const IDLE_INDICATOR = 'NADOC · WORKSPACE'
  * @param {object} deps.expandedSpacing  { forceOff }
  * @returns {{ activate: Function, hide: Function, isActive: () => boolean }}
  */
-export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
+export function initExtrudePanel({ store, slicePlane, expandedSpacing, getCamera, getControls, canvas, beginAuthoringDisplay }) {
   const _panel  = document.getElementById('extrude-panel')
   const _select = document.getElementById('extrude-from')
   let _active = false
@@ -39,6 +40,37 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
   let _editCancel = null
   let _editPlane = null
   const popup = createToolPopup({ panel: _panel, title: 'Extrude', onClose: hide })
+
+  const workflow = createCrossSectionWorkflow({ slicePlane, getCamera, getControls, canvas, popup, beginAuthoringDisplay })
+  let step = 1
+  const next = document.getElementById('extrude-next')
+  const cancel = document.getElementById('slice-cancel-btn')
+  const apply = document.getElementById('slice-extrude-btn')
+  const help = document.getElementById('extrude-section-help')
+  if (help) help.textContent = CROSS_SECTION_HELP
+  function selectionChanged() { if (next) next.disabled = !(slicePlane.getSelectedCells?.().length > 0) }
+  function setStep(value) {
+    step = value
+    for (const group of _panel?.querySelectorAll('[data-extrude-step]') ?? []) group.hidden = group.dataset.extrudeStep !== String(step)
+    if (help) help.hidden = step !== 1
+    const status = document.getElementById('extrude-step')
+    if (status) status.textContent = step === 1 ? 'Step 1/2 · Select cross-section' : 'Step 2/2 · Set extrusion length'
+    if (next) next.hidden = step !== 1
+    if (apply) apply.hidden = step !== 2
+    if (cancel) cancel.textContent = step === 1 ? 'Cancel' : 'Previous'
+    selectionChanged()
+    workflow.setStep(step)
+  }
+  next?.addEventListener('click', () => { if (_active && !next.disabled) setStep(2) })
+  cancel?.addEventListener('click', event => {
+    if (_active && step === 2) { event.stopImmediatePropagation(); setStep(1) }
+  }, true)
+  const unsubscribeSource = slicePlane.subscribeSource?.(selectionChanged)
+  const unsubscribeSelection = slicePlane.subscribeSelection?.(selectionChanged)
+  const refit = () => { if (_active && step === 2) workflow.refit() }
+  _panel?.addEventListener('input', refit)
+  _panel?.addEventListener('change', refit)
+  _panel?.addEventListener('click', event => { if (event.target.closest('.rec-chip, .ctx-dir-btn')) refit() })
 
   function _modeIndicator() { return document.getElementById('mode-indicator') }
   function _latticeType() { return store.getState().currentDesign?.lattice_type ?? 'HONEYCOMB' }
@@ -68,6 +100,7 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
     if (_select) { _select.value = value; _select.disabled = disabled }
     popup?.show()
     slicePlane.setExtrudeUiOpen(true)
+    setStep(1)
 
     if (mode === 'newBundle') {
       store.setState({ currentPlane: value })
@@ -84,6 +117,7 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
     const wasActive = _active
     _active = false
     _mode   = null
+    workflow.close()
     slicePlane.setExtrudeUiOpen(false)
     if (wasActive) slicePlane.hide()
     popup?.hide()
@@ -122,5 +156,6 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
     const mi = _modeIndicator()
     if (mi) mi.textContent = 'EDIT EXTRUDE — change cells and parameters · Apply to rebuild · Esc to cancel'
   }
-  return { activate, activateEdit, finishEdit, hide, isActive: () => _active }
+  return { activate, activateEdit, finishEdit, hide, refreshCrossSection: () => workflow.refit(), isActive: () => _active,
+    dispose() { hide(); unsubscribeSelection?.(); unsubscribeSource?.(); workflow.dispose(); popup?.dispose() } }
 }

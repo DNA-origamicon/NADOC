@@ -1490,6 +1490,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       return out
     },
 
+    getArcRoot() { return _arcGroup },
+
     setArcsVisible(visible) {
       _arcGroup.visible = visible
     },

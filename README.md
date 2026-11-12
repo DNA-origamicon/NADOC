@@ -10,6 +10,9 @@ design tools, assemblies, simulations, visualization, and more. The
 [feature overview](#feature-overview) below explains the main workflows; the
 [documentation map](#documentation-map) links to setup and detailed references.
 
+**Learn with [illustrated user guides](docs/guides/README.md)** — real interface
+screenshots, reproducible examples, and a [guide coverage ledger](docs/guides/LEDGER.md).
+
 ## Getting Started
 
 **Never used a terminal before?** Read [INSTALL.md](INSTALL.md) — a click-by-click
@@ -551,6 +554,7 @@ and requires its external preparation tools.
 |---|---|
 | Install and run | [Installation](INSTALL.md), [daily commands](START.md) |
 | Browse capabilities | [Grouped feature inventory](FEATURES.md) |
+| Follow illustrated tutorials | [User guides](docs/guides/README.md), [coverage and capture dates](docs/guides/LEDGER.md) |
 | Learn selection and views | [Selection/sidebar](docs/selection_and_sidebar.md), [element visibility](docs/element_visibility.md) |
 | Design attachments | [Overhang screening](docs/overhang_generation_screening.md), [proteins](docs/protein_conjugate_movement.md), [gold particles](docs/nanoparticle_conjugation.md) |
 | Configure simulations | [External tools](docs/external_tools.md), [NAMD presets](docs/namd_setup_presets.md), [mrDNA pipeline](docs/mrdna/README.md) |

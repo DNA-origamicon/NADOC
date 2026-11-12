@@ -1,0 +1,992 @@
+{
+  "schema": 1,
+  "inventory_source": "FEATURES.md",
+  "shared_watch": [
+    "frontend/index.html",
+    "frontend/package.json",
+    "frontend/vite.config.js",
+    "frontend/playwright.guides.config.js",
+    "frontend/guides/capture.js",
+    "frontend/e2e/smoke_vite.js",
+    "frontend/src/main.js",
+    "frontend/src/api/client.js",
+    "frontend/src/state/store.js",
+    "frontend/src/app/test_api.js",
+    "frontend/src/ui/tool_popup.*",
+    "frontend/src/ui/*sidebar*.js",
+    "frontend/src/ui/sidebar_stack.css",
+    "frontend/src/ui/file_io.js",
+    "frontend/src/ui/feature_log*.js",
+    "frontend/src/ui/feature_log*.css",
+    "frontend/src/scene/design_renderer.js",
+    "frontend/src/scene/helix_renderer.js",
+    "frontend/src/scene/helix_renderer/*.js",
+    "frontend/src/viewer/mouse_bindings.js",
+    "backend/core/models.py",
+    "backend/api/feature_recording.py",
+    "backend/api/routes_feature_log.py",
+    "scripts/generate_feature_guide.py",
+    "scripts/feature_guides.py",
+    "scripts/agent_structure_guard.py",
+    "scripts/run_deformation_history_e2e.py",
+    "pyproject.toml",
+    "uv.lock",
+    "frontend/guides/model.js"
+  ],
+  "features": {
+    "design-readiness": {
+      "name": "Design Readiness",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Shared 3D/pathview progress ring",
+        "Actionable checklist and shortcuts",
+        "Exact scaffold-length validation",
+        "Assembly part issue navigation",
+        "Optional current-design simulation completion"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "lattice-design": {
+      "name": "Lattice Design",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Honeycomb lattice",
+        "Square lattice",
+        "Interactive helix painting",
+        "Slice-plane editing",
+        "Helix labels"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "extrude": {
+      "name": "Extrude",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Two-step cross-section and 3D length workflow (shared picker with Sweep)",
+        "Fit scaffold lengths (7249/8064)",
+        "Length in bp/nm",
+        "XY/XZ/YZ origin planes",
+        "Forward/reverse extrusion",
+        "Scaffold/staple/both extrusion",
+        "Adjacent-end ligation",
+        "Existing-bundle continuation",
+        "Deformed-end continuation"
+      ],
+      "status": "partial",
+      "guide": "extrude",
+      "recipe": "frontend/guides/extrude.spec.js",
+      "covered_workflows": [
+        "Desktop: shared Extrude/Sweep cross-section selection normal to XY/XZ/YZ source planes, then Next for a fitted 3D length preview",
+        "Length in bp/nm, direction, scaffold-size recommendations, strand classes and ligation",
+        "Next/Previous preserves footprint and length; cancel, apply, feature editing and Undo/Redo",
+        "Straight-end continuation with overlap refusal and a recorded result",
+        "Deformed-end entry and Cancel after Bend preparation; square-lattice completion blocked by GUIDE-UX-004"
+      ],
+      "introduction": "Desktop Extrude guide using the standard 3×6 square-lattice model (18 helices). Select the cross-section in Step 1, then click Next to set 64 bp in a fitted 3D view. Then edit the recorded length to 72 bp. This draft is being iterated for coverage and visual style before broader guide generation. Straight continuation is demonstrated. Deformed continuation is shown through entry and Cancel only because of a square-lattice implementation gap; coverage remains partial.",
+      "watch": [
+        "frontend/guides/extrude.spec.js",
+        "frontend/src/ui/extrude*.js",
+        "frontend/src/scene/extrude*.js",
+        "frontend/src/scene/slice_plane.js",
+        "frontend/src/scene/slice_plane/*.js",
+        "frontend/src/scene/end_extrude_arrows.js",
+        "frontend/src/scene/bundle_geometry.js",
+        "frontend/src/app/extrude_history_editor.js",
+        "backend/api/crud.py",
+        "backend/api/part_extrusion*.py",
+        "backend/core/extrude_plane.py",
+        "backend/core/lattice*.py",
+        "backend/core/constants.py",
+        "frontend/src/ui/blunt_end_menus.js",
+        "frontend/src/scene/domain_ends.js",
+        "frontend/src/ui/representation_switcher.js",
+        "frontend/src/ui/bend_twist_popup.js",
+        "frontend/src/ui/deformation*.js",
+        "frontend/src/scene/deformation*.js",
+        "frontend/src/features/deformation*.js",
+        "frontend/src/app/deformation*.js",
+        "backend/api/part_deformation*.py",
+        "backend/api/routes_deformation.py",
+        "backend/api/routes_part_deformation_preview.py",
+        "backend/core/deformation*.py",
+        "frontend/src/ui/cross_section_workflow.js",
+        "frontend/src/scene/lattice_authoring_stage.js",
+        "frontend/src/ui/tool_sections.css",
+        "frontend/src/ui/sweep_panel.js",
+        "frontend/src/ui/cross_section_transition.js",
+        "frontend/src/scene/authoring_display.js",
+        "frontend/src/scene/unfold_view.js",
+        "frontend/src/scene/native_connection_lines.js"
+      ]
+    },
+    "sweep": {
+      "name": "Sweep",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Desktop and VR authoring",
+        "Painted lattice cross-sections",
+        "Editable spline control points",
+        "VR free-drawn paths",
+        "Per-point direction and twist",
+        "Desktop Tab rotation gizmo",
+        "VR 15° grip rotation",
+        "Visible cross-section orientation",
+        "Persistent curvature warning icons",
+        "Safe automatic loop/skip correction",
+        "Idempotent correction recomputation",
+        "New base-pair site count",
+        "Editable feature history"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "primitive-library": {
+      "name": "Primitive Library",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "6-helix bundles",
+        "18-helix bundles",
+        "Interactive placement"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "scaffold-routing": {
+      "name": "Scaffold Routing",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Automatic scaffold routing",
+        "Seamless routing",
+        "Polymerization routing",
+        "Manual scaffold drawing"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "staple-design": {
+      "name": "Staple Design",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Full autostaple",
+        "Automatic staple breaking",
+        "Strand-length histogram"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "strand-editing": {
+      "name": "Strand Editing",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Draw strands",
+        "Resize strand ends",
+        "Shift domains",
+        "Split strands",
+        "Ligate strand ends",
+        "Create crossovers",
+        "Crossover extra bases",
+        "Reference/active strands",
+        "Scaffold/binder conversion"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "2d-origami-editor": {
+      "name": "2D Origami Editor",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Interactive sliceview",
+        "Interactive pathview",
+        "Strand spreadsheet",
+        "Zoom and pan",
+        "Synchronized 2D/3D editing",
+        "Multiple synchronized tabs"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "move-rotate": {
+      "name": "Move/Rotate",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Translation gizmos",
+        "Rotation gizmos",
+        "Numeric transforms",
+        "Individual nucleotide transforms"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "bend-and-twist": {
+      "name": "Bend and Twist",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Geometric bending",
+        "Geometric twisting",
+        "Cluster-specific deformation",
+        "Loop/skip bending",
+        "Loop/skip twisting",
+        "Physical-limit enforcement",
+        "Clear loops/skips"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "clusters-and-joints": {
+      "name": "Clusters and Joints",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Named helix clusters",
+        "Cluster colors",
+        "Cluster transforms",
+        "Cluster rotation joints",
+        "Joint-angle controls"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "dimensions": {
+      "name": "Dimensions",
+      "category": "Design and Editing",
+      "subfeatures": [
+        "Base-to-base distances",
+        "Assembly endpoint gizmos",
+        "Persistent dimension lines",
+        "Individual dimension visibility"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "sequence-assignment": {
+      "name": "Sequence Assignment",
+      "category": "Sequences and Ordering",
+      "subfeatures": [
+        "M13mp18 scaffold (7249)",
+        "p7560 scaffold (7560)",
+        "p8064 scaffold (8064)",
+        "Custom scaffold sequences",
+        "Staple sequence assignment",
+        "Individual strand sequences",
+        "Reverse-complement synchronization"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "sequence-spreadsheet": {
+      "name": "Sequence Spreadsheet",
+      "category": "Sequences and Ordering",
+      "subfeatures": [
+        "Inline sequence editing",
+        "Sequence search",
+        "Strand sorting",
+        "Strand groups",
+        "Selected-base highlighting",
+        "Overhang sequence editing"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "overhang-sequence-generation": {
+      "name": "Overhang Sequence Generation",
+      "category": "Sequences and Ordering",
+      "subfeatures": [
+        "Individual sequence generation",
+        "Batch sequence generation",
+        "Rare 5-mer selection",
+        "GC-content filtering",
+        "Hairpin/self-dimer filtering",
+        "Thermodynamic screening of whole staples and final connected linkers",
+        "Atomic staple/linker updates; failed searches preserve existing sequences",
+        "Locked sub-domain preservation during generation",
+        "Corpus-diversity filtering"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "ordering-and-plates": {
+      "name": "Ordering and Plates",
+      "category": "Sequences and Ordering",
+      "subfeatures": [
+        "96-well plate layout",
+        "IDT tube layout",
+        "CSV sequence export",
+        "Excel sequence export",
+        "Bold overhang annotations",
+        "IDT order spreadsheets"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "overhang-design": {
+      "name": "Overhang Design",
+      "category": "Overhangs and Attachments",
+      "subfeatures": [
+        "Overhang manager",
+        "Named, colored overhangs",
+        "Terminal extensions",
+        "ssDNA/dsDNA linkers",
+        "Subdomain editing",
+        "Orientation controls",
+        "Overhang pathview",
+        "Flexible-chain relaxation"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "overhang-connections": {
+      "name": "Overhang Connections",
+      "category": "Overhangs and Attachments",
+      "subfeatures": [
+        "Complementary overhang binding",
+        "Dedicated binder strands",
+        "Linker binding domains",
+        "Connection versions",
+        "Apply/unapply connections",
+        "Connection geometry validation",
+        "Collective attachment relaxation"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "proteins": {
+      "name": "Proteins",
+      "category": "Overhangs and Attachments",
+      "subfeatures": [
+        "PDB import",
+        "Overhang attachment",
+        "Reactive-site mapping",
+        "Conjugation manager",
+        "Constrained move/rotate",
+        "Streptavidin attachment",
+        "Biotin binding"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "aptamers": {
+      "name": "Aptamers",
+      "category": "Overhangs and Attachments",
+      "subfeatures": [
+        "Aptamer structure import",
+        "Native-coordinate preservation",
+        "Origami attachment",
+        "Cadnano editing"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "gold-nanospheres": {
+      "name": "Gold Nanospheres",
+      "category": "Overhangs and Attachments",
+      "subfeatures": [
+        "Editable particle diameter",
+        "Thiolated ssDNA handles",
+        "Handle naming/coloring",
+        "Overhang connections",
+        "Move/rotate controls",
+        "Metallic rendering"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "quantum-dots": {
+      "name": "Quantum Dots",
+      "category": "Overhangs and Attachments",
+      "subfeatures": [
+        "Vendor catalog",
+        "Size selection",
+        "Absorption/emission plot previews",
+        "Custom PDB-based streptavidin coatings",
+        "Preview-only vendor entries identified",
+        "Emission-color visualization",
+        "Move/rotate controls"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "fluorescence": {
+      "name": "Fluorescence",
+      "category": "Overhangs and Attachments",
+      "subfeatures": [
+        "Terminal fluorophore labels",
+        "Fluorophore emission colors",
+        "FRET checker",
+        "Förster-radius pairs",
+        "Gold quenching visualization"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "assembly-workspace": {
+      "name": "Assembly Workspace",
+      "category": "Assemblies and Mechanisms",
+      "subfeatures": [
+        "Parts library",
+        "Multiple part instances",
+        "Part positioning",
+        "Instance-specific visualization",
+        "Assembly groups",
+        "Saved configurations",
+        "Assembly validation"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "connectors-and-mates": {
+      "name": "Connectors and Mates",
+      "category": "Assemblies and Mechanisms",
+      "subfeatures": [
+        "Connector definition",
+        "Mate definition",
+        "Rigid mates",
+        "Revolute mates",
+        "Prismatic mates",
+        "Spherical mates",
+        "Joint limits",
+        "Joint indicators"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "assembly-strand-connections": {
+      "name": "Assembly Strand Connections",
+      "category": "Assemblies and Mechanisms",
+      "subfeatures": [
+        "Cross-part overhang binding",
+        "Assembly overhang manager",
+        "Assembly linker strands",
+        "Connection versions"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "polymerization": {
+      "name": "Polymerization",
+      "category": "Assemblies and Mechanisms",
+      "subfeatures": [
+        "Repeating origami units",
+        "Periodic seam connections",
+        "Polymerization-aware routing"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "gears": {
+      "name": "Gears",
+      "category": "Assemblies and Mechanisms",
+      "subfeatures": [
+        "Coupled revolute joints",
+        "Gear ratios",
+        "Driven rotation",
+        "RPM spin"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "belts-and-pulleys": {
+      "name": "Belts and Pulleys",
+      "category": "Assemblies and Mechanisms",
+      "subfeatures": [
+        "Belt-path definition",
+        "Rim-defined pulley radii",
+        "Coupled pulley rotation",
+        "Belt riders",
+        "Polymerize along belt"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "representations": {
+      "name": "Representations",
+      "category": "Visualization and Navigation",
+      "subfeatures": [
+        "Hull prism",
+        "Helix cylinders",
+        "Nucleotide beads",
+        "Full beads/slabs",
+        "Molecular surfaces",
+        "VDW space-fill",
+        "Ball and stick",
+        "Atomic sticks",
+        "mrDNA coarse",
+        "mrDNA fine",
+        "oxDNA preview"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "coloring": {
+      "name": "Coloring",
+      "category": "Visualization and Navigation",
+      "subfeatures": [
+        "Strand colors",
+        "Base colors",
+        "Cluster colors",
+        "Overhang highlighting",
+        "Atomic CPK colors",
+        "Part/source colors",
+        "Adjustable scalar legends"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "comparison-views": {
+      "name": "Comparison Views",
+      "category": "Visualization and Navigation",
+      "subfeatures": [
+        "Two-to-four-panel multi-view",
+        "Synchronized panel navigation",
+        "Independent panel representations",
+        "Independent panel coloring",
+        "Four-layer multi-overlay",
+        "Per-layer opacity",
+        "Overlay separation"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "spatial-views": {
+      "name": "Spatial Views",
+      "category": "Visualization and Navigation",
+      "subfeatures": [
+        "Box view volumes",
+        "Hexagonal view volumes",
+        "Regional representation overrides",
+        "Regional opacity controls",
+        "Volume outlines",
+        "Movable section plane",
+        "Hatched section intersections"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "display-overlays": {
+      "name": "Display Overlays",
+      "category": "Visualization and Navigation",
+      "subfeatures": [
+        "Sequence letters",
+        "Undefined-base highlights",
+        "Loop/skip highlights",
+        "Overhang names",
+        "Helical axes",
+        "Reference geometry",
+        "Deformed geometry",
+        "Extra-base spacing",
+        "Staple visibility",
+        "2D unfold"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "selection-and-navigation": {
+      "name": "Selection and Navigation",
+      "category": "Visualization and Navigation",
+      "subfeatures": [
+        "Hierarchical selection",
+        "Selection-level filters",
+        "Multiscale orbit",
+        "Turntable orbit",
+        "Trackball orbit",
+        "Frame selection",
+        "View cube",
+        "Keyboard shortcuts",
+        "Resizable sidebar panels"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "simulation-workspace": {
+      "name": "Simulation Workspace",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Unified simulation launcher",
+        "Engine installation/status",
+        "Local CPU/GPU execution",
+        "Remote cluster execution",
+        "RunPod GPU execution",
+        "Resource estimates",
+        "Job queues",
+        "Job folders",
+        "Progress and ETA",
+        "Job cancellation",
+        "Job archives",
+        "Stale-result detection"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "oxdna": {
+      "name": "oxDNA",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Staged relaxation",
+        "Live relaxation",
+        "Equilibration and production",
+        "Automatic refinement",
+        "Salt controls",
+        "Electric fields",
+        "Positional anchors",
+        "Hard-surface constraints",
+        "Surface-attached strands",
+        "LAMMPS CPU fallback",
+        "NAMD seed generation"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "mrdna": {
+      "name": "mrDNA",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Coarse relaxation",
+        "Fine relaxation",
+        "Electric fields",
+        "Positional anchors",
+        "Hard-surface constraints",
+        "Relaxed geometry display"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "cando-fem": {
+      "name": "CanDo FEM",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Coarse/fine structural analysis",
+        "Automatic refinement",
+        "Electric fields",
+        "Positional anchors",
+        "RMSF flexibility maps"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "snupi-fem": {
+      "name": "SNUPI FEM",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Anisotropic structural analysis",
+        "Electric fields",
+        "Positional anchors",
+        "Structural metrics"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "namd": {
+      "name": "NAMD",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Atomistic relaxation",
+        "Production dynamics",
+        "Explicit-solvent preparation",
+        "GBIS implicit solvent",
+        "Deferred sequence preparation",
+        "oxDNA-seeded relaxation",
+        "Live MD display",
+        "Water/ion/cell display"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "nanopore-transport": {
+      "name": "Nanopore Transport",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Graphene membrane setup",
+        "Graphene-only control systems",
+        "DNA-blocked pores",
+        "Applied voltage",
+        "Ion-current analysis",
+        "Ion-crossing paths",
+        "Crossing-window controls",
+        "Ion-path sampling"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "trajectory-analysis": {
+      "name": "Trajectory Analysis",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Playback and scrubbing",
+        "Frame stepping",
+        "Frame-range selection",
+        "Aligned trajectory display",
+        "Average-structure display",
+        "RMSF flexibility maps",
+        "Deviation maps",
+        "Strain maps",
+        "Conformational occupancy clustering",
+        "Selection-scoped clustering",
+        "Metrics graphs",
+        "Metric export"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "simulation-health": {
+      "name": "Simulation Health",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Base-pair retention",
+        "Energy convergence",
+        "Clash monitoring",
+        "Resource monitoring"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "photocrosslink-analysis": {
+      "name": "Photocrosslink Analysis",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "Thymine CPD geometry screening",
+        "Intended/off-target pair screening",
+        "Reciprocal weld analysis",
+        "KIMMDY analysis command"
+      ],
+      "status": "blocked",
+      "guide": null,
+      "reason": "Experimental CPD workflow; guide execution requires a specifically authorized CPD session."
+    },
+    "preliminary-cpd-construction": {
+      "name": "Preliminary CPD Construction",
+      "category": "Simulation and Analysis",
+      "subfeatures": [
+        "cis-syn TT-CPD strand-builder workflow",
+        "Explicit-solvent NAMD preparation",
+        "Qualification and export restrictions: [scope](docs/cpd_strand_builder.md)"
+      ],
+      "status": "blocked",
+      "guide": null,
+      "reason": "Experimental CPD workflow; guide execution requires a specifically authorized CPD session."
+    },
+    "photo-mode": {
+      "name": "Photo Mode",
+      "category": "Rendering, Animation, and VR",
+      "subfeatures": [
+        "PBR material presets",
+        "Per-representation materials",
+        "HDRI environment import",
+        "Built-in studio environment",
+        "Subsurface scattering",
+        "Translucency controls",
+        "Lighting presets",
+        "Light-angle controls",
+        "Fluorophore light sources",
+        "Ambient occlusion",
+        "Bloom",
+        "Progressive path tracing",
+        "Shadow catcher",
+        "Custom backgrounds",
+        "300/600 DPI PNG export"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "animation": {
+      "name": "Animation",
+      "category": "Rendering, Animation, and VR",
+      "subfeatures": [
+        "Saved camera poses",
+        "Keyframe timeline",
+        "Keyframe reordering",
+        "Camera interpolation",
+        "Cluster deformation animation",
+        "Assembly configuration animation",
+        "Joint animation",
+        "Camera spin",
+        "Text overlays",
+        "Trajectory clips",
+        "Video export"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "strand-animation": {
+      "name": "Strand Animation",
+      "category": "Rendering, Animation, and VR",
+      "subfeatures": [
+        "Overhang unzipping",
+        "Toehold strand displacement",
+        "Helical/straight forms",
+        "Reaction-coordinate controls",
+        "Melt-width controls",
+        "Strand-splay controls",
+        "Unequal-length strand support"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "native-vr": {
+      "name": "Native VR",
+      "category": "Rendering, Animation, and VR",
+      "subfeatures": [
+        "SteamVR viewer",
+        "Atomistic viewing",
+        "Controller selection volumes",
+        "Shared desktop selection",
+        "Grab/move/rotate navigation",
+        "Two-handed scaling",
+        "Lattice extrusion and end continuation",
+        "Strand-end resizing, nicking, ligation",
+        "Move/rotate, bend, and twist",
+        "Routing and sequence assignment",
+        "In-headset undo/redo",
+        "View volumes and dimensions",
+        "Simulation result controls",
+        "Existing-presentation pause/resume/end",
+        "Tracked presenter figure",
+        "Desktop mirror",
+        "Five-second stereo recordings",
+        "Shared trajectory controls"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "file-management": {
+      "name": "File Management",
+      "category": "Files, History, and Collaboration",
+      "subfeatures": [
+        "Native parts and assemblies",
+        "File library",
+        "Recent files",
+        "Save as",
+        "File metadata",
+        "Simulation-inclusive packages",
+        "Selective simulation packaging"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "browser-presentation-experimental": {
+      "name": "Browser Presentation (Experimental)",
+      "category": "Files, History, and Collaboration",
+      "subfeatures": [
+        "Password-protected guest invitations",
+        "Independent guest navigation",
+        "Presenter perspective following",
+        "Selected oxDNA/NAMD visualization sharing",
+        "Shared design/display updates",
+        "Backend-free prepared snapshot viewing",
+        "Coverage and hosting limits: [reference](docs/prepared_viewer.md)"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "import-and-export": {
+      "name": "Import and Export",
+      "category": "Files, History, and Collaboration",
+      "subfeatures": [
+        "caDNAno import/export",
+        "scadnano import/export",
+        "Export compatibility/loss review",
+        "PDB structure import/export",
+        "PSF topology export",
+        "NAMD package export",
+        "GROMACS package export (API)",
+        "Simulation-coordinate PDB export",
+        "Scalar-map B-factors",
+        "ChimeraX coloring commands"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "3d-printing": {
+      "name": "3D Printing",
+      "category": "Files, History, and Collaboration",
+      "subfeatures": [
+        "Watertight STL surfaces",
+        "Multicolor 3MF surfaces",
+        "Staple map coloring",
+        "Printer-bed scaling"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "feature-history": {
+      "name": "Feature History",
+      "category": "Files, History, and Collaboration",
+      "subfeatures": [
+        "Undo/redo",
+        "Feature log",
+        "Feature editing",
+        "Snapshot restoration",
+        "Dependency-aware changes"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "loadouts-and-versions": {
+      "name": "Loadouts and Versions",
+      "category": "Files, History, and Collaboration",
+      "subfeatures": [
+        "Design loadouts",
+        "Assembly loadouts",
+        "Named immutable versions",
+        "Revision history",
+        "Branch promotion",
+        "Recovery versions"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "workspace-collaboration": {
+      "name": "Workspace Collaboration",
+      "category": "Files, History, and Collaboration",
+      "subfeatures": [
+        "Tailscale pairing",
+        "Remote file libraries",
+        "Server online status",
+        "Pull/push/sync",
+        "Local project checkouts",
+        "Branch-history synchronization",
+        "Conflict-preserving sync",
+        "Single-writer leases",
+        "Read-only access",
+        "Automatic busy-branch forks",
+        "On-demand simulation artifacts"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "automation": {
+      "name": "Automation",
+      "category": "Automation and Diagnostics",
+      "subfeatures": [
+        "In-app script runner",
+        "Backend API",
+        "Headless design construction",
+        "Headless assembly construction",
+        "Headless simulation workflows",
+        "VR automation scripts"
+      ],
+      "status": "planned",
+      "guide": null
+    },
+    "diagnostics": {
+      "name": "Diagnostics",
+      "category": "Automation and Diagnostics",
+      "subfeatures": [
+        "Debug overlay",
+        "Molecular placement audit",
+        "Extra-base metrics audit",
+        "Hull audit",
+        "Wireframe inspection",
+        "Mesh inspection",
+        "Performance benchmarks"
+      ],
+      "status": "planned",
+      "guide": null
+    }
+  },
+  "default_model": {
+    "lattice": "SQUARE",
+    "rows": 3,
+    "columns": 6,
+    "policy": "Use this footprint unless a guide explicitly states an exception; length is lesson-specific."
+  }
+}

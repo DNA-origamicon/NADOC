@@ -8110,7 +8110,9 @@
         <!-- Extrude tool -->
         <div class="panel-section" id="extrude-panel" style="display:none">
           <h2>Extrude</h2>
-          <fieldset class="tool-section"><legend>Source</legend>
+          <p id="extrude-step" role="status">Step 1/2 · Select cross-section</p>
+          <p id="extrude-section-help" class="tool-help"></p>
+          <fieldset class="tool-section" data-extrude-step="1"><legend>Source</legend>
           <p class="tool-help ctx-count">0 helices</p>
           <div class="def-row" style="margin-bottom:8px">
             <label for="extrude-from">From</label>
@@ -8121,7 +8123,7 @@
             </select>
           </div>
           </fieldset>
-          <fieldset class="tool-section"><legend>Length</legend>
+          <fieldset class="tool-section" data-extrude-step="2"><legend>Length</legend>
           <div class="ctx-row" style="display:flex;gap:6px">
             <input id="slice-length" aria-label="Extrusion length" type="number" value="0" min="0" step="1" style="flex:1;min-width:0">
             <select id="slice-unit" aria-label="Length unit">
@@ -8130,7 +8132,7 @@
             </select>
           </div>
           </fieldset>
-          <fieldset class="tool-section"><legend>Direction</legend>
+          <fieldset class="tool-section" data-extrude-step="2"><legend>Direction</legend>
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
             <div style="display:flex">
               <button id="slice-dir-fwd" class="btn btn--sm ctx-dir-btn ctx-dir-active" title="Extrude in +axis direction">+</button>
@@ -8138,7 +8140,7 @@
             </div>
           </div>
           </fieldset>
-          <fieldset class="tool-section"><legend>Strands</legend>
+          <fieldset class="tool-section" data-extrude-step="1"><legend>Strands</legend>
           <div style="display:flex;gap:8px;margin-bottom:8px">
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
               <input type="radio" name="slice-strand-filter" value="both" checked style="cursor:pointer"> Both
@@ -8156,13 +8158,14 @@
             </label>
           </div>
           </fieldset>
-          <fieldset class="tool-section"><legend>Info</legend>
-          <p class="tool-help">Select cells on the plane to define the extrusion footprint.</p>
+          <fieldset class="tool-section" data-extrude-step="2"><legend>Info</legend>
+          <p class="tool-help">Set the length and direction. Orbit to inspect; Previous edits the cross-section. Close the window or press Escape to cancel.</p>
           <div id="slice-total-bp" style="padding:1px 0 2px;min-height:15px"></div>
           <div id="slice-scaffold-rec" style="padding:0 0 6px"></div>
           </fieldset>
           <div class="def-btn-row">
             <button id="slice-cancel-btn" class="def-btn btn btn--sm">Cancel</button>
+            <button id="extrude-next" class="def-btn primary" disabled>Next</button>
             <button id="slice-extrude-btn" class="def-btn btn btn--sm btn--primary primary">Extrude</button>
           </div>
         </div>

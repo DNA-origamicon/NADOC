@@ -35,7 +35,7 @@ function fixture(cursor = -1) {
     getPlaneNormalWorld: () => new THREE.Vector3(0, 1, 0),
     getPlaneUpWorld: () => new THREE.Vector3(0, 0, 1), getPlaneCenterWorld: () => new THREE.Vector3(3, 0, 4),
   }
-  const panel = { hide: vi.fn(), activateEdit: vi.fn(), finishEdit: vi.fn() }
+  const panel = { refreshCrossSection: vi.fn(), hide: vi.fn(), activateEdit: vi.fn(), finishEdit: vi.fn() }
   const camera = new THREE.PerspectiveCamera(); camera.position.set(10, 20, 30)
   const controls = { target: new THREE.Vector3(), enableRotate: true, update: vi.fn() }
   const originalPosition = camera.position.clone()
@@ -46,7 +46,7 @@ function fixture(cursor = -1) {
   return { editor, entry, state, api, panel, slicePlane, camera, controls, originalPosition, release, setPreviewHelices,
     notify: () => { for (const fn of subscribers) fn() }, picker: () => picker, inputs: () => inputs, externalChange() { state.currentDesign = { id: 'other' }; for (const fn of subscribers) fn() } }
 }
-it('opens the normal tool at the feature with original cells, signed length and a face-on camera', async () => {
+it('opens the normal tool at the feature with original cells, signed length and requests shared cross-section framing', async () => {
   const f = fixture()
   expect(await f.editor.open(f.entry, 0)).toBe(true)
   expect(f.api.seekFeatures.mock.calls).toEqual([[-2, null], [0, null]])
@@ -54,7 +54,7 @@ it('opens the normal tool at the feature with original cells, signed length and 
   expect(f.picker().design.helices).toEqual([])
   expect(f.inputs()).toEqual(f.entry.params)
   expect(f.setPreviewHelices).toHaveBeenLastCalledWith(['h'])
-  expect(f.camera.position.clone().sub(f.controls.target).normalize().toArray()).toEqual([0, 1, 0])
+  expect(f.panel.refreshCrossSection).toHaveBeenCalled()
   expect(f.api.editNativeExtrusionFeature).not.toHaveBeenCalled()
 })
 it.each([-1, 0])('Cancel restores cursor %s, camera and tool visibility without editing', async cursor => {

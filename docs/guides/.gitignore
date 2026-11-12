@@ -1,0 +1,3 @@
+# In-progress publication only; the launcher cleans these after success/failure.
+.guide-staging-*/
+.guide-backup-*/
