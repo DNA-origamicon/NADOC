@@ -74,7 +74,7 @@ const _HIDDEN_BOND = new THREE.Matrix4().makeScale(0, 0, 0)
 
 // ── Renderer factory ──────────────────────────────────────────────────────────
 
-export function initAtomisticRenderer(scene, { independentColors = false } = {}) {
+export function initAtomisticRenderer(scene, { independentColors = false, coloredStrandId = null } = {}) {
   const colors = independentColors ? { mode: 'cpk', strands: new Map(), bases: new Map(), scalar: null } : sharedColors
   // Colour preferences are shared by renderer instances; skip a repeated paint
   // only when this instance has actually painted those same preferences.
@@ -1018,6 +1018,11 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
      * Call whenever canonical selection changes.
      */
     highlight(selection) {
+      // Strand-local coloring remains visible while its strand is selected;
+      // selection glow and finer domain/base highlights still identify it.
+      if (coloredStrandId && selection?.strandIds?.includes(coloredStrandId)) {
+        selection = { ...selection, strandIds: selection.strandIds.filter(id => id !== coloredStrandId) }
+      }
       _state.lastSel = selection
       _applyColors(selection)
     },

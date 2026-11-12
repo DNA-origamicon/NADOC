@@ -72,7 +72,8 @@ _fields = {
     m.TubeAssignment: "strand_id reason",
     m.PlateLayout: "orientation plate_count wells tubes",
     m.RepresentationSegment: "helix_id bp_start bp_end",
-    m.RepresentationOverride: "id name representation segments protein_attachment_ids",
+    # Strand selection and coloring are owned display metadata, never physical inputs.
+    m.RepresentationOverride: "id name representation segments protein_attachment_ids strand_ids coloring",
     m.Annotation: "id name font_family box_size rotation_deg text icon callout_type color highlight glow_color glow_intensity highlight_type transparency size manual screen_pos visible refs",
     m.ViewVolume: "id name shape min_corner max_corner rotation representation opacity coloring outline_visible enabled",
     m.VisibilityState: "hidden_base_keys shown_base_keys hidden_cluster_ids hidden_part_group_ids",

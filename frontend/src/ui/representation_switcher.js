@@ -1,3 +1,4 @@
+import { editStrandRepresentation } from '../scene/strand_representation.js'
 // Unified representation switcher — the core of the View → Representation menu.
 //
 // Owns the mutually-exclusive representation presets (hull-prism / cylinders /
@@ -15,7 +16,7 @@
 // injected.
 
 import { supportedColoringSet, nextColoringMode, reprMenuState, coloringFallbackMode, COLORING_LABELS as _COLORING_LABELS } from '../scene/coloring_modes.js'
-import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, editOverridesForProteins } from '../scene/representation_overrides.js'
+import { clustersToSegments, domainsToSegments, editOverridesForSegments, editOverridesForProteins } from '../scene/representation_overrides.js'
 import { cancelSurfaceComputations } from '../api/surface_progress_request.js'
 import { showToast } from './toast.js'
 import { showConfirm } from './primitives/confirm.js'
@@ -349,13 +350,12 @@ export function initRepresentationSwitcher({
       const clusterIds = refs.filter(r => r.kind === 'cluster').map(r => r.id)
       const domainRefs = refs.filter(r => r.kind === 'domain')
       const segs = [
-        ...strandsToSegments(currentDesign, strandIds),
         ...clustersToSegments(currentDesign, clusterIds),
         ...domainsToSegments(currentDesign, domainRefs),
       ]
-      if (!simulationActive() && !external && (proteinIds.length || segs.length)) {
+      if (!simulationActive() && !external && (strandIds.length || proteinIds.length || segs.length)) {
         if (detail) selectSurfaceDetail(detail)
-        let next = currentDesign.representation_overrides ?? []
+        let next = strandIds.length ? editStrandRepresentation(currentDesign, strandIds, repr, { globalColoring: store.getState().coloringMode }) : currentDesign.representation_overrides ?? []
         if (segs.length) next = editOverridesForSegments(next, segs, repr)
         if (proteinIds.length) next = editOverridesForProteins(next, proteinIds, repr)
         await api.saveRepresentationOverrides(next)
@@ -379,6 +379,8 @@ export function initRepresentationSwitcher({
     })
   }
 
+  let strandHotkeyWrite = Promise.resolve()
+
   // ── Function-key bindings: F1…F8 → representations ────────────────────────────
   // Bound in the established order in _ALL_REPRS.  First press switches to the representation;
   // pressing the SAME key again (while that representation is already active)
@@ -396,6 +398,19 @@ export function initRepresentationSwitcher({
         e.preventDefault()
         const btn = document.getElementById(id)
         if (!btn || btn.disabled) return
+        const state = store.getState()
+        const strandIds = (state.selection?.items ?? []).filter(ref => ref.kind === 'strand').map(ref => ref.id)
+        if (!state.assemblyActive && !simulationActive() && state.currentDesign && strandIds.length) {
+          strandHotkeyWrite = strandHotkeyWrite.then(async () => {
+            const latest = store.getState()
+            if (latest.assemblyActive || latest.currentDesign?.id !== state.currentDesign.id) return
+            const next = editStrandRepresentation(latest.currentDesign, strandIds, repr, {
+              cycle: true, globalRepresentation: _appliedRepr ?? 'full', globalColoring: latest.coloringMode ?? 'strand',
+            })
+            await api.saveRepresentationOverrides(next)
+          }).catch(() => showToast('Could not save the strand representation.', { severity: 'error' }))
+          return
+        }
         // is-checked means this representation is already the active GLOBAL one →
         // repeat press cycles its coloring. EXCEPT when per-region representation
         // overrides are active: the displayed structure then diverges from the

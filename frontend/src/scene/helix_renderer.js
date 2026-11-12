@@ -2973,6 +2973,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
    *  than covering the full-rep half. Returns 1 when no override is active. */
   function _cylRepVis(dom) {
     if (!_repActive) return 1
+    if (_repColumnRep.has(`strand:${dom.strandId}`)) return 0
     for (let bp = dom.bp_lo; bp <= dom.bp_hi; bp++) {
       if (_effCol(dom.helixId, bp) !== 'cylinders') return 0
     }
@@ -3157,7 +3158,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _ensureAlphaInstalled()
     _rebuildClippedCylinderRuns()
     // A bead (either strand) shows only where its column resolves to 'full'.
-    const beadVis = (nuc) => (nuc && _effCol(nuc.helix_id, nuc.bp_index) === 'full' ? 1 : 0)
+    const beadVis = (nuc) => (nuc && !_repColumnRep.has(`strand:${nuc.strand_id}`) && _effCol(nuc.helix_id, nuc.bp_index) === 'full' ? 1 : 0)
     for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))

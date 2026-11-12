@@ -81,3 +81,20 @@ it('exact nucleotide membership excludes a complementary base and dangling bonds
   expect(found[0].direction).toBe('FORWARD')
   display.dispose()
 })
+
+it('keeps strand-local colors visible while the strand remains selected', async () => {
+  const store = createMockStore({ currentDesign: { strands: [] }, currentGeometry: [], strandColors: { s: 0xff0000 } })
+  const displays = initViewVolumeDisplays({ scene: new THREE.Scene(), store, api: {}, ensureAtoms: async () => atoms })
+  const layer = { id: 's', strandId: 's', representation: 'ballstick', coloring: 'strand', keys: ['h:0'], baseKeys: ['h:0:FORWARD'], opacity: 1 }
+  await displays.update([layer])
+  const entry = displays.entries.get('s')
+  const before = color(entry.root)
+  entry.renderer.highlight({ strandIds: ['s'] })
+  expect(color(entry.root)).toBe(before)
+  await displays.update([{ ...layer, coloring: 'cpk' }])
+  const cpk = color(entry.root)
+  expect(cpk).not.toBe(before)
+  entry.renderer.highlight({ strandIds: ['s'] })
+  expect(color(entry.root)).toBe(cpk)
+  displays.dispose()
+})

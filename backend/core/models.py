@@ -1292,7 +1292,10 @@ class RepresentationOverride(BaseModel):
     — e.g. a focal duplex at full bead-and-base detail against a cylinder-bundle
     background, for publication figures.
 
-    The rep applies to BOTH strands at each covered column: setting a region to
+    Strand IDs optionally pin an independent, locally colored strand display.
+    These do not expand into domain/duplex columns.
+
+    For segments, the rep applies to BOTH strands at each covered column: setting a region to
     'cylinders' hides every bead/slab there (staple AND scaffold) and shows the
     duplex cylinder; 'full' shows beads/slabs. 'surface'/'vdw'/'ballstick' hide
     the coarse-grained geometry at those columns and are drawn by dedicated overlay
@@ -1312,6 +1315,9 @@ class RepresentationOverride(BaseModel):
     ] = "full"
     segments: List[RepresentationSegment] = Field(default_factory=list)
     protein_attachment_ids: List[str] = Field(default_factory=list)
+    # Independent strand display; segments retain their duplex-column semantics.
+    strand_ids: List[str] = Field(default_factory=list)
+    coloring: Literal["strand", "base", "cluster", "overhang-only", "cpk"] = "strand"
 
 
 class Annotation(BaseModel):

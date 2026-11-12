@@ -1,3 +1,4 @@
+import { bindStrandDisplayMotion } from './strand_display_motion.js'
 import { buildVolumeExtras, paintVolumeExtras } from './view_volume_extras.js'
 import { coarseVolumePicker } from './volume_render_adapter.js'
 import { baseKey, atomBaseKey } from './base_ref.js'
@@ -11,7 +12,7 @@ import { atomColorsFromLetters, computeAtomStrandColors, computeAtomNucColors, c
 import { coloringFallbackMode } from './coloring_modes.js'
 
 /** A volume is a display layer with its own coloring and opacity, even on overlap. */
-export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHiddenNucs = () => new Set(), onError = console.error }) {
+export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHiddenNucs = () => new Set(), getLiveDisplay = null, onError = console.error }) {
   const entries = new Map()
   let generation = 0, layers = []
   const stage = (kind, phase, revision) => window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
@@ -19,6 +20,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
   }))
   function remove(entry) {
     entry.abort.abort()
+    entry.motion?.dispose()
     if (entry.renderer) entry.renderer.dispose()
     else entry.root.traverse(o => {
       if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
@@ -93,31 +95,39 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
         const geometry = (state.currentGeometry ?? []).filter(n => !exact || exact.has(baseKey(n, n.copy_k ?? 0)))
         // Scaffold cylinders normally borrow the paired staple's display. An isolated
         // scaffold must own a cylinder when its complementary strand is absent.
+        const sourceDesign = layer.strandId ? { ...design, strands: design.strands.filter(s => s.id === layer.strandId) } : design
         const buildDesign = exact && layer.representation === 'cylinders'
-          ? { ...design, strands: design.strands.map(s => ({ ...s, strand_type: s.strand_type === 'scaffold' ? 'staple' : s.strand_type })) } : design
+          ? { ...sourceDesign, strands: sourceDesign.strands.map(s => ({ ...s, strand_type: s.strand_type === 'scaffold' ? 'staple' : s.strand_type })) } : sourceDesign
         entry.cg = buildHelixObjects(geometry, buildDesign, root, {}, state.loopStrandIds, state.currentHelixAxes, layer.representation)
         const columns = new Map((layer.allColumnKeys ?? geometry.map(n => `${n.helix_id}:${n.bp_index}`)).map(key => [key, 'surface']))
         for (const key of keys) columns.set(key, layer.representation === 'cylinders' ? 'cylinders' : 'full')
         entry.cg.setReferenceStrands(new Set((design.strands ?? []).filter(s => s.is_reference).map(s => s.id)))
         entry.cg.setDetailLevel(layer.representation === 'cylinders' ? 2 : layer.representation === 'beads' ? 1 : 0)
-        entry.extras = layer.baseKeys ? null : buildVolumeExtras(design, geometry, root, layer.representation)
+        entry.extras = layer.baseKeys && !layer.strandId ? null : buildVolumeExtras(sourceDesign, geometry, root, layer.representation)
         entry.columns = columns
         entry.cg.applyRepOverrides(columns)
         entry.ready = true; paint(entry, layer)
+        if (layer.strandId && getLiveDisplay && ['full', 'beads'].includes(layer.representation)) entry.motion = bindStrandDisplayMotion(entry, getLiveDisplay, scene)
         entry.picker = coarseVolumePicker(entry, keys, geometry)
       } else {
         const work = (async () => {
           if (kind === 'atom') {
             const data = await ensureAtoms()
             if (!data || !current()) return
-            entry.renderer = initAtomisticRenderer(root, { independentColors: true })
+            entry.renderer = initAtomisticRenderer(root, { independentColors: true, coloredStrandId: layer.strandId })
             const exact = layer.baseKeys ? new Set(layer.baseKeys) : null
-            const selected = exact ? { ...data, atoms: data.atoms.filter(a => exact.has(atomBaseKey(a))) } : data
+            const selected = exact ? { ...data, atoms: data.atoms.filter(a => layer.strandId ? a.strand_id === layer.strandId : exact.has(atomBaseKey(a))) } : data
             const live = new Set(selected.atoms.map(a => a.serial))
             entry.renderer.update(exact ? { ...selected, bonds: (selected.bonds ?? []).filter(([a, b]) => live.has(a) && live.has(b)) } : filterAtomData(selected, keys, layer.representation !== 'vdw'))
             entry.renderer.setMode(layer.representation)
           } else {
-            const mesh = await api.getRegionSurface(layer.segments, { nucleotideKeys: layer.baseKeys, colorMode: 'strand', signal: entry.abort.signal, suppressBusy: true })
+            let nucleotideKeys = layer.baseKeys
+            if (layer.strandId) {
+              const data = await ensureAtoms()
+              if (!data || !current()) return
+              nucleotideKeys = [...new Set(data.atoms.filter(a => a.strand_id === layer.strandId).map(atomBaseKey))]
+            }
+            const mesh = await api.getRegionSurface(layer.segments, { nucleotideKeys, colorMode: 'strand', signal: entry.abort.signal, suppressBusy: true })
             if (!current()) return
             entry.renderer = initSurfaceRenderer(root)
             entry.motionMesh = mesh

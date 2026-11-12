@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { buildHelixObjects } from './helix_renderer.js'
 import { initVisibilityController } from './visibility_controller.js'
 
-function build(curved = false, strandType = 'scaffold') {
+function build(curved = false, strandType = 'scaffold', paired = false) {
   const design = {
     helices: [{ id: 'h', bp_start: 0, length_bp: 16,
       axis_start: { x: 0, y: 0, z: 0 }, axis_end: { x: 0, y: 0, z: 5 } }],
@@ -23,6 +23,11 @@ function build(curved = false, strandType = 'scaffold') {
     slab_quaternion: [0, Math.SQRT1_2, Math.SQRT1_2, 0],
     base_normal: [-1, 0, 0], axis_tangent: [0, 0, 1],
   }))
+  if (paired) {
+    design.strands.push({ ...design.strands[0], id: 'partner', strand_type: 'staple',
+      domains: design.strands[0].domains.map(d => ({ ...d, direction: 'REVERSE' })) })
+    geometry.push(...geometry.map(n => ({ ...n, strand_id: 'partner', strand_type: 'staple', direction: 'REVERSE' })))
+  }
   design.cluster_transforms = [{ id: 'c', helix_ids: ['h'] }]
   const ctrl = buildHelixObjects(geometry, design, new THREE.Scene(), {}, [], axes)
   ctrl.visibility = initVisibilityController({
@@ -129,4 +134,20 @@ it('uses the same axis and base visibility for Hide Staples without losing other
   const after = new THREE.Matrix4()
   slab.instMesh.getMatrixAt(slab.id, after)
   expect(after.elements).toEqual(before.elements)
+})
+
+
+it('strand display masks only that strand and retains the shared domain axis', () => {
+  const ctrl = build(false, 'scaffold', true)
+  ctrl.applyRepOverrides(new Map([['strand:s', 'surface']]))
+  const alpha = entry => entry.instMesh._instanceAlpha.getX(entry.id)
+  const selected = ctrl.backboneEntries.filter(e => e.nuc.strand_id === 's')
+  const partner = ctrl.backboneEntries.filter(e => e.nuc.strand_id === 'partner')
+  expect(selected).toHaveLength(16)
+  expect(partner).toHaveLength(16)
+  expect(selected.every(e => alpha(e) === 0)).toBe(true)
+  expect(partner.every(e => alpha(e) === 1)).toBe(true)
+  expect(ctrl.getAxisArrows()[0].segments.every(s => s.mesh.visible)).toBe(true)
+  ctrl.applyRepOverrides(new Map())
+  expect(selected.every(e => alpha(e) === 1)).toBe(true)
 })
