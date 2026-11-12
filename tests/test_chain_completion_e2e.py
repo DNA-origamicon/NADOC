@@ -483,6 +483,17 @@ def test_full_chain_runs_end_to_end_with_a_mock_binary(tmp_path, monkeypatch):
 
     monkeypatch.setattr(r, "_run_oxdna_async", fake_run)
 
+    # Detached workers cannot inherit these in-process binary/health mocks.
+    # Capture the real launch boundary and drain the actual protocol coroutine
+    # locally; detached-process ownership is covered by test_oxdna_worker_storage.
+    pending = []
+
+    def capture_launch(job, workspace, module, root, **kwargs):
+        assert module == "backend.core.oxdna_worker"
+        pending.append((job.job_id, workspace))
+
+    monkeypatch.setattr(r.runtime, "launch_detached", capture_launch)
+
     design, _, request = _load_authored_chain_request()
     design_state.set_design(design)
 
@@ -491,10 +502,11 @@ def test_full_chain_runs_end_to_end_with_a_mock_binary(tmp_path, monkeypatch):
     chain_id = resp.json()["chain"]["chain_id"]
 
     def _drain():
-        # Join every running oxDNA runner thread (mock → fast) so the stage's job is
-        # completed on disk before the next supervisor tick reconciles it.
-        for handle in list(r._RUNNING.values()):
-            handle.thread.join(timeout=60)
+        while pending:
+            jid, workspace = pending.pop(0)
+            job = OxdnaJob.load(jid, workspace)
+            with r.runtime.use_workspace(workspace):
+                asyncio.run(r.run_job(job, workspace, r.load_stage_specs(job.job_dir(workspace))))
 
     # Drive: drain the running stage, tick the supervisor (which spawns the next), repeat.
     for _ in range(12):

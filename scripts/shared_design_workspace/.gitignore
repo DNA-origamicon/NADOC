@@ -1,0 +1,25 @@
+# Only design inputs and compact evidence belong in this repository.
+# NADOC's managed simulation jobs normally live outside this folder.
+*_jobs/
+runs/
+results/
+__pycache__/
+.venv/
+.nadoc-*/
+.session/
+*.agent-writing
+*.dcd
+*.xtc
+*.trr
+*.cpt
+*.coor
+*.vel
+*.log
+*.zip
+*.tar.gz
+.env
+.env.*
+*.pem
+*.key
+*.credentials.json
+*.secrets.json

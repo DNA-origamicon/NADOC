@@ -161,6 +161,30 @@ from then on.
 
 ## Moving between the two development computers
 
+### Shared design repository
+
+For an independent Git-synchronized folder selectable in the Library, initialize
+the first machine from the NADOC checkout:
+
+```bash
+python scripts/setup_shared_design_workspace.py
+```
+
+This creates `workspace/Shared Designs` (or beneath `NADOC_WORKSPACE`) without
+changing existing designs, committing, or connecting a remote. It refuses an
+existing folder. Follow its [README](scripts/shared_design_workspace/README.md)
+to connect a private remote and clone into the same workspace-relative location
+on the second machine. The folder is an ordinary Library entry, not a separate
+server tab or an automatic background synchronization service.
+
+The outer repository continues to ignore `workspace/`; the inner repository has
+its own Git history. Keep portable native parts/assemblies, construction process,
+required inputs and compact reports there. Simulation jobs remain local. A clean
+`git pull --ff-only` transfers saved inputs; receiving-engine preparation and
+provenance checks still determine whether a design is usable for simulation.
+
+### Application code
+
 This is a human-operated synchronization procedure, not an automatic agent action.
 
 Before starting work, first make sure no other session has uncommitted changes, then run:

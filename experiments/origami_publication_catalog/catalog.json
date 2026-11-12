@@ -223,11 +223,11 @@
       "score_version": "image_reconstruction_v2",
       "staple_list": {
         "status": "available",
-        "location": "SI Table S1 (strong\u2013weak), pp.82\u201385; Table S2 (strong\u2013strong), pp.86\u201389; edge variants Tables S3 onward",
-        "notes": "Published sequence list located; sequence-to-topology equivalence has not been validated.",
+        "location": "SI Table S2 (strong\u2013strong), pp.86\u201389, plus Table S4 (44 unextended stacking-edge staples), p.91",
+        "notes": "D003 strong\u2013strong variant with unextended stacking edges: all 210 Table S2/S4 sequences match the recovered Fig. S71 routes (2026-11-04). Native feature replay verified; rigid panel geometry retains junction strain and is not simulation-equilibrated. See recovery/d003_20261104.json.",
         "sources": [
           {
-            "label": "SI Table S1 (strong\u2013weak), pp.82\u201385; Table S2 (strong\u2013strong), pp.86\u201389; edge variants Tables S3 onward",
+            "label": "SI Table S2 (strong\u2013strong), pp.86\u201389, plus Table S4 (44 unextended stacking-edge staples), p.91",
             "url": "https://www.qianlab.caltech.edu/nnano.2016.256-s1.pdf#page=86",
             "local_file": "sources/tilings.pdf",
             "pdf_page": 86

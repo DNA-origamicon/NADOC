@@ -36,9 +36,19 @@ rail colors match panel headers; Properties and Plates remain neutral. Saved lay
 use left v3 / right v2. Empty animation contexts start with a persisted-on-save
 `animation 1`; `animation_defaults.js` prevents repeated seeding within a session. Programmatic navigation focuses an existing copy. Dimensions
 stays active when another column opens while Properties remains open. Detached
-browser controls remain assessment-only. See `docs/expandable_panels_implementation_plan.md`.
+browser controls are implemented (2026-11-11) through View → Un/dock sidebars: one
+controls-only popup per originating editor, equal-width columns, mirrored dialogs,
+and a closed-session placeholder until the same editor opens another session.
+The editor retains all controllers and API authority; the popup has no broadcast
+subscription or independent application state. See `docs/expandable_panels_implementation_plan.md`.
 
 ## Corrections from the 2026-07-31 audit (the archive is wrong about these)
+
+**Shared design folder (2026-11-04):** `scripts/setup_shared_design_workspace.py`
+initializes a separate Git repository at `workspace/Shared Designs` (honoring
+`NADOC_WORKSPACE`). It uses the existing Library folder navigation. Hidden
+directories are now pruned at every listing depth so nested `.git` data is not
+scanned or shown. Remote setup and synchronization remain explicit; see `START.md`.
 
 | Archive claim | Reality |
 |---|---|

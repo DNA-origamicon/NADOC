@@ -16,6 +16,15 @@ equilibrium sampling and physical convergence campaigns require explicit
 Historical full-run commands/results below predate this split; the legacy
 `NADOC_RUN_OXDNA_SLOW` flag no longer enables campaigns.
 
+## November 11 full regression
+
+Full `just test` at `12958aee`: 21,492 passed, 8 failed, 26 skipped (41m50s).
+Four obsolete harness/fixture expectations were corrected; the mixed-module
+CPD display parameter now carries the required scientific opt-in marker.
+mrDNA zero-step accuracy, corner fold clashes and rod DNA/gold clearance remain
+failing software regressions. No tolerances were relaxed and no molecular
+candidate was promoted. Evidence: `.development-artifacts/full-test-20261111/`.
+
 ## Topic navigation and current boundaries
 
 Reorganized October 17, 2026. Read the retained contracts here, then only the

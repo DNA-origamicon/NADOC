@@ -30,6 +30,10 @@ def list_workspace_entries(workspace: Path) -> list[dict]:
         except OSError:
             continue
         for child in children:
+            # Nested design repositories keep their Git database beside the
+            # documents. Never expose or walk hidden metadata directories.
+            if child.name.startswith("."):
+                continue
             relative = os.path.join(parent, child.name) if parent else child.name
             # The existing exclusion policy is root-scoped. Check it once per
             # root, rather than constructing Paths for every nested result file.

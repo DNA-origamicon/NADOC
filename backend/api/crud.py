@@ -2274,30 +2274,18 @@ def get_helix(helix_id: str) -> dict:
 
 @router.put("/design/helices/{helix_id}")
 def update_helix(helix_id: str, body: HelixRequest) -> dict:
-    replacement = Helix(
-        id=helix_id,
-        axis_start=body.axis_start,
-        axis_end=body.axis_end,
-        length_bp=body.length_bp,
-        phase_offset=body.phase_offset,
-    )
-
-    def _apply(d: Design) -> None:
-        for i, h in enumerate(d.helices):
-            if h.id == helix_id:
-                d.helices[i] = replacement
-                return
-        raise HTTPException(404, detail=f"Helix {helix_id!r} not found.")
+    from backend.api.part_structural_commands import build
+    params = {"helix_id": helix_id, **body.model_dump(mode="json")}
 
     label = f"Update helix {_helix_label(design_state.get_or_404(), helix_id)}"
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype="helix-update",
         label=label,
-        params={"helix_id": helix_id, **body.model_dump(mode="json")},
-        fn=_apply,
+        params=params,
+        fn=lambda d: build('helix-update', d, params),
     )
     return {
-        "helix": replacement.model_dump(),
+        "helix": design.find_helix(helix_id).model_dump(),
         **_design_response(design, report),
     }
 

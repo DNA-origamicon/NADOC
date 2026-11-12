@@ -74,7 +74,8 @@ def preservation_digest(design, *, allow_view_volumes=False):
             _reject("Strict preservation initially requires empty visibility lists")
     return digest({
         "id": design.id, "annotations_enabled": design.annotations_enabled,
-        **dict.fromkeys(_ABSENT), **{name: [] for name in _EMPTY_LISTS},
+        # Empty zoom metadata is checked above; retain existing sealed digests.
+        **dict.fromkeys(_ABSENT), **{name: [] for name in _EMPTY_LISTS if name != "zoom_volumes"},
         "view_volumes": volumes,
         # The new empty identity mask is omitted by VisibilityState's serializer.
         # Preserve the existing exact three-field bytes and preservation digest;

@@ -1508,3 +1508,19 @@ responsive toggle-off, and no residual updates after Stop or switching jobs.
 Unit coverage exercises buffering, duplicate snapshots, teardown and stale-session
 responses; the browser exercise uses intercepted frames, not a physical oxDNA run.
 Real-simulation visual quality remains a manual check. No new design is required.
+
+
+### MV-60 — Detached sidebar controls across physical monitors (PENDING, 2026-11-11)
+
+Use View → Un/dock sidebars with an existing part or assembly, move the controls
+window to a second monitor, and check readability and keyboard focus while
+opening/closing columns. Compare local and Tailscale editor windows: controls
+must affect only their own spawning editor. Exercise prepared trajectory seeking,
+canvas-based plate interactions, feature drag/reordering, file/color pickers,
+and modal/context-menu placement. Close the session, open another in the same
+editor, and close/redock the popup. Do not launch a new simulation for this check.
+Automated coverage exercises representations, native sliders, lighting, equal
+column widths, session lifecycle, and owner isolation; unit coverage includes
+repeated-control labels, dialogs, blocked popups and pointer-capture adaptation.
+Physical-monitor behavior and the remaining specialized widgets require manual
+inspection; no molecular geometry change or new design artifact is needed.

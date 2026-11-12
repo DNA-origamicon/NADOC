@@ -42,8 +42,9 @@ ABSENT = ("plate_layout", "atomistic_reference", "active_loadout_id", "last_edit
 
 
 def projection(design):
-    # Independent oracle: same full field values carried by classic publication.
-    return design.model_dump(mode="json", include=set(PRESERVED_ROLES))
+    # Version 1 seals predate zoom metadata; empty zoom lists are admitted but
+    # excluded from the digest to preserve existing sealed identities.
+    return design.model_dump(mode="json", include=set(PRESERVED_ROLES) - {"zoom_volumes"})
 
 
 @pytest.mark.parametrize("enabled", [False, True])

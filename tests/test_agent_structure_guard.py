@@ -30,6 +30,27 @@ def test_native_process_replays_after_recovery_payloads_are_destroyed(tmp_path):
     assert verify(m.Design.from_json((tmp_path/'good.nadoc').read_text()))['commands'] == 1
 
 
+def test_replay_does_not_copy_accumulated_recovery_payloads(monkeypatch):
+    """Long native recipes must execute inputs without repeatedly copying caches."""
+    process = part()
+    process.append('strand-sequence', {'_proof_version': 1,
+        'strand_id': process.design.strands[0].id, 'sequence': 'ACGT'}, 'Assign bases')
+    marker = 'UNTRUSTED_RECOVERY_CACHE_' * 1000
+    for row in process.design.feature_log:
+        row.design_snapshot_gz_b64 = marker
+        row.post_state_gz_b64 = marker
+    original = m.Design.model_dump_json
+
+    def reject_cache_copy(self, *args, **kwargs):
+        raw = original(self, *args, **kwargs)
+        assert marker not in raw, 'Replay serialized a recovery cache instead of only molecular state'
+        return raw
+
+    monkeypatch.setattr(m.Design, 'model_dump_json', reject_cache_copy)
+    assert verify(process.design)['commands'] == 2
+    assert process.design.feature_log[0].design_snapshot_gz_b64 == marker
+
+
 @pytest.mark.parametrize('root', ['missing','capture'])
 def test_history_free_structure_cannot_be_published(tmp_path, root):
     design = part().design.copy_with(feature_log=[],recipe_root=None)
