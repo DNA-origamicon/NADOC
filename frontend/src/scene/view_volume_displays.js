@@ -75,7 +75,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
     const pending = { atom: [], surface: [] }
     for (const layer of layers) {
       const kind = layer.representation === 'surface' ? 'surface' : ['vdw', 'ballstick', 'stick'].includes(layer.representation) ? 'atom' : 'cg'
-      const signature = JSON.stringify([layer.representation, layer.keys, layer.baseKeys])
+      const signature = JSON.stringify([layer.representation, layer.keys, layer.baseKeys, layer.backbonePairs ? [...layer.backbonePairs] : null])
       let entry = entries.get(layer.id)
       if (entry && (entry.signature !== signature || entry.geometry !== state.currentGeometry || entry.axes !== state.currentHelixAxes)) {
         remove(entry); entries.delete(layer.id); entry = null
@@ -95,9 +95,9 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
         // scaffold must own a cylinder when its complementary strand is absent.
         const buildDesign = exact && layer.representation === 'cylinders'
           ? { ...design, strands: design.strands.map(s => ({ ...s, strand_type: s.strand_type === 'scaffold' ? 'staple' : s.strand_type })) } : design
-        entry.cg = buildHelixObjects(geometry, buildDesign, root, {}, state.loopStrandIds, state.currentHelixAxes, layer.representation)
+        entry.cg = buildHelixObjects(geometry, buildDesign, root, {}, state.loopStrandIds, state.currentHelixAxes, exact ? 'full' : layer.representation, { isolatedBases: !!exact, backbonePairs: layer.backbonePairs })
         const columns = new Map((layer.allColumnKeys ?? geometry.map(n => `${n.helix_id}:${n.bp_index}`)).map(key => [key, 'surface']))
-        for (const key of keys) columns.set(key, layer.representation === 'cylinders' ? 'cylinders' : 'full')
+        for (const key of keys) columns.set(key, layer.representation === 'cylinders' && !key.startsWith('__ext_') && !key.startsWith('__lnk__') ? 'cylinders' : 'full')
         entry.cg.setReferenceStrands(new Set((design.strands ?? []).filter(s => s.is_reference).map(s => s.id)))
         entry.cg.setDetailLevel(layer.representation === 'cylinders' ? 2 : layer.representation === 'beads' ? 1 : 0)
         entry.extras = layer.baseKeys ? null : buildVolumeExtras(design, geometry, root, layer.representation)

@@ -8,7 +8,7 @@ import { ordinaryBackboneContinuations, isOrdinaryBackboneContinuation } from '.
 import { computeAtomStrandColors } from './color_util.js'
 
 /** Connections use both selected and neighboring endpoints, in the source's local frame. */
-export function buildZoomConnections({ root, design, entries, selectedKeys, bounds, matrix, representation, state, coloring, selectionOnly = false }) {
+export function buildZoomConnections({ root, design, entries, selectedKeys, bounds, matrix, representation, state, coloring, selectionOnly = false, separateExtraBases = false }) {
   const visible = entries.filter(e => selectedKeys.has(baseKey(e.nuc, e.nuc.copy_k ?? 0)) || (!selectionOnly && bounds.containsPoint(e.pos.clone().applyMatrix4(matrix))))
   const geometry = visible.map(e => ({ ...e.nuc, backbone_position: e.pos.toArray() }))
   const sites = new Map(geometry.map(n => [`${n.helix_id}:${n.bp_index}:${n.direction}`, n]))
@@ -82,7 +82,7 @@ export function buildZoomConnections({ root, design, entries, selectedKeys, boun
     group.add(lines.line)
   }
   // Keep inserted residues and their native curved backbone, including saved poses.
-  const extras = buildVolumeExtras(subset, [...geometry, ...records.flatMap(endpoints)], group, representation === 'full' ? 'full' : 'beads')
+  const extras = separateExtraBases ? null : buildVolumeExtras(subset, [...geometry, ...records.flatMap(endpoints)], group, representation === 'full' ? 'full' : 'beads')
   paintVolumeExtras(extras, { columns: new Map(geometry.map(n => [`${n.helix_id}:${n.bp_index}`, 'full'])), design, mode: coloring, strands, nucAlphas: new Map() })
   return { group, update(live, updates) {
     const byKey = new Map(live.map(e => [baseKey(e.nuc, e.nuc.copy_k ?? 0), e.pos]))

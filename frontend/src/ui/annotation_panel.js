@@ -9,7 +9,7 @@ import { createAnnotationBoxControls } from './annotation_box_controls.js'
 import { createPresentationCheckpointButton } from './presentation_checkpoint_button.js'
 import { ANNOTATION_ICONS, annotationIconMarkup } from '../scene/annotation_icons.js'
 import {
-  ANNOTATION_FONTS, CALLOUT_TYPES, GLOW_INTENSITY_RANGE, TRANSPARENCY_RANGE, annotationHasContent, MAX_TEXT_LENGTH,
+  ANNOTATION_FONT_SIZES, ANNOTATION_FONTS, CALLOUT_TYPES, GLOW_INTENSITY_RANGE, TRANSPARENCY_RANGE, annotationHasContent, MAX_TEXT_LENGTH,
 } from '../scene/annotation_model.js'
 import { assemblyAnnotationSelection } from '../scene/assembly_annotation_refs.js'
 import { describeTarget } from '../scene/annotation_targets.js'
@@ -256,7 +256,7 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
     const currentSize = Math.min(Number.MAX_VALUE, 13 * entry.size)
     sizeInput.value = String(currentSize)
     sizeSelect.append(h(document, 'option', '', { value: '', text: '▾' }))
-    for (const px of [10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 48, 64, 96])
+    for (const px of ANNOTATION_FONT_SIZES)
       sizeSelect.append(h(document, 'option', '', { value: String(px), text: `${px} px` }))
     const commitSize = () => {
       const value = Number(sizeInput.value), scale = value / 13

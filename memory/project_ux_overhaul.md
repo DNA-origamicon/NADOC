@@ -173,3 +173,11 @@ user browsing via a picker still sees `*_jobs`.
 **Why:** this file is the single record of *what* and *why* — losing it means re-running the
 audit and re-asking the user, which they explicitly invested time in to avoid.
 **How to apply:** open it whenever picking up UX work; treat each entry as a small spec.
+
+**Visualization cards (2026-11-12):** Representations, Coloring and View Actions
+now have keyboard-accessible collapse buttons, using the shared per-section
+preference storage. Repeated/detached sidebar copies mirror their state. View
+Actions uses aligned two-column buttons with uniform compact height, typography,
+neutral/selected colors and border styles, including section-plane controls.
+Legacy Reset Camera margins were removed. Implementation: `visualization_cards.js`
+and its scoped stylesheet; browser coverage: `visualization_cards.spec.js`.

@@ -7,7 +7,7 @@
  * callers cache the matched entries and read `.pos` every frame.
  */
 import { partGroupById, partGroupNucKeys } from './part_group_display.js'
-import { baseKey } from './base_ref.js'
+import { baseKey, xbKey } from './base_ref.js'
 import { ovhgDomainIds } from './design_queries.js'
 
 const KIND_LABELS = {
@@ -51,12 +51,16 @@ export function buildTargetMatcher(refs, design) {
         if (ref.subtype === 'forced_ligation') {
           const fl = design?.forced_ligations?.find(x => x.id === ref.id)
           if (fl) {
+            for (let k = 0; k < (fl.extra_bases?.length ?? 0); k++) m.bases.add(xbKey(fl.id, k))
             m.bases.add(nucKey(fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction))
             m.bases.add(nucKey(fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction))
           }
         } else {
           const xo = design?.crossovers?.find(x => x.id === ref.id)
-          if (xo) for (const half of [xo.half_a, xo.half_b]) m.bases.add(nucKey(half.helix_id, half.index, half.strand))
+          if (xo) {
+            for (const half of [xo.half_a, xo.half_b]) m.bases.add(nucKey(half.helix_id, half.index, half.strand))
+            for (let k = 0; k < (xo.extra_bases?.length ?? 0); k++) m.bases.add(xbKey(xo.id, k))
+          }
         }
         break
       }

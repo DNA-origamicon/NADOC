@@ -509,7 +509,7 @@ export function orderStrandNucleotides(nucs) {
  * for their whole lifetime and never expose LOD switching (private preview
  * layers); the default view builds them so a later LOD switch can show them.
  */
-export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full', { curvedCylinders = true, axisTubeSubdivisions = 4, axisMeshes = true } = {}) {
+export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full', { curvedCylinders = true, axisTubeSubdivisions = 4, axisMeshes = true, isolatedBases = false, backbonePairs = null } = {}) {
   // Validate before adding any scene objects. An incomplete response must not
   // leave a half-updated scientific representation on screen.
   for (const nuc of geometry ?? []) {
@@ -541,8 +541,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // helix axis (a chord between the anchors), which clashes with the curved
   // arc. ds-linker bridges (`__lnk__{conn}__a` / `__b`) are explicitly drawn
   // by helix_renderer as the dsDNA bridge segment, so they're NOT filtered.
+  // An exact base-selection layer owns these residues itself; no arc renderer
+  // is present there to provide their beads. Source display coordinates are retained.
   const _isSsLinkerBridgeNuc = (nuc) =>
-    typeof nuc.strand_id === 'string'
+    !isolatedBases && typeof nuc.strand_id === 'string'
     && nuc.strand_id.startsWith('__lnk__')
     && nuc.strand_id.endsWith('__s')
     && typeof nuc.helix_id === 'string'
@@ -551,7 +553,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // Beads marked as a flexible ssDNA segment are excluded from the rigid bead
   // meshes (they don't follow their helix's cluster); overhang_link_arcs.js
   // draws them on a fixed-length arc between the live cluster anchors instead.
-  const _isFlexibleSegmentNuc = (nuc) => nuc.is_flexible_segment === true
+  const _isFlexibleSegmentNuc = (nuc) => !isolatedBases && nuc.is_flexible_segment === true
 
   const byStrand = new Map()
   const byBp     = new Map()
@@ -1104,8 +1106,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   // ── Strand direction cones (InstancedMesh) ────────────────────────────────
 
+  const includesBackbonePair = (a, b) => !backbonePairs || backbonePairs.has(JSON.stringify([
+    baseKey(a, a.copy_k ?? 0), baseKey(b, b.copy_k ?? 0),
+  ].sort()))
   let totalCones = 0
-  for (const [, nucs] of byStrand) totalCones += Math.max(0, nucs.length - 1)
+  for (const nucs of byStrand.values()) for (let i = 1; i < nucs.length; i++) {
+    if (includesBackbonePair(nucs[i - 1], nucs[i])) totalCones++
+  }
 
   const _coneCount = _skipCones ? 1 : Math.max(1, totalCones)
   const iCones = new THREE.InstancedMesh(
@@ -1123,6 +1130,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (const [, nucs] of byStrand) {
       const color = nucArrowColor(nucs[0], stapleColorMap, customColors, loopSet)
       for (let i = 0; i < nucs.length - 1; i++) {
+        if (!includesBackbonePair(nucs[i], nucs[i + 1])) continue
         const from   = new THREE.Vector3(...nucs[i].backbone_position)
         const to     = new THREE.Vector3(...nucs[i + 1].backbone_position)
         const dir    = to.clone().sub(from)

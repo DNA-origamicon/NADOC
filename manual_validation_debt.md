@@ -1540,3 +1540,17 @@ existing-geometry opacity (including crossover arcs) remain for review. Check or
 close/Apply and after history-edit cancellation.
 No deformed square-lattice extrusion is required; its existing implementation
 limitation remains GUIDE-UX-004.
+
+### MV-62 — Inset title typography (PENDING, 2026-11-12)
+
+Review centered titles in inset top border bars with long labels and 10–96 px
+annotation font presets, including narrow windows and bottom-corner placement.
+Browser assertions cover rendered typography, export compositing and save/reopen;
+human judgment of legibility and long-title truncation remains for review.
+
+### MV-63 — Visualization card layout (PENDING, 2026-11-12)
+
+Review collapse-header affordances and View Actions label legibility at unusually
+narrow sidebar widths and nondefault UI scale. Browser checks cover keyboard
+activation, reload persistence, mirrored cards and uniform button metrics; a
+rendered default-width screenshot was inspected during implementation.

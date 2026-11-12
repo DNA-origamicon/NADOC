@@ -1,0 +1,55 @@
+.visualization-card .visualization-card-body[hidden] { display: none !important; }
+.visualization-card h2 .visualization-card-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.visualization-card-toggle::before { content: '▾'; width: 12px; }
+.visualization-card-toggle[aria-expanded="false"]::before { content: '▸'; }
+.view-actions-card > .ox-card__body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+/* Scope by class so mirrored and detached sidebar copies get the same layout.
+   Override the old Reset Camera margins and the section tool's local styles. */
+:is(.view-actions-card, #right-view-actions) .ox-card__body button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: var(--control-sm, 32px);
+  min-height: var(--control-sm, 32px);
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid var(--right-sidebar-button-border, #6e7681);
+  border-radius: var(--radius-md, 4px);
+  background: var(--color-bg-raised, #21262d);
+  color: var(--right-sidebar-text, #fff);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs, 13px);
+  white-space: nowrap;
+  font-weight: var(--weight-medium, 500);
+  line-height: 1;
+  cursor: pointer;
+}
+:is(.view-actions-card, #right-view-actions) .ox-card__body button:hover:not(:disabled) { background: var(--color-bg-elevated, #30363d); }
+:is(.view-actions-card, #right-view-actions) .ox-card__body button[aria-pressed="true"] { background: var(--color-accent-strong, #1f6feb); color: #fff; }
+:is(.view-actions-card, #right-view-actions) .ox-card__body button[aria-pressed="true"]:hover:not(:disabled) { background: var(--color-accent-hover, #388bfd); }
+:is(.view-actions-card, #right-view-actions) .ox-card__body button:disabled { opacity: .5; cursor: not-allowed; }
+:is(.view-actions-card, #right-view-actions) .ox-card__body button:focus-visible { outline: 2px solid var(--color-accent, #58a6ff); outline-offset: 2px; }
+.view-actions-card .section-view-controls__toolbar { gap: 6px; }
+.view-actions-card .section-view-controls__plane button:first-child { justify-content: flex-start; }

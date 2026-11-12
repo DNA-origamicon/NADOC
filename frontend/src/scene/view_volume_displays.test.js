@@ -81,3 +81,39 @@ it('exact nucleotide membership excludes a complementary base and dangling bonds
   expect(found[0].direction).toBe('FORWARD')
   display.dispose()
 })
+
+it('renders exact extension and linker bases even when their owning domains are absent', async () => {
+  const geometry = ['__ext_tail', '__lnk__bridge'].map((helix_id, index) => ({
+    helix_id, strand_id: index ? '__lnk__bridge__s' : 's', strand_type: 'staple', domain_index: -1,
+    bp_index: 0, direction: 'FORWARD', backbone_position: [index * 3,0,0], base_position: [index * 3,1,0],
+    base_normal: [0,1,0], axis_tangent: [0,0,1], base: 'T',
+    placement_source: index ? 'native-full-o5-v1' : 'native-full-extension-v1',
+    extension_id: index ? undefined : 'tail', is_modification: false,
+    slab_position: index ? [3,.67,0] : null, slab_quaternion: index ? [0,0,0,1] : null,
+  }))
+  const store = createMockStore({ currentDesign: { helices: [], strands: [{ id: 's', domains: [], strand_type: 'staple' }] }, currentGeometry: geometry })
+  const display = initViewVolumeDisplays({ scene: new THREE.Scene(), store, api: {} })
+  const keys = geometry.map(n => `${n.helix_id}:0`)
+  for (const representation of ['full', 'beads', 'cylinders']) {
+    await display.update([{ id: 'zoom', representation, keys, baseKeys: keys.map(k => `${k}:FORWARD`), opacity: 1 }])
+    const entry = display.entries.get('zoom')
+    expect(entry.cg.backboneEntries).toHaveLength(2)
+    expect(entry.columns.get('__ext_tail:0')).toBe('full')
+    expect(entry.columns.get('__lnk__bridge:0')).toBe('full')
+  }
+  display.dispose()
+})
+
+it('does not connect disjoint selected bases when the source adjacency omits that bond', async () => {
+  const geometry = [0, 4].map(bp_index => ({
+    helix_id: 'h', bp_index, direction: 'FORWARD', strand_id: 's', strand_type: 'staple', domain_index: 0,
+    placement_source: 'native-full-o5-v1', backbone_position: [bp_index,0,0], base_position: [bp_index,.5,0],
+    base_normal: [0,1,0], axis_tangent: [0,0,1], slab_position: [bp_index,.67,0], slab_quaternion: [0,0,0,1],
+  }))
+  const store = createMockStore({ currentDesign: { helices: [], strands: [{ id: 's', domains: [] }] }, currentGeometry: geometry })
+  const display = initViewVolumeDisplays({ scene: new THREE.Scene(), store, api: {} })
+  await display.update([{ id: 'zoom', representation: 'full', keys: ['h:0', 'h:4'], baseKeys: ['h:0:FORWARD', 'h:4:FORWARD'], backbonePairs: new Set(), opacity: 1 }])
+  expect(display.entries.get('zoom').cg.backboneEntries).toHaveLength(2)
+  expect(display.entries.get('zoom').cg.coneEntries).toHaveLength(0)
+  display.dispose()
+})
