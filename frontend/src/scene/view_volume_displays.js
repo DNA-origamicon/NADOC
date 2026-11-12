@@ -32,6 +32,9 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
   function paint(entry, layer) {
     const original = store.getState(), mode = coloringFallbackMode(layer.representation, layer.coloring ?? 'strand') ?? layer.coloring ?? 'strand'
     const state = { ...original, coloringMode: mode }, design = state.currentDesign, geometry = state.currentGeometry ?? []
+    // Earlier visibility subscribers can repaint after the store clears the
+    // document, before our cleanup subscriber removes these scene layers.
+    if (!design) return
     const strands = computeAtomStrandColors(state, buildStapleColorMap(geometry, design))
     const nucColors = computeAtomNucColors(state), nucAlphas = computeAtomNucAlphas(design)
     const hidden = getHiddenNucs(), hideReference = state.showReferenceGeometry === false || state.simulationTabActive === true

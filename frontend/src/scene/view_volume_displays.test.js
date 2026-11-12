@@ -98,3 +98,18 @@ it('keeps strand-local colors visible while the strand remains selected', async 
   expect(color(entry.root)).toBe(cpk)
   displays.dispose()
 })
+
+it('allows an earlier visibility subscriber to repaint during document teardown', async () => {
+  const store = createMockStore({ currentDesign: { strands: [] }, currentGeometry: [] })
+  let displays
+  // Visibility is registered before the display owner in main.js and repaints
+  // synchronously when the document is cleared, before our cleanup subscriber.
+  store.subscribe(() => displays.repaint())
+  const scene = new THREE.Scene()
+  displays = initViewVolumeDisplays({ scene, store, api: {}, ensureAtoms: async () => atoms })
+  await displays.update([{ id: 's', strandId: 's', representation: 'ballstick', keys: ['h:0'], opacity: 1 }])
+  expect(scene.children.length).toBe(1)
+  expect(() => store.setState({ currentDesign: null, currentGeometry: null })).not.toThrow()
+  expect(scene.children).toEqual([])
+  displays.dispose()
+})

@@ -14,6 +14,17 @@ beads, binding cylinders — are CLOSED, and the suspected photo-export bug was 
 photo-mode/override interaction, per-region extra bases, a test gap, and in-app verification —
 real, but none of them silently wrong geometry.
 
+## Strand-layer Close Session correction (2026-11-12)
+
+Visibility-controller subscribers run before the independent display owner.
+On document clear they request a repaint with `currentDesign === null`, while
+strand layers still exist. `paint` previously dereferenced that cleared design,
+throwing before the display cleanup subscriber and remaining session reset ran.
+It now skips repainting without a document; the same synchronous store update
+then disposes the layers and their motion hooks. Regression coverage reproduces
+this subscriber ordering and exercises F7 → F4 → Close Session on the existing
+`workspace/2hb_1xT.nadoc`, intercepting saves and checking unchanged source bytes.
+
 ## Strand Full view-motion correction (2026-11-12)
 
 The independent strand Full/Beads layer now follows the native live instance
