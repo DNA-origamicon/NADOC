@@ -21,3 +21,41 @@
 .trajectory-transport { display: flex; align-items: center; justify-content: center; gap: 6px; }
 .trajectory-transport .btn { min-width: 30px; margin: 0; }
 .anim-keyframe:not(.is-collapsed) .trajectory-header-play { display: none; }
+
+/* Compact controls follow the sidebar column, including detached copies. */
+#animation-panel { container: animation-sidebar / inline-size; min-width: 0; }
+.anim-keyframe-header { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.anim-keyframe-header > button:not(.anim-keyframe-title) { flex-shrink: 0; }
+.anim-keyframe-header .anim-keyframe-title { flex: 1 1 64px; }
+.anim-number { width: max(72px, calc(5ch + 28px)); min-width: max(72px, calc(5ch + 28px)); flex: 0 0 auto; box-sizing: border-box; font-variant-numeric: tabular-nums; }
+.anim-keyframe-timing { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding-left: 18px; }
+.anim-keyframe-timing > label { display: inline-flex; align-items: center; gap: 5px; }
+@container animation-sidebar (max-width: 320px) {
+  .anim-keyframe-header { gap: 2px; }
+  .anim-keyframe-header > button:not(.anim-keyframe-title) { width: 22px; min-width: 22px; height: 24px; box-sizing: border-box; padding: 0 !important; margin: 0; font-size: 11px; }
+  .anim-keyframe-header .anim-keyframe-title { flex-basis: 48px; padding-inline: 3px; height: 24px; }
+  .anim-keyframe-text-preview { display: none; }
+  .anim-keyframe-header button svg { width: 13px; height: 13px; }
+}
+
+#animation-panel div:has(> .anim-number) { flex-wrap: wrap; }
+
+/* Measure the title button itself, so mirrored/detached columns adapt independently. */
+.anim-keyframe-title { container: keyframe-title / inline-size; }
+.anim-keyframe-title-short { display: none; }
+@container keyframe-title (max-width: 10ch) {
+  .anim-keyframe-title-full { display: none; }
+  .anim-keyframe-title-short { display: inline; }
+}
+@container keyframe-title (max-width: 11ch) {
+  [data-number-digits="2"] .anim-keyframe-title-full { display: none; }
+  [data-number-digits="2"] .anim-keyframe-title-short { display: inline; }
+}
+@container keyframe-title (max-width: 12ch) {
+  [data-number-digits="3"] .anim-keyframe-title-full { display: none; }
+  [data-number-digits="3"] .anim-keyframe-title-short { display: inline; }
+}
+@container keyframe-title (max-width: 13ch) {
+  [data-number-digits="4"] .anim-keyframe-title-full { display: none; }
+  [data-number-digits="4"] .anim-keyframe-title-short { display: inline; }
+}

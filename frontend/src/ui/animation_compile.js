@@ -18,7 +18,6 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
     <label>Video size <select aria-label="Compiled video size"><option value="1080p">1080p</option><option value="720p">720p</option></select></label>
     <p class="compile-summary" role="status"></p>
     <div class="compile-result" hidden><button class="btn compile-play">Play compiled</button> <a class="compile-download">Download offline presentation</a></div>
-    <div class="compile-preview-result" hidden><button class="btn compile-preview-play">Play compiled keyframe</button> <a class="compile-preview-download">Download keyframe</a></div>
     <dialog aria-label="Compiling presentation"><h3>Compiling presentation</h3><p>Preparing videos for offline playback. Keep this tab open. Single-file limit: 256 MiB of video.</p>
     <progress max="1" aria-label="Overall compilation progress"></progress><p class="compile-stage" role="status"></p><div class="compile-videos"></div><button class="btn compile-cancel">Cancel</button></dialog>`
   anchor?.after(root)
@@ -27,7 +26,7 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
   const summary = root.querySelector('.compile-summary'), result = root.querySelector('.compile-result')
   const download = root.querySelector('a'), resolution = root.querySelector('select')
   let controller = null, url = null, signature = null, sourceSignature = null
-  let compiled = null, preview = null
+  let compiled = null
   const livePlayer = controls && camera ? initCompiledPresentationPlayer({
     viewport: document.getElementById('canvas-area') ?? renderer.domElement.parentElement,
     player, camera, controls, captureCamera, getPlayOptions, beforeStart: beforeCompile,
@@ -106,12 +105,7 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
       controller.signal.throwIfAborted()
       compiledStatus.record(prepared)
       if (target) {
-        if (preview) URL.revokeObjectURL(preview.url)
-        preview = { url: URL.createObjectURL(blob), compiled: prepared && { ...prepared, source, signature: sourceSignature } }
-        const link = root.querySelector('.compile-preview-download')
-        link.href = preview.url; link.download = `${(target.name || 'trajectory-keyframe').replace(/[^\p{L}\p{N} _-]/gu, '_')}.html`
-        root.querySelector('.compile-preview-result').hidden = false
-        summary.textContent = `Keyframe ready. Play compiled keyframe to review it; the full presentation is unchanged. ${saved.notice}`
+        summary.textContent = ''
         return
       }
       if (url) URL.revokeObjectURL(url)
@@ -138,10 +132,6 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
   } })
   root.querySelector('.compile-open').onclick = () => { if (!controller) void libraryDialog.open() }
   button.addEventListener('click', () => start())
-  root.querySelector('.compile-preview-play').onclick = () => {
-    if (livePlayer && preview?.compiled) livePlayer.open(preview.url, preview.compiled)
-    else if (preview) window.open(preview.url, '_blank', 'noopener')
-  }
   root.querySelector('.compile-cancel').addEventListener('click', cancel)
   dialog.addEventListener('cancel', event => { event.preventDefault(); cancel() })
   root.querySelector('.compile-play').addEventListener('click', () => {
@@ -177,6 +167,6 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
       if (event.type === 'baking_cancelled') controller.abort()
       return true
     },
-    dispose() { compiledStatus.dispose(); indicators.clear(); libraryDialog.dispose(); livePlayer?.dispose(); cancel(); if (url) URL.revokeObjectURL(url); if (preview) URL.revokeObjectURL(preview.url); root.remove() },
+    dispose() { compiledStatus.dispose(); indicators.clear(); libraryDialog.dispose(); livePlayer?.dispose(); cancel(); if (url) URL.revokeObjectURL(url); root.remove() },
   }
 }

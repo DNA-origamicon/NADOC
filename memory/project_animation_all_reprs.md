@@ -41,7 +41,9 @@ session. Diagnostic session/cache and screenshots were removed.
 
 ## Compiled offline presentations (2026-11-11)
 
-`Pre-compile` and `Load` share a row (8px gap) below `Start Presentation`.
+`Pre-compile` and `Load` share a row (8px gap) below `Start Presentation`. Keyframe
+headers compact at 320px and wrap below that; titles show `Keyframe N` or `KN` when narrow; numeric fields reserve space for `99.9` and spinners.
+Individual compilation stays in the background, without standalone play/download UI or success text.
 Matching film icons mark full or individual compilation; video badges and a separate
 readiness rail show matching compiled clips, with stale detection after timeline/source edits. Video size has an explicitly themed select. Compilation renders one WebM
 per selected keyframe, exact entry/exit images, captions and companions into an

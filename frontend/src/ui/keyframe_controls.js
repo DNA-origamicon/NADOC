@@ -32,8 +32,14 @@ export function initKeyframeControls({ player, getAnimation, getAnnotations, get
     sync(); header.prepend(collapse)
     const title = doc.createElement('button')
     title.type = 'button'; title.className = 'btn btn--sm anim-keyframe-title'
-    title.textContent = kf.name || `Keyframe ${index + 1}${kf.camera_pose_id ? ' · ' + (poses.find(p => p.id === kf.camera_pose_id)?.name ?? 'Missing pose') : ''}`
-    title.title = 'Select keyframe: show its pose and state'
+    const number = index + 1
+    title.dataset.numberDigits = String(String(number).length)
+    const fullTitle = doc.createElement('span'), shortTitle = doc.createElement('span')
+    fullTitle.className = 'anim-keyframe-title-full'; fullTitle.textContent = `Keyframe ${number}`
+    shortTitle.className = 'anim-keyframe-title-short'; shortTitle.textContent = `K${number}`
+    fullTitle.setAttribute('aria-hidden', 'true'); shortTitle.setAttribute('aria-hidden', 'true')
+    title.append(fullTitle, shortTitle)
+    title.title = `Keyframe ${number}`; title.setAttribute('aria-label', title.title)
     title.addEventListener('click', () => { void show(kf.id, false) })
     const spacer = [...header.children].find(element => element.style.flexGrow === '1')
     if (spacer) spacer.replaceWith(title)

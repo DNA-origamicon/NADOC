@@ -410,9 +410,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
 
   function _numInput(value, step, min, onChange) {
     const inp = document.createElement('input')
-    inp.type = 'number'; inp.step = step; inp.min = min; inp.value = value
+    inp.className = 'anim-number'; inp.type = 'number'; inp.step = step; inp.min = min; inp.value = value
     inp.style.cssText = [
-      'width:44px;box-sizing:border-box',
+      'box-sizing:border-box',
       'background:#0d1117;border:1px solid #30363d;border-radius:3px',
       'color:#c9d1d9;padding:2px 3px;font-family:var(--font-ui);font-size:var(--text-xs)',
     ].join(';')
@@ -1089,7 +1089,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
 
     // ── Top row: drag handle + index badge + delete ───────────────────────────
     const topRow = document.createElement('div')
-    topRow.style.cssText = 'display:flex;align-items:center;gap:5px'
+    topRow.className = 'anim-keyframe-header'
 
     // Drag handle
     const handle = document.createElement('span')
@@ -1153,7 +1153,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
       ? 'background:#1a2942;border:1px solid #1f6feb;color:#58a6ff;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 6px;flex-shrink:0'
       : _editStyle + ';padding:3px 6px'
     const textBtn = document.createElement('button')
-    textBtn.textContent = hasText ? `T: ${_truncate(kf.text, 12)}` : 'T'
+    textBtn.textContent = 'T'
+    if (hasText) {
+      const preview = document.createElement('span')
+      preview.className = 'anim-keyframe-text-preview'; preview.textContent = `: ${_truncate(kf.text, 12)}`
+      textBtn.append(preview)
+    }
     textBtn.title = hasText ? 'Edit keyframe text' : 'Add keyframe text'
     textBtn.style.cssText = textBtnStyle
     textBtn.addEventListener('click', async e => {
@@ -1207,13 +1212,6 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
       saBadge.title = 'Strand-animation keyframe (un/hybridization φ)'
       saBadge.style.cssText = 'font-size:var(--text-xs);color:#c050d0;background:#1a0a1f;border:1px solid #c050d0;border-radius:3px;padding:0 3px;flex-shrink:0'
     }
-    let trajBadge = null
-    if (isTrajectory) {
-      trajBadge = document.createElement('span')
-      trajBadge.textContent = 'Trajectory'
-      trajBadge.title = 'Trajectory keyframe (plays an oxDNA trajectory range)'
-      trajBadge.style.cssText = 'font-size:var(--text-xs);color:#c050d0;background:#1a0a1f;border:1px solid #c050d0;border-radius:3px;padding:0 3px;flex-shrink:0'
-    }
     if (_assemblyMode && jointCount > 0) {
       const jBadge = document.createElement('span')
       jBadge.textContent = `Joints: ${jointCount}`
@@ -1221,8 +1219,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
       topRow.append(handle, badge, spacer, jBadge, textBtn, delBtn)
     } else if (saBadge) {
       topRow.append(handle, badge, spacer, saBadge, textBtn, delBtn)
-    } else if (trajBadge) {
-      topRow.append(handle, badge, spacer, trajBadge, presentationCompiler.keyframeButton(kf), presentationCompiler.keyframeIndicator(kf), textBtn, delBtn)
+    } else if (isTrajectory) {
+      topRow.append(handle, badge, spacer, presentationCompiler.keyframeButton(kf), presentationCompiler.keyframeIndicator(kf), textBtn, delBtn)
     } else {
       topRow.append(handle, badge, spacer, textBtn, delBtn)
     }
@@ -1497,7 +1495,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
 
     // ── Timing row: transition + hold ─────────────────────────────────────────
     const timingRow = document.createElement('div')
-    timingRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding-left:18px'
+    timingRow.className = 'anim-keyframe-timing'
 
     function _lbl(text) {
       const s = document.createElement('span')
@@ -1531,7 +1529,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
       }
     })
 
-    timingRow.append(_lbl('trans'), transInp, _lbl('hold'), holdInp)
+    transInp.setAttribute('aria-label', 'Transition duration (seconds)')
+    holdInp.setAttribute('aria-label', 'Hold duration (seconds)')
+    for (const [text, input] of [['trans', transInp], ['hold', holdInp]]) {
+      const label = document.createElement('label')
+      label.append(_lbl(text), input); timingRow.append(label)
+    }
 
     // ── Drivers sub-row: per-driver reaction coordinate φ ──────────────────────
     // Bound (φ=1) / Unbound (φ=0) / Custom φ for a mid-transition keyframe.

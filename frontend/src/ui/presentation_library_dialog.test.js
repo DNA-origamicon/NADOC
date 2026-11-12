@@ -13,12 +13,14 @@ afterEach(() => { ui?.dispose(); document.body.replaceChildren(); vi.restoreAllM
 const entry = { id: 'a', name: '<Talk>', size: 1048576, created_at: '2026-11-11T00:00:00Z' }
 it('offers the fixed library instead of a file picker and waits for the full download', async () => {
   let finish
-  const library = { list: async () => ({ entries: [entry], notice: 'Server folder: compiled_presentations' }),
+  const library = { list: async () => ({ entries: [entry, { ...entry, id: 'clip', kind: 'keyframe', name: 'Background clip' }], notice: 'Server folder: compiled_presentations' }),
     open: vi.fn(() => new Promise(resolve => { finish = resolve })) }
   const onOpen = setup(library)
   await ui.open()
   expect(document.querySelector('input[type=file]')).toBeNull()
   expect(document.querySelector('.presentation-library-list').textContent).toContain('<Talk>')
+  expect(document.querySelector('.presentation-library-list').textContent).not.toContain('Background clip')
+  expect(document.querySelectorAll('.presentation-library-list button')).toHaveLength(1)
   const button = document.querySelector('.presentation-library-list button')
   expect(button.textContent).toBe('Download and open')
   button.click()

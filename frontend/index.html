@@ -7081,8 +7081,8 @@
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--text-xs);color:#6e7681">
               <label style="display:flex;align-items:center;gap:3px">
                 FPS
-                <input id="anim-fps" type="number" min="1" max="60" step="1" value="30"
-                       style="width:38px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 3px;font-size:var(--text-xs)">
+                <input id="anim-fps" class="anim-number" type="number" min="1" max="60" step="1" value="30"
+                       style="background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 3px;font-size:var(--text-xs)">
               </label>
             </div>
             <!-- Keyframe list -->
@@ -7130,9 +7130,9 @@
                   <option value="720p">720p</option>
                   <option value="1080p">1080p</option>
                 </select>
-                <input id="anim-export-fps" type="number" min="1" max="60" step="1" placeholder="fps"
+                <input id="anim-export-fps" class="anim-number" type="number" min="1" max="60" step="1" placeholder="fps"
                        title="FPS override (leave blank to use animation FPS)"
-                       style="width:34px;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
+                       style="box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
                 <button id="anim-export-btn" class="panel-action-btn"
                         style="flex-shrink:0;padding:2px 5px;font-size:var(--text-xs);white-space:nowrap" title="Export animation">
                   Export

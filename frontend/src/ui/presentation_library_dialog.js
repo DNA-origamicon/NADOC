@@ -23,11 +23,12 @@ export function initPresentationLibraryDialog({ root, library, onOpen }) {
       const result = await library.list(signal)
       if (token !== generation) return
       status.textContent = result.notice
-      if (!result.entries.length) list.textContent = 'No compiled presentations yet. Compile a presentation or trajectory keyframe first.'
-      for (const entry of result.entries) {
+      const entries = result.entries.filter(entry => entry.kind !== 'keyframe')
+      if (!entries.length) list.textContent = 'No compiled presentations yet. Pre-compile a presentation first.'
+      for (const entry of entries) {
         const row = document.createElement('div'), label = document.createElement('div'), detail = document.createElement('small'), button = document.createElement('button')
         label.textContent = entry.name
-        detail.textContent = `${entry.kind === 'keyframe' ? 'Trajectory keyframe' : 'Presentation'} · ${(entry.size / 1048576).toFixed(1)} MiB · ${new Date(entry.created_at).toLocaleString()} · ${entry.deviceSaved ? 'Saved on this device' : 'On server'}`
+        detail.textContent = `Presentation · ${(entry.size / 1048576).toFixed(1)} MiB · ${new Date(entry.created_at).toLocaleString()} · ${entry.deviceSaved ? 'Saved on this device' : 'On server'}`
         button.className = 'btn'; button.textContent = entry.deviceSaved ? 'Open local copy' : 'Download and open'
         button.onclick = async () => {
           for (const item of list.querySelectorAll('button')) item.disabled = true

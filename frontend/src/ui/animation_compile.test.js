@@ -56,6 +56,7 @@ it('shares the icon and keeps the full presentation when compiling one trajector
   expect(compile.mock.calls[1][0].keyframeId).toBe('b')
   expect(document.querySelector('.compile-download').href).toBe(full)
   expect(document.querySelector('.compile-result').hidden).toBe(false)
-  expect(document.querySelector('.compile-preview-result').hidden).toBe(false)
+  expect(document.querySelector('.compile-preview-result')).toBeNull()
+  expect(document.querySelector('.compile-summary').textContent).not.toContain('Keyframe ready')
   expect(ui.keyframeButton({ id: 'empty' }).disabled).toBe(true)
 })

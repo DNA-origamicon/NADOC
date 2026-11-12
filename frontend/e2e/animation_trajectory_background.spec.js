@@ -114,9 +114,38 @@ test('trajectory scrubber and collapsed/expanded transport share bounded playbac
   })
   await expect(page.locator('[data-role="trajectory-frame-end"]')).toHaveValue('12')
   expect(await page.evaluate(() => window.proof.downloads)).toEqual([])
+  const title = page.getByRole('button', { name: 'Keyframe 1', exact: true })
+  await page.locator('#animation-panel').evaluate(el => { el.style.width = '600px' })
+  await expect(title.locator('.anim-keyframe-title-full')).toBeVisible()
+  await expect(title.locator('.anim-keyframe-title-short')).toBeHidden()
+  for (const width of [360, 280, 200]) {
+    await page.locator('#animation-panel').evaluate((el, width) => { el.style.width = `${width}px` }, width)
+    const layout = await page.locator('.anim-keyframe-header').evaluate(header => {
+      const bounds = header.getBoundingClientRect()
+      return [...header.querySelectorAll('button')].filter(el => el.getBoundingClientRect().width > 0).map(el => {
+        const rect = el.getBoundingClientRect()
+        return { inside: rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1, width: rect.width }
+      })
+    })
+    expect(layout.every(button => button.inside)).toBe(true)
+    for (const field of ['Transition duration (seconds)', 'Hold duration (seconds)']) {
+      const available = await page.getByLabel(field, { exact: true }).evaluate(el => {
+        const style = getComputedStyle(el), ctx = document.createElement('canvas').getContext('2d')
+        ctx.font = `${style.fontSize} ${style.fontFamily}`
+        return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 18 >= ctx.measureText('99.9').width
+      })
+      expect(available).toBe(true)
+    }
+  }
+  await expect(title.locator('.anim-keyframe-title-short')).toBeVisible()
+  await expect(title.locator('.anim-keyframe-title-full')).toBeHidden()
+  await page.locator('#animation-panel').evaluate(el => { el.style.width = '600px' })
+  await expect(title.locator('.anim-keyframe-title-full')).toBeVisible()
+  await page.locator('#animation-panel').evaluate(el => { el.style.width = '' })
   const preview = page.locator('[data-role="trajectory-play"]')
   const header = page.locator('[data-role="trajectory-header-play"]')
   await expect(header).toBeHidden()
+  await expect(page.locator('.anim-keyframe').getByText('Trajectory', { exact: true })).toHaveCount(0)
   expect(await page.locator('[data-role="trajectory-timeline"]').evaluate(el => el.previousElementSibling === el.parentElement.firstElementChild)).toBe(true)
   const scrub = await page.locator('[data-role="trajectory-scrubber"]').boundingBox()
   const buttons = await page.locator('.trajectory-transport').boundingBox()
@@ -199,17 +228,12 @@ test('trajectory scrubber and collapsed/expanded transport share bounded playbac
   // Compile the selected trajectory interval through the real encoder as well.
   await page.getByLabel('Compiled video size').selectOption('720p')
   await page.getByRole('button', { name: 'Compile this trajectory keyframe', exact: true }).click()
-  await expect(page.locator('.compile-summary')).toContainText('Keyframe ready', { timeout: 60000 })
-  await expect(page.locator('.compile-preview-result')).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Compiling presentation', exact: true })).not.toBeVisible({ timeout: 60000 })
+  await expect(page.getByRole('button', { name: 'Play compiled keyframe', exact: true })).toHaveCount(0)
+  await expect(page.locator('.compile-summary')).not.toContainText('Keyframe ready')
   await expect(page.locator('[data-role="keyframe-compiled-status"]')).toHaveAttribute('data-compiled', 'ready')
   await expect(page.locator('[data-role="animation-compiled-readiness"] [data-keyframe-id="k"]')).toHaveAttribute('data-compiled', 'ready')
   expect(await page.evaluate(() => window.proof.frames.some(x => x > 10 && x < 12 && !Number.isInteger(x)))).toBe(true)
-  await page.getByRole('button', { name: 'Play compiled keyframe', exact: true }).click()
-  const clipPreview = page.frameLocator('iframe[title="Compiled presentation"]')
-  await expect(clipPreview.locator('#jump option')).toHaveCount(1)
-  await page.getByRole('button', { name: 'Inspect in 3D', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Return to presentation', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Close presentation', exact: true }).click()
   await page.locator('#anim-compile-presentation-btn').click()
   await expect(page.locator('.compile-summary')).toContainText('Ready', { timeout: 60000 })
   const compiled = await page.locator('.compile-download').evaluate(async link => (await fetch(link.href)).text())

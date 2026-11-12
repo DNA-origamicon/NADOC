@@ -25,6 +25,13 @@ test('compiles sidebar keyframes and plays the downloaded presentation without n
     window.__leftSidebar.refresh()
   })
   await page.locator('.left-tab-btn[data-tab="scene"]').click()
+  for (const id of ['anim-fps', 'anim-export-fps']) {
+    expect(await page.locator(`#${id}`).evaluate(el => {
+      const style = getComputedStyle(el), ctx = document.createElement('canvas').getContext('2d')
+      ctx.font = `${style.fontSize} ${style.fontFamily}`
+      return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 18 >= ctx.measureText('99.9').width
+    })).toBe(true)
+  }
   const animationScrub = await page.locator('#anim-scrub').boundingBox()
   const animationPlay = await page.locator('#anim-playpause-btn').boundingBox()
   expect(animationPlay.y).toBeGreaterThanOrEqual(animationScrub.y + animationScrub.height)
