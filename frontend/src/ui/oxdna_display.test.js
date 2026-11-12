@@ -656,7 +656,7 @@ describe('initOxdnaDisplay controller', () => {
     expect(api.getOxdnaDisplay).toHaveBeenCalledTimes(1)
   })
 
-  it('aborts an in-flight trajectory request when toggled off before it loads', async () => {
+  it.each([false, true])('aborts an in-flight trajectory request even with preserveTrajectory=%s', async preserveTrajectory => {
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     let signal, release
     const api = { getOxdnaTrajectory: vi.fn((id, opts) => {
@@ -666,7 +666,7 @@ describe('initOxdnaDisplay controller', () => {
     const ctrl = initOxdnaDisplay({ designRenderer, api })
     const pending = ctrl.loadTrajectory('wrong-job')
     expect(signal.aborted).toBe(false)
-    ctrl.cancelPendingLoad()
+    ctrl.cancelPendingLoad({ preserveTrajectory })
     expect(signal.aborted).toBe(true)
     release()
     await expect(pending).resolves.toMatchObject({ ok: false, reason: 'superseded' })

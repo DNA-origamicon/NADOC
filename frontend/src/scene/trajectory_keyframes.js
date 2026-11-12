@@ -491,7 +491,7 @@ export function initTrajectoryKeyframes({
     _swapping = null
     for (const ctrl of _prev.keys()) {
       ctrl.setPlaying?.(false)      // bumps the controller's prebuild token
-      ctrl.cancelPendingLoad?.()    // and terminates the HTTP body transfer
+      ctrl.cancelPendingLoad?.({ preserveTrajectory: true }) // abort unfinished loads, retain playable streams
       ctrl.cancelTrajectoryPreparation?.()
     }
   }

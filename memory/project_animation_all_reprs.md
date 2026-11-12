@@ -22,6 +22,23 @@ All three representations are animated via the same pre-bake pipeline in `animat
 > "Trajectory keyframes". The player's private trajectory pipeline (`_bakedTrajectories`,
 > `_bakedTrajAtom`, `_bakedTrajSurf`, the fixed 40/20-frame caps) is **deleted**.
 
+## Progressive trajectory replay (2026-11-11)
+
+Reproduced `2hb_1xT.nadoc`: full playback reaches NAMD frame 50/50, then
+replay reports `Could not load trajectory be74a1436d66`. Animation release
+cancelled the controller's load signal/epoch even after loading completed.
+Progressive pages share that lifetime, so the retained frame count described a
+disposed stream. `cancelPendingLoad({preserveTrajectory:true})` now retains a
+successfully loaded trajectory; unfinished loads still abort. Full teardown and
+job switches retain their ordinary cancellation behavior. The regression test
+uses the real display controller and page loader across repeated release/prepare
+cycles, including a previously unread page, rather than a cache-only mock.
+Verified three consecutive full plays of the saved animation (13 s, frame 50/50,
+no error toast; each progressive page downloaded once). Frontend suite: 10,370
+passed, 1 skipped. Browser autosave refreshed only the embedded snapshot's gzip
+timestamp; decompressed content and all other fields matched the earlier user
+session. Diagnostic session/cache and screenshots were removed.
+
 ## Compiled offline presentations (2026-11-11)
 
 `Pre-compile` and `Load` share a row (8px gap) below `Start Presentation`.
