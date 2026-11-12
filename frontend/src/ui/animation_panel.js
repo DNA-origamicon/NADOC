@@ -134,7 +134,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
   if (!heading || !kfListEl) return
 
   const readinessBar = initAnimationReadinessBar({ scrub: scrubEl })
-  let reportReadiness = () => {}
+  let reportReadiness = () => {}, readinessEpoch = 0, lastReadinessPoll = 0
 
   let _collapsed    = getSectionCollapsed('scene', 'animation-panel', false)
   let _activeAnimId = null   // currently selected animation ID
@@ -171,6 +171,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
 
   const presentationCompiler = initAnimationCompile({ anchor: document.getElementById('anim-start-presentation-btn'),
     player, renderer, scene, camera, controls, captureCamera: captureCurrentCamera, getAnimation: _getActiveAnim,
+    onCompiledStatus: states => readinessBar.setCompiled(states),
     getSource: () => _partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'],
     beforeCompile: () => { localPresentation.exit(); _stopPreview(); player.stop() },
     getPlayOptions: () => animationPlayOptions(_assemblyMode ? store.getState().currentAssembly : null, api) })
@@ -380,8 +381,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
     presentationCompiler.refresh()
     keyframeControls.clearRows()
     kfListEl.innerHTML = ''
-    reportReadiness = readinessBar.setAnimation(_getActiveAnim()) || (() => {})
+    reportReadiness = readinessBar.setAnimation(_getActiveAnim(), JSON.stringify([_assemblyMode, _partMode, _partInstanceId, (_partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'])?.id, _activeAnimId, readinessEpoch])) || (() => {})
     trajectoryKeyframes?.retain?.(_getActiveAnim())
+    trajectoryKeyframes?.readiness?.(_getActiveAnim()).forEach(reportReadiness)
     // Bind/Unbind pose authoring (design editor only) — shown even with no
     // keyframes so the user can set open/closed angles before building the timeline.
     const posesSection = _makeBindingPosesSection(_bindingsDesign())
@@ -523,7 +525,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
 
   async function _patchKfNoRebuild(kf, patch) {
     _selfKfPatch++
-    try { await _patchKf(kf, patch) } finally { _selfKfPatch--; readinessBar.refreshAnimation(_getActiveAnim()) }
+    try { await _patchKf(kf, patch) } finally { _selfKfPatch--; readinessBar.refreshAnimation(_getActiveAnim()); presentationCompiler.refresh() }
   }
 
   /** All trajectory authoring now shares the keyframe preview timeline. */
@@ -1220,7 +1222,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
     } else if (saBadge) {
       topRow.append(handle, badge, spacer, saBadge, textBtn, delBtn)
     } else if (trajBadge) {
-      topRow.append(handle, badge, spacer, trajBadge, presentationCompiler.keyframeButton(kf), textBtn, delBtn)
+      topRow.append(handle, badge, spacer, trajBadge, presentationCompiler.keyframeButton(kf), presentationCompiler.keyframeIndicator(kf), textBtn, delBtn)
     } else {
       topRow.append(handle, badge, spacer, textBtn, delBtn)
     }
@@ -1776,6 +1778,11 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
 
   // Player calls this via onEvent callback (wired in main.js)
   function onPlayerEvent(evt) {
+    if (evt.type === 'tick' && performance.now() - lastReadinessPoll > 250) {
+      lastReadinessPoll = performance.now(); trajectoryKeyframes?.readiness?.(_getActiveAnim()).forEach(reportReadiness)
+    }
+    if (evt.type === 'baking_progress' && evt.jobId) reportReadiness(evt)
+    if (['baking_cancelled', 'baking_error'].includes(evt.type)) readinessBar.stopPending(evt.type === 'baking_error' ? 'error' : 'cancelled')
     if (presentationCompiler.onPlayerEvent(evt)) return
     localPresentation.onPlayerEvent(evt)
     keyframeControls.onPlayerEvent(evt)
@@ -1978,6 +1985,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
   // A ready VDW cache is not a ready surface cache. Re-warm after display settings
   // change without taking the viewport over or starting playback.
   window.addEventListener('nadoc:representation-change', () => {
+    readinessEpoch++
     if (!player.isPlaying()) _rebuildKfList(_getActiveAnim()?.keyframes ?? [])
   })
 

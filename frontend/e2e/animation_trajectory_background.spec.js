@@ -69,13 +69,15 @@ test('trajectory scrubber and collapsed/expanded transport share bounded playbac
     const ctrl = initOxdnaDisplay({ designRenderer: dr, api: {
       getOxdnaTrajectory: async (_job, spec) => {
         proof.downloads.push({ start: spec.frameStart, end: spec.frameEnd })
+        if (window.holdTrajectory) await new Promise(resolve => { window.finishTrajectory = resolve })
         return { ready: true, n_frames: 3, total_n_frames: 100, frame_start: 10,
           keys: [['h', 0, 'FORWARD']], frames: [10, 11, 12].map(x => [x, 0, 0, 1, 0, 0]) }
       },
     } })
     window.companion = companion
     const trajectories = initTrajectoryKeyframes({ getController: e => e === 'namd' ? ctrl : null,
-      getCompanion: e => e === 'namd' ? companion : null })
+      getCompanion: e => e === 'namd' ? companion : null,
+      pollLoadProgress: async () => ({ active: true, done: 50, total: 100 }), pollMs: 20 })
     let panel
     const controls = { target: new THREE.Vector3(), update() {} }
     const player = initAnimationPlayer({ camera, controls,
@@ -119,7 +121,13 @@ test('trajectory scrubber and collapsed/expanded transport share bounded playbac
   const scrub = await page.locator('[data-role="trajectory-scrubber"]').boundingBox()
   const buttons = await page.locator('.trajectory-transport').boundingBox()
   expect(buttons.y).toBeGreaterThanOrEqual(scrub.y + scrub.height)
+  const readiness = page.locator('[data-role="animation-readiness"] [role="progressbar"]')
+  await page.evaluate(() => { window.holdTrajectory = true })
   await preview.click()
+  await expect(readiness).toHaveAttribute('data-loading-percent', '50')
+  await expect(readiness).toHaveAttribute('aria-valuenow', '50')
+  await page.evaluate(() => { window.holdTrajectory = false; window.finishTrajectory() })
+  await expect(readiness).toHaveAttribute('data-ready-percent', '100')
   await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(12)
   expect(await page.evaluate(() => [...new Set(window.proof.frames)].sort())).toEqual([10, 11, 12])
   await expect(preview).toHaveAttribute('aria-label', 'Play trajectory')
@@ -193,6 +201,8 @@ test('trajectory scrubber and collapsed/expanded transport share bounded playbac
   await page.getByRole('button', { name: 'Compile this trajectory keyframe', exact: true }).click()
   await expect(page.locator('.compile-summary')).toContainText('Keyframe ready', { timeout: 60000 })
   await expect(page.locator('.compile-preview-result')).toBeVisible()
+  await expect(page.locator('[data-role="keyframe-compiled-status"]')).toHaveAttribute('data-compiled', 'ready')
+  await expect(page.locator('[data-role="animation-compiled-readiness"] [data-keyframe-id="k"]')).toHaveAttribute('data-compiled', 'ready')
   expect(await page.evaluate(() => window.proof.frames.some(x => x > 10 && x < 12 && !Number.isInteger(x)))).toBe(true)
   await page.getByRole('button', { name: 'Play compiled keyframe', exact: true }).click()
   const clipPreview = page.frameLocator('iframe[title="Compiled presentation"]')
@@ -222,6 +232,7 @@ test('trajectory scrubber and collapsed/expanded transport share bounded playbac
   expect(proof.frames.every(x => x >= 10 && x <= 12)).toBe(true)
   expect(proof.boxFrames).toBeGreaterThan(0)
   await page.getByLabel('Smooth playback', { exact: true }).uncheck()
+  await expect(page.locator('[data-role="keyframe-compiled-status"]')).toHaveAttribute('data-compiled', 'stale')
   await page.evaluate(() => { window.proof.frames = [] })
   await page.locator('[data-role="trajectory-play"]').click()
   await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(12)

@@ -2569,6 +2569,18 @@ export function initOxdnaDisplay({
     activeJobId: () => _jobId,
     alignment: () => _align,
     cancelPendingLoad: _cancelLoad,
+    trajectoryReadiness: () => {
+      const state = trajectoryPreparationProgress()
+      if (!_traj) return null
+      if (state.kind === 'cg') {
+        state.exact = true
+        state.readyIndices = Object.keys(_traj.frames).filter(i => _traj.frames[i]).map(i => sourceFrame(Number(i)))
+        state.grid = []; state.capped = !!_stream?.status().limited
+      }
+      const total = state.exact ? _traj.frames.length : state.grid.length
+      return { ...state, done: state.readyIndices.length, total,
+        phase: total > 0 && state.readyIndices.length === total ? 'ready' : 'frames' }
+    },
     trajectoryMarkers: () => _traj?.markers ?? [],
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
       // atomSerials/nNucleotides let a caller price an all-atom prebuild: the exact

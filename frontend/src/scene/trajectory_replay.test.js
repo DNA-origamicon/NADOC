@@ -21,7 +21,13 @@ it('replays a completed progressive trajectory and can load a new page after rel
   const animation = { keyframes: [{ trajectory_job_id: 'replay', trajectory_engine: 'namd', trajectory_stride: 20 }] }
   try {
     await tk.prepare(animation, { strict: true })
+    const initial = tk.readiness(animation)[0]
+    expect(initial.phase).toBe('frames')
+    expect(initial.exact).toBe(true)
+    expect(initial.readyIndices.length).toBeGreaterThan(0)
+    expect(initial.readyIndices.length).toBeLessThan(total)
     expect(await ctrl.ensureTrajectoryFrame(49)).toBe(true)
+    expect(tk.readiness(animation)[0].readyIndices).toContain(49)
     tk.show('replay', 'namd', 49)
     tk.release()
     expect(ctrl.isActive()).toBe(false)

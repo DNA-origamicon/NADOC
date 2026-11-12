@@ -205,7 +205,7 @@ describe('initTrajectoryKeyframes.prepare', () => {
     // The load phase now brackets the download: one event as it starts (0/0 — the
     // frame count isn't known until the response lands) and one closing it at 100%,
     // so the export bar isn't left mid-phase while the JSON body transfers.
-    expect(seen.map(p => p.phase)).toEqual(['load', 'load', 'frames', 'frames'])
+    expect(seen.map(p => p.phase)).toEqual(['load', 'load', 'frames', 'frames', 'ready'])
     expect(seen[0]).toMatchObject({ done: 0, total: 0, jobId: 'A' })
     expect(seen[1]).toMatchObject({ done: 100, total: 100, jobId: 'A' })
     expect(seen[3]).toMatchObject({ done: 2, total: 2, jobId: 'A' })
@@ -351,7 +351,7 @@ describe('initTrajectoryKeyframes.prepare', () => {
       // …but the phase is still ANNOUNCED, at 100%, so the export bar's download
       // slice is labelled rather than jumped silently. The heavy prebuild then
       // reports as normal — a held trajectory is not a silent bake.
-      expect(seen.map(e => e.phase)).toEqual(['load', 'frames', 'frames'])
+      expect(seen.map(e => e.phase)).toEqual(['load', 'frames', 'frames', 'ready'])
       expect(seen[0]).toMatchObject({ done: 100, total: 100, reused: true })
     })
 

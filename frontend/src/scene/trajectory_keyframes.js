@@ -202,16 +202,16 @@ export function initTrajectoryKeyframes({
       // download slice with nothing written next to it is its own kind of confusing
       // — and this branch is reached exactly when the user was already scrubbing
       // the job, which is the case they are most likely to try.
-      onProgress?.({ phase: 'load', jobId, engine, done: n, total: n, reused: true })
+      onProgress?.({ ...spec, phase: 'load', jobId, engine, done: n, total: n, reused: true })
       _frames.set(jobId, n)
     } else {
-      onProgress?.({ phase: 'load', jobId, engine, done: 0, total: 0 })
+      onProgress?.({ ...spec, phase: 'load', jobId, engine, done: 0, total: 0 })
       // The download is a single await that returns only once the whole composite
       // trajectory has been parsed, aligned and shipped — on VoltronCoreScad's run 17
       // that is a 1 GB .dat and minutes of silence. Poll the backend's own
       // frames-processed counter alongside it so the phase reports real interior
       // progress instead of a dead bar.
-      const stop = _pollLoad(jobId, engine, onProgress)
+      const stop = _pollLoad(jobId, engine, p => onProgress?.({ ...spec, ...p }))
       let r = null
       try {
         r = await Promise.resolve(
@@ -222,7 +222,7 @@ export function initTrajectoryKeyframes({
       const n = Number(r.n_frames) || 0
       // Close the phase at 100% — the poller stops reporting the moment the build
       // finishes server-side, but the JSON body is still in transfer after that.
-      onProgress?.({ phase: 'load', jobId, engine, done: n, total: n })
+      onProgress?.({ ...spec, phase: 'load', jobId, engine, done: n, total: n })
       _frames.set(jobId, n)
     }
     _variantFrames.set(variantKey(jobId, spec), _frames.get(jobId))
@@ -250,6 +250,8 @@ export function initTrajectoryKeyframes({
       if (bake) _bakes.set(jobId, { frames: bake.frames ?? bake.n ?? 0,
                                     capped: !!bake.capped, total: bake.trajFrames ?? 0 })
     }
+    onProgress?.({ ...spec, jobId, phase: 'ready', trajectoryFrames: _frames.get(jobId),
+      capped: !!_bakes.get(jobId)?.capped, ...ctrl.trajectoryReadiness?.() })
     return true
   }
 
@@ -351,7 +353,11 @@ export function initTrajectoryKeyframes({
       _specs.set(jobId, spec)
       if (!first.has(ctrl)) {
         first.set(ctrl, { jobId, spec })
-        if (ctrl.prepareTrajectory) await ctrl.prepareTrajectory(jobId, spec, { planPrebuild, schedule: schedulePreparation(jobId, spec), onProgress: p => onProgress?.({ ...spec, ...p, jobId }) })
+        if (ctrl.prepareTrajectory) {
+          const stop = _pollLoad(jobId, spec.engine, p => onProgress?.({ ...spec, ...p }))
+          try { await ctrl.prepareTrajectory(jobId, spec, { planPrebuild, schedule: schedulePreparation(jobId, spec), onProgress: p => onProgress?.({ ...spec, ...p, jobId }) }) }
+          finally { stop() }
+        }
       }
       else if (metadataFrames.has(variantKey(jobId, spec))) {
         const count = metadataFrames.get(variantKey(jobId, spec))
@@ -587,7 +593,18 @@ export function initTrajectoryKeyframes({
   /** True when this module is holding a controller for preview (nothing is playing). */
   function isPreviewing() { return _prev.size > 0 }
 
-  return { recordMetadata, markers: engine => getController?.(engine)?.trajectoryMarkers?.() ?? [],
+  function readiness(animation) {
+    const states = []
+    for (const kf of animation?.keyframes ?? []) {
+      const spec = keyframeTrajSpec(kf), ctrl = getController?.(spec.engine)
+      if (!kf.trajectory_job_id || ctrl?.activeJobId?.() !== kf.trajectory_job_id || ctrl.trajSpecMatches?.(spec) === false) continue
+      const state = ctrl.trajectoryReadiness?.()
+      if (state) states.push({ ...spec, ...state, jobId: kf.trajectory_job_id })
+    }
+    return states
+  }
+
+  return { readiness, recordMetadata, markers: engine => getController?.(engine)?.trajectoryMarkers?.() ?? [],
     prepare, prefetch, retain, prepareCompanions, cancelPreparation, frameCount, heavyBake, show, invalidate, suspend, setPlaying, cancel, release,
     hasJobs, previewLoad, previewShow, isPreviewing, settle,
   }

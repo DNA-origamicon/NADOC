@@ -1,3 +1,4 @@
+import { initCompiledKeyframeStatus } from './compiled_keyframe_status.js'
 import { createPresentationLibrary } from '../scene/presentation_library.js'
 import { initPresentationLibraryDialog } from './presentation_library_dialog.js'
 import { compileIcon } from './compile_icon.js'
@@ -9,7 +10,7 @@ import { compilationEstimate, presentationHTML } from '../scene/compiled_present
 import './animation_compile.css'
 
 export function initAnimationCompile({ anchor, player, renderer, scene, camera, getAnimation, beforeCompile, controls, captureCamera, getSource = () => null, getPlayOptions = () => ({}),
-  compile = compilePresentation, library = createPresentationLibrary() }) {
+  onCompiledStatus = () => {}, compile = compilePresentation, library = createPresentationLibrary() }) {
   const root = document.createElement('div')
   root.className = 'animation-compile'
   root.innerHTML = `<div class="compile-actions"><button id="anim-compile-presentation-btn" class="btn">${compileIcon} Pre-compile</button>
@@ -36,10 +37,25 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
       return !!data.source && sameFeatureSource(data.source, getSource()) && data.signature === fingerprint()
     },
   }) : null
+  const indicators = new Map()
+  let compiledStates = new Map()
+  const paintIndicator = (node, state = 'none') => {
+    node.dataset.compiled = state
+    node.textContent = state === 'ready' ? '✓' : state === 'stale' ? '↻' : state === 'checking' ? '…' : '○'
+    node.title = state === 'ready' ? 'Matching pre-compiled video available' : state === 'stale' ? 'Keyframe or source changed — pre-compile again' : 'No matching compiled video loaded'
+    node.setAttribute('aria-label', node.title)
+    node.style.color = state === 'ready' ? '#3fb950' : state === 'stale' ? '#d29922' : '#8b949e'
+  }
+  const compiledStatus = initCompiledKeyframeStatus({ getAnimation, getSource, onChange: states => {
+    compiledStates = states
+    for (const [id, node] of indicators) paintIndicator(node, states.get(id))
+    onCompiledStatus(states)
+  } })
   let started = 0, currentIndex = -1, rows = [], bakeStage = null, bakeStarted = 0
   const fingerprint = () => JSON.stringify(getAnimation())
   const cancel = () => { if (!controller) return; controller.abort(); player.cancelBake?.(); stage.textContent = 'Cancelling…' }
   function refresh() {
+    void compiledStatus.refresh()
     button.disabled = !!controller || !getAnimation()?.keyframes?.length
     if (controller && fingerprint() !== sourceSignature) cancel()
     if (url && signature != null && signature !== fingerprint()) summary.textContent = 'Animation changed. The compiled file is the previous version; compile again to update it.'
@@ -88,6 +104,7 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
       stage.textContent = 'Saving to the presentation library…'
       const saved = await library.save(blob, target?.name || (target ? `${animation.name || 'Presentation'} · trajectory keyframe` : animation.name || 'Presentation'), target ? 'keyframe' : 'presentation', controller.signal)
       controller.signal.throwIfAborted()
+      compiledStatus.record(prepared)
       if (target) {
         if (preview) URL.revokeObjectURL(preview.url)
         preview = { url: URL.createObjectURL(blob), compiled: prepared && { ...prepared, source, signature: sourceSignature } }
@@ -114,6 +131,7 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
     const blob = new Blob([presentationHTML(data.title || 'Presentation', data.clips, data.inspection)], { type: 'text/html' })
     if (url) URL.revokeObjectURL(url)
     url = URL.createObjectURL(blob); compiled = data.inspection; signature = null
+    compiledStatus.record(data.inspection)
     download.href = url; download.download = `${entry.name.replace(/[^\p{L}\p{N} _-]/gu, '_')}.html`
     result.hidden = false
     summary.textContent = `Presentation opened. ${notice} Load the matching source document to inspect in 3D.`
@@ -132,6 +150,13 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
   })
   refresh()
   return { start, refresh,
+    keyframeIndicator(kf) {
+      const node = document.createElement('span')
+      node.dataset.role = 'keyframe-compiled-status'
+      node.style.cssText = 'font-size:12px;width:14px;flex-shrink:0;text-align:center'
+      indicators.set(kf.id, node); paintIndicator(node, compiledStates.get(kf.id))
+      return node
+    },
     keyframeButton(kf) {
       const button = document.createElement('button')
       button.className = 'btn compile-keyframe'; button.innerHTML = compileIcon
@@ -152,6 +177,6 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
       if (event.type === 'baking_cancelled') controller.abort()
       return true
     },
-    dispose() { libraryDialog.dispose(); livePlayer?.dispose(); cancel(); if (url) URL.revokeObjectURL(url); if (preview) URL.revokeObjectURL(preview.url); root.remove() },
+    dispose() { compiledStatus.dispose(); indicators.clear(); libraryDialog.dispose(); livePlayer?.dispose(); cancel(); if (url) URL.revokeObjectURL(url); if (preview) URL.revokeObjectURL(preview.url); root.remove() },
   }
 }

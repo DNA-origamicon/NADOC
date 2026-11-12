@@ -521,14 +521,15 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         _ownsTrajectory = animation.keyframes.some(kf => !!kf.trajectory_job_id)
         const held = await trajectoryKeyframes.prepare(animation, {
           strict: true,
-          onProgress: ({ phase, done, total }) => {
+          onProgress: progress => {
+            const { phase, done, total } = progress
             const label = phase === 'load'
               ? (total > 0 && done > 0
                   ? `Loading trajectory… ${done} of ${total} frames`
                   : 'Loading trajectory…')
               : `Preparing trajectory frames ${done} of ${total}`
             onEvent?.({
-              type: 'baking_progress',
+              ...progress, type: 'baking_progress',
               stage: phase === 'load' ? 'traj_load' : 'traj_frames',
               done, total, frame: done, frames: total, label,
             })

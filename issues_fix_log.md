@@ -1,5 +1,12 @@
 # Issues fix log
 
+## ISSUE-187 — Live trajectory readiness and compiled-video indicators (2026-11-12)
+
+- [x] Preserve preparation-event identity through preview and compilation, retain
+  valid progress across row rebuilds, and report actual progressive frame availability.
+- [x] Add independent per-keyframe compiled-video badges and a duration-aligned rail,
+  with stale detection after source or timeline edits and recognition on library Load.
+
 ## ISSUE-186 — Placement review released after schema and test-isolation repairs (2026-11-11)
 
 - [x] Repaired display-field ownership, strict empty-state admission, archive copy

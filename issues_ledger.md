@@ -1,5 +1,17 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-187 — Trajectory readiness rail loses live progress (2026-11-12)
+
+- [x] Player events dropped trajectory identity/range and compilation intercepted them
+  before the readiness rail. Forward full progress before compiler handling, publish
+  completion, poll cold preparation, and retain same-document readiness across row rebuilds.
+- [x] Report actual buffered exact frames during progressive playback; unloaded/evicted
+  pages stay dark. Blue work percentages remain distinct from green prepared frames.
+- [x] Separate compiled-video rail and keyframe badges track successful saved/loaded
+  videos; source, timing, smoothing and preceding-keyframe edits invalidate their status.
+- Verification: unit coverage plus isolated browser checks for delayed loading,
+  prepared completion, successful compilation and stale-video indicators.
+
 ## Full regression follow-up (2026-11-11)
 
 - Synced upstream after committing the existing work. Full `just test` at

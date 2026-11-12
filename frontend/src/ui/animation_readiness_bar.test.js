@@ -44,3 +44,21 @@ it('updates live loading percentages and partial prepared frames before completi
   expect(el.getAttribute('aria-valuenow')).toBe('100')
   bar.destroy()
 })
+it('retains readiness on same-document rebuilds and separates compiled video status', () => {
+  document.body.innerHTML = '<input id="scrub">'
+  const bar = initAnimationReadinessBar({ scrub: document.getElementById('scrub') })
+  const animation = { id: 'anim', keyframes: [{ id: 'k', trajectory_job_id: 'a', hold_duration_s: 2 }] }
+  bar.setAnimation(animation, 'doc-1')({ jobId: 'a', phase: 'ready' })
+  bar.setAnimation(animation, 'doc-1')
+  expect(document.querySelector('[role="progressbar"]').dataset.readyPercent).toBe('100')
+  bar.setCompiled(new Map([['k', 'ready']]))
+  expect(document.querySelector('[data-role="animation-compiled-readiness"]').textContent).toContain('Video ✓')
+  bar.update({ jobId: 'a', phase: 'frames', done: 1, total: 4 })
+  expect(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow')).toBe('25')
+  expect(document.querySelector('[role="progressbar"]').firstChild.style.background).toContain('rgb(31, 111, 235)')
+  bar.stopPending('cancelled')
+  expect(document.querySelector('[role="progressbar"]').dataset.phase).toBe('cancelled')
+  bar.setAnimation(animation, 'doc-2')
+  expect(document.querySelector('[role="progressbar"]').dataset.readyPercent).toBe('0')
+  bar.destroy()
+})

@@ -42,8 +42,8 @@ session. Diagnostic session/cache and screenshots were removed.
 ## Compiled offline presentations (2026-11-11)
 
 `Pre-compile` and `Load` share a row (8px gap) below `Start Presentation`.
-Matching film icons mark compilation of the full presentation or one trajectory
-keyframe. Video size has an explicitly themed select. Compilation renders one WebM
+Matching film icons mark full or individual compilation; video badges and a separate
+readiness rail show matching compiled clips, with stale detection after timeline/source edits. Video size has an explicitly themed select. Compilation renders one WebM
 per selected keyframe, exact entry/exit images, captions and companions into an
 import-free HTML player. Play/pause, skip, jump, replay, held endpoints and fullscreen
 work without any server or trajectory files. This is not an authored molecular part.
