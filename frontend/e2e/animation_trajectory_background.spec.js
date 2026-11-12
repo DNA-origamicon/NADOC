@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 // Browser-only fixture: real UI, trajectory controller, companions, Three.js and GIF
 // encoder; simulated coordinate responses. No user documents or jobs are modified.
-test('Load fetches selected frames, companion toggles report progress, and GIF contains ions', async ({ page }) => {
+test('trajectory scrubber and collapsed/expanded transport share bounded playback and companions', async ({ page }) => {
   test.setTimeout(90000)
   await page.route('**/__animation-test', route => route.fulfill({ contentType: 'text/html', body: `
     <div id="animation-panel"><div id="animation-panel-heading"><span id="animation-panel-arrow"></span></div>
@@ -22,7 +22,7 @@ test('Load fetches selected frames, companion toggles report progress, and GIF c
     const { exportVideo } = await import('/src/scene/export_video.js')
     const kf = { id: 'k', is_trajectory: true, trajectory_job_id: 'A', trajectory_engine: 'namd',
       trajectory_stride: 1, trajectory_frame_start: 10, trajectory_frame_end: 12,
-      hold_duration_s: 0.3, transition_duration_s: 0, feature_log_index: null, easing: 'linear' }
+      hold_duration_s: 2, transition_duration_s: 0, feature_log_index: null, easing: 'linear' }
     const animation = { id: 'anim', name: 'Trajectory', fps: 10, keyframes: [kf] }
     const design = { animations: [animation], helices: [], strands: [], clusters: [], camera_poses: [],
       feature_log: [], feature_log_cursor: -1, overhangs: [] }
@@ -77,7 +77,8 @@ test('Load fetches selected frames, companion toggles report progress, and GIF c
     const trajectories = initTrajectoryKeyframes({ getController: e => e === 'namd' ? ctrl : null,
       getCompanion: e => e === 'namd' ? companion : null })
     let panel
-    const player = initAnimationPlayer({ camera, controls: { target: new THREE.Vector3(), update() {} },
+    const controls = { target: new THREE.Vector3(), update() {} }
+    const player = initAnimationPlayer({ camera, controls,
       getDesign: () => design, getCameraPoses: () => [], getClusterTransforms: () => [],
       getDesignRenderer: () => dr, getHelixCtrl: () => null,
       getAtomisticRenderer: () => ({ getMode: () => 'off' }), getSurfaceRenderer: () => ({ getMode: () => 'off' }),
@@ -85,7 +86,9 @@ test('Load fetches selected frames, companion toggles report progress, and GIF c
       trajectoryKeyframes: trajectories, onEvent: event => panel?.onPlayerEvent(event) })
     player.setBounce(false)
     panel = initAnimationPanel({ getState: () => ({ currentDesign: design }), subscribeSlice() {} }, {
-      player, trajectoryKeyframes: trajectories, getWorkspacePath: () => 'fixture.nadoc', api: {
+      player, renderer, scene, camera, controls,
+      captureCurrentCamera: () => ({ position: camera.position.toArray(), up: camera.up.toArray(), target: controls.target.toArray(), fov: camera.fov }),
+      trajectoryKeyframes: trajectories, getWorkspacePath: () => 'fixture.nadoc', api: {
         listOxdnaJobs: async () => [], listMdJobs: async () => [{ job_id: 'A', design_source_path: 'fixture.nadoc', status: 'completed' }],
         getMdTrajectoryMeta: async () => ({ ready: true, n_frames: 100 }),
         updateKeyframe: async (_anim, _id, patch) => { Object.assign(kf, patch) },
@@ -109,24 +112,118 @@ test('Load fetches selected frames, companion toggles report progress, and GIF c
   })
   await expect(page.locator('[data-role="trajectory-frame-end"]')).toHaveValue('12')
   expect(await page.evaluate(() => window.proof.downloads)).toEqual([])
-  await page.getByRole('button', { name: 'Load', exact: true }).click()
-  await expect(page.locator('[data-role="trajectory-download-status"]')).toHaveText('Selected frames loaded')
+  const preview = page.locator('[data-role="trajectory-play"]')
+  const header = page.locator('[data-role="trajectory-header-play"]')
+  await expect(header).toBeHidden()
+  expect(await page.locator('[data-role="trajectory-timeline"]').evaluate(el => el.previousElementSibling === el.parentElement.firstElementChild)).toBe(true)
+  const scrub = await page.locator('[data-role="trajectory-scrubber"]').boundingBox()
+  const buttons = await page.locator('.trajectory-transport').boundingBox()
+  expect(buttons.y).toBeGreaterThanOrEqual(scrub.y + scrub.height)
+  await preview.click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(12)
+  expect(await page.evaluate(() => [...new Set(window.proof.frames)].sort())).toEqual([10, 11, 12])
+  await expect(preview).toHaveAttribute('aria-label', 'Play trajectory')
   expect(await page.evaluate(() => window.proof.downloads)).toEqual([{ start: 10, end: 12 }])
+  await page.evaluate(() => { window.proof.frames = [] })
+  await preview.click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(12)
+  expect(await page.evaluate(() => [...new Set(window.proof.frames)].sort())).toEqual([10, 11, 12])
+  await expect(preview).toHaveAttribute('aria-label', 'Play trajectory')
+  expect(await page.evaluate(() => window.proof.downloads)).toHaveLength(1)
+  // Pause expanded, resume collapsed, then stop and seek using the same playhead.
+  await preview.click()
+  await expect(preview).toHaveAttribute('aria-label', 'Pause trajectory')
+  await preview.click()
+  const paused = await page.evaluate(() => window.proof.frames.at(-1))
+  await page.waitForTimeout(200)
+  expect(await page.evaluate(() => window.proof.frames.at(-1))).toBe(paused)
+  await page.getByTitle('Collapse keyframe', { exact: true }).click()
+  await expect(preview).toBeHidden(); await expect(header).toBeVisible()
+  await header.click(); await expect(header).toHaveAttribute('aria-label', 'Pause trajectory')
+  await page.getByTitle('Collapse keyframe', { exact: true }).click()
+  await expect(preview).toHaveAttribute('aria-label', 'Pause trajectory')
+  await page.locator('[data-role="trajectory-stop"]').click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(10)
+  await page.locator('[data-role="trajectory-last"]').click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(12)
+  await page.locator('[data-role="trajectory-first"]').click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(10)
+  await page.locator('[data-role="trajectory-scrubber"]').focus()
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(11)
+  await page.locator('[data-role="trajectory-frame-start"]').fill('11')
+  await page.locator('[data-role="trajectory-frame-start"]').press('Tab')
+  await page.locator('[data-role="trajectory-first"]').click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(11)
+  await page.locator('[data-role="trajectory-stop"]').click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(11)
+  await page.locator('[data-role="trajectory-frame-start"]').fill('10')
+  await page.locator('[data-role="trajectory-frame-start"]').press('Tab')
+  await page.locator('[data-role="trajectory-first"]').click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(10)
   for (const label of ['Ions', 'Bounding box']) {
     await page.evaluate(() => { window.holdCompanion = true })
     await page.locator('#animation-kf-list').getByLabel(label, { exact: true }).check()
-    await expect(page.locator('[data-role="trajectory-download-status"]')).toContainText('Loading ions / bounding box')
-    await expect(page.locator('[data-role="trajectory-download-status"]')).toContainText('elapsed')
+    await expect(page.locator('[data-role="trajectory-download-status"]')).toContainText(/Preparing|Loading/)
     await page.evaluate(() => window.finishCompanion())
-    await expect(page.locator('[data-role="trajectory-download-status"]')).toContainText('ions / bounding box ready')
+    await expect(page.locator('[data-role="trajectory-download-status"]')).toContainText('Preview paused')
   }
+  await page.evaluate(() => { window.proof.frames = []; window.proof.boxFrames = 0 })
+  await preview.click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(12)
+  expect(await page.evaluate(() => window.proof.boxFrames)).toBeGreaterThan(0)
+  expect(await page.evaluate(() => window.proof.companionRequests.some(r => r.ions && r.box))).toBe(true)
+  const held = await page.evaluate(() => window.proof.frames.length)
+  await page.waitForTimeout(400)
+  expect(await page.evaluate(() => window.proof.frames.length)).toBe(held)
   const gif = await page.evaluate(() => window.exportProof())
   expect(gif.magic).toMatch(/^GIF8[79]a$/)
   expect(gif.bytes).toBeGreaterThan(100)
   expect(gif.colored).toBeGreaterThan(10)
+  // Smooth playback uses the same controller, and compilation must capture subframes.
+  await page.getByLabel('Smooth playback', { exact: true }).check()
+  await page.evaluate(() => { window.proof.frames = [] })
+  await page.getByRole('button', { name: 'Play trajectory', exact: true }).filter({ visible: true }).click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.some(x => x > 10 && x < 12 && !Number.isInteger(x)))).toBe(true)
+  await page.getByRole('button', { name: 'Stop trajectory', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(10)
+  await page.evaluate(() => { window.proof.frames = [] })
+  // Compile the selected trajectory interval through the real encoder as well.
+  await page.getByLabel('Compiled video size').selectOption('720p')
+  await page.getByRole('button', { name: 'Compile this trajectory keyframe', exact: true }).click()
+  await expect(page.locator('.compile-summary')).toContainText('Keyframe ready', { timeout: 60000 })
+  await expect(page.locator('.compile-preview-result')).toBeVisible()
+  expect(await page.evaluate(() => window.proof.frames.some(x => x > 10 && x < 12 && !Number.isInteger(x)))).toBe(true)
+  await page.getByRole('button', { name: 'Play compiled keyframe', exact: true }).click()
+  const clipPreview = page.frameLocator('iframe[title="Compiled presentation"]')
+  await expect(clipPreview.locator('#jump option')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Inspect in 3D', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Return to presentation', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Close presentation', exact: true }).click()
+  await page.locator('#anim-compile-presentation-btn').click()
+  await expect(page.locator('.compile-summary')).toContainText('Ready', { timeout: 60000 })
+  const compiled = await page.locator('.compile-download').evaluate(async link => (await fetch(link.href)).text())
+  expect(compiled).toContain('data:video/webm;base64,')
+  expect(compiled).toContain("connect-src 'none'")
+  expect(compiled).toContain('trajectory_smooth_playback')
+  await page.getByRole('button', { name: 'Play compiled', exact: true }).click()
+  const embedded = page.frameLocator('iframe[title="Compiled presentation"]')
+  await embedded.locator('#replay').click()
+  await expect(embedded.locator('#status')).toContainText('Held')
+  await page.getByRole('button', { name: 'Inspect in 3D', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Return to presentation', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => window.proof.frames.at(-1))).toBe(12)
+  await page.getByRole('button', { name: 'Return to presentation', exact: true }).click()
+  await expect(embedded.locator('#status')).toContainText('Held')
+  await page.getByRole('button', { name: 'Close presentation', exact: true }).click()
   const proof = await page.evaluate(() => window.proof)
-  expect(proof.downloads).toHaveLength(1)
+  expect(proof.downloads.every(r => r.start >= 10 && r.end <= 12)).toBe(true)
   expect(proof.companionRequests.flatMap(r => r.ids).every(i => i >= 10 && i <= 12)).toBe(true)
-  expect([...new Set(proof.frames)].sort()).toEqual([10, 11, 12])
+  expect(proof.frames.every(x => x >= 10 && x <= 12)).toBe(true)
   expect(proof.boxFrames).toBeGreaterThan(0)
+  await page.getByLabel('Smooth playback', { exact: true }).uncheck()
+  await page.evaluate(() => { window.proof.frames = [] })
+  await page.locator('[data-role="trajectory-play"]').click()
+  await expect.poll(() => page.evaluate(() => window.proof.frames.at(-1))).toBe(12)
+  expect(await page.evaluate(() => window.proof.frames.every(Number.isInteger))).toBe(true)
 })

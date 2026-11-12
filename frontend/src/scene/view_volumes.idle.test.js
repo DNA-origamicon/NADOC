@@ -60,3 +60,12 @@ it('applies active membership, observes in-place source changes on rebuild, then
   expect(f.assemblyRenderer.getInstanceRenderData).toHaveBeenCalledTimes(reads)
   expect(f.applyAssemblyLayers).toHaveBeenLastCalledWith([])
 })
+
+it('does not veto another document presentation through its global event listener', async () => {
+  setup()
+  const pending = []
+  window.dispatchEvent(new CustomEvent('nadoc:presentation-frame', { detail: {
+    documentId: 'other-document', state: {}, waitUntil: promise => pending.push(promise),
+  } }))
+  expect(pending).toHaveLength(0)
+})

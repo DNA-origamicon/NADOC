@@ -29,14 +29,14 @@ from tests.test_part_immutable_revision import retained_source, source
 PRESERVED_ROLES = {
     "id": "document_identity",
     "plate_layout": "presentation", "representation_overrides": "presentation",
-    "view_volumes": "presentation", "annotations": "presentation",
+    "view_volumes": "presentation", "zoom_volumes": "presentation", "annotations": "presentation",
     "annotations_enabled": "presentation", "visibility_state": "presentation",
     "camera_poses": "presentation", "animations": "presentation",
     "chain_sim_projects": "physical", "loadouts": "physical", "atomistic_reference": "physical",
     "active_loadout_id": "physical", "last_editable_loadout_id": "physical",
     "repair_draft": "repair_draft",
 }
-EMPTY_LISTS = ("representation_overrides", "view_volumes", "annotations", "camera_poses",
+EMPTY_LISTS = ("representation_overrides", "view_volumes", "zoom_volumes", "annotations", "camera_poses",
                "animations", "chain_sim_projects", "loadouts")
 ABSENT = ("plate_layout", "atomistic_reference", "active_loadout_id", "last_editable_loadout_id", "repair_draft")
 

@@ -1,58 +1,17 @@
+import { initKeyframePreview } from './keyframe_preview.js'
+import { attachTrajectoryTransport } from './trajectory_keyframe_transport.js'
 import './animation_sidebar.css'
 
 export function initKeyframeControls({ player, getAnimation, getAnnotations, getViewVolumes = () => [], getZoomVolumes = () => [], getPlayOptions = () => ({}), stopPreview,
   save, capture, duplicate, onError, window: win = window }) {
-  const collapsed = new Set()
-  let selected = null, generation = 0, frame = null, starting = false
-  let savedDisablePoses = null
-  function cancel() {
-    generation++; if (frame !== null) win.cancelAnimationFrame(frame); frame = null
-    if (savedDisablePoses !== null) player.setDisablePoses?.(savedDisablePoses)
-    savedDisablePoses = null
-    selected = null
-    paintSelection()
-  }
+  const collapsed = new Set(), transports = new Map()
+  let selected = null
+  const previewState = initKeyframePreview({ player, getAnimation, getPlayOptions, stopPreview, onError, window: win })
+  const { cancel, show } = previewState
+  previewState.subscribe(state => { selected = state.id; paintSelection() })
   const viewport = win.document.getElementById('canvas-area')
   const deselect = () => { if (selected !== null) { cancel(); player.stop() } }
   viewport?.addEventListener('pointerdown', deselect, true)
-  async function show(id, play) {
-    cancel()
-    const token = generation
-    const source = getAnimation()
-    if (!source?.keyframes?.some(k => k.id === id)) return
-    selected = id
-    paintSelection()
-    stopPreview()
-    const animation = { ...source, loop: false, keyframes: source.keyframes.slice(0, source.keyframes.findIndex(k => k.id === id) + 1).map(k => ({ ...k, hold_duration_s: Math.max(0.001, k.hold_duration_s ?? 0) })) }
-    try {
-      savedDisablePoses = player.getDisablePoses?.() ?? false
-      player.setDisablePoses?.(false)
-      starting = true
-      const preparation = player.play(animation, { ...getPlayOptions(), holdKeyframeText: true })
-      starting = false
-      await preparation
-      if (token !== generation) return
-      player.pause()
-      const range = player.getKeyframeRange(id)
-      if (!range) return
-      // A tiny offset selects this segment rather than the previous inclusive endpoint.
-      let time = play ? Math.min(range.end, range.start + 1e-7) : range.end
-      player.seekTo(time)
-      await player.settleFrame()
-      if (!play || token !== generation) return
-      let previous = win.performance.now()
-      async function tick(now) {
-        if (token !== generation) return
-        time = Math.min(range.end, time + Math.max(0, now - previous) / 1000)
-        try { player.seekTo(time); await player.settleFrame() }
-        catch (error) { if (token === generation) { cancel(); onError(error) }; return }
-        if (token !== generation) return
-        previous = win.performance.now()
-        frame = time < range.end ? win.requestAnimationFrame(tick) : null
-      }
-      frame = win.requestAnimationFrame(tick)
-    } catch (error) { starting = false; if (token === generation) { cancel(); onError(error) } }
-  }
   function paintSelection() {
     for (const row of win.document.querySelectorAll('.anim-keyframe')) {
       row.classList.toggle('is-selected', row.dataset.kfId === selected)
@@ -81,9 +40,15 @@ export function initKeyframeControls({ player, getAnimation, getAnnotations, get
     else header.insertBefore(title, header.lastElementChild)
     const preview = doc.createElement('button')
     preview.type = 'button'; preview.textContent = '▶'; preview.title = 'Preview keyframe'; preview.className = 'btn btn--sm btn--icon'
-    preview.addEventListener('click', () => { void show(kf.id, true) })
+    preview.addEventListener('click', () => { void (kf.is_trajectory ? previewState.toggle(kf.id) : show(kf.id, true)) })
     const deleteButton = header.lastElementChild
     header.insertBefore(preview, deleteButton)
+    const timeline = row.querySelector('[data-role="trajectory-settings"]')?.trajectoryTimeline
+    if (timeline) {
+      transports.get(kf.id)?.()
+      for (const [id, dispose] of transports) if (!getAnimation()?.keyframes.some(k => k.id === id)) { dispose(); transports.delete(id) }
+      transports.set(kf.id, attachTrajectoryTransport({ row, keyframe: kf, headerButton: preview, timeline, preview: previewState }))
+    }
     if (duplicate) {
       const copy = actionButton(doc, 'Duplicate keyframe', () => duplicate(kf))
       copy.className = 'btn btn--sm btn--icon'
@@ -91,7 +56,7 @@ export function initKeyframeControls({ player, getAnimation, getAnnotations, get
       header.insertBefore(copy, deleteButton)
     }
     if (capture) {
-      const button = actionButton(doc, 'Capture keyframe', () => capture(kf))
+      const button = actionButton(doc, 'Capture pose', () => capture(kf))
       button.dataset.role = 'capture-keyframe'; button.className = 'btn btn--sm'
       button.style.marginLeft = '18px'
       const poseRow = row.querySelector('[data-role="keyframe-pose"]')?.parentElement
@@ -158,9 +123,9 @@ export function initKeyframeControls({ player, getAnimation, getAnnotations, get
     root.append(summary, choices); label()
     return root
   }
-  return { decorate, show, cancel, dispose() { cancel(); viewport?.removeEventListener('pointerdown', deselect, true) },
-    onPlayerEvent(event) {
-      if ((!starting && ['stopped', 'baking'].includes(event.type)) || ['baking_cancelled', 'baking_error'].includes(event.type)) cancel()
-    },
+  function clearRows() { for (const dispose of transports.values()) dispose(); transports.clear() }
+  return { decorate, show, cancel, preview: previewState, clearRows,
+    dispose() { previewState.dispose(); clearRows(); viewport?.removeEventListener('pointerdown', deselect, true) },
+    onPlayerEvent: previewState.onPlayerEvent,
   }
 }

@@ -16,3 +16,8 @@
 .anim-annotation-list label:focus-within { outline: 1px solid var(--color-accent); }
 .anim-annotation-list label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .anim-annotation-list input { flex-shrink: 0; accent-color: var(--color-accent); }
+
+[data-role="trajectory-timeline"] { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 6px 18px; }
+.trajectory-transport { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.trajectory-transport .btn { min-width: 30px; margin: 0; }
+.anim-keyframe:not(.is-collapsed) .trajectory-header-play { display: none; }

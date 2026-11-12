@@ -14,7 +14,7 @@ it('loads only metadata before job discovery finishes, leaving frame loading exp
   }) }
   initAnimationPanel({ getState: () => ({ currentDesign: design }), subscribeSlice() {} }, { api, player, trajectoryKeyframes: trajectories })
   try {
-    await vi.waitFor(() => expect(document.querySelector('[data-role="trajectory-download-status"]').textContent).toBe('Choose frames, then Load'))
+    await vi.waitFor(() => expect(document.querySelector('[data-role="trajectory-download-status"]').textContent).toBe('Choose frames, then play or scrub'))
     expect(trajectories.prefetch).not.toHaveBeenCalled()
     expect(api.getOxdnaTrajectoryMeta).toHaveBeenCalled()
     expect(api.listOxdnaJobs).toHaveBeenCalledWith({ waitForIdle: false })

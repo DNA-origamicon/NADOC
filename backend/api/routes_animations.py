@@ -72,6 +72,7 @@ class CreateKeyframeBody(BaseModel):
     trajectory_stride: Optional[int] = Field(default=None, ge=1)
     trajectory_show_ions: bool = False
     trajectory_show_box: bool = False
+    trajectory_smooth_playback: bool = False
     spin_axis: Optional[str] = None
     spin_rotations: float = 0.0
     spin_invert: bool = False
@@ -107,6 +108,7 @@ class PatchKeyframeBody(BaseModel):
     trajectory_stride: Optional[int] = Field(default=None, ge=1)
     trajectory_show_ions: Optional[bool] = None
     trajectory_show_box: Optional[bool] = None
+    trajectory_smooth_playback: Optional[bool] = None
     spin_axis: Optional[str] = None
     spin_rotations: Optional[float] = None
     spin_invert: Optional[bool] = None
@@ -212,6 +214,7 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
         trajectory_stride=body.trajectory_stride,
         trajectory_show_ions=body.trajectory_show_ions,
         trajectory_show_box=body.trajectory_show_box,
+        trajectory_smooth_playback=body.trajectory_smooth_playback,
         spin_axis=body.spin_axis,
         spin_rotations=body.spin_rotations,
         spin_invert=body.spin_invert,

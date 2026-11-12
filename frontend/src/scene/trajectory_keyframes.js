@@ -1,3 +1,4 @@
+import { initKeyframeSmoothing } from './keyframe_smoothing.js'
 import { initTrajectoryPreparationQueue } from './trajectory_preparation_queue.js'
 
 /**
@@ -93,6 +94,7 @@ export function initTrajectoryKeyframes({
   pollMs = 400,
 } = {}) {
   // jobId → frame count of its loaded composite trajectory (0 = failed / not loaded).
+  const smoothing = initKeyframeSmoothing()
   const _frames  = new Map()
   const _variantFrames = new Map()
   const variantKey = (jobId, spec) => JSON.stringify([jobId, spec.engine, spec.scope, spec.stride ?? null, spec.frameStart ?? null, spec.frameEnd ?? null])
@@ -410,21 +412,23 @@ export function initTrajectoryKeyframes({
    * the controller's showFrame does a full CG position sweep plus a heavy-rep apply,
    * which is not something to run per rAF for an unchanged frame.
    */
-  function show(jobId, engine, frameIdx, companions = null, spec = null) {
+  function show(jobId, engine, frameIdx, companions = null, spec = null, sample = null) {
+    smoothing.set(sample ? { ...sample, jobId, frame: frameIdx, companions } : null)
     const ctrl = getController?.(engine)
     if (!ctrl) return
     if (_loaded.get(ctrl) !== jobId
         || (ctrl.activeJobId && ctrl.activeJobId() !== jobId)
         || (ctrl.isActive && !ctrl.isActive())
         || (spec && ctrl.trajSpecMatches && !ctrl.trajSpecMatches(spec))) {
-      _requested = { jobId, engine, frameIdx, companions, spec }
+      _requested = { jobId, engine, frameIdx, companions, spec, sample }
       _swap(ctrl, jobId, engine, spec)
       return
     }
     const companion = getCompanion?.(engine)
     const companionSig = companions
       ? `${companions.ions ? 1 : 0}|${companions.box ? 1 : 0}` : '0|0'
-    if (_lastJob === jobId && _lastFrame === frameIdx && show._companionSig === companionSig) return
+    if (_lastJob === jobId && _lastFrame === frameIdx && show._companionSig === companionSig && show._smooth === !!sample) return
+    show._smooth = !!sample
     const companionChanged = _companionJob !== jobId || show._companionSig !== companionSig
     if (!companion) show._companionSig = companionSig
     if (companion && companionChanged) {
@@ -450,6 +454,7 @@ export function initTrajectoryKeyframes({
   /** Drop the frame-change guard — something other than us moved the model, so the next
    *  show() must re-apply even if the index is unchanged. */
   function invalidate() {
+    smoothing.clear()
     _lastJob = null; _lastFrame = -1; show._companionSig = null
     _companionJob = null; _companionSetup = null
   }
@@ -480,6 +485,7 @@ export function initTrajectoryKeyframes({
   /** Abandon an in-flight prepare: aborts a trajectory download in transfer and stops a
    *  grinding prebuild. Leaves whatever landed in place — release() does the restoring. */
   function cancel() {
+    smoothing.clear()
     _generation++
     _requested = null
     _swapping = null
@@ -566,19 +572,22 @@ export function initTrajectoryKeyframes({
     if (_requested) {
       const request = _requested
       _requested = null
-      show(request.jobId, request.engine, request.frameIdx, request.companions, request.spec)
+      show(request.jobId, request.engine, request.frameIdx, request.companions, request.spec, request.sample)
       if (_swapping) return settle()
     }
     if (_companionSetup) await _companionSetup
     if (_lastJob == null || _lastFrame < 0) return true
     const companion = getCompanion?.(_specs.get(_lastJob)?.engine)
-    return await (companion?.settleFrame?.(_lastFrame) ?? true)
+    if (await companion?.settleFrame?.(_lastFrame) === false) return false
+    if (generation !== _generation) return false
+    const ctrl = getController?.(_specs.get(_lastJob)?.engine)
+    return smoothing.settle(ctrl, companion, ctrl?.trajectoryMarkers?.() ?? [])
   }
 
   /** True when this module is holding a controller for preview (nothing is playing). */
   function isPreviewing() { return _prev.size > 0 }
 
-  return { recordMetadata,
+  return { recordMetadata, markers: engine => getController?.(engine)?.trajectoryMarkers?.() ?? [],
     prepare, prefetch, retain, prepareCompanions, cancelPreparation, frameCount, heavyBake, show, invalidate, suspend, setPlaying, cancel, release,
     hasJobs, previewLoad, previewShow, isPreviewing, settle,
   }

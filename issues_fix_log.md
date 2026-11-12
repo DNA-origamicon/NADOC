@@ -1,5 +1,36 @@
 # Issues fix log
 
+## ISSUE-186 — Placement review released after schema and test-isolation repairs (2026-11-11)
+
+- [x] Repaired display-field ownership, strict empty-state admission, archive copy
+  schemas and NAMD display-only identity exclusions. Added preservation and aliasing
+  regressions; no molecular geometry or numerical constants changed.
+- [x] Scoped cancellation injection and isolated NAMD mocks; completed eight explicit
+  incident reviews, preserving original evidence. Placement gate reports clear.
+- [x] 380 focused checks, 78 metadata checks and two browser workflows passed.
+- One experimental CPD preview-contract failure remains for dedicated review; see
+  ISSUE-186 in the ledger. The broad FULL suite remains deferred by the session gate.
+
+## ISSUE-185 — Compile selector and library modal (2026-11-11)
+
+- [x] Styled the native Video size select and options to match the dark sidebar.
+- Root cause: the new select had no component styling and inherited browser defaults.
+- [x] Library dialog lives in the document body, outside sidebar mirror cloning;
+  download progress explicitly respects hidden state.
+- [x] Browser checks verify styles, server-to-device download, local reopen, and
+  playback without networking. No molecular documents were authored for these checks.
+
+
+## ISSUE-184 — Presentation export readiness belongs to its document (2026-11-11)
+
+- [x] Added a failing regression for a view-volume host receiving another
+  document's presentation event; it previously vetoed frame readiness.
+- [x] Ignore that event before rendering or registering pending work. Preserve
+  rejection if the owning document changes during an actual pending frame.
+- [x] Full-app compiled presentation now exports, then plays/backtracks/replays
+  from a downloaded HTML file with browser networking disabled and no HTTP requests.
+
+
 ## ISSUE-183 — Transfer inputs and compact Alpine submission review (2026-11-11)
 
 - [x] User requested standard upload/download fields and a submission popup focused

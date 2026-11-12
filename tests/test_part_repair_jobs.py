@@ -29,8 +29,10 @@ def document():
     try:
         yield
     finally:
-        state.close_session()
-        reset_current_doc(token)
+        try:
+            state.close_session()
+        finally:
+            reset_current_doc(token)
 
 
 def body(*actions):
@@ -265,15 +267,15 @@ def test_interrupted_publication_preserves_ready_candidate_for_retry(controlled,
         bump(session)
         raise error("interrupted publication")
 
-    monkeypatch.setattr(state, "_bump_revision", fail)
-    with pytest.raises(error, match="interrupted publication"):
-        jobs.commit(controlled.id)
+    with monkeypatch.context() as patch:
+        patch.setattr(state, "_bump_revision", fail)
+        with pytest.raises(error, match="interrupted publication"):
+            jobs.commit(controlled.id)
     unchanged(controlled)
     assert state.get_or_404() is controlled.original
     assert jobs.inspect(controlled.id)["result"]["status"] == "ready"
     assert _slot.acquire(blocking=False)
     _slot.release()
-    monkeypatch.setattr(state, "_bump_revision", bump)
     committed = jobs.commit(controlled.id)
     assert committed["revision"] == controlled.revision + 1
     assert state.undo_depth() == controlled.depth + 1

@@ -4,7 +4,7 @@ import { trackConsoleErrors } from './helpers/scene_harness.js'
 
 // Reads a legacy fixture; changes display metadata only in an isolated session.
 // No saves/exports. Session cache is disabled; global teardown/reporter clean artifacts.
-test('capture and duplicate preserve current overlays, pose, state and independent frames', async ({ page }) => {
+test('capture saves an ordinary pose and selects it without replacing keyframe settings', async ({ page }) => {
   test.setTimeout(90000)
   const errors = trackConsoleErrors(page)
   await page.setViewportSize({ width: 1600, height: 1000 })
@@ -40,16 +40,22 @@ test('capture and duplicate preserve current overlays, pose, state and independe
   })
   const rows = page.locator('.anim-keyframe')
   await expect(rows).toHaveCount(2)
-  await rows.first().getByRole('button', { name: 'Capture keyframe', exact: true }).click()
+  const before = await page.evaluate(() => window.__nadocTest.store.getState().currentDesign.animations[0].keyframes[0])
+  await page.keyboard.press('v')
+  await expect.poll(() => page.evaluate(() => window.__nadocTest.store.getState().currentDesign.camera_poses.length)).toBe(1)
+  await rows.first().getByRole('button', { name: 'Capture pose', exact: true }).click()
   await expect.poll(() => page.evaluate(() => window.__nadocTest.store.getState().currentDesign.animations[0].keyframes[0].camera_pose_id)).toBeTruthy()
   const original = await page.evaluate(() => {
     const d = window.__nadocTest.store.getState().currentDesign, k = d.animations[0].keyframes[0]
     return { frame: k, pose: d.camera_poses.find(p => p.id === k.camera_pose_id), position: window.__NADOC_DBG__.camera.position.toArray(), count: d.feature_log.length }
   })
-  expect(original.frame.annotation_ids).toEqual(['shown-note'])
-  expect(original.frame.view_volume_ids).toHaveLength(1); expect(original.frame.zoom_volume_ids).toHaveLength(1)
+  expect(original.frame).toEqual({ ...before, camera_pose_id: original.pose.id })
   expect(original.pose.position).toEqual(original.position)
-  expect(original.frame.feature_log_index).toBe(original.count ? original.count - 1 : -2)
+  expect(original.pose.name).toBe('Pose 2')
+  expect(original.pose.thumbnail).toMatch(/^data:image/)
+  const firstPose = await page.evaluate(() => window.__nadocTest.store.getState().currentDesign.camera_poses[0])
+  for (const field of ['position', 'target', 'up', 'fov', 'orbit_mode']) expect(original.pose[field]).toEqual(firstPose[field])
+  await expect(rows.first().locator('[data-role="keyframe-pose"]')).toHaveValue(original.pose.id)
   await rows.first().getByRole('button', { name: 'Duplicate keyframe', exact: true }).click()
   await expect(rows).toHaveCount(3)
   const frames = await page.evaluate(() => window.__nadocTest.store.getState().currentDesign.animations[0].keyframes)
@@ -57,11 +63,12 @@ test('capture and duplicate preserve current overlays, pose, state and independe
   expect(frames[1]).toEqual({ ...original.frame, id: frames[1].id }); expect(frames[1].id).not.toBe(frames[0].id)
   await page.locator('.zoom-volume-row [data-control="enabled"]').click()
   await expect(page.locator('.zoom-volume-inset')).toBeHidden()
-  await rows.nth(1).getByRole('button', { name: 'Capture keyframe', exact: true }).click()
-  await expect.poll(() => page.evaluate(() => window.__nadocTest.store.getState().currentDesign.animations[0].keyframes[1].zoom_volume_ids)).toEqual([])
+  await rows.nth(1).getByRole('button', { name: 'Capture pose', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => window.__nadocTest.store.getState().currentDesign.animations[0].keyframes[1].camera_pose_id)).not.toBe(original.pose.id)
   const recaptured = await page.evaluate(() => window.__nadocTest.store.getState().currentDesign.animations[0].keyframes)
   expect(recaptured[0]).toEqual(original.frame)
   expect(recaptured[1].camera_pose_id).not.toBe(original.frame.camera_pose_id)
+  expect(recaptured[1]).toEqual({ ...original.frame, id: recaptured[1].id, camera_pose_id: recaptured[1].camera_pose_id })
   expect(recaptured[1].text).toBe('Keep text'); expect(recaptured[1].hold_duration_s).toBe(2)
   expect(errors, errors.join('\n')).toEqual([])
 })

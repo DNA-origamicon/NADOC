@@ -35,7 +35,7 @@ tm_settings extensions staple_groups photoproduct_junctions crossovers
 crossover_constraints forced_ligations
 """.split()
 _PRESENTATION = """
-plate_layout representation_overrides view_volumes annotations annotations_enabled
+plate_layout representation_overrides view_volumes zoom_volumes annotations annotations_enabled
 visibility_state camera_poses animations
 """.split()
 _PHYSICAL = "chain_sim_projects loadouts atomistic_reference active_loadout_id last_editable_loadout_id".split()

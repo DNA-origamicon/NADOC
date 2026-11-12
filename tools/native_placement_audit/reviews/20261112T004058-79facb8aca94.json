@@ -1,0 +1,34 @@
+{
+  "incident_id": "20261112T004058-79facb8aca94",
+  "reviewer": "Codex (agent review, user-authorized remediation)",
+  "reviewed_at_utc": "2026-11-12T01:29:09.816698+00:00",
+  "report_sha256": "4133b9e3892daf7e721fb9c064e3bc3cb464bb33b842a7d661ae6f4e45cbe0be",
+  "review": {
+    "root_cause": "The incident traceback identifies test_namd_provenance.forbidden as subprocess.run. The native audit command never launched: a CPU-receipt test mock rejected it as a GPU query. The earlier repair teardown cancellation could abort pytest finalization; this is the supported explanation for extended mock lifetime, not a native executable failure. Receipt tests now replace only their consumer module subprocess binding and assert the shared runner is unchanged.",
+    "affected_paths": [
+      "tests/test_native_placement_command.py::test_native_command_preserves_success_and_explicit_skip_without_incident[0]",
+      "tests/test_part_repair_jobs.py cancellation teardown",
+      "tests/test_namd_estimator_review.py module binding",
+      "tests/test_namd_provenance.py module binding",
+      "backend/core/part_history_contract.py presentation ownership",
+      "backend/api/part_immutable_preservation.py closed empty zoom metadata contract"
+    ],
+    "validation": "380 focused checks passed (1 experimental case deselected), including all incident tests, native full/compact/reload, slab, desktop API and VR pose parity/invalid-input checks; exit 1 solely for this retained latch. Additional 78 metadata checks passed. Broad FAST intermediate run: 20697 passed, 45 failed, 90 skipped; no new incidents; remaining display-schema omissions then repaired and focused checks passed. No molecular source, canonical landmark, geometry golden, solver or runtime placement path changed. All recorded source hashes match. No VR hardware visual session or new physical validation claimed.",
+    "regression_tests": [
+      "tests/test_native_placement_command.py::test_native_command_preserves_success_and_explicit_skip_without_incident[0]",
+      "tests/test_part_repair_jobs.py::test_interrupted_publication_preserves_ready_candidate_for_retry",
+      "tests/test_namd_estimator_review.py::test_model_schema_mismatch_is_unavailable_instead_of_truncating",
+      "tests/test_namd_provenance.py::test_cpu_receipt_does_not_query_gpu",
+      "tests/test_part_history_verification.py::test_zoom_volumes_survive_reload_without_changing_authoring_proof",
+      "tests/test_oxdna_preparation_capture.py::test_presentation_metadata_is_owned_without_changing_archive_scope"
+    ],
+    "evidence": [
+      ".native-placement-review/incidents/20261112T004058-79facb8aca94/report.json",
+      ".development-artifacts/native-review-20261111/repair-before.log",
+      ".development-artifacts/native-review-20261111/final-focused.log",
+      ".development-artifacts/native-review-20261111/metadata.log",
+      ".development-artifacts/native-review-20261111/numeric-evidence.json",
+      "Original incident has empty coordinate evidence: execution failed before molecular comparison. No current/candidate geometry exists to compare. Unchanged 26hb source reports zero clashes; unchanged corner fixture reports six, with pair identities/positions/distances retained. Existing clash test independently checks all pair identities against native bead distances."
+    ]
+  }
+}

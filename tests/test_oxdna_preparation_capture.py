@@ -144,6 +144,24 @@ def test_full_archive_retains_legacy_history_and_every_declared_document_field()
     assert owned.feature_log[0].design_snapshot_gz_b64 == "opaque recovery, not a proof input"
 
 
+def test_presentation_metadata_is_owned_without_changing_archive_scope():
+    original = source()
+    original.camera_poses = [m.CameraPose(thumbnail="data:image/png;base64,YQ==")]
+    original.annotations[0].name = "Detail"
+    original.annotations[0].font_family = "Georgia"
+    original.annotations[0].box_size = (120., 80.)
+    original.annotations[0].rotation_deg = 30.
+    original.animations = [m.DesignAnimation(keyframes=[
+        m.AnimationKeyframe(annotation_ids=[original.annotations[0].id])])]
+    original.zoom_volumes = [m.ZoomVolume(id="detail", settings={"colors": ["red"]})]
+    expected = original.model_dump(mode="json")
+    owned = core().capture_archive(original)
+    assert owned.model_dump(mode="json") == expected
+    original.zoom_volumes[0].settings["colors"].append("blue")
+    original.animations[0].keyframes[0].annotation_ids.clear()
+    assert owned.model_dump(mode="json") == expected
+
+
 def test_suppressed_feature_definition_is_retained_in_owned_archive():
     original = source()
     original.feature_log[0].suppressed = True

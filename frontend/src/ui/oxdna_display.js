@@ -2558,6 +2558,7 @@ export function initOxdnaDisplay({
     activeJobId: () => _jobId,
     alignment: () => _align,
     cancelPendingLoad: _cancelLoad,
+    trajectoryMarkers: () => _traj?.markers ?? [],
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
       // atomSerials/nNucleotides let a caller price an all-atom prebuild: the exact
       // serial span once the topology has been fetched, the nucleotide count (which the

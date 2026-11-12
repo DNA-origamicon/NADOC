@@ -67,21 +67,21 @@ _fields = {
         identity_confirmed_at primitive_kind hardware_defaults peg_surface namd_peg_review namd_box_solvent
         namd_peg_coating namd_peg_visible""",
     m.TmSettings: "na_mM conc_nM",
-    m.CameraPose: "id name position target up fov orbit_mode",
+    m.CameraPose: "id name thumbnail position target up fov orbit_mode",
     m.WellAssignment: "strand_id plate row col",
     m.TubeAssignment: "strand_id reason",
     m.PlateLayout: "orientation plate_count wells tubes",
     m.RepresentationSegment: "helix_id bp_start bp_end",
     m.RepresentationOverride: "id name representation segments protein_attachment_ids",
-    m.Annotation: "id text icon callout_type color highlight glow_color glow_intensity highlight_type transparency size manual screen_pos visible refs",
+    m.Annotation: "id name font_family box_size rotation_deg text icon callout_type color highlight glow_color glow_intensity highlight_type transparency size manual screen_pos visible refs",
     m.ViewVolume: "id name shape min_corner max_corner rotation representation opacity coloring outline_visible enabled",
     m.VisibilityState: "hidden_base_keys shown_base_keys hidden_cluster_ids hidden_part_group_ids",
     m.DesignAnimation: "id name fps loop keyframes",
     m.AnimationKeyframe: """id name camera_pose_id configuration_id feature_log_index hold_duration_s
         transition_duration_s easing joint_values binding_states strand_anim_phi is_trajectory trajectory_job_id
         trajectory_engine trajectory_frame_start trajectory_frame_end trajectory_scope trajectory_stride
-        trajectory_show_ions trajectory_show_box spin_axis spin_rotations spin_invert text text_font_family
-        text_font_size_px text_color text_bold text_italic text_align view_volume_ids zoom_volume_ids""",
+        trajectory_show_ions trajectory_show_box trajectory_smooth_playback spin_axis spin_rotations spin_invert text text_font_family
+        text_font_size_px text_color text_bold text_italic text_align view_volume_ids zoom_volume_ids annotation_ids""",
     m.ChainSimStage: """id engine protocol field anchors surface run_target cluster_name length_ns steps label
         seed_job_id seed_job_name seed_engine""",
     m.ChainSimProject: "id name stages",

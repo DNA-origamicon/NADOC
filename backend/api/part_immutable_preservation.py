@@ -15,14 +15,14 @@ PRESERVATION_VERSION = 1
 _ROLES = {
     "id": "document_identity",
     "plate_layout": "presentation", "representation_overrides": "presentation",
-    "view_volumes": "presentation", "annotations": "presentation",
+    "view_volumes": "presentation", "zoom_volumes": "presentation", "annotations": "presentation",
     "annotations_enabled": "presentation", "visibility_state": "presentation",
     "camera_poses": "presentation", "animations": "presentation",
     "chain_sim_projects": "physical", "loadouts": "physical", "atomistic_reference": "physical",
     "active_loadout_id": "physical", "last_editable_loadout_id": "physical",
     "repair_draft": "repair_draft",
 }
-_EMPTY_LISTS = ("representation_overrides", "view_volumes", "annotations", "camera_poses",
+_EMPTY_LISTS = ("representation_overrides", "view_volumes", "zoom_volumes", "annotations", "camera_poses",
                 "animations", "chain_sim_projects", "loadouts")
 _ABSENT = ("plate_layout", "atomistic_reference", "active_loadout_id", "last_editable_loadout_id", "repair_draft")
 _VISIBILITY = frozenset({"hidden_base_keys", "shown_base_keys", "hidden_cluster_ids", "hidden_part_group_ids"})

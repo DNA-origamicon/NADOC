@@ -211,7 +211,7 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     initKeyboardShortcuts(d)
     await press('v')
     expect(d.captureCurrentCamera).toHaveBeenCalled()
-    expect(d.api.createCameraPose).toHaveBeenCalledWith('Pose 3', { pos: [1, 2, 3] })
+    expect(d.api.createCameraPose).toHaveBeenCalledWith('Pose 3', { pos: [1, 2, 3], thumbnail: null })
   })
 
   it('Shift+D dumps deform debug from the api', async () => {
