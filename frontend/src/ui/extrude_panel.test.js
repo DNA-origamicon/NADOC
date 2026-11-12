@@ -150,3 +150,27 @@ describe('initExtrudePanel — hide', () => {
     expect(document.getElementById('extrude-panel').style.display).toBe('block')
   })
 })
+
+it('requires a footprint for Next, separates controls, and preserves length on Previous', () => {
+  const host=document.getElementById('extrude-panel')
+  host.innerHTML='<p id="extrude-step"></p><p id="extrude-section-help"></p><fieldset data-extrude-step="1">Cross-section</fieldset><fieldset data-extrude-step="2"><input id="slice-length" value="64"></fieldset><button id="extrude-next">Next</button><button id="slice-cancel-btn">Cancel</button><button id="slice-extrude-btn">Extrude</button>'
+  const deps=makeDeps(); let cells=[], notify
+  deps.slicePlane.getSelectedCells=()=>cells
+  deps.slicePlane.subscribeSelection=fn=>{notify=fn;return vi.fn()}
+  deps.slicePlane.setAuthoringStage=vi.fn()
+  const panel=initExtrudePanel(deps); panel.activate()
+  const next=document.getElementById('extrude-next'), cancel=document.getElementById('slice-cancel-btn')
+  expect(next.disabled).toBe(true)
+  expect(host.querySelector('[data-extrude-step="2"]').hidden).toBe(true)
+  cells=[[0,0],[0,1]]; notify(); next.click()
+  expect(host.querySelector('[data-extrude-step="1"]').hidden).toBe(true)
+  expect(host.querySelector('[data-extrude-step="2"]').hidden).toBe(false)
+  expect(cancel.textContent).toBe('Previous')
+  expect(deps.slicePlane.setAuthoringStage).toHaveBeenLastCalledWith('length')
+  cancel.click()
+  expect(panel.isActive()).toBe(true)
+  expect(document.getElementById('slice-length').value).toBe('64')
+  expect(cells).toEqual([[0,0],[0,1]])
+  expect(deps.slicePlane.setAuthoringStage).toHaveBeenLastCalledWith('section')
+  panel.dispose()
+})

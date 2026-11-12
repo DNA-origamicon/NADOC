@@ -10,11 +10,9 @@ import { test, expect } from '@playwright/test'
 import path from 'node:path'
 import { trackConsoleErrors, loadScaffoldedPart } from './helpers/scene_harness.js'
 
-// Representative design loaded by the console-error gate below. teeth.nadoc (the
-// CLAUDE.md example) does not exist in Examples/; 26hb_platform_v3 is a real
-// 26-helix honeycomb bundle — substantial enough to exercise the render paths,
-// small enough (~22 KB) to keep the gate fast.
-const SMOKE_DESIGN = '26hb_platform_v3.nadoc'
+// Read-only legacy fixture for renderer diagnosis: two helices and four crossovers.
+// The fixture is never edited or republished by this test.
+const SMOKE_DESIGN = '2hb_xover_val.nadoc'
 
 // Backend base for the direct-API legs. Defaults to :8000; the isolated smoke
 // config sets NADOC_E2E_API_BASE to its throwaway backend so these calls hit the
@@ -37,6 +35,28 @@ test.describe('App boot', () => {
   test('page title is NADOC 3D', async ({ page }) => {
     await page.goto('/')
     await expect(page).toHaveTitle('NADOC 3D')
+  })
+
+  test('fresh startup and reload do not show the selection tutorial toast', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('nadoc.hint.selModifiers.v1')
+      window.__selectionStartupHintSeen = false
+      new MutationObserver(() => {
+        if ([...document.querySelectorAll('.toast-message')].some(el => el.textContent.includes('Selection: D = dimensions'))) {
+          window.__selectionStartupHintSeen = true
+        }
+      }).observe(document, { childList: true, subtree: true, characterData: true })
+    })
+    await page.goto('/')
+    for (let boot = 0; boot < 2; boot++) {
+      await expect(page.locator('#canvas')).toBeVisible()
+      await page.waitForFunction(() => !!window.__nadocTest)
+      // The removed startup timer fired after 1500 ms. Observe beyond that
+      // deadline, including transient toasts that might already have vanished.
+      await page.waitForTimeout(2000)
+      expect(await page.evaluate(() => window.__selectionStartupHintSeen)).toBe(false)
+      if (boot === 0) await page.reload()
+    }
   })
 
   test('Three.js canvas is visible', async ({ page }) => {
@@ -266,7 +286,8 @@ test.describe('Console-error gate', () => {
   ]
   const isBenign = (text) => BENIGN.some((b) => text.includes(b))
 
-  test('loads a real design and renders with zero console errors', async ({ page, request }) => {
+  test('loads a real design and renders with zero console errors', async ({ page }) => {
+    test.setTimeout(60_000)
     const consoleErrors = []
     const pageErrors = []
     page.on('console', (msg) => {
@@ -274,20 +295,49 @@ test.describe('Console-error gate', () => {
     })
     page.on('pageerror', (err) => pageErrors.push(err.message))
 
-    // Load the representative design into the server's active state, using an
-    // absolute path so it resolves regardless of which CWD the server was started
-    // from (`just dev` from repo root vs. Playwright's webServer from frontend/).
+    // Load through the app client after boot so both the document and frontend
+    // store receive the fixture. A backend-only load leaves the welcome UI empty.
+    const doc = '__e2e__smoke-render'
     const designPath = path.resolve(process.cwd(), '..', 'Examples', SMOKE_DESIGN)
-    const loadResp = await request.post(`${API_BASE}/api/design/load`, {
-      data: { path: designPath },
-    })
-    expect(loadResp.status(), `failed to load ${SMOKE_DESIGN}`).toBe(200)
-
-    // Now boot the frontend — it fetches the active design + geometry and renders.
-    await page.goto('/')
+    await page.goto(`/?doc=${doc}`)
     await expect(page.locator('#canvas')).toBeVisible()
+    // Establish the editor host through File > New; loadDesign is a read-only
+    // renderer fixture load and does not dismiss the welcome/menu shell itself.
+    await openDropdownAndClick(page, 'File', 'menu-file-new')
+    await page.fill('#new-design-name', '__e2e__smoke-render-host')
+    await page.getByRole('button', { name: 'Create', exact: true }).click()
+    await expect(page.locator('#welcome-screen')).not.toBeVisible()
+    await expect.poll(async () => (await page.request.get(`${API_BASE}/api/design`, { headers: { 'X-NADOC-Doc': doc } })).status()).toBe(200)
+    await page.evaluate(async path => {
+      const api = await import('/src/api/client.js')
+      await api.loadDesign(path)
+    }, designPath)
     // Give the geometry round-trip + renderer rebuild time to run and throw if broken.
     await page.waitForTimeout(1500)
+
+    // Existing crossovers live outside the helix root. Both authoring tools must
+    // dim their rendered materials and restore them on close without editing DNA.
+    const arcDisplay = () => page.evaluate(() => {
+      const root = window.__NADOC_DBG__.unfoldView.getArcRoot()
+      return root.children.map(line => ({
+        name: line.name, opacity: line.material.opacity,
+        dimmed: line.material.customProgramCacheKey().includes('|nadoc-authoring-opacity'),
+        depthWrite: line.material.depthWrite,
+      }))
+    })
+    await expect.poll(async () => (await arcDisplay()).length).toBeGreaterThan(0)
+    const originalArcs = await arcDisplay()
+    for (const tool of ['extrude', 'sweep']) {
+      await page.locator('.menu-item').filter({ hasText: 'Tools' }).first().hover()
+      await page.locator(`#menu-tools-${tool}`).click()
+      await expect.poll(async () => {
+        const arcs = await arcDisplay()
+        return arcs.length > 0 && arcs.every(arc => arc.dimmed && !arc.depthWrite)
+      }).toBe(true)
+      await page.waitForFunction(() => !document.querySelector('[data-camera-transition="true"]'))
+      await page.getByRole('button', { name: `Close ${tool === 'extrude' ? 'Extrude' : 'Sweep'}`, exact: true }).click()
+      await expect.poll(arcDisplay).toEqual(originalArcs)
+    }
 
     expect(pageErrors, `uncaught exceptions during load/render:\n${pageErrors.join('\n')}`).toEqual([])
     expect(consoleErrors, `console errors during load/render:\n${consoleErrors.join('\n')}`).toEqual([])

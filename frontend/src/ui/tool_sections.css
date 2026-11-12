@@ -47,3 +47,6 @@ fieldset.tool-section[hidden], .cp-controls fieldset.tool-section[hidden] { disp
 #move-rotate-panel .mr-selection-box { margin-bottom: 0; }
 #move-rotate-panel .mr-reference .mr-label { width: 40px; flex-basis: 40px; }
 #move-rotate-panel .tool-section .mr-check { margin-top: 8px; }
+
+/* Tool stages must also hide controls styled as flex buttons. */
+#extrude-panel [hidden] { display: none !important; }

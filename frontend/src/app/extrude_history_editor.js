@@ -1,6 +1,5 @@
 import { canEditAtCursor } from '../ui/feature_edit_cursor.js'
 import { isNativeExtrusionFeature } from '../ui/extrusion_feature_editor.js'
-import { signedAlong } from '../scene/axis_snap.js'
 
 const KINDS = new Set(['bundle-create', 'extrude-segment', 'extrude-continuation', 'extrude-deformed-continuation'])
 export const usesExtrudeTool = entry => isNativeExtrusionFeature(entry) && KINDS.has(entry.op_kind)
@@ -48,16 +47,6 @@ export function createExtrudeHistoryEditor({ store, api, slicePlane, panel, getC
     if (s.context.designId !== s.designId || s.context.docId !== s.docId)
       throw new Error('The active document changed.')
   }
-  function align(s) {
-    const camera = getCamera(), controls = getControls()
-    const normal = signedAlong(slicePlane.getPlaneNormalWorld(), camera.position.clone().sub(controls.target))
-    const center = slicePlane.getPlaneCenterWorld()
-    const distance = Math.max(20, camera.position.distanceTo(controls.target))
-    camera.up.copy(slicePlane.getPlaneUpWorld())
-    controls.target.copy(center)
-    camera.position.copy(center).addScaledVector(normal, distance)
-    camera.lookAt(center); controls.update(); camera.updateMatrixWorld()
-  }
   function showPicker(s, inputs = s.params) {
     const continuation = s.entry.op_kind === 'extrude-continuation'
     if (s.entry.op_kind === 'extrude-deformed-continuation') {
@@ -70,6 +59,7 @@ export function createExtrudeHistoryEditor({ store, api, slicePlane, panel, getC
       })
     }
     slicePlane.setExtrudeInputs(inputs)
+    panel.refreshCrossSection?.()
   }
   async function cancel() {
     const s = session
@@ -156,9 +146,9 @@ export function createExtrudeHistoryEditor({ store, api, slicePlane, panel, getC
         onPlaneChange: ['bundle-create', 'extrude-segment'].includes(entry.op_kind) ? plane => {
           const inputs = slicePlane.getExtrudeInputs()
           s.params.plane = plane
-          showPicker(s, { ...s.params, ...inputs }); align(s)
+          showPicker(s, { ...s.params, ...inputs })
         } : null })
-      showPicker(s); align(s)
+      showPicker(s)
       s.busy = false
       return true
     } catch (error) {

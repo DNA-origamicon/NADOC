@@ -15,6 +15,47 @@ Reorganized October 17, 2026. Read the retained contracts here, then only the
 matching detail below. Dated results and old handoffs are not new verification
 or authorization; current user instructions and `CLAUDE.md` take precedence.
 
+## Shared desktop cross-section workflow (2026-11-11)
+
+Extrude now opens Step 1 with the source plane normal to the camera and orbit
+locked. Next requires selected cells and opens Step 2 with a fitted oblique view,
+length/direction/recommendations, and a non-pickable cross-section. Previous keeps
+the footprint and length; the close button/Escape cancels the whole draft.
+Source and strand/ligation choices live in Step 1. History edits use the same
+steps and retain their existing Apply/Cancel/replay contract.
+`ui/cross_section_workflow.js` is shared with Sweep for normal source alignment,
+orbit gating, and view fitting. Source switches, Next/Previous, and length refits
+use cancellable 500 ms eased camera transitions (`cross_section_transition.js`).
+New requests replace the pending transition; canvas input and close cancel it.
+Existing design materials are multiplied by 0.15 opacity while either tool is
+active (`scene/authoring_display.js`), with depth writing disabled. This includes
+the separate crossover arc group owned by Unfold View, including rebuilt arcs;
+existing per-cluster arc alpha continues to multiply the temporary tool fade. Preview and
+picker materials are separate. The scoped multiplier follows renderer rebuilds,
+preserves concurrent representation/cross-fade opacity changes, and restores
+those values when the last tool closes. It does not change saved design fields. `scene/lattice_authoring_stage.js` separates
+picker visibility/input from the retained selection and ghost length preview.
+Source changes (including deformed frames) notify the controller after the
+picker is built. Camera bounds include selected cells, extrusion ends and existing
+helix axes, with room beside the tool popup. Molecular authoring commands and
+lattice geometry are unchanged. Guide capture exercises the actual UI and is
+being updated to reflect this workflow; visual ergonomics remain reviewable.
+
+## Guide representation convention (2026-11-12)
+
+All guide screenshots use Full, except the representations lesson itself.
+The shared capture helper checks the global mode and rejects regional overrides,
+and records each screenshot's mode in steps.json. Extrude no longer switches to
+Cylinders. Tool-specific previews remain the actual application previews.
+
+## Guide capture and startup hints (2026-11-11)
+
+The automatic “Selection: D = dimensions…” startup toast has been removed.
+Its delayed localStorage-gated boot timer reappeared in fresh browser contexts
+and cluttered guide screenshots. Help → Keyboard Shortcuts remains the on-demand
+reference. Smoke checks cover fresh startup and reload with the old flag absent;
+guide capture refuses a screenshot containing that hint instead of hiding it.
+
 ## Desktop spline Sweep (2026-10-08)
 
 Tools → Sweep uses the shared `tool_popup` shell and slice-plane lattice picker.

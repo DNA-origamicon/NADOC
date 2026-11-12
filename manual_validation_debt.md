@@ -1524,3 +1524,19 @@ column widths, session lifecycle, and owner isolation; unit coverage includes
 repeated-control labels, dialogs, blocked popups and pointer-capture adaptation.
 Physical-monitor behavior and the remaining specialized widgets require manual
 inspection; no molecular geometry change or new design artifact is needed.
+
+
+### MV-61 — Shared Extrude/Sweep cross-section workflow (PENDING, 2026-11-11)
+
+Use the 3×6 square-lattice Extrude guide in `docs/guides/extrude.html`.
+Compare XY/XZ/YZ cross-section selection, Next's 3D length view, long/short and
+negative previews, and Previous with retained cells/length. Check camera framing
+beside the popup at narrow and wide window sizes, free orbit in Step 2, and
+normal-view alignment on straight/deformed continuation entry. Compare Sweep's
+Step 1 behavior. Check history edit Apply and close/Escape cancellation. Browser
+captures and software assertions exercise the workflow; human camera comfort,
+legibility, the 0.5 s eased transitions (including rapid plane changes), and 15%
+existing-geometry opacity (including crossover arcs) remain for review. Check original opacity returns on
+close/Apply and after history-edit cancellation.
+No deformed square-lattice extrusion is required; its existing implementation
+limitation remains GUIDE-UX-004.

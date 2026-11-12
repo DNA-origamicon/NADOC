@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Extrude: a 3×6 square-lattice walkthrough · NADOC guide</title>
+<style>
+:root{color-scheme:dark; font-family:system-ui,sans-serif; line-height:1.65; color:#e6edf3; background:#10151d}
+*{box-sizing:border-box}body{margin:0}a{color:#8ecbff}a:hover{color:#fff}
+a:focus-visible{outline:3px solid #ffd54a;outline-offset:4px}
+.layout{display:grid;grid-template-columns:265px minmax(0,1fr);max-width:1700px;margin:auto}
+nav{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:32px 22px;border-right:1px solid #303b4b}
+nav strong{display:block;letter-spacing:.15em;color:#8ecbff;margin-bottom:20px}
+nav a{display:block;margin:0 0 13px;font-size:.9rem;text-decoration:none}
+main{min-width:0;padding:40px clamp(18px,4vw,64px) 70px}
+h1{font-size:clamp(1.8rem,3vw,2.8rem);line-height:1.2;max-width:900px}h2{line-height:1.3}
+.eyebrow,.meta{color:#aab9ca;font-size:.85rem}.eyebrow{letter-spacing:.12em;text-transform:uppercase}
+header>p,section>p{max-width:85ch}.links{display:flex;gap:12px 24px;flex-wrap:wrap}
+.notice{border-left:3px solid #ffd54a;padding:12px 18px;background:#202532}
+section{margin-top:58px;scroll-margin-top:24px}figure{margin:26px 0 38px;border:1px solid #344153;border-radius:10px;overflow:hidden;background:#17202c}
+figcaption{padding:18px 22px}figcaption p{margin:7px 0 0;max-width:95ch}
+.step{font-weight:700;color:#ffd54a}img{display:block;width:100%;height:auto}
+footer{margin-top:50px;color:#aab9ca}.skip{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;z-index:2;background:#10151d;padding:8px}
+@media(max-width:850px){.layout{display:block}nav{position:static;height:auto;border-right:0;border-bottom:1px solid #303b4b;padding:22px}nav a{display:inline-block;margin:0 18px 10px 0}main{padding-top:24px}}
+@media print{:root{color-scheme:light;color:#111;background:white}nav,.skip{display:none}.layout{display:block}main{padding:0}figure{break-inside:avoid;background:white}a{color:inherit}}
+</style></head><body><a class="skip" href="#guide">Skip to guide</a>
+<div class="layout"><nav aria-label="Guide chapters"><strong>NADOC / GUIDES</strong>
+<a href="#guide">Overview</a><a href="#chapter-1">Create a square-lattice part</a><a href="#chapter-2">Choose a source plane</a><a href="#chapter-3">Select the 3×6 footprint</a><a href="#chapter-4">Set length, units and direction</a><a href="#chapter-5">Use scaffold-length recommendations</a><a href="#chapter-6">Choose strands and ligation</a><a href="#chapter-7">Cancel a preview, then build</a><a href="#chapter-8">Edit the recorded extrusion</a><a href="#chapter-9">Continue from an existing end</a><a href="#chapter-10">Deformed-end continuation: current limitation</a><a href="#chapter-11">Save and troubleshoot</a><a href="README.md">Guide library (Markdown)</a></nav>
+<main id="guide"><header><p class="eyebrow">Extrude · desktop walkthrough · style-review draft</p>
+<h1>Extrude: a 3×6 square-lattice walkthrough</h1><p>Desktop Extrude guide using the standard 3×6 square-lattice model (18 helices). Select the cross-section in Step 1, then click Next to set 64 bp in a fitted 3D view. Then edit the recorded length to 72 bp. This draft is being iterated for coverage and visual style before broader guide generation. Straight continuation is demonstrated. Deformed continuation is shown through entry and Cancel only because of a square-lattice implementation gap; coverage remains partial.</p>
+<p class="meta">65 illustrated steps · 11 chapters · Captured 2026-11-12T00:21:37-07:00</p>
+<p class="notice">Coverage is partial: square-lattice deformed continuation is demonstrated through entry and Cancel only. See the limitation chapter. This is a tool demonstration, not a validated origami design.</p>
+<p>Numbered arrows indicate click targets; dashed boxes show drag extents. Click any screenshot to open it at full size.</p>
+<p class="links"><a href="extrude/example.nadoc" download>Download example</a><a href="extrude/README.md">Markdown guide</a><a href="extrude/verification.json">Construction verification</a><a href="UX_LEDGER.md">UX findings</a></p>
+<details><summary>Demonstrated scope</summary><ul><li>Desktop: shared Extrude/Sweep cross-section selection normal to XY/XZ/YZ source planes, then Next for a fitted 3D length preview</li><li>Length in bp/nm, direction, scaffold-size recommendations, strand classes and ligation</li><li>Next/Previous preserves footprint and length; cancel, apply, feature editing and Undo/Redo</li><li>Straight-end continuation with overlap refusal and a recorded result</li><li>Deformed-end entry and Cancel after Bend preparation; square-lattice completion blocked by GUIDE-UX-004</li></ul></details></header>
+<section id="chapter-1"><h2>Create a square-lattice part</h2><p>The shared guide model is three rows × six columns: 18 helices on a square lattice. This lesson uses 64 bp initially. A painted lattice footprint is not yet a routed origami; scaffold routing and staple design are separate operations.</p><figure id="step-1">
+<figcaption><span class="step">Step 1</span><p>Choose File → New.</p></figcaption>
+<a href="extrude/01.png" aria-label="Open step 1 screenshot at full size">
+<img src="extrude/01.png" alt="Step 1: Choose File → New." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-2">
+<figcaption><span class="step">Step 2</span><p>Choose Square for the lattice type. The guide uses a temporary example name; use a meaningful name for your own part.</p></figcaption>
+<a href="extrude/02.png" aria-label="Open step 2 screenshot at full size">
+<img src="extrude/02.png" alt="Step 2: Choose Square for the lattice type. The guide uses a temporary example name; use a meaningful name for your own part." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-3">
+<figcaption><span class="step">Step 3</span><p>Click Create to open the empty square-lattice part.</p></figcaption>
+<a href="extrude/03.png" aria-label="Open step 3 screenshot at full size">
+<img src="extrude/03.png" alt="Step 3: Click Create to open the empty square-lattice part." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-4">
+<figcaption><span class="step">Step 4</span><p>Use Full representation throughout this guide. Full shows the nucleotide beads and base slabs; it is the standard display for guides.</p></figcaption>
+<a href="extrude/04.png" aria-label="Open step 4 screenshot at full size">
+<img src="extrude/04.png" alt="Step 4: Use Full representation throughout this guide. Full shows the nucleotide beads and base slabs; it is the standard display for guides." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-2"><h2>Choose a source plane</h2><p>The From control chooses the construction plane, not a camera view. XY extrudes normal to XY, XZ normal to XZ, and YZ normal to YZ. The camera turns smoothly to face the selected plane over 0.5 seconds, and orbit is locked during cross-section selection. Changing the plane clears an in-progress footprint: choose the plane before selecting cells. Tools → Extrude starts a new footprint; end continuation uses a different entry point shown later.</p><figure id="step-5">
+<figcaption><span class="step">Step 5</span><p>Open Tools → Extrude to start a new extrusion.</p></figcaption>
+<a href="extrude/05.png" aria-label="Open step 5 screenshot at full size">
+<img src="extrude/05.png" alt="Step 5: Open Tools → Extrude to start a new extrusion." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-6">
+<figcaption><span class="step">Step 6</span><p>Choose XZ in From. Notice the construction plane changes.</p></figcaption>
+<a href="extrude/06.png" aria-label="Open step 6 screenshot at full size">
+<img src="extrude/06.png" alt="Step 6: Choose XZ in From. Notice the construction plane changes." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-7">
+<figcaption><span class="step">Step 7</span><p>Choose YZ in From. Notice the construction plane changes.</p></figcaption>
+<a href="extrude/07.png" aria-label="Open step 7 screenshot at full size">
+<img src="extrude/07.png" alt="Step 7: Choose YZ in From. Notice the construction plane changes." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-8">
+<figcaption><span class="step">Step 8</span><p>Choose XY in From. Return to XY for the main example.</p></figcaption>
+<a href="extrude/08.png" aria-label="Open step 8 screenshot at full size">
+<img src="extrude/08.png" alt="Step 8: Choose XY in From. Return to XY for the main example." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-3"><h2>Select the 3×6 footprint</h2><p>Select three consecutive rows and six consecutive columns. Here the displayed indices are rows 0–2 and columns 1–6, positioned beside the floating tool panel. The offset is only to keep the targets visible; the footprint is still 3×6. Drag the tool-window title bar if it covers your intended cells. Extrude and Sweep share this cross-section picker and normal-view workflow. Grid colors identify strand-direction parity; the +/− extrusion buttons below are a separate choice.</p><figure id="step-9">
+<figcaption><span class="step">Step 9</span><p>Click a cell to select it. Click the same cell again to deselect it.</p></figcaption>
+<a href="extrude/09.png" aria-label="Open step 9 screenshot at full size">
+<img src="extrude/09.png" alt="Step 9: Click a cell to select it. Click the same cell again to deselect it." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-10">
+<figcaption><span class="step">Step 10</span><p>With the canvas focused, press Tab for box selection. Left-drag from upper left to lower right, enclosing the entire circles of the 3-row × 6-column footprint. Left-to-right requires full enclosure; right-to-left selects touching cells.</p></figcaption>
+<a href="extrude/10.png" aria-label="Open step 10 screenshot at full size">
+<img src="extrude/10.png" alt="Step 10: With the canvas focused, press Tab for box selection. Left-drag from upper left to lower right, enclosing the entire circles of the 3-row × 6-column footprint. Left-to-right requires full enclosure; right-to-left selects touching cells." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-11">
+<figcaption><span class="step">Step 11</span><p>The count must read 18 helices. Tab returns to ordinary cell picking; a left-drag can also paint cells along its path.</p></figcaption>
+<a href="extrude/11.png" aria-label="Open step 11 screenshot at full size">
+<img src="extrude/11.png" alt="Step 11: The count must read 18 helices. Tab returns to ordinary cell picking; a left-drag can also paint cells along its path." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-4"><h2>Set length, units and direction</h2><p>Step 1 selects the cross-section. Click Next for Step 2: the camera transitions over 0.5 seconds to a fitted oblique 3D view, and the lattice cannot be repainted accidentally. The initial length is zero; enter a nonzero length to show the preview. Changing the length or direction refits the preview. Previous returns to the normal cross-section view while retaining the length and selected cells. Square-lattice spinner/arrow steps are 8 bp; you can type a different integer directly. In nm mode the entered distance is rounded to an integer number of base pairs using 0.334 nm/bp. Changing the unit reinterprets the field; enter the corresponding numeric value explicitly. +/− controls the extrusion direction, independently of the grid color.</p><figure id="step-12">
+<figcaption><span class="step">Step 12</span><p>Click Next. The footprint is retained, the picker is hidden, and the camera changes to a fitted 3D view for length and direction.</p></figcaption>
+<a href="extrude/12.png" aria-label="Open step 12 screenshot at full size">
+<img src="extrude/12.png" alt="Step 12: Click Next. The footprint is retained, the picker is hidden, and the camera changes to a fitted 3D view for length and direction." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-13">
+<figcaption><span class="step">Step 13</span><p>With length 0, Extrude refuses to build and asks for a length. The footprint remains available for correction.</p></figcaption>
+<a href="extrude/13.png" aria-label="Open step 13 screenshot at full size">
+<img src="extrude/13.png" alt="Step 13: With length 0, Extrude refuses to build and asks for a length. The footprint remains available for correction." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-14">
+<figcaption><span class="step">Step 14</span><p>Enter 64 bp. The readout should show 18 × 64 bp = 1152 bp total.</p></figcaption>
+<a href="extrude/14.png" aria-label="Open step 14 screenshot at full size">
+<img src="extrude/14.png" alt="Step 14: Enter 64 bp. The readout should show 18 × 64 bp = 1152 bp total." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-15">
+<figcaption><span class="step">Step 15</span><p>For the same 64 bp length, choose nm and enter 21.376. The total remains 1152 bp.</p></figcaption>
+<a href="extrude/15.png" aria-label="Open step 15 screenshot at full size">
+<img src="extrude/15.png" alt="Step 15: For the same 64 bp length, choose nm and enter 21.376. The total remains 1152 bp." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-16">
+<figcaption><span class="step">Step 16</span><p>Click − to preview extrusion on the opposite side of the plane.</p></figcaption>
+<a href="extrude/16.png" aria-label="Open step 16 screenshot at full size">
+<img src="extrude/16.png" alt="Step 16: Click − to preview extrusion on the opposite side of the plane." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-17">
+<figcaption><span class="step">Step 17</span><p>The negative-direction readout and preview change together. No DNA has been committed yet.</p></figcaption>
+<a href="extrude/17.png" aria-label="Open step 17 screenshot at full size">
+<img src="extrude/17.png" alt="Step 17: The negative-direction readout and preview change together. No DNA has been committed yet." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-18">
+<figcaption><span class="step">Step 18</span><p>Return to + for the main example.</p></figcaption>
+<a href="extrude/18.png" aria-label="Open step 18 screenshot at full size">
+<img src="extrude/18.png" alt="Step 18: Return to + for the main example." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-5"><h2>Use scaffold-length recommendations</h2><p>The 7249 and 8064 chips propose a per-helix length for the current selection. They reserve 14 nt per helix for end loops: floor(target / selected helices) − 14. They size this extrusion alone, not the entire existing design. They do not route a scaffold, assign its sequence, or certify a scaffold-length fit after later routing.</p><figure id="step-19">
+<figcaption><span class="step">Step 19</span><p>Click 7249 to fill 388 bp for 18 selected helices.</p></figcaption>
+<a href="extrude/19.png" aria-label="Open step 19 screenshot at full size">
+<img src="extrude/19.png" alt="Step 19: Click 7249 to fill 388 bp for 18 selected helices." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-20">
+<figcaption><span class="step">Step 20</span><p>The recommendation sets the field to 388 bp and switches the unit to bp. Restore 64 bp for this lesson.</p></figcaption>
+<a href="extrude/20.png" aria-label="Open step 20 screenshot at full size">
+<img src="extrude/20.png" alt="Step 20: The recommendation sets the field to 388 bp and switches the unit to bp. Restore 64 bp for this lesson." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-21">
+<figcaption><span class="step">Step 21</span><p>Click 8064 to fill 434 bp for 18 selected helices.</p></figcaption>
+<a href="extrude/21.png" aria-label="Open step 21 screenshot at full size">
+<img src="extrude/21.png" alt="Step 21: Click 8064 to fill 434 bp for 18 selected helices." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-22">
+<figcaption><span class="step">Step 22</span><p>The recommendation sets the field to 434 bp and switches the unit to bp. Restore 64 bp for this lesson.</p></figcaption>
+<a href="extrude/22.png" aria-label="Open step 22 screenshot at full size">
+<img src="extrude/22.png" alt="Step 22: The recommendation sets the field to 434 bp and switches the unit to bp. Restore 64 bp for this lesson." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-6"><h2>Choose strands and ligation</h2><p>Both, Scaffold and Staples select which strand classes the extrusion creates or extends. These controls do not perform an autoscaffold or autostaple routing operation. Ligate adjacent requests joining compatible neighboring strand ends at the extrusion boundary; leaving it unchecked keeps the new segment unligated. Compatibility depends on the source ends and selected strand classes. In an empty part there are no upstream ends to join.</p><figure id="step-23">
+<figcaption><span class="step">Step 23</span><p>Click Previous to return to the cross-section and strand choices. The view becomes normal to the source plane again.</p></figcaption>
+<a href="extrude/23.png" aria-label="Open step 23 screenshot at full size">
+<img src="extrude/23.png" alt="Step 23: Click Previous to return to the cross-section and strand choices. The view becomes normal to the source plane again." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-24">
+<figcaption><span class="step">Step 24</span><p>Choose Scaffold to restrict the extrusion to scaffold strands.</p></figcaption>
+<a href="extrude/24.png" aria-label="Open step 24 screenshot at full size">
+<img src="extrude/24.png" alt="Step 24: Choose Scaffold to restrict the extrusion to scaffold strands." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-25">
+<figcaption><span class="step">Step 25</span><p>Choose Staples to restrict the extrusion to staple strands.</p></figcaption>
+<a href="extrude/25.png" aria-label="Open step 25 screenshot at full size">
+<img src="extrude/25.png" alt="Step 25: Choose Staples to restrict the extrusion to staple strands." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-26">
+<figcaption><span class="step">Step 26</span><p>Choose Both for the main example.</p></figcaption>
+<a href="extrude/26.png" aria-label="Open step 26 screenshot at full size">
+<img src="extrude/26.png" alt="Step 26: Choose Both for the main example." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-27">
+<figcaption><span class="step">Step 27</span><p>Uncheck Ligate adjacent when the new segment should remain unligated to upstream ends.</p></figcaption>
+<a href="extrude/27.png" aria-label="Open step 27 screenshot at full size">
+<img src="extrude/27.png" alt="Step 27: Uncheck Ligate adjacent when the new segment should remain unligated to upstream ends." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-28">
+<figcaption><span class="step">Step 28</span><p>Restore Ligate adjacent for this example and the later continuation.</p></figcaption>
+<a href="extrude/28.png" aria-label="Open step 28 screenshot at full size">
+<img src="extrude/28.png" alt="Step 28: Restore Ligate adjacent for this example and the later continuation." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-29">
+<figcaption><span class="step">Step 29</span><p>Click Next again. The same 18 cells and 64 bp length are retained and shown in 3D.</p></figcaption>
+<a href="extrude/29.png" aria-label="Open step 29 screenshot at full size">
+<img src="extrude/29.png" alt="Step 29: Click Next again. The same 18 cells and 64 bp length are retained and shown in 3D." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-7"><h2>Cancel a preview, then build</h2><p>Preview changes are not authored structure. Cancel in Step 1, the window close button, or Escape discards the pending operation. Previous in Step 2 returns to selection without discarding inputs. Reopen the tool to start again. When ready, click Extrude (or press Enter in the length field). A successful operation is recorded in feature history. Red overlap feedback means the proposed extrusion intersects existing DNA; change direction/length or remove conflicting cells before applying.</p><figure id="step-30">
+<figcaption><span class="step">Step 30</span><p>Close the Extrude window to discard this preview and selection.</p></figcaption>
+<a href="extrude/30.png" aria-label="Open step 30 screenshot at full size">
+<img src="extrude/30.png" alt="Step 30: Close the Extrude window to discard this preview and selection." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-31">
+<figcaption><span class="step">Step 31</span><p>Open Tools → Extrude to start a new extrusion.</p></figcaption>
+<a href="extrude/31.png" aria-label="Open step 31 screenshot at full size">
+<img src="extrude/31.png" alt="Step 31: Open Tools → Extrude to start a new extrusion." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-32">
+<figcaption><span class="step">Step 32</span><p>With the canvas focused, press Tab for box selection. Left-drag from upper left to lower right, enclosing the entire circles of the 3-row × 6-column footprint. Left-to-right requires full enclosure; right-to-left selects touching cells.</p></figcaption>
+<a href="extrude/32.png" aria-label="Open step 32 screenshot at full size">
+<img src="extrude/32.png" alt="Step 32: With the canvas focused, press Tab for box selection. Left-drag from upper left to lower right, enclosing the entire circles of the 3-row × 6-column footprint. Left-to-right requires full enclosure; right-to-left selects touching cells." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-33">
+<figcaption><span class="step">Step 33</span><p>The count must read 18 helices. Tab returns to ordinary cell picking; a left-drag can also paint cells along its path.</p></figcaption>
+<a href="extrude/33.png" aria-label="Open step 33 screenshot at full size">
+<img src="extrude/33.png" alt="Step 33: The count must read 18 helices. Tab returns to ordinary cell picking; a left-drag can also paint cells along its path." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-34">
+<figcaption><span class="step">Step 34</span><p>Click Next to set the extrusion length in 3D.</p></figcaption>
+<a href="extrude/34.png" aria-label="Open step 34 screenshot at full size">
+<img src="extrude/34.png" alt="Step 34: Click Next to set the extrusion length in 3D." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-35">
+<figcaption><span class="step">Step 35</span><p>With 18 cells, 64 bp, +, Both and Ligate adjacent selected, click Extrude.</p></figcaption>
+<a href="extrude/35.png" aria-label="Open step 35 screenshot at full size">
+<img src="extrude/35.png" alt="Step 35: With 18 cells, 64 bp, +, Both and Ligate adjacent selected, click Extrude." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-36">
+<figcaption><span class="step">Step 36</span><p>Right-drag to orbit the result. Press F to fit, then scroll down slightly if the sidebars crowd the model. This is the 3×6 square-lattice, 64 bp example.</p></figcaption>
+<a href="extrude/36.png" aria-label="Open step 36 screenshot at full size">
+<img src="extrude/36.png" alt="Step 36: Right-drag to orbit the result. Press F to fit, then scroll down slightly if the sidebars crowd the model. This is the 3×6 square-lattice, 64 bp example." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-8"><h2>Edit the recorded extrusion</h2><p>The feature log preserves the construction inputs. Editing the feature changes its recorded parameters and rebuilds dependent operations. Cancel abandons the edit; Apply commits it. Undo and Redo operate through Edit → Undo/Redo (Ctrl+Z/Ctrl+Y). Review later dependent features after upstream changes.</p><figure id="step-37">
+<figcaption><span class="step">Step 37</span><p>Click the edit control on the Extrude feature row.</p></figcaption>
+<a href="extrude/37.png" aria-label="Open step 37 screenshot at full size">
+<img src="extrude/37.png" alt="Step 37: Click the edit control on the Extrude feature row." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-38">
+<figcaption><span class="step">Step 38</span><p>The recorded footprint opens in Step 1. Click Next to edit its length in 3D.</p></figcaption>
+<a href="extrude/38.png" aria-label="Open step 38 screenshot at full size">
+<img src="extrude/38.png" alt="Step 38: The recorded footprint opens in Step 1. Click Next to edit its length in 3D." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-39">
+<figcaption><span class="step">Step 39</span><p>Change the length to 72 bp. Close the window first to verify that the original 64 bp design is preserved.</p></figcaption>
+<a href="extrude/39.png" aria-label="Open step 39 screenshot at full size">
+<img src="extrude/39.png" alt="Step 39: Change the length to 72 bp. Close the window first to verify that the original 64 bp design is preserved." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-40">
+<figcaption><span class="step">Step 40</span><p>Close the window to cancel this trial edit.</p></figcaption>
+<a href="extrude/40.png" aria-label="Open step 40 screenshot at full size">
+<img src="extrude/40.png" alt="Step 40: Close the window to cancel this trial edit." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-41">
+<figcaption><span class="step">Step 41</span><p>Reopen the feature edit to make a deliberate change.</p></figcaption>
+<a href="extrude/41.png" aria-label="Open step 41 screenshot at full size">
+<img src="extrude/41.png" alt="Step 41: Reopen the feature edit to make a deliberate change." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-42">
+<figcaption><span class="step">Step 42</span><p>Click Next to return to the length controls.</p></figcaption>
+<a href="extrude/42.png" aria-label="Open step 42 screenshot at full size">
+<img src="extrude/42.png" alt="Step 42: Click Next to return to the length controls." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-43">
+<figcaption><span class="step">Step 43</span><p>Click Apply to rebuild the recorded extrusion at 72 bp.</p></figcaption>
+<a href="extrude/43.png" aria-label="Open step 43 screenshot at full size">
+<img src="extrude/43.png" alt="Step 43: Click Apply to rebuild the recorded extrusion at 72 bp." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-44">
+<figcaption><span class="step">Step 44</span><p>Use Edit → Undo to restore 64 bp.</p></figcaption>
+<a href="extrude/44.png" aria-label="Open step 44 screenshot at full size">
+<img src="extrude/44.png" alt="Step 44: Use Edit → Undo to restore 64 bp." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-45">
+<figcaption><span class="step">Step 45</span><p>Use Edit → Redo to restore the 72 bp edit. The saved example retains this demonstrated change.</p></figcaption>
+<a href="extrude/45.png" aria-label="Open step 45 screenshot at full size">
+<img src="extrude/45.png" alt="Step 45: Use Edit → Redo to restore the 72 bp edit. The saved example retains this demonstrated change." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-9"><h2>Continue from an existing end</h2><p>Use BLUNT end rings to identify the source. Right-click an end → Extrude, or left-click the end and use the Extrude action in Properties. Amber cells represent compatible ends that can be continued. Step 1 faces the inherited source plane; Next opens the length preview in 3D. Existing geometry is shown at 15% opacity while the tool is open, making the new preview easier to see; closing or applying restores its normal display. The plane is inherited from the source; +/− defaults away from the body. Select only the ends you intend to extend. Ligate adjacent controls boundary joining; an unligated segment is a different result, not an equivalent continuation.</p><figure id="step-46">
+<figcaption><span class="step">Step 46</span><p>Enable BLUNT in the toolbar to show selectable end rings.</p></figcaption>
+<a href="extrude/46.png" aria-label="Open step 46 screenshot at full size">
+<img src="extrude/46.png" alt="Step 46: Enable BLUNT in the toolbar to show selectable end rings." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-47">
+<figcaption><span class="step">Step 47</span><p>Right-click the marked far-end ring, then choose Extrude from its menu.</p></figcaption>
+<a href="extrude/47.png" aria-label="Open step 47 screenshot at full size">
+<img src="extrude/47.png" alt="Step 47: Right-click the marked far-end ring, then choose Extrude from its menu." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-48">
+<figcaption><span class="step">Step 48</span><p>Choose Extrude to continue from this end.</p></figcaption>
+<a href="extrude/48.png" aria-label="Open step 48 screenshot at full size">
+<img src="extrude/48.png" alt="Step 48: Choose Extrude to continue from this end." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-49">
+<figcaption><span class="step">Step 49</span><p>From is locked to the selected source end. The tool chooses the initial direction away from the existing body.</p></figcaption>
+<a href="extrude/49.png" aria-label="Open step 49 screenshot at full size">
+<img src="extrude/49.png" alt="Step 49: From is locked to the selected source end. The tool chooses the initial direction away from the existing body." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-50">
+<figcaption><span class="step">Step 50</span><p>Select the amber cell at the chosen end. This focused example extends one helix within the 3×6 model; select more compatible cells to extend a wider footprint.</p></figcaption>
+<a href="extrude/50.png" aria-label="Open step 50 screenshot at full size">
+<img src="extrude/50.png" alt="Step 50: Select the amber cell at the chosen end. This focused example extends one helix within the 3×6 model; select more compatible cells to extend a wider footprint." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-51">
+<figcaption><span class="step">Step 51</span><p>Click Next to keep the selected end and inspect the continuation in 3D.</p></figcaption>
+<a href="extrude/51.png" aria-label="Open step 51 screenshot at full size">
+<img src="extrude/51.png" alt="Step 51: Click Next to keep the selected end and inspect the continuation in 3D." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-52">
+<figcaption><span class="step">Step 52</span><p>For this far end, − points back into existing DNA. Inspect the red overlap feedback.</p></figcaption>
+<a href="extrude/52.png" aria-label="Open step 52 screenshot at full size">
+<img src="extrude/52.png" alt="Step 52: For this far end, − points back into existing DNA. Inspect the red overlap feedback." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-53">
+<figcaption><span class="step">Step 53</span><p>Attempting the overlapping extrusion is refused. Correct the direction rather than forcing the operation.</p></figcaption>
+<a href="extrude/53.png" aria-label="Open step 53 screenshot at full size">
+<img src="extrude/53.png" alt="Step 53: Attempting the overlapping extrusion is refused. Correct the direction rather than forcing the operation." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-54">
+<figcaption><span class="step">Step 54</span><p>Restore + to extrude away from this far end. A near-end continuation normally defaults to −.</p></figcaption>
+<a href="extrude/54.png" aria-label="Open step 54 screenshot at full size">
+<img src="extrude/54.png" alt="Step 54: Restore + to extrude away from this far end. A near-end continuation normally defaults to −." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-55">
+<figcaption><span class="step">Step 55</span><p>With 8 bp, Both and Ligate adjacent selected, apply the continuation.</p></figcaption>
+<a href="extrude/55.png" aria-label="Open step 55 screenshot at full size">
+<img src="extrude/55.png" alt="Step 55: With 8 bp, Both and Ligate adjacent selected, apply the continuation." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-56">
+<figcaption><span class="step">Step 56</span><p>The selected end has been extended and the continuation has its own history entry. Unselected helices retain their previous extent.</p></figcaption>
+<a href="extrude/56.png" aria-label="Open step 56 screenshot at full size">
+<img src="extrude/56.png" alt="Step 56: The selected end has been extended and the continuation has its own history entry. Unselected helices retain their previous extent." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-10"><h2>Deformed-end continuation: current limitation</h2><p>For a bent or twisted source, show Deformed View, right-click an end and choose Extrude. The tool uses the local deformed frame and locks From to the source. However, the current backend places new cells using honeycomb coordinates even for a square source, and its request does not carry the strand-filter/ligation controls. This square-lattice guide therefore demonstrates entry and Cancel only. Do not treat the square deformed-continuation result as verified. GUIDE-UX-004 tracks the gap; the feature remains partially covered until it is resolved and a successful continuation is demonstrated. We add a small 10° Bend through the normal UI to show the entry point; this is geometric CAD deformation, not physical relaxation.</p><figure id="step-57">
+<figcaption><span class="step">Step 57</span><p>Right-click the marked far-end ring, then choose Bend from its menu.</p></figcaption>
+<a href="extrude/57.png" aria-label="Open step 57 screenshot at full size">
+<img src="extrude/57.png" alt="Step 57: Right-click the marked far-end ring, then choose Bend from its menu." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-58">
+<figcaption><span class="step">Step 58</span><p>Choose Bend to prepare the deformed-end example.</p></figcaption>
+<a href="extrude/58.png" aria-label="Open step 58 screenshot at full size">
+<img src="extrude/58.png" alt="Step 58: Choose Bend to prepare the deformed-end example." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-59">
+<figcaption><span class="step">Step 59</span><p>For this preparation step, use a 10° Bend. Review the selected scope and start/end planes.</p></figcaption>
+<a href="extrude/59.png" aria-label="Open step 59 screenshot at full size">
+<img src="extrude/59.png" alt="Step 59: For this preparation step, use a 10° Bend. Review the selected scope and start/end planes." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-60">
+<figcaption><span class="step">Step 60</span><p>Apply the Bend before continuing its deformed end.</p></figcaption>
+<a href="extrude/60.png" aria-label="Open step 60 screenshot at full size">
+<img src="extrude/60.png" alt="Step 60: Apply the Bend before continuing its deformed end." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-61">
+<figcaption><span class="step">Step 61</span><p>Right-click the marked far-end ring, then choose Extrude from its menu.</p></figcaption>
+<a href="extrude/61.png" aria-label="Open step 61 screenshot at full size">
+<img src="extrude/61.png" alt="Step 61: Right-click the marked far-end ring, then choose Extrude from its menu." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-62">
+<figcaption><span class="step">Step 62</span><p>Choose Extrude to continue from this end.</p></figcaption>
+<a href="extrude/62.png" aria-label="Open step 62 screenshot at full size">
+<img src="extrude/62.png" alt="Step 62: Choose Extrude to continue from this end." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-63">
+<figcaption><span class="step">Step 63</span><p>The source plane is locked in deformed continuation. This entry point is available, but square-lattice placement is not verified: stop here for this model.</p></figcaption>
+<a href="extrude/63.png" aria-label="Open step 63 screenshot at full size">
+<img src="extrude/63.png" alt="Step 63: The source plane is locked in deformed continuation. This entry point is available, but square-lattice placement is not verified: stop here for this model." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-64">
+<figcaption><span class="step">Step 64</span><p>Cancel this deformed-continuation preview. No deformed extrusion is committed in the downloadable example.</p></figcaption>
+<a href="extrude/64.png" aria-label="Open step 64 screenshot at full size">
+<img src="extrude/64.png" alt="Step 64: Cancel this deformed-continuation preview. No deformed extrusion is committed in the downloadable example." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-11"><h2>Save and troubleshoot</h2><p>The downloaded example includes the full demonstrated construction: the edited 3×6 extrusion, straight continuation and Bend preparation. The deformed-continuation preview is canceled because of the documented square-lattice limitation. Use the feature log to inspect the earlier stages. If a target is covered, drag the tool-window title bar or adjust the camera. If the footprint count is wrong, check full-circle enclosure for left-to-right box selection. If no preview appears, check for a nonzero length. If an overlap or backend error occurs, keep the pending inputs, correct the source/direction/length and retry. Cancel abandons the pending operation. Source-plane changes reset an unfinished footprint. Desktop controls are covered here; headset interactions require a separate VR guide.</p><figure id="step-65">
+<figcaption><span class="step">Step 65</span><p>Inspect the final geometry and ordered feature log. NADOC autosaves the part; use File → Save As when you need a separately named user copy.</p></figcaption>
+<a href="extrude/65.png" aria-label="Open step 65 screenshot at full size">
+<img src="extrude/65.png" alt="Step 65: Inspect the final geometry and ordered feature log. NADOC autosaves the part; use File → Save As when you need a separately named user copy." width="1920" height="1080" loading="lazy"></a>
+</figure></section>
+<footer>Offline viewing: keep this HTML file beside the extrude folder. No server or internet connection is required. <a href="#guide">Back to top ↑</a></footer>
+</main></div></body></html>

@@ -9,6 +9,8 @@ validation; see [scope and documentation](README.md#feature-overview).
 
 [Getting started](README.md#getting-started) · [Setup guide](INSTALL.md)
 
+[Illustrated guides](docs/guides/README.md) · [Guide coverage and dates](docs/guides/LEDGER.md)
+
 [Design](#design-and-editing) · [Sequences](#sequences-and-ordering) ·
 [Attachments](#overhangs-and-attachments) · [Assemblies](#assemblies-and-mechanisms) ·
 [Visualization](#visualization-and-navigation) · [Simulation](#simulation-and-analysis) ·
@@ -30,6 +32,7 @@ validation; see [scope and documentation](README.md#feature-overview).
   - Slice-plane editing
   - Helix labels
 - **Extrude**
+  - Two-step cross-section and 3D length workflow (shared picker with Sweep)
   - Fit scaffold lengths (7249/8064)
   - Length in bp/nm
   - XY/XZ/YZ origin planes

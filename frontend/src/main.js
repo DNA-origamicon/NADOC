@@ -1,3 +1,4 @@
+import { createAuthoringDisplay } from './scene/authoring_display.js'
 import { initDetachedSidebars } from './ui/detached_sidebars.js'
 import { initRecordLauncher } from './ui/record_launcher.js'
 import { dnaSilhouetteEntries } from './scene/annotation_targets.js'
@@ -954,18 +955,6 @@ async function main() {
     scene, camera, canvas, controls, store, selectionManager, assemblyRenderer, rightSidebar,
     persistence: { load: api.getDimensions, save: api.changeDimensions, capture: api.captureDimensionContext }, showToast,
   })
-
-  // One-time hint about selection modifiers and the CAD-style Dimensions mode.
-  const _SEL_HINT_KEY = 'nadoc.hint.selModifiers.v1'
-  if (!localStorage.getItem(_SEL_HINT_KEY)) {
-    setTimeout(() => {
-      showToast(
-        'Selection: D = dimensions · Shift-click = add to selection · Left-drag = box selection',
-        { duration: 8000 },
-      )
-      localStorage.setItem(_SEL_HINT_KEY, '1')
-    }, 1500)
-  }
 
   const selectionHud = initSelectionHud({ store, selectionManager, selectedCrossoverRefs })
   const _updateSelectionHud = selectionHud.update
@@ -2386,10 +2375,11 @@ async function main() {
   // Owns #extrude-panel visibility, the "Extrude from" origin-plane dropdown, and
   // the tool lifecycle. Replaces the retired workspace.js plane-picker as the entry
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
-  _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
+  const beginAuthoringDisplay = createAuthoringDisplay({ getRoots: () => [designRenderer.getHelixCtrl()?.root, unfoldView.getArcRoot()], addFrameCallback, removeFrameCallback })
+  _extrudePanel = initExtrudePanel({ beginAuthoringDisplay, store, slicePlane, expandedSpacing, getCamera: getRenderCamera, getControls: getActiveControls, canvas })
   const extrudeHistoryEditor = createExtrudeHistoryEditor({ store, api, slicePlane, panel: _extrudePanel, getCamera: getRenderCamera, getControls: getActiveControls, setPreviewHelices: ids => { designRenderer.setPreviewHelices(ids); unfoldView.setPreviewHelices(ids) }, showToast })
   initSavedSweepWarnings(scene,store,{canvas,getCamera:getRenderCamera,addFrameCallback,removeFrameCallback,getHelixCtrl:()=>designRenderer.getHelixCtrl()})
-  const sweepPanel = initSweepPanel({ setPreviewHelices: ids => { designRenderer.setPreviewHelices(ids); unfoldView.setPreviewHelices(ids) }, store, api, slicePlane, scene, extrudePanel: _extrudePanel, expandedSpacing, showToast, getDocId, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
+  const sweepPanel = initSweepPanel({ beginAuthoringDisplay, setPreviewHelices: ids => { designRenderer.setPreviewHelices(ids); unfoldView.setPreviewHelices(ids) }, store, api, slicePlane, scene, extrudePanel: _extrudePanel, expandedSpacing, showToast, getDocId, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
   initLinearPatternPanel({ store, showToast, selectionManager, scene })
   initCircularPatternPanel({ store, showToast, selectionManager, scene, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
 

@@ -1,3 +1,4 @@
+import { createCrossSectionWorkflow, CROSS_SECTION_HELP } from './cross_section_workflow.js'
 import { createToolPopup } from './tool_popup.js'
 import { initSweepPoints } from './sweep_points.js'
 import { createSweepPreview } from '../scene/sweep_preview.js'
@@ -5,12 +6,12 @@ import { resolveExtrudeSourcePlane } from './extrude_source_plane.js'
 import { createSweepHistoryEditor, isNativeSweepFeature, SWEEP_HISTORY_EDITOR_ENABLED } from '../app/sweep_history_editor.js'
 import './sweep_panel.css'
 
-export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, expandedSpacing, showToast, getDocId = () => null, setPreviewHelices, canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, historyEnabled = SWEEP_HISTORY_EDITOR_ENABLED, createHistoryEditor = createSweepHistoryEditor }) {
+export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, expandedSpacing, showToast, getDocId = () => null, setPreviewHelices, beginAuthoringDisplay, canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, historyEnabled = SWEEP_HISTORY_EDITOR_ENABLED, createHistoryEditor = createSweepHistoryEditor }) {
   const panel = document.createElement('div')
   panel.id = 'sweep-panel'; panel.className = 'panel-section'; panel.style.display = 'none'
   panel.innerHTML = `<h2>Sweep</h2>
-    <p id="sweep-step" role="status">Step 1/2 · Select lattice cells</p>
-    <div id="sweep-footprint"><fieldset class="tool-section"><legend>Extrude from source</legend>
+    <p id="sweep-step" role="status">Step 1/2 · Select cross-section</p>
+    <div id="sweep-footprint"><p class="tool-help">${CROSS_SECTION_HELP}</p><fieldset class="tool-section"><legend>Extrude from source</legend>
       <div class="def-row"><label for="sweep-source">From</label><select id="sweep-source"><option value="">New bundle</option></select></div>
       <div class="def-row"><label for="sweep-plane">Plane</label><select id="sweep-plane"><option>XY</option><option>XZ</option><option>YZ</option></select></div>
       <p class="tool-help" id="sweep-count">Select cells on the lattice plane.</p>
@@ -28,6 +29,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
   const el = id => panel.querySelector(`#sweep-${id}`)
   const sourceSelect = el('source'), planeSelect = el('plane'), status = el('status'), apply = el('apply')
   const popup = createToolPopup({ panel, title: 'Sweep', onClose: hide })
+  const workflow = createCrossSectionWorkflow({ slicePlane, getCamera, getControls, canvas, popup, beginAuthoringDisplay })
   const preview = createSweepPreview(scene, { setPreviewHelices, canvas, getCamera, getControls, addFrameCallback, removeFrameCallback,
     onSelect: index => editor.select(index), onOrient: (index, value) => editor.orient(index, value), canOrient: index => !busy && !locked && editor.canOrient(index), canMove: index => !busy && !locked && editor.canMove(index), onMove: (index, value) => editor.move(index, value) })
   const editor = initSweepPoints(el('point-editor'), () => {
@@ -61,7 +63,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     el('conflicts').hidden = true; el('conflicts').open = false
     store.setState({ sweepActive: false })
     preview.clear(); if (session) preview.setPrivateDisplayLayer(null)
-    popup.hide()
+    workflow.close(); popup.hide()
     if (!session || session.isPickerCurrent?.() !== false) {
       slicePlane.hide()
       slicePlane.setPreviewEnabled(previousPreview)
@@ -148,9 +150,10 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
   function setStep(value) {
     step = value; epoch++; clearTimeout(timer); preview.clear()
     el('footprint').hidden = step !== 1; el('path').hidden = step !== 2; el('info').hidden = step !== 2
-    el('step').textContent = step === 1 ? 'Step 1/2 · Select lattice cells' : 'Step 2/2 · Define sweep path'
+    el('step').textContent = step === 1 ? 'Step 1/2 · Select cross-section' : 'Step 2/2 · Define sweep path'
     el('cancel').textContent = step === 1 ? 'Cancel' : 'Previous'
     apply.textContent = step === 1 ? 'Next' : 'Confirm'
+    workflow.setStep(step)
     if (step === 2) {
       editor.setOrientations(editor.getOrientations(), !!source && !detachedSource)
       updatingPicker = true; slicePlane.hide(); updatingPicker = false
@@ -332,7 +335,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
         el('footprint').hidden = true; el('path').hidden = false; el('info').hidden = false
         el('step').textContent = 'Step 2/2 · Define sweep path'; el('cancel').textContent = 'Previous'; apply.textContent = 'Apply'; apply.disabled = true
         updatingPicker = true; slicePlane.hide(); updatingPicker = false
-        popup.setTitle('Edit Sweep'); popup.show(); store.setState({ sweepActive: true })
+        popup.setTitle('Edit Sweep'); popup.show(); workflow.setStep(2); store.setState({ sweepActive: true })
       },
       updatePreview: ownedPreview, setStatus: ownedState, close: closeLocal,
     } })
@@ -364,5 +367,5 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     changeSource()
   }
   return { activate, activateFromEnd, edit, hide, isActive: () => active || !!owner?.active(),
-    dispose() { owner?.dispose(); closeLocal(); unsubscribe?.(); unsubscribeSelection?.(); preview.dispose(); popup.dispose(); document.removeEventListener('click', otherTool, true); menu?.removeEventListener('click', launch); window.removeEventListener('keydown', escape) } }
+    dispose() { owner?.dispose(); closeLocal(); unsubscribe?.(); unsubscribeSelection?.(); preview.dispose(); workflow.dispose(); popup.dispose(); document.removeEventListener('click', otherTool, true); menu?.removeEventListener('click', launch); window.removeEventListener('keydown', escape) } }
 }

@@ -1,0 +1,24 @@
+{
+  "guide": "extrude",
+  "source_revision": "496f6b3ea3e2ee61d80d3239f8d1332ce2440b92",
+  "source_worktree_dirty": true,
+  "publication": {
+    "status": "verified",
+    "commands": 3,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1,
+    "path": "example.nadoc",
+    "sha256": "1e09c9566abb7a2bfa957e3c27cbdf295cef1672b6931eebf1f1a184f078b49b"
+  },
+  "reopened_audit": {
+    "status": "verified",
+    "commands": 3,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1
+  },
+  "interaction": "Real browser input; rendered cell positions are read-only observations"
+}
