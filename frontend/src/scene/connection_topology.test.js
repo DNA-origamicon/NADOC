@@ -40,3 +40,16 @@ describe('rendered connection topology signatures', () => {
     )).toBe(false)
   })
 })
+
+it('rebuilds cross-helix arcs when undo restores an overhang root, with unchanged crossover records', () => {
+  const design = root => ({ crossovers: [], forced_ligations: [], strands: [{ id: 'QD_OH1', domains: [
+    { helix_id: 'parent', start_bp: 1208, end_bp: 1223, direction: 'FORWARD' },
+    { helix_id: 'overhang', start_bp: root, end_bp: 1209, direction: 'REVERSE' },
+  ] }] })
+  const before = design(1223), broken = design(1218)
+  expect(sameConnectionTopology(before, broken)).toBe(false)
+  expect(sameConnectionTopology(broken, before)).toBe(false)
+  const tipOnly = design(1223)
+  tipOnly.strands[0].domains[1].end_bp = 1214
+  expect(sameConnectionTopology(before, tipOnly)).toBe(true)
+})

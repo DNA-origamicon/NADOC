@@ -27,6 +27,22 @@ export const sameForcedLigationTopology = (leftDesign, rightDesign) =>
   JSON.stringify((leftDesign?.forced_ligations ?? []).map(s => selfClosingPolymerSeam(leftDesign, s))) ===
   JSON.stringify((rightDesign?.forced_ligations ?? []).map(s => selfClosingPolymerSeam(rightDesign, s)))
 
+// Strand-domain transitions also own rendered arcs. A root can move while
+// its explicit crossover record stays unchanged; undo must rebuild that arc.
+const strandJunctions = design => (design?.strands ?? []).flatMap(strand => {
+  const domains = strand.domains ?? []
+  return domains.slice(1).flatMap((next, i) => {
+    const previous = domains[i]
+    if (previous.helix_id === next.helix_id) return []
+    return [[strand.id, previous.helix_id, previous.end_bp, previous.direction,
+      next.helix_id, next.start_bp, next.direction]]
+  })
+})
+
+export const sameStrandJunctionTopology = (leftDesign, rightDesign) =>
+  JSON.stringify(strandJunctions(leftDesign)) === JSON.stringify(strandJunctions(rightDesign))
+
 export const sameConnectionTopology = (leftDesign, rightDesign) =>
   sameCrossoverTopology(leftDesign, rightDesign) &&
-  sameForcedLigationTopology(leftDesign, rightDesign)
+  sameForcedLigationTopology(leftDesign, rightDesign) &&
+  sameStrandJunctionTopology(leftDesign, rightDesign)

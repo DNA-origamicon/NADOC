@@ -33,9 +33,9 @@ def _counter(monkeypatch):
     calls = {"n": 0}
     orig = seqmod.assign_staple_sequences
 
-    def _counted(design):
+    def _counted(design, **kwargs):
         calls["n"] += 1
-        return orig(design)
+        return orig(design, **kwargs)
 
     monkeypatch.setattr(seqmod, "assign_staple_sequences", _counted)
     yield calls
@@ -97,15 +97,19 @@ def test_connection_creation_flow_re_derives_once_not_thrice(_counter, monkeypat
     )
     _counter["n"] = 0
 
-    client.patch(
+    # Preserve the fixture’s 16-bp root separation; shortening both shared-helix
+    # domains to 8 bp cannot form this duplex without moving a covalent root.
+    response = client.patch(
         f"/api/design/overhang/{a}",
-        json={"sequence": "ACGTACGT", "defer_reassign": True},
+        json={"sequence": "ACGTACGTACGTACGT", "defer_reassign": True},
     )
-    client.patch(
+    assert response.status_code == 200, response.text
+    response = client.patch(
         f"/api/design/overhang/{b}",
-        json={"sequence": "ACGTACGT", "defer_reassign": True},
+        json={"sequence": "ACGTACGTACGTACGT", "defer_reassign": True},
     )
-    client.post(
+    assert response.status_code == 200, response.text
+    response = client.post(
         "/api/design/connection-versions",
         json={
             "overhang_a_id": a,
@@ -113,7 +117,9 @@ def test_connection_creation_flow_re_derives_once_not_thrice(_counter, monkeypat
             "connection_type": "root-to-root",
         },
     )
+    assert response.status_code == 201, response.text
     vid = design_state.get_or_404().connection_versions[-1].id
-    client.post(f"/api/design/connection-versions/{vid}/apply")
+    response = client.post(f"/api/design/connection-versions/{vid}/apply")
+    assert response.status_code == 200, response.text
 
     assert _counter["n"] == 1, f"expected one staple re-derivation, got {_counter['n']}"

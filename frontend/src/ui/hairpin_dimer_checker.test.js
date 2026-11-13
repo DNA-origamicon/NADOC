@@ -180,3 +180,17 @@ describe('initHairpinDimerChecker — generation auto-check', () => {
     expect(clean.deps.showToast).not.toHaveBeenCalled()
   })
 })
+
+it('keeps the sequence indicator through the debounce and delayed recheck response', async () => {
+  document.body.innerHTML = ''; localStorage.clear()
+  let release
+  const { checker, deps } = setup({ active: true, response: () => new Promise(resolve => { release = resolve }) })
+  const indicator = () => document.querySelector('#overhang-sequence-activity')
+  expect(indicator().style.display).toBe('flex')
+  await vi.waitFor(() => expect(deps.checkHairpinDimer).toHaveBeenCalledOnce())
+  expect(indicator().style.display).toBe('flex')
+  release(makeReport())
+  await flush()
+  expect(indicator().style.display).toBe('none')
+  checker.destroy()
+})

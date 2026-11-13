@@ -1575,3 +1575,31 @@ Review collapse-header affordances and View Actions label legibility at unusuall
 narrow sidebar widths and nondefault UI scale. Browser checks cover keyboard
 activation, reload persistence, mirrored cards and uniform button metrics; a
 rendered default-width screenshot was inspected during implementation.
+
+### MV-66 — QD_OH1 sequence resize and undo arc restoration (PENDING, 2026-11-12)
+
+In VoltronCoreArmV2, shorten the 3′ QD_OH1 sequence, then Undo and Redo. Its
+root at h_XY_17_25[1223] must remain fixed; only the free end moves, and the
+crossover arc must restore immediately. Verify Full and cylinder views and
+both Overhangs/spreadsheet entry points. Backend real-file diagnosis and native
+process replay pass; renderer-subscriber tests cover stale-junction invalidation.
+The isolated browser now exercises the real file through sequence shortening and
+Undo (including the menu), checks restored endpoints, and verifies subsecond
+visible response in three final samples; a rendered screenshot was inspected.
+Redo now also has menu/API browser coverage, six subsecond post-fix measurements,
+and an inspected rendered screenshot. Full/cylinder and both editing entry points
+remain pending.
+The broad smoke suite is blocked by the active-NAMD guard; no override used.
+
+
+### MV-67 — Sequence activity feedback across editor surfaces (PENDING, 2026-11-12)
+
+ISSUE-192 adds shared nonblocking sequence-work tracking. The 3D spreadsheet
+browser exercise covers rapid queued edits and preservation of an unfinished draft;
+queue/indicator/recheck tests cover overlapping work and delayed checks. Manually
+review the same indicator from the Overhangs Set/Gen controls, Connections,
+Domain Designer sub-domain overrides, and 2D spreadsheet while changing drafts.
+Confirm placement at narrow widths and that a failed edit clears activity while
+retaining the ordinary error message. Shared request/lifecycle code and existing
+editor regressions cover these routes, but those visual entry points have not all
+been individually driven in the browser this session.

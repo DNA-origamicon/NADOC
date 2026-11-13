@@ -990,15 +990,19 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   subscribe((newState, prevState) => {
     const geometryChanged = newState.currentGeometry !== prevState.currentGeometry
     const designChanged   = newState.currentDesign   !== prevState.currentDesign
+    const designerClosed = prevState.domainDesigner?.modalActive && !newState.domainDesigner?.modalActive
 
-    if (!geometryChanged && !designChanged) return
+    // The helix renderer defers its rebuild while Domain Designer is open.
+    // Consume its refreshed connections on close, even without another edit.
+    if (newState.domainDesigner?.modalActive) return
+    if (!geometryChanged && !designChanged && !designerClosed) return
 
     // Skip arc rebuild for topology-preserving design changes (cluster-transform patches,
     // config saves, camera-pose updates, etc.).  These patch currentDesign without touching
     // geometry, so backbone_position values are stale — rebuilding arcs would reset their
     // endpoints to the pre-animation positions, undoing whatever applyClusterArcUpdate set.
     // Same guard as design_renderer.js.
-    if (designChanged && !geometryChanged) {
+    if (designChanged && !geometryChanged && !designerClosed) {
       const p = prevState.currentDesign, n = newState.currentDesign
       if (p && n &&
           p.helices.length      === n.helices.length      &&

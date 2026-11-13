@@ -1,3 +1,4 @@
+import { createSequenceDraftGuard } from './sequence_draft_guard.js'
 /**
  * Overhang sequences panel — collapsible sidebar list of every overhang on the
  * design, with editable Name + Sequence, a "Gen" button (Johnson et al. random
@@ -176,7 +177,11 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
   let _rowsByOverhangId = new Map()
   let _warningHosts = new Map()
 
+  const sequenceDraftGuard = createSequenceDraftGuard(list)
   function _rebuildPanel(design) {
+    sequenceDraftGuard(design?.id, () => _rebuildPanelContents(design))
+  }
+  function _rebuildPanelContents(design) {
     const overhangs = sortOverhangsForDisplay(liveOverhangs(design))
     _rowsByStrandId = {}
     _rowsByOverhangId = new Map()
@@ -246,6 +251,7 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
       // 3' positions render as 'N' instead of leaving the row looking fully defined.
       const domainLen = overhangDomainLength(design, ovhg.id) ?? undefined
       const seqInput = document.createElement('input')
+      seqInput.dataset.overhangSequence = ovhg.id
       seqInput.type        = 'text'
       seqInput.placeholder = 'Sequence…'
       seqInput.value       = assembleOverhangSequence(ovhg, domainLen)

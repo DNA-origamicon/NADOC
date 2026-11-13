@@ -58,7 +58,9 @@ describe.each(['workspace', 'assembly part'])('overhang Gen autosave: %s', (dest
     ['Gen reverse complement', () => patchOverhang('oh1', { sequence: 'ACGT' })],
   ])('%s persists the changed design through the normal save path', async (_label, generate) => {
     partContext = destination === 'assembly part' ? { instanceId: 'i1' } : null
-    await generate()
+    const updating = generate()
+    await vi.advanceTimersByTimeAsync(40) // sequence completion includes two rendered frames
+    await updating
     expect(store.getState().currentDesign.overhangs[0].sequence).toBe('ACGT')
     expect(store.getState().currentDesign.strands[0].sequence).toBe('ACGT')
     await vi.advanceTimersByTimeAsync(1500)

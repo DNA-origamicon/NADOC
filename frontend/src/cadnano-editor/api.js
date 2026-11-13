@@ -1,3 +1,4 @@
+import { createSequenceWork } from '../api/sequence_work.js'
 /**
  * Minimal API client for the cadnano editor.
  *
@@ -20,6 +21,8 @@ const _historyRevisions = createDesignRevisionTracker()
 
 const _extensionDocuments = createDocumentRequestScope()
 if (import.meta.hot) import.meta.hot.dispose(() => _extensionDocuments.dispose())
+
+const runSequenceWork = createSequenceWork(() => JSON.stringify([getDocId(), editorStore.getState().design?.id, _extensionDocuments.capture()]))
 
 const BASE = '/api'
 
@@ -445,7 +448,7 @@ export async function getStrandSequenceContext(strandId) {
   return _request('GET', `/design/strand/${encodeURIComponent(strandId)}/sequence-context`)
 }
 
-export async function patchOverhang(overhangId, { sequence = undefined, label = undefined } = {}) {
+async function _patchOverhang(overhangId, { sequence = undefined, label = undefined } = {}) {
   const body = {}
   if (sequence !== undefined) body.sequence = sequence
   if (label    !== undefined) body.label    = label
@@ -478,7 +481,7 @@ export async function checkHairpinDimer(body = {}) {
 
 /** Generate a rare, structure-safe sequence for a single overhang via
  *  the Johnson et al. 5-mer scoring algorithm. */
-export async function generateOverhangRandomSequence(overhangId) {
+async function _generateOverhangRandomSequence(overhangId) {
   const json = await mutate(req =>
     req('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random`)
   )
@@ -811,3 +814,11 @@ export const featureLogAPI = createFeatureLogAPI({ store: createFeatureLogStore(
   documentRequests: _extensionDocuments, mutate,
   syncDesign: json => { const result = _applyDesignResponse(json, { emit: true, source: 'feature-log' }); _absorbAuxFields(json); return result },
 })
+
+export function patchOverhang(id, patch = {}) {
+  return patch.sequence === undefined ? _patchOverhang(id, patch)
+    : runSequenceWork(`overhang:${id}`, () => _patchOverhang(id, patch))
+}
+export function generateOverhangRandomSequence(id) {
+  return runSequenceWork(`generate:${id}`, () => _generateOverhangRandomSequence(id))
+}

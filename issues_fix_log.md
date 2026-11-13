@@ -1,5 +1,131 @@
 # Issues fix log
 
+## ISSUE-192 — Nonblocking sequence-work spinner and scoped geometry (2026-11-12)
+
+Subsecond follow-up: removed the redundant FastAPI response traversal, hash only
+history bodies actually transmitted, reuse exact serialized recovery entries,
+and avoid visibility notifications when the hidden sets have not changed.
+Same-length sequence-only changes now reuse geometry after proving every other
+model field equal. Targeted staple assignment derives only requested strands;
+a bounded immutable scaffold lookup is keyed by complete sequence, traversal,
+loop/skip and reference precedence inputs, with fresh mutable results for callers.
+No history bodies, validation checks, or completion paints were removed.
+
+The target is **not yet met for resizing**: the latest browser samples are
+**1448.3, 1357.0, 1441.0 ms** for growth/shrinks and **981.2 ms** for a same-length
+substitution. Backend profiling fell from 602.7 to 366.0 ms, but native rendering
+under concurrent NAMD load (GPU observed at 99%) still adds roughly 360 ms for
+completion paint; deferred scene consolidation also overlaps subsequent edits.
+The camera is explicitly framed outside timing in this follow-up, so comparisons
+to earlier unframed samples are diagnostic, not a controlled A/B claim.
+Final repeat: **1107.3, 1165.2, 1648.1, 1150.2 ms**. Even the same-length
+981 ms result was not repeatable; no subsecond acceptance claim. Inspected both
+the live spinner/editable draft screenshot and the framed completed scene.
+Validation: FAST **20,844 passed, 90 skipped**; frontend **10,455 passed,
+1 skipped**; final browser **1 passed** with source-file hash unchanged; lint
+and whitespace checks passed. Browser teardown removed its output and scratch
+artifacts. `main.js` LOC delta remains 0. Removed completed test
+scratch after process-reference checks: 2,775,022,674 logical bytes.
+Evidence: `.development-artifacts/sequence-subsecond-20261112/`. Failed fixture
+setup tests and all slower browser samples are retained in the logs.
+
+
+- [x] Track sequence writes, queued replacements, geometry application/final paint,
+  generated-sequence checks, and live-check debounce/request lifetimes with a shared
+  nonmodal spinning indicator. Keep sequence controls editable; suppress duplicate
+  request popups for the owned work.
+- [x] Serialize authoring writes and coalesce only unsent drafts; discard queued
+  work after document reset. Preserve active drafts and Set buttons in main/2D
+  spreadsheets and the Overhangs panel. Domain Designer retains its existing
+  in-place annotation updates. Explicit sequence writes can pass passive reads.
+- [x] Embed scoped geometry in the sequence response instead of rebuilding the old
+  scene, fetching full geometry, and rebuilding again. Same-length edits refresh
+  affected sequence-dependent strands. Posed/complex designs retain full fallback.
+
+Validation: FAST backend **20,842 passed, 90 skipped**; frontend **10,452 passed,
+1 skipped**; focused backend **12 passed**; final browser **1 passed**; lint and
+whitespace checks passed. The browser uses real spreadsheet Enter/blur gestures,
+proves the middle unsent draft is not written, preserves a further unfinished
+seven-base draft through both responses, and checks spinner completion. Inspected
+its actual rendered wheel and editable QD_OH1 cell. The read-only source hash matched
+before/after the browser run (the user's current file has a seven-base QD_OH1).
+
+Natural completion samples with the spreadsheet open: **1661.2, 1591.7, 1595.4,
+1845.8 ms** (growth/shrinks/same-length substitution, including final paint).
+Earlier full-geometry traces were 3545–5198 ms; these are diagnostic comparisons,
+not a controlled same-state A/B guarantee under active NAMD. No checks were removed.
+The first two browser attempts exposed welcome-screen spreadsheet hiding in the
+API-load test setup; corrected observation setup, retained failure/interruption logs.
+Early frontend failures included stale modules during edits and fake-clock tests
+not advancing paint; the final clean run passed. Remaining visual-surface review:
+MV-67. Broad smoke refused by active-NAMD guard; no override used.
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+Removed completed pytest artifacts after process-reference checks (5,550,331,213
+logical bytes); Playwright's standard teardown/report cleanup removed browser
+artifacts. Evidence: `.development-artifacts/overhang-sequence-feedback-20261112/`.
+`main.js` LOC delta: 0.
+
+## ISSUE-191 — Subsecond visible QD_OH1 undo (2026-11-12)
+
+Redo follow-up: retained only the preceding history request's original entries
+within the same document scope/design, so redo can acknowledge an edit body
+removed from the current history by undo. Current same-ID bodies take precedence;
+retained entries never enter the authored document. Added isolation, bounded
+retention and exact recovery-body tests. Initial redo was 990.4/1062.0/986.8 ms.
+After the fix: **687.5/905.4/899.1 ms**, then **927.8/892.2/918.6 ms** in the
+visual-review run. Both runs include a Redo-menu sample; all six are <1,000 ms
+through two animation frames. Root/free end 1223/1214; source hash unchanged.
+Framed and inspected the actual redo rendering, with review hold outside timing.
+Frontend **10,446 passed, 1 skipped**; focused cache **6 passed**; lint passed.
+Evidence: `.development-artifacts/qd-redo-performance-20261112/` and reusable
+`frontend/e2e/qd_overhang_undo_latency.spec.js` (undo/redo parameterized).
+
+
+- [x] Remove the previous-design deep copy, acknowledge identical recovery bodies
+  by content, and scope geometry to the changed domain's helix. Feature records
+  retain exact authored content; cache tokens live outside the records.
+- [x] Remove redundant display work, allow one undo/redo past a passive read,
+  and defer complete local recovery serialization until after the restored frame.
+- [x] Check same-ID body replacement/clearing, request-cache races, previous-state
+  immutability, partial/full geometry equivalence, and overlay visibility.
+
+Final native-GL browser measurements on the real read-only VoltronCoreArmV2 file:
+**653.9 ms, 861.9 ms, 987.6 ms** through two animation frames after restoration;
+the last sample uses the Undo menu. All three pass the strict <1,000 ms assertion.
+The restored root/free end are 1223/1209. Inspected the framed rendered screenshot;
+source SHA-256 unchanged. Earlier runs exceeded a second, including a 1,096 ms
+sample after the interactive-lane fix under active NAMD load; these results are
+retained, so this is measured attainment, not a worst-case latency guarantee.
+Browser artifacts cleaned by the standard reporter. Completed broad-test temporary
+files removed after process-reference checks (5,550,048,281 logical bytes).
+Evidence: `.development-artifacts/qd-undo-performance-20261112/`.
+Validation: FAST backend **20,840 passed, 90 skipped**, with one verification
+HTTP 408 (0.5-second deadline under active NAMD); that exact test **passed in
+isolation**. Final history-body checks **5 passed**. Frontend **10,444 passed,
+1 skipped**; focused browser **1 passed**, lint and whitespace checks passed.
+Broad smoke refused by the active-NAMD guard; no override. Full backend deferred:
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+`main.js` LOC delta: 0.
+
+## ISSUE-190 — Preserve overhang roots and refresh undo connections (2026-11-12)
+
+- [x] Scope sequence resizing to the selected overhang's terminal domain; retain
+  shared helix occupancy and dedicated-root position/orientation.
+- [x] Include strand junctions in connection invalidation, so undo/redo rebuilds
+  arcs immediately even when crossover IDs and counts remain unchanged.
+
+Validation: FAST backend **20,835 passed** (90 skipped); frontend **10,435 passed**
+(1 skipped); lint passed. App exercise remains MV-66 (active-NAMD smoke guard).
+Full suite deferred without a test session. Saved/reopened native history audits pass.
+Disposable pytest output removed after process-reference checks (5,550,079,208
+logical bytes); compact logs/diagnosis retained under `.development-artifacts/qd-oh1-resize-20261112/`.
+
 ## ISSUE-189 — Late Slurm stderr inventory (2026-11-12)
 
 - [x] Recheck mismatching downloaded files against fresh remote sizes; preserve

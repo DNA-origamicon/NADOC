@@ -6,6 +6,29 @@ type: project
 
 # Overhang sub-domains + Domain Designer
 
+## Sequence resize root ownership (2026-11-12)
+
+Sequence edits now determine the free terminus from the selected overhang's
+own strand domain. A shared helix must not use its first crossover as every
+handle's root or shrink to one handle's length. Dedicated helices retain root
+position and helical phase while their origin changes; one-base shrink/regrowth
+uses domain direction. Nonterminal overhangs have no free end to resize.
+VoltronCoreArmV2 QD_OH1 diagnostic: 15→10 bases keeps root 1223 and moves free
+end 1209→1214, with zero root axis/phase displacement and unchanged crossover
+records. Existing user file was not rewritten. Native regression structures use
+recorded bundle/extrusion/sequence commands and guarded publication/replay.
+
+Undo already restored backend state exactly. Renderer connection signatures now
+include strand-domain junction endpoints, and partial patch/overlay paths decline
+junction changes so persistent crossover arcs refresh. Closing Domain Designer also
+refreshes arcs after its deferred helix rebuild, including a queued undo. Browser validation remains
+MV-66 while the active-NAMD guard blocks smoke. Validation: FAST backend
+20,835 passed (90 skipped), frontend 10,435 passed (1 skipped), lint passed;
+broad FULL suite remains deferred without a test session. Metadata-only patches
+do not resize from an existing sequence-length mismatch. The legacy connection
+reassignment test now retains its 16-bp root separation: its former 8-bp duplex
+only fitted because the old resize incorrectly moved a covalent root.
+
 ## Topic navigation and current boundaries
 
 Reorganized October 17, 2026. Read the retained contracts here, then only the
@@ -133,3 +156,16 @@ routine loop.
 Both geometry entry points are fully wired — `apply_overhang_rotation_if_needed` ←
 `design_geometry.py:397/761`, `crud.py:5478`; `_apply_ovhg_rotations_to_axes` ← `crud.py:403/410/1295`,
 `routes_blade.py:357` — so items 3 and 4 are about a live path, not a dormant one.
+
+
+## Sequence work feedback (2026-11-12, ISSUE-192)
+
+Sequence writes in the main/2D spreadsheets, Overhangs/Connections panels and
+Domain Designer share nonmodal activity tracking (`sequence_activity.js`) through
+geometry application/paint and scheduled hairpin/dimer checks. A scoped queue
+serializes writes and replaces only unsent sequence drafts. Focused spreadsheet
+and Overhangs-panel drafts defer refresh until focus leaves the edit controls;
+Domain Designer retains its existing in-place annotation updates. The canonical
+sequence PATCH now returns embedded geometry, partial for local identity-pose
+resizes and sequence replacements, with conservative full-geometry fallback.
+No authored geometry algorithm or sequence check was removed.

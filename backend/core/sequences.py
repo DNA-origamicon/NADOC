@@ -389,23 +389,15 @@ def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], list[s
     if not scaffolds:
         return {}
 
-    ls_map = _build_loop_skip_map(design)
-    base_map: dict[tuple[str, int, str], list[str]] = {}
-    for scaffold in scaffolds:
-        seq_iter = iter(scaffold.sequence or "")
-        for domain in scaffold.domains:
-            h = domain.helix_id
-            d_val = domain.direction.value
-            for bp in domain_bp_range(domain):
-                delta = ls_map.get((h, bp), 0)
-                if delta <= -1:
-                    continue  # skip -- no nucleotide
-                n_copies = delta + 1
-                bases_at_bp = [next(seq_iter, "N") for _ in range(n_copies)]
-                # Active scaffolds are visited first and win any overlap.
-                base_map.setdefault((h, bp, d_val), bases_at_bp)
+    from backend.core.scaffold_sequence_cache import scaffold_base_entries
 
-    return base_map
+    inputs = tuple((s.sequence or "", tuple(
+        (d.helix_id, d.direction.value, tuple(domain_bp_range(d))) for d in s.domains
+    )) for s in scaffolds)
+    entries = scaffold_base_entries(inputs, tuple(_build_loop_skip_map(design).items()))
+    # Callers may extend maps with native templates or mutate returned lists;
+    # neither may alter the cached scaffold authority.
+    return {key: list(bases) for key, bases in entries}
 
 
 def build_scaffold_index_map(design: Design) -> list[tuple[str, int, str]]:
@@ -572,7 +564,7 @@ def strand_partner_bases(
     return partners
 
 
-def assign_staple_sequences(design: Design) -> Design:
+def assign_staple_sequences(design: Design, *, strand_ids: set[str] | None = None) -> Design:
     """Assign complementary sequences to all staple strands.
 
     Each staple base is the Watson-Crick complement of the scaffold base at
@@ -629,6 +621,9 @@ def assign_staple_sequences(design: Design) -> Design:
                 offset += span
     new_strands: list[Strand] = []
     for strand in design.strands:
+        if strand_ids is not None and strand.id not in strand_ids:
+            new_strands.append(strand)
+            continue
         if strand.is_scaffold:
             new_strands.append(strand)
             continue
@@ -784,8 +779,7 @@ def reassign_strands(design: Design, strand_ids: set[str] | list[str]) -> Design
     only ever change a handful of strands, and a whole-design rewrite silently
     destroys sequences the user typed by hand elsewhere.
 
-    Runs the full derivation (it needs global scaffold/overhang context) and then
-    copies back only the requested strands.  No-op when the scaffold carries no
+    Retains global scaffold/overhang context but derives only requested strands.  No-op when the scaffold carries no
     sequence, or on any derivation error — same tolerance as
     :func:`reassign_if_sequenced`.
     """
@@ -795,7 +789,7 @@ def reassign_strands(design: Design, strand_ids: set[str] | list[str]) -> Design
     if not _sequenced_scaffolds(design):
         return design
     try:
-        re_derived = assign_staple_sequences(design)
+        re_derived = assign_staple_sequences(design, strand_ids=wanted)
     except Exception:
         return design
 

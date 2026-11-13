@@ -101,7 +101,7 @@ def _build_overhang_patch(
             )
 
     new_seq: str | None = spec_updates.get("sequence", spec.sequence)
-    new_length_bp: int | None = len(new_seq) if new_seq else None
+    new_length_bp: int | None = len(new_seq) if sequence_was_set and new_seq else None
 
     # ── Resize policy: last sub-domain absorbs Δ; reject pathological shrink ─
     # If the sequence write changes the backing domain length, we must update
@@ -178,17 +178,31 @@ def _build_overhang_patch(
                     if domain.overhang_id == overhang_id), None)
     resize_required = backing is None or new_length_bp != abs(backing.end_bp - backing.start_bp) + 1
 
-    # For extrude-style overhangs we need the junction bp on the dedicated
-    # helix. The junction can be at the helix's low (+Z extrude) OR high
-    # (−Z extrude, axis flipped) bp end — see Bug 06.
+    # Resolve the root from this strand's terminal domain, not the first
+    # crossover on a potentially shared helix (e.g. Voltron QD_OH1).
     extrude_junction_bp: int | None = None
-    if not is_inline:
-        from backend.core.lattice import _overhang_junction_bp
-
-        extrude_junction_bp = _overhang_junction_bp(design, spec.helix_id)
+    shared_helix = any(
+        d.helix_id == spec.helix_id and d.overhang_id != overhang_id
+        for strand in design.strands for d in strand.domains
+    )
+    if new_length_bp is not None and resize_required and not is_inline:
+        owner = design.find_strand(spec.strand_id)
+        index = next((i for i, d in enumerate(owner.domains)
+                      if d.overhang_id == overhang_id), -1) if owner else -1
+        if index < 0:
+            raise HTTPException(409, detail="Overhang backing domain is missing.")
+        if len(owner.domains) > 1 and index == 0:
+            inline_end = "5p"
+        elif len(owner.domains) > 1 and index == len(owner.domains) - 1:
+            inline_end = "3p"
+        elif len(owner.domains) == 1 and overhang_id.rsplit("_", 1)[-1] in {"5p", "3p"}:
+            inline_end = overhang_id.rsplit("_", 1)[-1]
+        else:
+            raise HTTPException(409, detail="Sequence resizing requires an overhang with a free strand end.")
+        extrude_junction_bp = backing.start_bp if inline_end == "3p" else backing.end_bp
 
     if new_length_bp is not None:
-        if not is_inline and resize_required:
+        if not is_inline and not shared_helix and resize_required:
             # ── Extrude-style: resize the dedicated overhang helix ────────────
             # Keep the junction's world-space position fixed; move axis_start
             # inward/outward on the tip side. Correct for both +Z and −Z
@@ -218,11 +232,10 @@ def _build_overhang_patch(
                         }
                     )
                     break
-                helix_lo = helix.bp_start
-                helix_hi = helix.bp_start + helix.length_bp - 1
-                # Find the current tip bp (the helix endpoint that is not the junction).
-                tip_bp = helix_hi if extrude_junction_bp == helix_lo else helix_lo
-                tip_sign = 1 if tip_bp > extrude_junction_bp else -1
+                # The selected domain determines the direction toward its free tip.
+                tip_sign = 1 if backing.direction == Direction.FORWARD else -1
+                if inline_end == "5p":
+                    tip_sign = -tip_sign
                 new_tip_bp = extrude_junction_bp + tip_sign * (new_length_bp - 1)
                 new_bp_start = min(extrude_junction_bp, new_tip_bp)
                 # Junction's world position from the current axis.
@@ -241,6 +254,8 @@ def _build_overhang_patch(
                     update={
                         "length_bp": new_length_bp,
                         "bp_start": new_bp_start,
+                        "phase_offset": helix.phase_offset
+                        + (new_bp_start - helix.bp_start) * helix.twist_per_bp_rad,
                         "axis_start": Vec3(
                             x=float(new_axis_start[0]),
                             y=float(new_axis_start[1]),
@@ -267,7 +282,7 @@ def _build_overhang_patch(
                     # A sequence-content edit keeps native addresses and the
                     # complete shared helix intact; its length is not the OH's.
                     new_domain = domain
-                elif is_inline:
+                elif is_inline or shared_helix:
                     # Junction end (adjacent to scaffold) is fixed; free end moves.
                     # inline_end tells us which terminus is the free (dragged) end.
                     if inline_end == "3p":
@@ -304,49 +319,24 @@ def _build_overhang_patch(
                     )
                     if helix_idx is not None:
                         h = new_helices[helix_idx]
-                        free_bp = (
-                            new_domain.end_bp
-                            if inline_end == "3p"
-                            else new_domain.start_bp
-                        )
-                        helix_end_bp = h.bp_start + h.length_bp - 1
+                        # Include the root too: legacy shared helices can have
+                        # bounds left over from a different, shorter overhang.
+                        lo = min(h.bp_start, new_domain.start_bp, new_domain.end_bp)
+                        old_hi = h.bp_start + h.length_bp - 1
+                        hi = max(old_hi, new_domain.start_bp, new_domain.end_bp)
                         ax = h.axis_end.to_array() - h.axis_start.to_array()
                         ax_len = _math.sqrt(ax[0] ** 2 + ax[1] ** 2 + ax[2] ** 2)
                         unit = ax / ax_len if ax_len > 1e-9 else ax
-                        if free_bp < h.bp_start:
-                            extra = h.bp_start - free_bp
-                            new_start = (
-                                h.axis_start.to_array()
-                                - extra * BDNA_RISE_PER_BP * unit
-                            )
-                            new_helices[helix_idx] = h.model_copy(
-                                update={
-                                    "axis_start": Vec3(
-                                        x=float(new_start[0]),
-                                        y=float(new_start[1]),
-                                        z=float(new_start[2]),
-                                    ),
-                                    "length_bp": h.length_bp + extra,
-                                    "bp_start": free_bp,
-                                    "phase_offset": h.phase_offset
-                                    - extra * h.twist_per_bp_rad,
-                                }
-                            )
-                        elif free_bp > helix_end_bp:
-                            extra = free_bp - helix_end_bp
-                            new_end = (
-                                h.axis_end.to_array() + extra * BDNA_RISE_PER_BP * unit
-                            )
-                            new_helices[helix_idx] = h.model_copy(
-                                update={
-                                    "axis_end": Vec3(
-                                        x=float(new_end[0]),
-                                        y=float(new_end[1]),
-                                        z=float(new_end[2]),
-                                    ),
-                                    "length_bp": h.length_bp + extra,
-                                }
-                            )
+                        if lo != h.bp_start or hi != old_hi:
+                            shift = lo - h.bp_start
+                            new_start = h.axis_start.to_array() + shift * BDNA_RISE_PER_BP * unit
+                            new_end = h.axis_end.to_array() + (hi - old_hi) * BDNA_RISE_PER_BP * unit
+                            new_helices[helix_idx] = h.model_copy(update={
+                                "axis_start": Vec3(x=float(new_start[0]), y=float(new_start[1]), z=float(new_start[2])),
+                                "axis_end": Vec3(x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])),
+                                "length_bp": hi - lo + 1, "bp_start": lo,
+                                "phase_offset": h.phase_offset + shift * h.twist_per_bp_rad,
+                            })
                 else:
                     # Extrude-style: keep the junction bp fixed; move only the
                     # tip endpoint of the domain. The tip is whichever endpoint
@@ -362,12 +352,12 @@ def _build_overhang_patch(
                                 update={"start_bp": domain.end_bp + new_length_bp - 1}
                             )
                     else:
-                        if domain.start_bp == extrude_junction_bp:
-                            tip_sign = 1 if domain.end_bp > domain.start_bp else -1
+                        if inline_end == "3p":
+                            tip_sign = 1 if is_fwd else -1
                             new_tip = domain.start_bp + tip_sign * (new_length_bp - 1)
                             new_domain = domain.model_copy(update={"end_bp": new_tip})
                         else:
-                            tip_sign = 1 if domain.start_bp > domain.end_bp else -1
+                            tip_sign = -1 if is_fwd else 1
                             new_tip = domain.end_bp + tip_sign * (new_length_bp - 1)
                             new_domain = domain.model_copy(update={"start_bp": new_tip})
 

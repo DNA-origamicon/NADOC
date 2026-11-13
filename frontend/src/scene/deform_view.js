@@ -117,7 +117,9 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
 
   // ── Map builders ────────────────────────────────────────────────────────────
 
+  let _pendingStraightGeometry = null
   function _buildStraightNucleotideMaps(geometry) {
+    _pendingStraightGeometry = null
     _straightPosMap = new Map()
     _straightBnMap = new Map()
     _straightBaseMap = new Map()
@@ -149,6 +151,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   }
 
   function _applyLerp(t) {
+    if (_pendingStraightGeometry) _buildStraightNucleotideMaps(_pendingStraightGeometry)
     // Re-assert the current shaft mode every frame so it stays correct
     // across scene rebuilds (new axisArrows start with default visibility)
     // and across physics/deform-tool transitions. _shaftMode is owned by
@@ -203,6 +206,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     _active = true
     _shaftMode = 'hidden'
     designRenderer.setAxisShaftMode('hidden')
+    if (_pendingStraightGeometry) _buildStraightNucleotideMaps(_pendingStraightGeometry)
     if (_straightPosMap.size === 0) await getStraightGeometry()
     store.setState({ deformVisuActive: true })
     _animate(_currentT, 1, () => {
@@ -250,12 +254,14 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     if (!geoChanged && !axesChanged) return
 
     if (geoChanged)  {
-      _buildStraightNucleotideMaps(newState.straightGeometry)
+      if (hasEffectiveDisplayPose(newState.currentDesign)) _buildStraightNucleotideMaps(newState.straightGeometry)
+      else _pendingStraightGeometry = newState.straightGeometry
     }
     if (axesChanged) _straightAxesMap = _buildStraightAxesMap(newState.straightHelixAxes)
 
-    // Re-apply lerp at the current t so the view stays in sync.
-    _applyLerp(_currentT)
+    // Identity-pose geometry is already authoritative in the renderer. Avoid
+    // rewriting every instance twice when a response updates both geometry maps.
+    if (hasEffectiveDisplayPose(newState.currentDesign)) _applyLerp(_currentT)
   })
 
   // When currentGeometry changes (undo/redo, topology mutation, new deformation):
@@ -272,7 +278,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     if (!hasDeformations && !hasTransforms) {
       // Nothing shifts positions — straight geometry equals current geometry.
       // Build maps directly to avoid a redundant round-trip.
-      _buildStraightNucleotideMaps(newState.currentGeometry)
+      _pendingStraightGeometry = newState.currentGeometry
       _straightAxesMap = _buildStraightAxesMap(newState.currentHelixAxes)
     } else if (newState.straightGeometry !== prevState.straightGeometry
                && newState.straightGeometry) {
@@ -304,6 +310,10 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     // Keep the interpolation state in sync with the toggle.
     _currentT = _active ? 1 : 0
 
+    if (!hasDeformations && !hasTransforms) {
+      designRenderer.setAxisShaftMode(_shaftMode)
+      return
+    }
     _applyLerp(_currentT)
     // If the unfold view is active, _applyLerp above will have reset helix positions
     // to straight 3D (because it ran asynchronously after the unfold subscription

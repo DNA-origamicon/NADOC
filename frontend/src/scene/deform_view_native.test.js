@@ -21,3 +21,16 @@ it('applies the final native pose only after straight geometry is ready without 
  expect(renderer.setAxisShaftMode).toHaveBeenLastCalledWith('deformed')
  expect(store.setState).toHaveBeenLastCalledWith({deformVisuActive:true})
 })
+
+it('keeps authoritative identity geometry without rewriting every rendered nucleotide', async () => {
+  const renderer = { setAxisShaftMode: vi.fn(), applyDeformLerp: vi.fn() }
+  initDeformView(renderer)
+  const subscriptions = store.subscribe.mock.calls.map(([fn]) => fn)
+  const design = { helices: [], strands: [], deformations: [], cluster_transforms: [] }
+  const old = { currentDesign: design, currentGeometry: [], straightGeometry: [], currentHelixAxes: {}, straightHelixAxes: {} }
+  const next = { ...old, currentGeometry: [], straightGeometry: [] }
+  await subscriptions[0](next, old)
+  await subscriptions[1](next, old)
+  expect(renderer.applyDeformLerp).not.toHaveBeenCalled()
+  expect(renderer.setAxisShaftMode).toHaveBeenCalled()
+})

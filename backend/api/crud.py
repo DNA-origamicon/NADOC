@@ -278,6 +278,7 @@ def _strip_feature_log_payloads(
     for e in design_dict.get("feature_log", []):
         if e.get("id") in preserve_entry_ids:
             continue
+        e.pop("history_body_digest", None)
         for k in ("design_snapshot_gz_b64", "pre_state_gz_b64", "post_state_gz_b64"):
             if e.get(k):
                 e[k] = ""
@@ -329,7 +330,9 @@ def _design_response(
     # should_skip_geometry() (2D editor) still takes priority since that
     # client never decodes bodies at all, cold load or not.
     feature_log_partial = False
+    complete_body_ids = None
     if should_skip_geometry():
+        complete_body_ids = set()
         _strip_feature_log_payloads(design_dict)
     elif not full_feature_log:
         # Auto-detect: if THIS request's mutation just created/appended a
@@ -345,7 +348,12 @@ def _design_response(
         )
         preserve_ids = {effective_preserve_id} if effective_preserve_id else None
         _strip_feature_log_payloads(design_dict, preserve_entry_ids=preserve_ids)
+        complete_body_ids = preserve_ids or set()
         feature_log_partial = True
+    # Only transmitted bodies need acknowledgements. Ordinary edits omit the
+    # accumulated history, so hashing all of it before stripping is wasted work.
+    tag_history_bodies([entry for entry in design_dict.get("feature_log", [])
+                       if complete_body_ids is None or entry["id"] in complete_body_ids])
     # Monotonic per-document revision, captured ATOMICALLY at mutation time for a
     # mutating request (falls back to the current value for read-only GETs). The
     # client drops any design response whose revision is older than the newest
@@ -356,6 +364,7 @@ def _design_response(
         rev = design_state.revision()
     resp = {
         "design": design_dict,
+        "history_body_digests": take_history_digests(design_dict.get("feature_log", [])),
         "validation": _validation_dict(report, design),
         # Crossovers whose two halves currently resolve to the same strand
         # (would form a circular strand on ligation, so _ligate_crossover
@@ -969,7 +978,9 @@ def get_full_feature_log() -> dict:
     entries from it (``_mergeFeatureLogPayloads``). Read-only; never mutates state.
     """
     design = design_state.get_or_404()
-    return {"feature_log": design.to_dict()["feature_log"]}
+    entries = design.to_dict()["feature_log"]
+    tag_history_bodies(entries)
+    return {"feature_log": entries, "history_body_digests": take_history_digests(entries)}
 
 
 @router.get("/design/export")
@@ -1115,8 +1126,11 @@ def _design_replace_response(
     )
 
 
+from backend.api.history_response_cache import HistoryCacheRequest, reuse_history_bodies, tag_history_bodies, take_history_digests
+
+
 @router.post("/design/undo")
-def undo_design():
+def undo_design(body: HistoryCacheRequest | None = None):
     """Revert the active design to the state before the last mutation.
 
     Returns 404 if nothing to undo. Per-step wall-clock is exposed via the
@@ -1124,17 +1138,20 @@ def undo_design():
     """
     design_state.require_compatibility_write("undo")
     trace = _TimingTrace()
-    with trace.step("clone_prev"):
-        prev = design_state.get_or_404().model_copy(deep=True)
+    with trace.step("get_prev"):
+        # Undo/redo replace the active object; snapshot restoration is copy-on-write.
+        prev = design_state.get_or_404()
     with trace.step("undo"):
         design, report = design_state.undo()
     with trace.step("response"):
         payload = _design_replace_response(prev, design, report, trace)
+    with trace.step("history_cache"):
+        reuse_history_bodies(payload, body.history_body_digests if body else {})
     return trace.attach(ORJSONResponse(payload))
 
 
 @router.post("/design/redo")
-def redo_design():
+def redo_design(body: HistoryCacheRequest | None = None):
     """Re-apply the last undone mutation.
 
     Returns 404 if nothing to redo. Per-step wall-clock is exposed via the
@@ -1142,12 +1159,15 @@ def redo_design():
     """
     design_state.require_compatibility_write("redo")
     trace = _TimingTrace()
-    with trace.step("clone_prev"):
-        prev = design_state.get_or_404().model_copy(deep=True)
+    with trace.step("get_prev"):
+        # Undo/redo replace the active object; snapshot restoration is copy-on-write.
+        prev = design_state.get_or_404()
     with trace.step("redo"):
         design, report = design_state.redo()
     with trace.step("response"):
         payload = _design_replace_response(prev, design, report, trace)
+    with trace.step("history_cache"):
+        reuse_history_bodies(payload, body.history_body_digests if body else {})
     return trace.attach(ORJSONResponse(payload))
 
 
@@ -4206,6 +4226,17 @@ from backend.api.overhang_patch import (  # noqa: F401 - compatibility exports
 
 
 @router.patch("/design/overhang/{overhang_id}", status_code=200)
+def patch_overhang_endpoint(overhang_id: str, body: OverhangPatchRequest) -> Response:
+    trace = _TimingTrace()
+    with trace.step("sequence_and_geometry"):
+        payload = patch_overhang(overhang_id, body)
+    # The payload is already JSON-compatible. Avoid FastAPI recursively walking
+    # the whole design/history again before its default ORJSON serializer.
+    with trace.step("serialize_response"):
+        response = ORJSONResponse(payload)
+    return trace.attach(response)
+
+
 def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     """Update sequence and/or label of an existing OverhangSpec.
 
@@ -4253,6 +4284,9 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
             params=params,
             fn=lambda _d: updated,
         )
+        if sequence_was_set and not body.defer_reassign:
+            from backend.api.overhang_response import sequence_response
+            return sequence_response(design, updated, report)
         payload = _design_response(updated, report)
         # A label is display metadata only.  In particular, it cannot move a
         # nucleotide or alter an axis.  Advertising that fact prevents the 3D

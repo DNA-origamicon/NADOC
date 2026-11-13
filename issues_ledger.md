@@ -1,5 +1,63 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-192 — Sequence work has no continuous nonblocking feedback (2026-11-12)
+
+- [x] Shared spinner spans queued sequence writes, geometry application, the final
+  paint, generated-sequence checks, and debounced live hairpin/dimer rechecks.
+  It never captures pointer events or disables sequence fields.
+- [x] Sequence writes execute in order; a newer unsent draft supersedes an older
+  queued draft. Closed/replaced document contexts discard queued writes.
+- [x] Keep focused spreadsheet/Overhangs-panel drafts and their Set buttons alive
+  through older responses; preserve 2D editor independence and existing Domain
+  Designer/Connections focus handling.
+- [x] Return atomic partial geometry for local resizes and same-length sequence
+  changes; retain full geometry for posed/complex designs. Removes the follow-up
+  full-design geometry fetch and intermediate scene rebuild.
+- [ ] Subsecond resize completion: optimized server derivation, response/recovery
+  serialization and duplicate visibility work; latest live resize completion
+  ranges 1107–1648 ms. Same-length substitution reached 981 ms once,
+  but repeated at 1150 ms; reliable subsecond completion remains unresolved.
+- Validation and measured completion times: see fix log and
+  `.development-artifacts/overhang-sequence-feedback-20261112/`.
+
+## ISSUE-191 — QD_OH1 undo latency and passive-read head-of-line blocking (2026-11-12)
+
+- [x] Profile the real VoltronCoreArmV2 sequence edit: 55.85 MB undo response,
+  redundant deep copy, whole-owning-strand geometry footprint, duplicate display work.
+- [x] Use content-verified history body reuse (including same-ID replacement and
+  empty bodies), resolve replies against the exact acknowledged request cache,
+  and retain the prior copy-on-write design as the diff baseline.
+- [x] Stable domain ordinals bound partial geometry to changed domains: QD undo
+  updates one helix / 63 nucleotides instead of four helices / 7,107 nucleotides.
+  Partial geometry independently matches full recomputation.
+- [x] Avoid unchanged selection/visibility notifications, preserve overlay hiding,
+  compute atom visibility in one pass, lazily build identity-pose interpolation maps,
+  and serialize complete local recovery after paint (flush on pagehide).
+- [x] A slow passive read could hold an undo request for seconds before dispatch.
+  Give undo/redo one bounded interactive lane; passive transports remain serialized.
+- [x] Redo initially took 990/1,062/987 ms because undo removed the edited
+  feature from the current acknowledgement source. Retain one preceding source,
+  bounded by design/document scope, and reconstruct from that exact acknowledged
+  source. After this fix, redo measured 688/905/899 ms, including the Redo menu.
+- Browser timing is measured through the restored frame, with source-file hash
+  checked and save endpoints blocked. Logs: `.development-artifacts/qd-undo-performance-20261112/`.
+  Broad regression and final menu-path measurements are recorded in the fix log.
+
+## ISSUE-190 — Shared overhang sequence resize moves root; undo retains stale arcs (2026-11-12)
+
+- [x] QD_OH1 in VoltronCoreArmV2 shares h_XY_17_25 with other overhangs.
+  Sequence resize used the first crossover (bp 72), not its own root (bp 1223),
+  and resized the whole shared helix. Resolve the selected strand's free end,
+  preserve the root and shared helix span, and retain phase when a dedicated
+  helix's bp origin shifts. Shrink-to-one and regrowth preserve root pose.
+- [x] Undo restores backend topology exactly, but rendering guards compared
+  explicit crossover/ligation records without strand-domain junctions. Include
+  those endpoints and reject stale in-place/overlay paths on junction changes.
+  Flush persistent arcs when Domain Designer closes after deferred edits/undo.
+- Regression: both termini, shrinking/growing, saved/reopened independent replay,
+  guarded publication, exact undo/redo, and real renderer-subscriber behavior.
+  User source stays unchanged; the legacy design is diagnosis-only.
+
 ## ISSUE-189 — Late Slurm stderr makes complete downloads appear incomplete (2026-11-12)
 
 - [x] Gerling WITHOUT_EXTRA_T run created November 5 12:47: initial remote

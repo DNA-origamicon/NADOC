@@ -113,3 +113,13 @@ it('toggles nanoparticle surface and biotin DNA together', () => {
   controller.toggle({ kind: 'nanoparticle', id: 'n' })
   expect(controller.getState().items).toEqual([{ kind: 'protein', id: 'p' }])
 })
+
+it('reconciliation of unchanged refs does not publish a second selection update', () => {
+  const store = fakeStore({ selection: createSelectionState({ items: [{ kind: 'strand', id: 's' }] }) })
+  const controller = createSelectionController({ store })
+  controller.reconcile(() => true)
+  expect(store.setState).not.toHaveBeenCalled()
+  controller.reconcile(() => false)
+  expect(store.setState).toHaveBeenCalledOnce()
+  expect(controller.getState().items).toEqual([])
+})

@@ -61,6 +61,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
   let contextGeneration = 0
   let needsHydration = false
   let disposed = false
+  let notifiedVisibility = null
   let acknowledged = null
 
   const invalidateContext = () => {
@@ -70,6 +71,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     pendingPersists = 0
     needsHydration = true
     acknowledged = null
+    notifiedVisibility = null
   }
   eventTarget?.addEventListener('nadoc:document-reset', invalidateContext)
 
@@ -111,7 +113,15 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     }
     designRenderer.setHiddenNucs(all)
     designRenderer.setHiddenCrossovers(unfoldView?.setHiddenNucs?.(all) ?? new Set())
-    if (notify) onChange?.(all, new Set(hiddenClusters), new Set(hiddenPartGroups))
+    if (notify) {
+      const next = [all, hiddenClusters, hiddenPartGroups]
+      const unchanged = notifiedVisibility && next.every((set, i) =>
+        set.size === notifiedVisibility[i].size && [...set].every(key => notifiedVisibility[i].has(key)))
+      if (!unchanged) {
+        notifiedVisibility = next.map(set => new Set(set))
+        onChange?.(all, new Set(hiddenClusters), new Set(hiddenPartGroups))
+      }
+    }
     if (persist && onPersist) {
       const state = _persistedState()
       const generation = contextGeneration

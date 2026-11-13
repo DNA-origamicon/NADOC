@@ -1,3 +1,4 @@
+import { createSequenceDraftGuard } from '../ui/sequence_draft_guard.js'
 import { junctionIndex } from '../design/strand_junctions.js'
 import { selectedSequenceKeys, highlightOverhangCell } from '../ui/sequence_selection.js'
 import { strandSequenceDisplay, renderStrandSequence, strandLength } from '../ui/strand_sequence_display.js'
@@ -111,6 +112,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
   const body        = document.getElementById('spreadsheet-body')
   const theadRow    = document.getElementById('spreadsheet-thead-row')
   const tbody       = document.getElementById('spreadsheet-tbody')
+  const sequenceDraftGuard = createSequenceDraftGuard(tbody)
   const toggleBar   = document.getElementById('spreadsheet-col-toggles')
   const nameDrafts = new Map()
   const nameCommits = new Map()
@@ -258,6 +260,9 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
 
   // ── Build table body ──────────────────────────────────────────────
   function _rebuildTable(changedIds = null, selectedBases = null) {
+    sequenceDraftGuard(_design?.id, deferred => _rebuildTableContents(deferred ? null : changedIds, selectedBases))
+  }
+  function _rebuildTableContents(changedIds = null, selectedBases = null) {
     if (!isOpen) return
     selectedBases ??= selectedSequenceKeys(_design, _selectionRefs)
     _renderedSelectedBases = selectedBases
@@ -470,6 +475,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
       const input = document.createElement('input')
       input.type      = 'text'
       input.className = 'sheet-cell-input'
+      input.dataset.overhangSequence = ovhg.id
       input.value     = ovhg.sequence
       let lastVal     = input.value
 
@@ -517,6 +523,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
     label.style.cursor = 'text'
 
     const editInput = document.createElement('input')
+    editInput.dataset.overhangSequence = ovhg.id
     editInput.type        = 'text'
     editInput.className   = 'sheet-cell-input'
     editInput.placeholder = overhangLen ? `N\xd7${overhangLen}` : 'sequence…'

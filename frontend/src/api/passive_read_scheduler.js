@@ -33,7 +33,16 @@ export function createPassiveReadScheduler({ maxPending = 4, maxSubscribers = 16
   }
   function pump() {
     scheduled = false
-    if (passive) return
+    if (passive) {
+      // One explicit history gesture may pass a slow background read. Keep
+      // that read's lane occupied and never fan out urgent writes.
+      const index = activeForeground === 0 ? foreground.findIndex(entry => entry.interactive) : -1
+      if (index >= 0) {
+        const [entry] = foreground.splice(index, 1)
+        if (entry.waiters.size) start(entry)
+      }
+      return
+    }
     while (foreground.length) {
       const entry = foreground.shift()
       if (entry.waiters.size) start(entry)
@@ -46,12 +55,12 @@ export function createPassiveReadScheduler({ maxPending = 4, maxSubscribers = 16
     }
   }
   return {
-    run(key, task, { passive: isPassive = false, signal, current = () => true } = {}) {
+    run(key, task, { passive: isPassive = false, interactive = false, signal, current = () => true } = {}) {
       if (signal?.aborted || !current()) return Promise.reject(aborted())
       let entry = isPassive ? pending.get(key) : null
       if ((!entry && (isPassive ? pending.size >= maxPending : foreground.length >= 16))
           || (entry && entry.waiters.size >= maxSubscribers)) return Promise.reject(new Error('Passive read coordination queue is full'))
-      if (!entry) entry = { key, task, passive: isPassive, generation, waiters: new Set() }
+      if (!entry) entry = { key, task, passive: isPassive, interactive, generation, waiters: new Set() }
       const result = new Promise((resolve, reject) => {
         const waiter = { resolve, reject, signal, current, cancel: null }
         waiter.cancel = () => {
@@ -63,7 +72,7 @@ export function createPassiveReadScheduler({ maxPending = 4, maxSubscribers = 16
         signal?.addEventListener('abort', waiter.cancel, { once: true })
       })
       if (isPassive) { pending.set(key, entry); schedule() }
-      else if (passive) foreground.push(entry)
+      else if (passive && (!interactive || activeForeground > 0)) foreground.push(entry)
       else start(entry)
       return result
     },

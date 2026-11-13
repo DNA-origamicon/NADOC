@@ -1,3 +1,10 @@
+import { createRecoverySerializer } from './recovery_serializer.js'
+const _serializeRecovery = createRecoverySerializer()
+import { sequenceActivity } from '../ui/sequence_activity.js'
+import { createDeferredRecovery } from './deferred_recovery.js'
+const _deferredRecovery = createDeferredRecovery()
+import { createHistoryBodyCache, inheritHistoryBodyDigest, receiveHistoryBodyDigests } from './history_body_cache.js'
+const _historyBodyDigests = createHistoryBodyCache()
 import { createKeyframeActionsAPI } from './keyframe_actions.js'
 import { createZoomVolumeAPI } from './zoom_volume_endpoints.js'
 import { createKeyframeDeletionAPI } from './keyframe_deletion_endpoints.js'
@@ -34,7 +41,7 @@ import { createRoutingFeatureAPI } from './routing_feature_endpoints.js'
 
 const _documentRequests = createDocumentRequestScope()
 const _seekHistory = createSeekHistoryAcknowledgement()
-if (import.meta.hot) import.meta.hot.dispose(() => _documentRequests.dispose())
+if (import.meta.hot) import.meta.hot.dispose(() => { _documentRequests.dispose(); _deferredRecovery.dispose() })
 /**
  * API client — typed fetch wrappers for all CRUD endpoints.
  *
@@ -218,10 +225,13 @@ function _setItemWithEvict(key, value) {
 }
 
 /** Persist the current design topology to localStorage for session recovery. */
-export function persistDesign() {
+export function persistDesign({ afterPaint = false } = {}) {
   const design = store.getState().currentDesign
   if (!design) return
-  _setItemWithEvict(LS_DESIGN_KEY(), JSON.stringify(design))
+  const key = LS_DESIGN_KEY()
+  const write = () => _setItemWithEvict(key, _serializeRecovery(design))
+  if (afterPaint) _deferredRecovery.schedule(key, write)
+  else { _deferredRecovery.cancel(key); write() }
 }
 
 /** Read the persisted design from localStorage (parsed JSON or null). */
@@ -234,6 +244,7 @@ export function getPersistedDesign() {
 
 /** Remove the persisted design (e.g. when returning to the welcome screen). */
 export function clearPersistedDesign() {
+  _deferredRecovery.cancel(LS_DESIGN_KEY())
   try { localStorage.removeItem(LS_DESIGN_KEY()) } catch { /* ignore */ }
 }
 
@@ -450,7 +461,8 @@ export function _request(method, path, body, options = {}) {
   return passiveReadScheduler.run(JSON.stringify([docId, version, revision, method, path]),
     () => !_documentRequests.isCurrent(version) ? null
       : _performRequest(method, path, body, passive ? { ...options, signal: undefined } : options),
-    { passive, signal: options.signal, current: passive ? current : undefined })
+    { passive, interactive: options.interactive || (method === 'POST' && (path === '/design/undo' || path === '/design/redo')),
+      signal: options.signal, current: passive ? current : undefined })
 }
 
 async function _performRequest(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false, deferGeometry = false, onError } = {}) {
@@ -462,17 +474,21 @@ async function _performRequest(method, path, body, { signal, suppressBusy = fals
     return null
   }
   const version = _documentRequests.capture()
+  if (sequenceActivity.pending && /^\/design\/(?:overhang|connection-versions|geometry)/.test(path)) suppressBusy = true
   const scoped = docId === undefined && /^\/design(?:\/|\?|$)/.test(path)
   const retired = () => scoped && !_documentRequests.isCurrent(version)
   if (!skipSimulationPrepare && docId === undefined) {
     await _ensureAssemblySimulation(path, { method, timeoutMs, protectedRetry })
   }
   if (retired()) return null
+  if (path === '/design/undo' || path === '/design/redo') markOperationTiming('request-dispatched')
   const diagnosticId = ++_diagnosticRequestSeq
   _emitRequestDiagnostic({ phase: 'start', id: diagnosticId, method, path, suppressBusy })
   const isTimedOperation = !excludeFromTiming && (
     (method !== 'GET' && (
       path === '/design/load' || path === '/design/import' ||
+      path === '/design/undo' || path === '/design/redo' ||
+      (method === 'PATCH' && /^\/design\/overhang\/[^/]+$/.test(path)) ||
       path === '/design/bundle' || path === '/design/bundle-segment' ||
       path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
       path === '/design/flexible-segment' || path === '/design/flexible-segment/batch' ||
@@ -569,6 +585,7 @@ async function _performRequest(method, path, body, { signal, suppressBusy = fals
     }, operationTrace)
     notifyRequestSuccess()   // any HTTP response means the backend is reachable
     json = await readGeometryResponse(r)
+    receiveHistoryBodyDigests(json?.design ?? json, json?.history_body_digests)
     // Transport cancellation can race a completed response/body parse.
     if (retired()) { retireDisplay(); return null }
     markOperationTiming('response-parsed', undefined, operationTrace)
@@ -687,17 +704,22 @@ export function wasLastDesignSyncTransient() { return _designSyncTransient }
  * run before currentDesign is stored/persisted so restart recovery remains
  * complete even though the wire response omitted accumulated old blobs.
  */
-export function _mergeFeatureLogPayloads(incoming, previous) {
+export function _mergeFeatureLogPayloads(incoming, previous, reusedEntryIds = null) {
   if (!incoming?.feature_log || !previous?.feature_log) return incoming
   const prevById = new Map(previous.feature_log.map(e => [e.id, e]))
   const bodyKeys = ['design_snapshot_gz_b64', 'pre_state_gz_b64', 'post_state_gz_b64']
+  const allowed = reusedEntryIds == null ? null : new Set(reusedEntryIds)
   for (const entry of incoming.feature_log) {
+    if (allowed && !allowed.has(entry.id)) continue
     const prev = prevById.get(entry.id)
     if (!prev) continue
     for (const key of bodyKeys) {
       if (!entry[key] && prev[key]) entry[key] = prev[key]
     }
-    if (!Array.isArray(entry.children) || !Array.isArray(prev.children)) continue
+    if (!Array.isArray(entry.children) || !Array.isArray(prev.children)) {
+      inheritHistoryBodyDigest(entry, prev)
+      continue
+    }
     const prevChildren = new Map(prev.children.map((c, i) => [c.id ?? i, c]))
     for (let i = 0; i < entry.children.length; i++) {
       const child = entry.children[i]
@@ -707,6 +729,7 @@ export function _mergeFeatureLogPayloads(incoming, previous) {
         if (child[key] === '1' && old[key]) child[key] = old[key]
       }
     }
+    inheritHistoryBodyDigest(entry, prev)
   }
   return incoming
 }
@@ -758,6 +781,7 @@ async function _applyDesignResponse(json, {
   crossTabMetadataOnly = false,
   simulationProjection = false,
   deferGeometry = false,
+  persistAfterPaint = false,
 } = {}) {
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
@@ -766,7 +790,7 @@ async function _applyDesignResponse(json, {
   // is needed, rather than the merge silently leaving every body empty.
   const _wasColdLoad = json.feature_log_payloads_partial && !store.getState().currentDesign
   if (json.feature_log_payloads_partial && json.design) {
-    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
+    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign, json.feature_log_reused_entry_ids)
   }
   _designSyncTransient = transient
   const updates = _partRepairResponse.summaryPatch(json)
@@ -835,7 +859,7 @@ async function _applyDesignResponse(json, {
       geometryUnchanged: true,
       metadataOnly: crossTabMetadataOnly,
     })
-    if (json.design) persistDesign()
+    if (json.design) persistDesign({ afterPaint: persistAfterPaint })
     _designSyncTransient = false
     return json
   }
@@ -947,7 +971,7 @@ async function _applyDesignResponse(json, {
     metadataOnly: crossTabMetadataOnly,
   })
   // Persist design to localStorage for session recovery on refresh/restart.
-  if (json.design && !simulationProjection) persistDesign()
+  if (json.design && !simulationProjection) persistDesign({ afterPaint: persistAfterPaint })
   if (json.design) _clearStaleSelections()
   _designSyncTransient = false
   return json
@@ -1105,7 +1129,7 @@ async function _applyGetDesignResponse(json, metadataOnly) {
   // when the background backfill after this function returns is needed.
   const wasColdLoad = json.feature_log_payloads_partial && !store.getState().currentDesign
   if (json.feature_log_payloads_partial && json.design) {
-    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
+    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign, json.feature_log_reused_entry_ids)
   }
   if (metadataOnly) {
     // A sibling tab told us its mutation cannot affect geometry/topology-derived
@@ -1176,11 +1200,29 @@ async function _applyGetDesignResponse(json, metadataOnly) {
  * Returns null if nothing to undo (404 from server).
  */
 export async function undo({ onCommitted, deferGeometry = false } = {}) {
-  const json = await _request('POST', '/design/undo', undefined, { deferGeometry })
+  const trace = beginOperationTiming('Undo', { requestPath: '/design/undo' })
+  const scope = _documentRequests.capture()
+  const source = store.getState().currentDesign
+  const recoverySource = _historyBodyDigests.source(source, scope)
+  const digests = await _historyBodyDigests(recoverySource)
+  markOperationTiming('history-cache-ready', { entries: source?.feature_log?.length }, trace)
+  if (!_documentRequests.isCurrent(scope) || store.getState().currentDesign !== source) {
+    finishOperationTiming(trace, { status: 'Cancelled' }); return null
+  }
+  const json = await _request('POST', '/design/undo', {
+    history_body_digests: digests,
+  }, { deferGeometry })
+  if (!json) { finishOperationTiming(trace, { status: 'Cancelled' }); return null }
+  if (json?.design && Array.isArray(json.feature_log_reused_entry_ids)) {
+    // Resolve against the exact cache acknowledged by THIS request, not a
+    // different response that may have updated the store while it was pending.
+    _mergeFeatureLogPayloads(json.design, recoverySource, json.feature_log_reused_entry_ids)
+    json.feature_log_payloads_partial = false
+  }
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
-  return _syncFromDesignResponse(json, { deferGeometry })
+  return _syncFromDesignResponse(json, { deferGeometry, persistAfterPaint: true })
 }
 
 /**
@@ -1188,11 +1230,29 @@ export async function undo({ onCommitted, deferGeometry = false } = {}) {
  * Returns null if nothing to redo (404 from server).
  */
 export async function redo({ onCommitted, deferGeometry = false } = {}) {
-  const json = await _request('POST', '/design/redo', undefined, { deferGeometry })
+  const trace = beginOperationTiming('Redo', { requestPath: '/design/redo' })
+  const scope = _documentRequests.capture()
+  const source = store.getState().currentDesign
+  const recoverySource = _historyBodyDigests.source(source, scope)
+  const digests = await _historyBodyDigests(recoverySource)
+  markOperationTiming('history-cache-ready', { entries: source?.feature_log?.length }, trace)
+  if (!_documentRequests.isCurrent(scope) || store.getState().currentDesign !== source) {
+    finishOperationTiming(trace, { status: 'Cancelled' }); return null
+  }
+  const json = await _request('POST', '/design/redo', {
+    history_body_digests: digests,
+  }, { deferGeometry })
+  if (!json) { finishOperationTiming(trace, { status: 'Cancelled' }); return null }
+  if (json?.design && Array.isArray(json.feature_log_reused_entry_ids)) {
+    // Resolve against the exact cache acknowledged by THIS request, not a
+    // different response that may have updated the store while it was pending.
+    _mergeFeatureLogPayloads(json.design, recoverySource, json.feature_log_reused_entry_ids)
+    json.feature_log_payloads_partial = false
+  }
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
-  return _syncFromDesignResponse(json, { deferGeometry })
+  return _syncFromDesignResponse(json, { deferGeometry, persistAfterPaint: true })
 }
 
 /**
@@ -1360,7 +1420,7 @@ export function skipNextResponseDelta() {
 async function _syncClusterOnlyDiff(json) {
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
   if (json.feature_log_payloads_partial && json.design) {
-    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
+    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign, json.feature_log_reused_entry_ids)
   }
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
@@ -1390,7 +1450,7 @@ async function _syncClusterOnlyDiff(json) {
 async function _syncPositionsOnlyDiff(json) {
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
   if (json.feature_log_payloads_partial && json.design) {
-    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
+    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign, json.feature_log_reused_entry_ids)
   }
   const state = store.getState()
   const positionsByHelix = json.positions_by_helix
@@ -2030,7 +2090,7 @@ export async function getGeometry(helixIds = null, { designResponse = null, desi
   // Measured ("new positioning") placement is a query flag on this endpoint, so a
   // toggle costs one refetch and the legacy request stays byte-identical when off.
   const url  = base
-  const json = await _request('GET', url)
+  const json = await _request('GET', url, undefined, { suppressBusy: sequenceActivity.pending > 0 })
   return _applyTimedResponse(json, () => _applyGeometryResponse(json, designResponse, designUpdates))
 }
 

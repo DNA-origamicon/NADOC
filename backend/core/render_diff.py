@@ -317,6 +317,17 @@ def _local_changed_helices(before: dict, after: dict) -> list[str] | None:
     }
     helices: set[str] = set()
     for sid in changed:
-        helices |= before["helices"].get(sid, frozenset())
-        helices |= after["helices"].get(sid, frozenset())
+        old, new = b_sig.get(sid), a_sig.get(sid)
+        if old and new and old[0] == new[0] and len(old[1]) == len(new[1]):
+            # Stable domain ordinals preserve strand metadata on unchanged
+            # domains. A terminal overhang edit must not reship every helix
+            # traversed by its (potentially very long) owning staple.
+            for previous, current in zip(old[1], new[1], strict=True):
+                if previous != current:
+                    helices.update((previous[0], current[0]))
+        else:
+            # Splits, merges, insertion/removal and strand-type changes can
+            # change domain_index/strand_id on all downstream nucleotides.
+            helices |= before["helices"].get(sid, frozenset())
+            helices |= after["helices"].get(sid, frozenset())
     return list(helices) + [f"__ext_{eid}" for eid in affected_ext_ids]
