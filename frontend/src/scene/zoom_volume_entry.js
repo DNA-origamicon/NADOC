@@ -1,3 +1,5 @@
+import { ANNOTATION_FONT_SIZES, ANNOTATION_FONTS } from './annotation_model.js'
+import { zoomBaseEntries, buildZoomBaseExtras, zoomBackbonePairs } from './zoom_volume_bases.js'
 import { copyZoomBox, zoomBoxBounds, entriesInZoomBox } from './zoom_volume_box.js'
 import { createZoomLayerMotion, zoomMotionFrame, zoomLiveAtoms } from './zoom_volume_motion.js'
 import './zoom_volume.css'
@@ -9,7 +11,7 @@ import { buildZoomConnections } from './zoom_volume_connections.js'
 import { zoomVolumeConnectors } from './zoom_volume_lines.js'
 import { baseKey } from './base_ref.js'
 import { initViewVolumeDisplays } from './view_volume_displays.js'
-import { VIEW_VOLUME_REPRESENTATIONS, segmentsForKeys, volumeBackboneEntries } from './view_volumes.js'
+import { VIEW_VOLUME_REPRESENTATIONS, segmentsForKeys } from './view_volumes.js'
 import { COLORING_LABELS, supportedColoringSet, coloringFallbackMode } from './coloring_modes.js'
 import { eyeIcon, powerIcon } from './volume_panel.js'
 
@@ -38,8 +40,9 @@ export function fitZoomCamera(camera, orientation, bounds, aspect) {
 export function zoomSelectionSource(design, entries) {
   const geometry = entries.map(e => ({ ...e.nuc, backbone_position: e.pos.toArray() }))
   const selected = new Set(geometry.map(n => baseKey(n, n.copy_k ?? 0)))
-  const byDomain = new Map(), remapped = new Map()
+  const byDomain = new Map(), remapped = new Map(), strandIds = new Set(geometry.map(n => n.strand_id))
   for (const n of geometry) {
+    if (n.crossover_id != null || n.extension_id != null) continue
     const key = JSON.stringify([n.strand_id, n.domain_index])
     if (!byDomain.has(key)) byDomain.set(key, [])
     byDomain.get(key).push(n)
@@ -61,7 +64,7 @@ export function zoomSelectionSource(design, entries) {
       remapped.set(JSON.stringify([strand.id, index]), indices)
     })
     return { ...strand, domains }
-  }).filter(s => s.domains.length)
+  }).filter(s => s.domains.length || strandIds.has(s.id))
   const helixIds = new Set(geometry.map(n => n.helix_id))
   return { geometry, keys: [...selected], design: { ...design, strands,
     helices: (design.helices ?? []).filter(h => helixIds.has(h.id)),
@@ -70,10 +73,10 @@ export function zoomSelectionSource(design, entries) {
   } }
 }
 
-export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, position = 'tr', onDelete, onVisibilityChange = () => {}, onChange = () => {}, document, scene, canvas, store, api, designRenderer, assemblyRenderer, ensureAtoms, getAtomisticRenderer, getProteinGeometry, getAssemblyCluster = () => null, getRenderCamera, addFrameCallback, removeFrameCallback }) {
+export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, position = 'tr', onDelete, onVisibilityChange = () => {}, onChange = () => {}, document, scene, canvas, store, api, designRenderer, assemblyRenderer, ensureAtoms, getAtomisticRenderer, getProteinGeometry, resolveBasePosition, getAssemblyCluster = () => null, getRenderCamera, addFrameCallback, removeFrameCallback }) {
   const section = document.createElement('div'); section.className = 'zoom-volume-row volume-entry'; section.dataset.zoomId = id
   section.innerHTML = `<div class="volume-entry-top">
-      <input data-control="name" aria-label="Rename zoom volume" title="Rename volume">
+      <input data-control="name" aria-label="Rename zoom volume" title="Inset title" placeholder="Inset title">
       <button data-control="enabled" type="button">${powerIcon}</button>
       <button data-control="box" type="button">${eyeIcon}</button>
       <button data-control="delete" type="button" title="Delete volume" aria-label="Delete zoom volume">×</button>
@@ -86,6 +89,8 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     <button data-control="set" class="xover-mode-btn" type="button" title="Replace this volume's entities with the current selection">Use current selection</button>
     <div data-control="status" role="status">Select an element in the 3D view.</div>
     <details class="zoom-volume-options"><summary>Inset options</summary><div>
+    <label>Font size <select data-control="title-size" aria-label="Title font size"></select></label>
+    <label>Font style <select data-control="title-font" aria-label="Title font style"></select></label>
     <label><input data-control="with-structure" type="checkbox"> With structure</label>
     <label data-control="structure-controls" hidden>Other elements' transparency
       <span><input data-control="structure-transparency" aria-label="Other elements transparency" type="range" min="0" max="100" step="1" value="75"><output data-control="structure-value">75%</output></span>
@@ -97,6 +102,9 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
   const $ = key => section.querySelector(`[data-control="${key}"]`)
   $('name').value = name
   $('position').value = position
+  for (const px of ANNOTATION_FONT_SIZES) $('title-size').add(new Option(`${px} px`, String(px)))
+  $('title-size').value = '12'
+  for (const family of ANNOTATION_FONTS) $('title-font').add(new Option(family === 'system-ui' ? 'System sans-serif' : family, family))
   let presentationVisible = null
   function setVisibility(key, visible) {
     const button = $(key); button.checked = visible
@@ -120,15 +128,23 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
   }; colors()
   const host = document.createElement('div'); host.className = 'zoom-volume-inset'; host.dataset.zoomId = id
   host.style.cssText = 'position:fixed;z-index:20;border:2px solid #67c5ff;border-radius:6px;overflow:hidden;background:#171e28;display:none;'
-  const title = document.createElement('div'); title.textContent = `${name} · drag to move`
-  title.style.cssText = 'height:26px;line-height:26px;padding:0 8px;cursor:move;color:#e5f4ff;background:#243344;touch-action:none;font-size:12px'
+  const title = document.createElement('div'); title.className = 'zoom-volume-title'; title.title = 'Drag to move inset'
+  function updateTitle() {
+    title.textContent = $('name').value
+    title.style.fontSize = `${$('title-size').value || 12}px`
+    title.style.fontFamily = $('title-font').value || 'system-ui'
+    host.style.setProperty('--zoom-title-height', `${titleHeight()}px`)
+  }
+  function titleHeight() { return Math.max(26, Math.ceil(Number($('title-size').value || 12) * 1.25 + 8)) }
+  $('title-size').onchange = $('title-font').onchange = updateTitle
+  updateTitle()
   const image = document.createElement('canvas'); image.style.display = 'block'; image.setAttribute('aria-label', 'Zoom Volume: selected elements')
   const frozen = document.createElement('canvas'); frozen.className = 'zoom-volume-frozen'; frozen.hidden = true
   frozen.setAttribute('aria-hidden', 'true')
   const loadingOverlay = document.createElement('div'); loadingOverlay.className = 'zoom-volume-loading'; loadingOverlay.hidden = true
   loadingOverlay.setAttribute('role', 'status'); loadingOverlay.setAttribute('aria-label', 'Loading zoom volume')
   loadingOverlay.innerHTML = '<span class="zoom-volume-spinner" aria-hidden="true"></span><span>Loading…</span>'
-  $('name').onchange = () => { $('name').value = $('name').value.trim() || 'Zoom Volume'; title.textContent = `${$('name').value} · drag to move` }
+  $('name').onchange = () => { $('name').value = $('name').value.trim() || 'Zoom Volume'; updateTitle() }
   host.setAttribute('aria-busy', 'false')
   host.append(title, image, frozen, loadingOverlay); (canvas.parentElement ?? document.body).append(host)
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
@@ -181,6 +197,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     if ((stopped || switched) && targets.length) void rebuild()
   })
   let documentId = null, mode = null, abort = new AbortController()
+  let motionExtraEntries = []
   let contextRoots = [], contextBaseCount = 0, contextObjectCount = 0, selectionConnectionCount = 0, contextConnectionCount = 0
   const contextOpacity = () => 1 - Number($('structure-transparency').value) / 100
   function updateContextOpacity() {
@@ -199,7 +216,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     loadingOverlay.hidden = false; host.setAttribute('aria-busy', 'true')
   }
   function clear() {
-    motionLayers = []; motionConnections = []
+    motionLayers = []; motionConnections = []; motionExtraEntries = []
     loading = false; hasFrozenImage = false; frozen.hidden = true; loadingOverlay.hidden = true
     host.setAttribute('aria-busy', 'false'); displayedBounds.makeEmpty()
     abort.abort(); revision++; ready = false; targets = []; volume = null; bounds.makeEmpty()
@@ -242,7 +259,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
   function rebuild() { pendingBuild = build(); return pendingBuild }
   async function settle() { let pending; do { pending = pendingBuild; await pending } while (pending !== pendingBuild); return !(presentationVisible ?? $('enabled').checked) || !targets.length || ready }
   async function build() {
-    motionLayers = []; motionConnections = []
+    motionLayers = []; motionConnections = []; motionExtraEntries = []
     externalBounds.makeEmpty()
     abort.abort(); abort = new AbortController()
     const signal = abort.signal
@@ -260,13 +277,19 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
       const state = store.getState()
       let count = 0, externalCount = 0
       const selectedBySource = new Map()
-      async function buildDna(root, design, entries, instanceId, id, opacity) {
+      async function buildDna(root, design, entries, instanceId, id, opacity, sourceEntries = entries) {
         if (!entries.length) return
-        const subset = zoomSelectionSource(design, entries)
+        if (!instanceId) motionExtraEntries.push(...entries.filter(e => e.zoomExtra).map(e => ({ ...e, context: id === 'zoom-context' })))
+        const extraDisplay = buildZoomBaseExtras(root, entries, $('representation').value, $('coloring').value, opacity, instanceId ? null : designRenderer, { ...state, currentDesign: design },
+          id === 'zoom-context' ? sourceEntries.filter(e => selectedBySource.get(instanceId ?? 'design')?.keys.has(baseKey(e.nuc, e.nuc.copy_k ?? 0))) : [])
+        if (extraDisplay) { displays.push(extraDisplay); if (!instanceId) motionConnections.push(extraDisplay) }
+        const coarse = ['full', 'beads', 'cylinders'].includes($('representation').value)
+        const subset = zoomSelectionSource(design, coarse ? entries.filter(e => !e.zoomExtra) : entries)
+        if (!subset.geometry.length) return
         // Keep reference coordinates for reversible physical display updates.
         if (!instanceId) {
           const original = new Map(entries.map(e => [baseKey(e.nuc, e.nuc.copy_k ?? 0), e.nuc]))
-          subset.geometry = subset.geometry.map(n => ({ ...n, backbone_position: original.get(baseKey(n, n.copy_k ?? 0)).backbone_position }))
+          subset.geometry = subset.geometry.map(n => ({ ...n, backbone_position: n.is_flexible_segment || n.helix_id?.startsWith('__lnk__') ? n.backbone_position : original.get(baseKey(n, n.copy_k ?? 0)).backbone_position }))
         }
         const source = { ...state, assemblyActive: false, currentDesign: subset.design, currentGeometry: subset.geometry, currentHelixAxes: null, showReferenceGeometry: true, simulationTabActive: false }
         const display = initViewVolumeDisplays({ scene: root, store: { getState: () => source, subscribe: () => () => {} },
@@ -275,7 +298,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
           onError: error => { throw error } })
         displays.push({ dispose: () => { display.dispose(); root.removeFromParent() } })
         const keys = [...new Set(subset.geometry.map(n => `${n.helix_id}:${n.bp_index}`))]
-        await display.update([{ id, representation: $('representation').value, coloring: $('coloring').value, opacity, keys, baseKeys: subset.keys, segments: segmentsForKeys(keys) }])
+        await display.update([{ id, representation: $('representation').value, coloring: $('coloring').value, opacity, keys, baseKeys: subset.keys, backbonePairs: zoomBackbonePairs(sourceEntries), segments: segmentsForKeys(keys) }])
         if (!instanceId && current === revision && !disposed) {
           motionLayers.push({ motion: createZoomLayerMotion(display, subset.geometry), geometry: subset.geometry, display, context: id === 'zoom-context' })
           appliedMotionRevision = -1
@@ -285,7 +308,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
         const data = target.instanceId ? assemblyRenderer.getInstanceBackboneEntries(target.instanceId) : null
         const design = target.instanceId ? assemblyRenderer.getInstanceDesign(target.instanceId) : state.currentDesign
         if (!design) continue
-        const entries = target.instanceId ? volumeBackboneEntries(data?.entries, data?.nucleotides) : volumeBackboneEntries(designRenderer.getBackboneEntries(), state.currentGeometry ?? [])
+        const entries = target.instanceId ? zoomBaseEntries(design, data?.entries, data?.nucleotides) : zoomBaseEntries(design, designRenderer.getBackboneEntries(), state.currentGeometry ?? [], designRenderer, resolveBasePosition)
         const matched = volume ? entriesInZoomBox(entries, volume, data?.matrixWorld) : target.refs ? matchTargetEntries(target.refs, design, entries) : entries
         const sourceId = target.instanceId ?? 'design'
         if (!selectedBySource.has(sourceId)) selectedBySource.set(sourceId, { keys: new Set(), refs: [], whole: false })
@@ -312,15 +335,15 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
           bounds.union(externalBounds)
         }
         if (!matched.length) continue
-        await buildDna(root, design, matched, target.instanceId, 'zoom', Number($('opacity').value))
+        await buildDna(root, design, matched, target.instanceId, 'zoom', Number($('opacity').value), entries)
         if (disposed || current !== revision) return
       }
       if (!count && !externalCount) { hasFrozenImage = false; frozen.hidden = true; displayedBounds.makeEmpty(); $('status').textContent = 'The selected element is no longer available.'; return }
       // Own selected connections once per source, even when multiple targets share endpoints.
       for (const selected of selectedBySource.values()) {
         const root = new THREE.Group(); root.matrixAutoUpdate = false; root.matrix.copy(selected.matrix); insetScene.add(root)
-        const connections = buildZoomConnections({ root, design: selected.design, entries: selected.entries, selectedKeys: selected.keys,
-          selectionOnly: true, representation: $('representation').value, coloring: $('coloring').value, state })
+        const connections = buildZoomConnections({ root, design: selected.design, entries: selected.entries.filter(e => !e.zoomExtra), selectedKeys: selected.keys,
+          selectionOnly: true, separateExtraBases: true, representation: $('representation').value, coloring: $('coloring').value, state })
         displays.push({ dispose() { connections.dispose(); root.removeFromParent() } })
         if (!mode) motionConnections.push(connections)
         selectionConnectionCount += connections.count
@@ -340,7 +363,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
           const design = instanceId ? assemblyRenderer.getInstanceDesign(instanceId) : state.currentDesign
           if (!design) continue
           const matrix = data?.matrixWorld ?? new THREE.Matrix4()
-          const entries = instanceId ? volumeBackboneEntries(data?.entries, data?.nucleotides) : volumeBackboneEntries(designRenderer.getBackboneEntries(), state.currentGeometry ?? [])
+          const entries = instanceId ? zoomBaseEntries(design, data?.entries, data?.nucleotides) : zoomBaseEntries(design, designRenderer.getBackboneEntries(), state.currentGeometry ?? [], designRenderer, resolveBasePosition)
           const nearby = nearbyZoomEntries(entries, selected?.keys ?? new Set(), neighborhood, matrix)
           const proteinData = design.protein_attachments?.length
             ? await (instanceId ? api.getInstanceProteinGeometry(instanceId) : getProteinGeometry()) : { atoms: [] }
@@ -348,8 +371,8 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
           const refs = selected?.whole ? [] : nearbyZoomExternalRefs(design, proteinData?.atoms, selected?.refs ?? [], neighborhood, matrix)
           const root = new THREE.Group(); root.name = 'zoom-volume-context'; root.matrixAutoUpdate = false; root.matrix.copy(matrix); insetScene.add(root)
           contextRoots.push(root)
-          const connections = buildZoomConnections({ root, design, entries, selectedKeys: selected?.keys ?? new Set(), bounds: neighborhood, matrix,
-            representation: $('representation').value, coloring: $('coloring').value, state })
+          const connections = buildZoomConnections({ root, design, entries: entries.filter(e => !e.zoomExtra), selectedKeys: selected?.keys ?? new Set(), bounds: neighborhood, matrix,
+            separateExtraBases: true, representation: $('representation').value, coloring: $('coloring').value, state })
           displays.push(connections); if (!mode) motionConnections.push(connections); contextConnectionCount += connections.count
           const owner = { layer: null, dispose() { this.layer?.dispose(); root.removeFromParent() } }; displays.push(owner)
           const external = await buildZoomExternal({ root, design, refs, proteinData: () => proteinData,
@@ -357,7 +380,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
             getSurface: (segments, opts) => instanceId ? api.getInstanceRegionSurface(instanceId, segments, opts) : api.getRegionSurface(segments, opts), signal })
           if (disposed || current !== revision) { external?.dispose(); root.removeFromParent(); return }
           owner.layer = external; contextObjectCount += external?.count ?? 0
-          await buildDna(root, design, nearby, instanceId, 'zoom-context', contextOpacity())
+          await buildDna(root, design, nearby, instanceId, 'zoom-context', contextOpacity(), entries)
           if (disposed || current !== revision) return
           contextBaseCount += nearby.length
           setZoomContextOpacity(root, contextOpacity())
@@ -387,22 +410,23 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     svg.style.display = visible && $('lines').checked ? 'block' : 'none'
     zoomControls.hidden = !visible
     if (!visible) return
-    const rect = canvas.getBoundingClientRect(), size = Math.max(80, Math.min(Number($('size').value), rect.width - 64, rect.height - 50))
+    const rect = canvas.getBoundingClientRect(), size = Math.max(80, Math.min(Number($('size').value), rect.width - 64, rect.height - titleHeight() - 24))
     const corner = $('position').value
     const left = Math.max(rect.left + 8, Math.min(rect.right - size - 12, customPosition?.x ?? (corner.endsWith('r') ? rect.right - size - 12 : rect.left + 12)))
-    const top = Math.max(rect.top + 8, Math.min(rect.bottom - size - 40, customPosition?.y ?? (corner.startsWith('b') ? rect.bottom - size - 40 : rect.top + 12)))
+    const top = Math.max(rect.top + 8, Math.min(rect.bottom - size - titleHeight() - 14, customPosition?.y ?? (corner.startsWith('b') ? rect.bottom - size - titleHeight() - 14 : rect.top + 12)))
     host.style.left = `${left}px`; host.style.top = `${top}px`
-    host.style.width = `${size}px`; host.style.height = `${size + 26}px`
+    host.style.width = `${size}px`; host.style.height = `${size + titleHeight()}px`
     // Keep the pair outside the inset, on the side with more viewport room.
     const controlsLeft = left + size / 2 > rect.left + rect.width / 2 ? left - 40 : left + size + 10
-    zoomControls.style.left = `${controlsLeft}px`; zoomControls.style.top = `${top + 30}px`
+    zoomControls.style.left = `${controlsLeft}px`; zoomControls.style.top = `${top + titleHeight() + 4}px`
     zoomButtons[0].disabled = zoomStep === 8
     zoomButtons[1].disabled = zoomStep === -8
     if (loading || !ready) { svg.style.display = 'none'; return }
     const currentAtomVersion = getAtomisticRenderer?.()?.positionVersion?.()
-    if (motionLayers.length && (appliedMotionRevision !== motionRevision || currentAtomVersion !== atomVersion)) {
+    if ((motionLayers.length || motionExtraEntries.length) && (appliedMotionRevision !== motionRevision || currentAtomVersion !== atomVersion)) {
       const updates = designRenderer.getFemPositions?.()
-      const live = designRenderer.getBackboneEntries()
+      const live = [...designRenderer.getBackboneEntries(), ...motionExtraEntries.map(e => ({ ...e,
+        pos: designRenderer.xoverResidueInfo?.(e.zoomExtra.target)?.centroid ?? e.pos }))]
       const atoms = updates?.length ? zoomLiveAtoms(getAtomisticRenderer?.()) : null
       if (!volume) bounds.copy(externalBounds)
       for (const layer of motionLayers) {
@@ -410,7 +434,10 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
         layer.motion.apply(positions, atoms, !!updates?.length)
         if (!volume && !layer.context) for (const n of positions) bounds.expandByPoint(new THREE.Vector3(...n.backbone_position))
       }
-      if (!volume) bounds.expandByScalar(1.5)
+      if (!volume) {
+        for (const e of live) if (e.zoomExtra && !e.context) bounds.expandByPoint(e.pos)
+        bounds.expandByScalar(1.5)
+      }
       for (const connections of motionConnections) connections.update?.(live, updates)
       appliedMotionRevision = motionRevision
       atomVersion = currentAtomVersion
@@ -448,7 +475,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     if (n.currentGeometry !== p.currentGeometry || changed('currentDesign') || changed('currentAssembly')) void rebuild()
   })
 
-  const settingKeys = ['enabled', 'box', 'representation', 'opacity', 'coloring', 'with-structure', 'structure-transparency', 'position', 'size', 'lines']
+  const settingKeys = ['enabled', 'box', 'representation', 'opacity', 'coloring', 'with-structure', 'structure-transparency', 'position', 'size', 'lines', 'title-size', 'title-font']
   const booleanKeys = new Set(['enabled', 'box', 'with-structure', 'lines'])
   function snapshot() {
     return { id, name: $('name').value, zoom_step: zoomStep, targets: structuredClone(targets), volume: volume ? structuredClone(volume) : null,
@@ -457,12 +484,13 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
   function restore(value) {
     targets = structuredClone(value.targets ?? []); volume = copyZoomBox(value.volume)
     const state = store.getState(); mode = state.assemblyActive; documentId = state[mode ? 'currentAssembly' : 'currentDesign']?.id
-    $('name').value = value.name; title.textContent = `${value.name} · drag to move`
+    $('name').value = value.name
     for (const key of settingKeys) {
       if (value.settings?.[key] === undefined) continue
       if (key === 'enabled' || key === 'box') setVisibility(key, value.settings[key])
       else { if (key === 'coloring') colors(); $(key)[booleanKeys.has(key) ? 'checked' : 'value'] = value.settings[key] }
     }
+    updateTitle()
     zoomStep = Math.max(-8, Math.min(8, Math.round(Number(value.zoom_step) || 0))); camera.zoom = 1.25 ** zoomStep
     customPosition = value.custom_position ?? null
     $('structure-controls').hidden = !$('with-structure').checked; updateContextOpacity()
@@ -475,22 +503,22 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     const rect = canvas.getBoundingClientRect()
     if (!rect.width || !rect.height) return
     const scale = Math.min(width / rect.width, height / rect.height)
-    const size = parseFloat(host.style.width) * scale, titleHeight = 26 * scale
+    const size = parseFloat(host.style.width) * scale, headerHeight = titleHeight() * scale
     const corner = $('position').value
     const x = customPosition ? (parseFloat(host.style.left) - rect.left) / rect.width * width : corner.endsWith('r') ? width - size - 12 * scale : 12 * scale
-    const y = customPosition ? (parseFloat(host.style.top) - rect.top) / rect.height * height : corner.startsWith('b') ? height - size - 40 * scale : 12 * scale
+    const y = customPosition ? (parseFloat(host.style.top) - rect.top) / rect.height * height : corner.startsWith('b') ? height - size - headerHeight - 14 * scale : 12 * scale
     if ($('lines').checked) {
-      const links = zoomVolumeConnectors(displayedBounds, main, { left: 0, top: 0, width, height, right: width, bottom: height }, { left: x, top: y, right: x + size, bottom: y + size + titleHeight, width: size, height: size + titleHeight })
+      const links = zoomVolumeConnectors(displayedBounds, main, { left: 0, top: 0, width, height, right: width, bottom: height }, { left: x, top: y, right: x + size, bottom: y + size + headerHeight, width: size, height: size + headerHeight })
       ctx.save(); ctx.strokeStyle = '#67c5ff'; ctx.lineWidth = 1.5 * scale
       for (const line of links) { ctx.beginPath(); ctx.moveTo(line.x1, line.y1); ctx.lineTo(line.x2, line.y2); ctx.stroke() }
       ctx.restore()
     }
     renderer.setSize(Math.max(1, Math.ceil(size)), Math.max(1, Math.ceil(size)))
     fitZoomCamera(camera, main.quaternion, bounds, 1); light.position.copy(camera.position); renderer.render(insetScene, camera)
-    ctx.save(); ctx.fillStyle = '#243344'; ctx.fillRect(x, y, size, titleHeight)
-    ctx.drawImage(renderer.domElement, x, y + titleHeight, size, size)
-    ctx.strokeStyle = '#67c5ff'; ctx.lineWidth = 2 * scale; ctx.strokeRect(x, y, size, size + titleHeight)
-    ctx.fillStyle = '#e5f4ff'; ctx.font = `${12 * scale}px sans-serif`; ctx.fillText($('name').value, x + 8 * scale, y + 18 * scale, size - 16 * scale); ctx.restore()
+    ctx.save(); ctx.fillStyle = '#243344'; ctx.fillRect(x, y, size, headerHeight)
+    ctx.drawImage(renderer.domElement, x, y + headerHeight, size, size)
+    ctx.strokeStyle = '#67c5ff'; ctx.lineWidth = 2 * scale; ctx.strokeRect(x, y, size, size + headerHeight)
+    ctx.fillStyle = '#e5f4ff'; ctx.font = `${Number($('title-size').value || 12) * scale}px ${$('title-font').value || 'system-ui'}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText($('name').value, x + size / 2, y + headerHeight / 2, size - 16 * scale); ctx.restore()
   }
   addFrameCallback(frame)
   return { visible: () => host.style.display !== 'none', snapshot, restore, settle, draw, capture, setBox, clear, name: () => $('name').value, setPresentationVisible(value) { presentationVisible = value; frame() }, refreshAssembly() { if (!disposed && mode && targets.length) void rebuild() }, setVisibility, visibility: key => $(key).checked, debugAtoms: () => motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => e.kind === 'atom' ? [...zoomLiveAtoms(e.renderer)] : [])), debug: () => ({ zoom: camera.zoom, ready, loading, hasFrozenImage, targets, volume: volume ? structuredClone(volume) : null, motionRevision, appliedMotionRevision, motionPositions: motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => (e.cg?.backboneEntries ?? []).map(b => ({ key: baseKey(b.nuc, b.nuc.copy_k ?? 0), position: b.pos.toArray() })))), contextBaseCount, contextObjectCount, selectionConnectionCount, contextConnectionCount, contextOpacity: contextOpacity(), contextVisible: contextRoots.some(root => root.visible), bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, orientation: camera.quaternion.toArray(), triangles }), dispose() { disposed = true; clear(); unsubscribe(); unsubscribeMotion?.(); removeFrameCallback(frame); host.remove(); zoomControls.remove(); svg.remove(); section.remove(); box.removeFromParent(); box.geometry.dispose(); box.material.dispose() } }

@@ -14,10 +14,10 @@
 
 .zoom-volume-frozen, .zoom-volume-loading {
   position: absolute;
-  top: 26px;
+  top: var(--zoom-title-height, 26px);
   left: 0;
   width: 100%;
-  height: calc(100% - 26px);
+  height: calc(100% - var(--zoom-title-height, 26px));
   pointer-events: none;
 }
 .zoom-volume-frozen { z-index: 1; }
@@ -70,3 +70,17 @@
 .zoom-volume-zoom-controls button:hover { background: #354b63; }
 .zoom-volume-zoom-controls button:focus-visible { outline: 2px solid #e5f4ff; outline-offset: 2px; }
 .zoom-volume-zoom-controls button:disabled { opacity: .45; cursor: default; }
+
+.zoom-volume-title {
+  height: var(--zoom-title-height, 26px);
+  line-height: var(--zoom-title-height, 26px);
+  padding: 0 8px;
+  cursor: move;
+  color: #e5f4ff;
+  background: #243344;
+  touch-action: none;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

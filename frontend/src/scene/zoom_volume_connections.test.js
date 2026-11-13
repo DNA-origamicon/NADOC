@@ -104,3 +104,13 @@ it('updates existing connection line buffers from the displayed trajectory endpo
   expect(Array.from(buffer.array).every(Number.isFinite)).toBe(true)
   layer.dispose()
 })
+
+it('leaves inserted residues to exact base rendering when only their endpoints are selected', () => {
+  const entries = [0, 1].map(bp_index => ({ nuc: { helix_id: 'h', bp_index, direction: 'FORWARD', strand_id: 's', strand_type: 'scaffold', axis_tangent: [0,0,1] }, pos: new THREE.Vector3(bp_index, 0, 0) }))
+  const half = index => ({ helix_id: 'h', index, strand: 'FORWARD' })
+  const root = new THREE.Group()
+  const layer = buildZoomConnections({ root, design: { strands: [], crossovers: [{ id: 'xo', half_a: half(0), half_b: half(1), extra_bases: ['T'] }] }, entries,
+    selectedKeys: new Set(['h:0:FORWARD', 'h:1:FORWARD']), selectionOnly: true, separateExtraBases: true, representation: 'full', state: {}, coloring: 'strand' })
+  expect(root.getObjectByName('xoverExtraBeads')).toBeUndefined()
+  layer.dispose()
+})

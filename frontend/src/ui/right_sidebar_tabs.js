@@ -1,3 +1,4 @@
+import { initVisualizationCards } from './visualization_cards.js'
 import { initSidebarStack } from './sidebar_stack.js'
 
 const TAB_SECTIONS = {
@@ -50,7 +51,6 @@ function buildAddedSections(document) {
 
   const actionsBody = document.createElement('div')
   actionsBody.className = 'ox-card__body'
-  actionsBody.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px'
   const actions = makeSection(document, 'right-view-actions', 'View Actions', actionsBody)
 
   const multiViewBody = document.createElement('div')
@@ -88,6 +88,7 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
     }
   }
 
+  const disposeCards = initVisualizationCards({ document })
   const changeListeners = new Set()
   const stack = initSidebarStack({
     side: 'right', document, storage, getAvailableWidth,
@@ -140,6 +141,6 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
       changeListeners.add(listener)
       return () => changeListeners.delete(listener)
     },
-    dispose() { changeListeners.clear(); observer.disconnect(); toolObserver.disconnect(); stack.dispose() },
+    dispose() { disposeCards(); changeListeners.clear(); observer.disconnect(); toolObserver.disconnect(); stack.dispose() },
   }
 }

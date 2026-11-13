@@ -12,6 +12,27 @@ metadata:
 
 # Annotations (right sidebar → "Annotations")
 
+November 12 zoom-volume base membership: `scene/zoom_volume_bases.js` merges live
+backbone entries with missing geometry and native crossover-insert render records.
+Exact base refs retain loop-copy and `__xb__` identities; extension-only selections
+retain their owning strand without adding a domain. Insert beads/slabs copy the
+existing crossover matrices, and connectors require both selected endpoints.
+Backbone cones retain full-source adjacency so sparse selections cannot bridge
+omitted bases.
+Whole-crossover refs include their inserts. Exact display layers can render linker
+and flexible-segment beads independently of their normal arc renderer; synthetic
+extension/linker bases remain beads in Cylinders mode. Atomistic and surface
+requests keep exact nucleotide keys. `atomistic_to_json` now retains extension
+and loop-copy identity (ISSUE-188). This is transient display state, not an
+authored structure or a molecular-placement change. Coverage lives in
+`zoom_volume_bases.test.js`, `zoom_volume_panel.test.js`,
+`view_volume_displays.test.js`, and `e2e/zoom_volume_bases.spec.js`.
+Final validation: 10,396 frontend tests passed (one skipped), two browser checks
+passed including guarded publication/replay, and lint passed. Backend FAST had
+20,852 passes and one verification timeout that passed in isolation; its aggregate
+runtime guard and deferred FULL-suite debt remain. Evidence and cleanup results:
+`.development-artifacts/zoom-volume-bases/validation.json`. `main.js` LOC delta: 0.
+
 November 10 keyframe capture/duplicate: **Capture keyframe** above the pose selector
 creates a new saved camera pose and fills the frame with the actually visible
 annotation/view-volume/zoom-volume IDs. Part state pins the displayed feature-log
@@ -195,3 +216,10 @@ intensity/size at low zoom, every callout type's look, placement on a dense mult
   Annotation handles explicitly override `min-height: 0`. The browser regression
   measures all eight actual elements (16×16px) and equal screen bounds at 30° and
   120°, in addition to gesture/selection/manual-toggle behavior.
+
+- **Inset titles (2026-11-12):** zoom-volume names render as centered titles in
+  the top border bar, with drag guidance in a tooltip. Inset options use the
+  annotation font families and shared size presets (10–96 px). Typography is
+  saved per inset in `settings.title-size`/`settings.title-font`; legacy defaults
+  are 12 px/system-ui. Title height expands with font size in live layout and
+  photo/video compositing, including loading/frozen overlays and bottom placement.

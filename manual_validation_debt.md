@@ -1554,10 +1554,25 @@ limitation remains GUIDE-UX-004.
 - App exercise and smoke are pending: `scripts/sim_guard.py smoke` refused on
   November 12 because a production NAMD process was running. No override used.
 
-### MV-63 — Ctrl-right camera pan (PENDING, 2026-11-12)
+### MV-64 — Ctrl-right camera pan (PENDING, 2026-11-12)
 
 Exercise Ctrl + right-drag in Turntable, Trackball and Multiscale, in part and
 assembly views. Camera and target should translate together without rotation;
 plain right-drag still rotates and middle-drag still pans. Regression exercise:
 `frontend/e2e/mouse_pan.spec.js` (camera only, no authored structures or jobs).
 App exercise/smoke blocked by the active-NAMD simulation guard; no override used.
+
+### MV-63 — Inset title typography (PENDING, 2026-11-12)
+
+Review centered titles in inset top border bars with long labels and 10–96 px
+annotation font presets, including narrow windows and bottom-corner placement.
+Browser assertions cover rendered typography, export compositing and save/reopen;
+human judgment of legibility and long-title truncation remains for review.
+
+### MV-64 — Visualization card layout (PENDING, 2026-11-12)
+
+Review collapse-header affordances and View Actions label legibility at unusually
+narrow sidebar widths and nondefault UI scale. Browser checks cover keyboard
+activation, reload persistence, mirrored cards and uniform button metrics; a
+rendered default-width screenshot was inspected during implementation.
+

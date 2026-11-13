@@ -143,3 +143,41 @@ it('keeps an inset through a stale document response while its magnification sav
   await Promise.resolve(); await Promise.resolve()
   expect(update.state().currentDesign.zoom_volumes[0].zoom_step).toBe(1)
 })
+
+it('persists and restores an arbitrary mixed base selection without widening its refs', () => {
+  const update = setup()
+  const refs = ['h:3:REVERSE:1', '__ext_tail:0:FORWARD', '__xb__:xo:2'].map(key => ({ kind: 'base', key }))
+  update({ selection: { items: refs } })
+  panel.capture()
+  const saved = update.state().currentDesign.zoom_volumes
+  expect(saved[0].targets).toEqual([{ refs }])
+  panel.dispose(); panel = null
+  setup(false, saved)
+  expect(panel.debug().entries[0].targets).toEqual([{ refs }])
+})
+
+it('persists independent inset titles and annotation font presets, including legacy defaults', () => {
+  const update = setup(); panel.capture(); panel.capture()
+  const rows = document.querySelectorAll('.zoom-volume-row')
+  const control = key => rows[0].querySelector(`[data-control="${key}"]`)
+  const change = (key, value) => { control(key).value = value; control(key).dispatchEvent(new Event('change', { bubbles: true })) }
+  expect([...control('title-size').options].map(o => o.value)).toEqual(['10', '11', '12', '13', '14', '16', '18', '20', '24', '28', '32', '48', '64', '96'])
+  expect([...control('title-font').options].map(o => o.value)).toEqual(['system-ui', 'Arial', 'Verdana', 'Georgia', 'Times New Roman', 'monospace'])
+  change('name', 'Crossover detail'); change('title-size', '48'); change('title-font', 'Georgia')
+  const titles = document.querySelectorAll('.zoom-volume-title')
+  expect(titles[0].textContent).toBe('Crossover detail')
+  expect(titles[0].style.fontSize).toBe('48px')
+  expect(titles[0].style.fontFamily).toBe('Georgia')
+  expect(titles[0].parentElement.style.getPropertyValue('--zoom-title-height')).toBe('68px')
+  expect(titles[1].style.fontSize).toBe('12px')
+  const saved = structuredClone(update.state().currentDesign.zoom_volumes)
+  panel.dispose(); panel = null
+  delete saved[1].settings['title-size']; delete saved[1].settings['title-font']
+  setup(false, saved)
+  const restored = document.querySelectorAll('.zoom-volume-title')
+  expect(restored[0].textContent).toBe('Crossover detail')
+  expect(restored[0].style.fontFamily).toBe('Georgia')
+  expect(restored[0].style.fontSize).toBe('48px')
+  expect(restored[1].style.fontSize).toBe('12px')
+  expect(restored[1].style.fontFamily).toBe('system-ui')
+})

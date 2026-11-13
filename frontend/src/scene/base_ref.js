@@ -36,6 +36,7 @@ export const XB_HELIX = '__xb__'
  * @param {number} [copy=0]
  */
 export function baseKey(nuc, copy = 0) {
+  if (nuc?.crossover_id != null && nuc?.extra_base_k != null) return xbKey(nuc.crossover_id, nuc.extra_base_k)
   if (!nuc?.helix_id) return null
   const c = copy || 0
   return c ? `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}:${c}`

@@ -23,6 +23,7 @@ export const ANNOTATION_COLORS = Object.freeze([
 ])
 
 export const SIZE_RANGE = Object.freeze({ min: Number.MIN_VALUE, max: Number.MAX_VALUE, default: 1 })
+export const ANNOTATION_FONT_SIZES = Object.freeze([10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 48, 64, 96])
 export const ANNOTATION_FONTS = Object.freeze(['system-ui', 'Arial', 'Verdana', 'Georgia', 'Times New Roman', 'monospace'])
 export const TRANSPARENCY_RANGE = Object.freeze({ min: 0, max: 0.8, step: 0.05, default: 0 })
 export const GLOW_INTENSITY_RANGE = Object.freeze({ min: 0, max: 2, step: 0.05, default: 1 })

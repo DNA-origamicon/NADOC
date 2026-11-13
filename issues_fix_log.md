@@ -1,10 +1,28 @@
 # Issues fix log
 
-## ISSUE-188 — Late Slurm stderr inventory (2026-11-12)
+## ISSUE-189 — Late Slurm stderr inventory (2026-11-12)
 
 - [x] Recheck mismatching downloaded files against fresh remote sizes; preserve
   rejection when remote verification fails. Repaired Gerling's saved download
   state through normal worker retry, preserving its continuation checkpoint.
+
+## ISSUE-188 — Exact zoom-volume base selections (2026-11-12)
+
+- [x] Resolve extension, loop-copy, crossover-insert and separately rendered
+  linker/flexible bases; keep native insert display poses and exact connectors.
+- [x] Preserve extension and loop identity through atomistic JSON serialization.
+- [x] Add selection, display, persistence and transport regression coverage.
+- Validation: 10,396 frontend tests passed (one skipped); two final browser
+  checks passed, including independent replay/guarded publication and assembly
+  exit. Lint passed. Initial smoke: 23 passed, two skipped, one fixture timeout
+  subsequently passing in isolation.
+- Backend selector: FAST; 20,852 passed, 19 skipped, one history-verification
+  deadline failure that passed in isolation (0.11 s call). Aggregate guard:
+  496 s against 90 s, zero per-test violators; no limits or markers changed.
+  FULL remains deferred in `.nadoc-slow-pending`. Evidence:
+  `.development-artifacts/zoom-volume-bases/validation.json`. Test artifacts cleaned.
+
+
 
 ## ISSUE-187 — Live trajectory readiness and compiled-video indicators (2026-11-12)
 
@@ -1590,3 +1608,28 @@ Persistence/export validation completed: 10,290 frontend tests passed / one skip
 85 focused backend checks and both browser workflows passed. Smoke: 22 passed,
 two skipped, existing assembly scaffold-mesh setup timeout. The earlier Close Session
 and Square-lattice checks passed this run. FULL backend sweep deferred; cleanup verified.
+
+## Inset title typography (2026-11-12)
+
+Zoom-volume names now appear centered in the top border bar without the visible
+movement hint. Inset options share annotation font families and size presets;
+settings persist independently per inset. Header height, loading overlays, bottom
+positioning and photo/video compositing follow the selected size. Existing files
+retain 12 px defaults. Validation: 10,397 frontend tests passed, 27 focused tests,
+lint and browser typography/export/save-reopen passed. Smoke had 23 passed/2 skipped
+and an assembly fixture timeout that passed serially. The browser fixture now waits
+for serialized metadata writes before saving its audited structure. Evidence:
+`.development-artifacts/inset-titles/validation.json`; visual follow-up MV-63.
+
+## Visualization card collapse and View Actions alignment (2026-11-12)
+
+Representations, Coloring and View Actions now use native keyboard-accessible
+collapse buttons with remembered per-card state and shared sidebar-copy updates.
+View Actions uses consistent compact buttons, neutral and selected colors, aligned
+borders and single-line labels, including section-plane controls. Removed the old
+Reset Camera margins that broke grid alignment. Browser validation caught and
+resolved chevrons entering accessible names and Reset Camera wrapping at the
+standard width. Validation: 10,398 frontend tests passed, 18 focused tests, app
+exercise and lint passed. Smoke: 23 passed/2 skipped; assembly fixture setup timed
+out and passed its isolated retry. Evidence: `.development-artifacts/visualization-cards/validation.json`.
+Main.js LOC delta: 0; visual follow-up MV-64.

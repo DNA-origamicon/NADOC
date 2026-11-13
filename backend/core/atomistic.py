@@ -4554,6 +4554,9 @@ def atomistic_to_json(model: AtomisticModel) -> dict:
                 "aux_t": a.aux_t,
                 "crossover_id": a.crossover_id,
                 "extra_base_k": a.extra_base_k,
+                "copy_k": a.copy_k,
+                "extension_id": a.extension_id,
+                "ext_k": a.ext_k,
             }
             for a in model.atoms
         ],

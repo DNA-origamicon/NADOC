@@ -1,6 +1,6 @@
 # Issues & bugs ledger — "fix next issue" loop
 
-## ISSUE-188 — Late Slurm stderr makes complete downloads appear incomplete (2026-11-12)
+## ISSUE-189 — Late Slurm stderr makes complete downloads appear incomplete (2026-11-12)
 
 - [x] Gerling WITHOUT_EXTRA_T run created November 5 12:47: initial remote
   inventory said stderr was zero bytes; downloaded TIMEOUT message was 106 bytes.
@@ -10,6 +10,22 @@
 - [x] Refresh remote inventory on size mismatch; require an exact remote/local
   match before updating counts. Regression covers log growth, persistent mismatch,
   and unavailable SSH. Focused executor suite: 105 passed.
+
+## ISSUE-188 — Zoom volumes omit extension and crossover base selections (2026-11-12)
+
+- Exact base refs were captured, but the zoom lookup omitted the crossover bead
+  renderer and treated a partial backbone list as complete. Extension-only source
+  trimming discarded the owning strand; isolated linker bases were excluded by
+  the ordinary scene renderer's arc-ownership filter.
+- Atomistic display JSON also dropped `extension_id`, `ext_k`, and `copy_k`, so
+  exact extension/loop selections could not match the atoms they owned.
+- [x] Merge complete display membership, retain exact insert/loop identity and
+  strand metadata, copy native insert poses, and filter connector endpoints.
+- [x] Preserve atom identity in JSON without changing coordinates or bonds.
+- Regression coverage: zoom membership/display/persistence unit tests,
+  `tests/test_zoom_volume_identity.py`, and `e2e/zoom_volume_bases.spec.js`.
+
+
 
 ## ISSUE-187 — Trajectory readiness rail loses live progress (2026-11-12)
 
