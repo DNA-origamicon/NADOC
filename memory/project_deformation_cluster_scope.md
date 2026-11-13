@@ -195,3 +195,12 @@ Reference, Translation, Rotation (or joint rotation), and Info. Existing control
 IDs and event handlers stay intact. Regression app exercise:
 `frontend/e2e/floating_design_tools.spec.js`; its review screenshots use the
 Playwright output directory and the cleanup reporter removes them on all outcomes.
+
+## Desktop live plane preview (2026-11-12)
+
+The owned editor passes evaluated candidate helix axes to its private plane controls.
+Both planes follow the preview center and tangent; switching preview off restores
+the fixed-prefix axes. Teardown drops candidate axes. The source design, canonical
+store geometry and replay prefix retain their ownership. Regression coverage is in
+`deformation_history_adapter.test.js`; the two-cluster Bend guide exercises the
+Tools menu route and checks plane B movement/rotation and affected helix membership.

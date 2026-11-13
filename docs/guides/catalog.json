@@ -31,7 +31,8 @@
     "scripts/run_deformation_history_e2e.py",
     "pyproject.toml",
     "uv.lock",
-    "frontend/guides/model.js"
+    "frontend/guides/model.js",
+    "frontend/guides/workflow.js"
   ],
   "features": {
     "design-readiness": {
@@ -78,13 +79,11 @@
       "guide": "extrude",
       "recipe": "frontend/guides/extrude.spec.js",
       "covered_workflows": [
-        "Desktop: shared Extrude/Sweep cross-section selection normal to XY/XZ/YZ source planes, then Next for a fitted 3D length preview",
-        "Length in bp/nm, direction, scaffold-size recommendations, strand classes and ligation",
-        "Next/Previous preserves footprint and length; cancel, apply, feature editing and Undo/Redo",
-        "Straight-end continuation with overlap refusal and a recorded result",
-        "Deformed-end entry and Cancel after Bend preparation; square-lattice completion blocked by GUIDE-UX-004"
+        "Desktop: select a 3\u00d76 cross-section normal to XY/XZ/YZ source planes, then Next for a fitted 3D length preview",
+        "Length in bp/nm, forward/reverse direction, scaffold-size recommendations, strand classes and ligation",
+        "Apply a 64 bp extrusion, continue a 2\u00d73 end cross-section by 8 bp, then create a separated 3\u00d76 cluster"
       ],
-      "introduction": "Desktop Extrude guide using the standard 3×6 square-lattice model (18 helices). Select the cross-section in Step 1, then click Next to set 64 bp in a fitted 3D view. Then edit the recorded length to 72 bp. This draft is being iterated for coverage and visual style before broader guide generation. Straight continuation is demonstrated. Deformed continuation is shown through entry and Cancel only because of a square-lattice implementation gap; coverage remains partial.",
+      "introduction": "Create a 3\u00d76 square-lattice model with Extrude, extend a 2\u00d73 cross-section at one end, and add a separated 3\u00d76 cluster. Follow cross-section selection, length and strand settings, and applying each result.",
       "watch": [
         "frontend/guides/extrude.spec.js",
         "frontend/src/ui/extrude*.js",
@@ -131,7 +130,7 @@
         "VR free-drawn paths",
         "Per-point direction and twist",
         "Desktop Tab rotation gizmo",
-        "VR 15° grip rotation",
+        "VR 15\u00b0 grip rotation",
         "Visible cross-section orientation",
         "Persistent curvature warning icons",
         "Safe automatic loop/skip correction",
@@ -231,8 +230,63 @@
         "Physical-limit enforcement",
         "Clear loops/skips"
       ],
-      "status": "planned",
-      "guide": null
+      "status": "partial",
+      "guide": "bend",
+      "recipe": "frontend/guides/bend.spec.js",
+      "covered_workflows": [
+        "Open Tools \u2192 Bend on a two-cluster 256 bp design; select one 3\u00d76 cluster and apply two 60\u00b0 bends in directions 0\u00b0 and 90\u00b0 with live plane guides",
+        "Generate staple routing and loops/skips with built-in tools; inspect the same marks in Full 3D and the cadnano-style editor"
+      ],
+      "introduction": "Start with two 256 bp 3\u00d76 square-lattice clusters. Choose Tools \u2192 Bend and select one cluster, bend it in two directions, then inspect loops and skips in Full 3D and the cadnano-style editor.",
+      "watch": [
+        "frontend/guides/bend.spec.js",
+        "frontend/src/ui/extrude*.js",
+        "frontend/src/scene/extrude*.js",
+        "frontend/src/scene/slice_plane.js",
+        "frontend/src/scene/slice_plane/*.js",
+        "frontend/src/scene/end_extrude_arrows.js",
+        "frontend/src/scene/bundle_geometry.js",
+        "frontend/src/app/extrude_history_editor.js",
+        "backend/api/crud.py",
+        "backend/api/part_extrusion*.py",
+        "backend/core/extrude_plane.py",
+        "backend/core/lattice*.py",
+        "backend/core/constants.py",
+        "frontend/src/ui/blunt_end_menus.js",
+        "frontend/src/scene/domain_ends.js",
+        "frontend/src/ui/representation_switcher.js",
+        "frontend/src/ui/bend_twist_popup.js",
+        "frontend/src/ui/deformation*.js",
+        "frontend/src/scene/deformation*.js",
+        "frontend/src/features/deformation*.js",
+        "frontend/src/app/deformation*.js",
+        "backend/api/part_deformation*.py",
+        "backend/api/routes_deformation.py",
+        "backend/api/routes_part_deformation_preview.py",
+        "backend/core/deformation*.py",
+        "frontend/src/ui/cross_section_workflow.js",
+        "frontend/src/scene/lattice_authoring_stage.js",
+        "frontend/src/ui/tool_sections.css",
+        "frontend/src/ui/sweep_panel.js",
+        "frontend/src/ui/cross_section_transition.js",
+        "frontend/src/scene/authoring_display.js",
+        "frontend/src/scene/unfold_view.js",
+        "frontend/src/scene/native_connection_lines.js",
+        "frontend/src/cadnano-editor/*.js",
+        "frontend/cadnano-editor.html",
+        "frontend/src/scene/loop_skip_highlight.js",
+        "frontend/src/scene/loop_skip_glyph.js",
+        "frontend/src/ui/view_legends.js",
+        "frontend/src/ui/region_autostaple.js",
+        "frontend/src/ui/autostaple_options.js",
+        "backend/api/part_autostaple_command.py",
+        "backend/api/part_routing_recording.py",
+        "backend/api/routes_loop_skip.py",
+        "backend/core/loop_skip_calculator.py",
+        "frontend/src/app/deformation_history_editor.js",
+        "frontend/src/ui/deformation_tool_launcher.js",
+        "frontend/src/ui/tool_cluster_selection.js"
+      ]
     },
     "clusters-and-joints": {
       "name": "Clusters and Joints",
@@ -413,7 +467,7 @@
         "Terminal fluorophore labels",
         "Fluorophore emission colors",
         "FRET checker",
-        "Förster-radius pairs",
+        "F\u00f6rster-radius pairs",
         "Gold quenching visualization"
       ],
       "status": "planned",

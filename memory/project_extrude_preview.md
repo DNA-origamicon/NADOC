@@ -38,8 +38,7 @@ picker visibility/input from the retained selection and ghost length preview.
 Source changes (including deformed frames) notify the controller after the
 picker is built. Camera bounds include selected cells, extrusion ends and existing
 helix axes, with room beside the tool popup. Molecular authoring commands and
-lattice geometry are unchanged. Guide capture exercises the actual UI and is
-being updated to reflect this workflow; visual ergonomics remain reviewable.
+lattice geometry are unchanged. Guide capture exercises the actual UI; visual ergonomics remain reviewable.
 
 ## Guide representation convention (2026-11-12)
 
@@ -130,3 +129,19 @@ translation handles and the blunt-end context-menu entry as well as history/relo
 
 <a id="minus-extrude-backend-bug-fixed-2026-05-25"></a>
 - [Minus-extrude backend bug (fixed 2026-05-25)](details/project_extrude_preview/03-reopen-empty-part--empty-space-extrude-menu-2026-05-26.md#minus-extrude-backend-bug-fixed-2026-05-25)
+
+## Focused guide lessons (2026-11-12)
+
+Extrude teaches creation and straight-end continuation only. Cancellation,
+Undo/Redo, history editing and Bend preparation have been removed from its lesson.
+Extrude continues a 2×3 end footprint and creates a separated second 3×6 cluster.
+Bend has a separate guide using two 3×6, 256 bp square-lattice clusters constructed
+through the real Extrude UI. Tools → Bend selects one cluster; two 60° bends use directions 0° and 90°, followed by
+Full Autostaple and Add Loops/Skips. Full 3D and native cadnano path views show the
+same saved marks, including an enlarged path-view detail. Both examples retain verified complete feature logs;
+lesson scope does not reduce the provenance requirement. Shared browser operations
+live in `frontend/guides/workflow.js`; the generator selects a catalog recipe.
+
+Guide prose states the action and its result. Omit extraneous explanations of what
+a feature does not do, including scaffold recommendations and routing disclaimers.
+The convention is maintained in `docs/guides/MAINTENANCE.md`.

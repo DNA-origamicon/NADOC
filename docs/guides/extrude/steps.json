@@ -4,47 +4,39 @@
   "sections": [
     {
       "title": "Create a square-lattice part",
-      "body": "The shared guide model is three rows × six columns: 18 helices on a square lattice. This lesson uses 64 bp initially. A painted lattice footprint is not yet a routed origami; scaffold routing and staple design are separate operations."
+      "body": "The shared guide model is three rows × six columns: 18 helices on a square lattice. This lesson uses 64 bp initially."
     },
     {
       "title": "Choose a source plane",
-      "body": "The From control chooses the construction plane, not a camera view. XY extrudes normal to XY, XZ normal to XZ, and YZ normal to YZ. The camera turns smoothly to face the selected plane over 0.5 seconds, and orbit is locked during cross-section selection. Changing the plane clears an in-progress footprint: choose the plane before selecting cells. Tools → Extrude starts a new footprint; end continuation uses a different entry point shown later."
+      "body": "The From control chooses the construction plane. XY extrudes normal to XY, XZ normal to XZ, and YZ normal to YZ. The camera turns smoothly to face the selected plane over 0.5 seconds, and orbit is locked during cross-section selection. Changing the plane clears an in-progress footprint: choose the plane before selecting cells. Tools → Extrude starts a new footprint; end continuation uses a different entry point shown later."
     },
     {
       "title": "Select the 3×6 footprint",
       "body": "Select three consecutive rows and six consecutive columns. Here the displayed indices are rows 0–2 and columns 1–6, positioned beside the floating tool panel. The offset is only to keep the targets visible; the footprint is still 3×6. Drag the tool-window title bar if it covers your intended cells. Extrude and Sweep share this cross-section picker and normal-view workflow. Grid colors identify strand-direction parity; the +/− extrusion buttons below are a separate choice."
     },
     {
+      "title": "Choose strands and ligation",
+      "body": "Both, Scaffold and Staples select which strand classes the extrusion creates or extends. Ligate adjacent requests joining compatible neighboring strand ends at the extrusion boundary; leaving it unchecked keeps the new segment unligated. Compatibility depends on the source ends and selected strand classes."
+    },
+    {
       "title": "Set length, units and direction",
-      "body": "Step 1 selects the cross-section. Click Next for Step 2: the camera transitions over 0.5 seconds to a fitted oblique 3D view, and the lattice cannot be repainted accidentally. The initial length is zero; enter a nonzero length to show the preview. Changing the length or direction refits the preview. Previous returns to the normal cross-section view while retaining the length and selected cells. Square-lattice spinner/arrow steps are 8 bp; you can type a different integer directly. In nm mode the entered distance is rounded to an integer number of base pairs using 0.334 nm/bp. Changing the unit reinterprets the field; enter the corresponding numeric value explicitly. +/− controls the extrusion direction, independently of the grid color."
+      "body": "Step 1 selects the cross-section. Click Next for Step 2: the camera transitions over 0.5 seconds to a fitted oblique 3D view. The initial length is zero; enter a nonzero length to show the preview. Changing the length or direction refits the preview. Previous returns to the normal cross-section view while retaining the length and selected cells. Square-lattice spinner/arrow steps are 8 bp; you can type a different integer directly. In nm mode the entered distance is rounded to an integer number of base pairs using 0.334 nm/bp. Changing the unit reinterprets the field; enter the corresponding numeric value explicitly. +/− controls the extrusion direction, independently of the grid color."
     },
     {
       "title": "Use scaffold-length recommendations",
-      "body": "The 7249 and 8064 chips propose a per-helix length for the current selection. They reserve 14 nt per helix for end loops: floor(target / selected helices) − 14. They size this extrusion alone, not the entire existing design. They do not route a scaffold, assign its sequence, or certify a scaffold-length fit after later routing."
+      "body": "The 7249 and 8064 chips propose a per-helix length for the current selection. They reserve 14 nt per helix for end loops: floor(target / selected helices) − 14. The recommendation sizes the selected extrusion."
     },
     {
-      "title": "Choose strands and ligation",
-      "body": "Both, Scaffold and Staples select which strand classes the extrusion creates or extends. These controls do not perform an autoscaffold or autostaple routing operation. Ligate adjacent requests joining compatible neighboring strand ends at the extrusion boundary; leaving it unchecked keeps the new segment unligated. Compatibility depends on the source ends and selected strand classes. In an empty part there are no upstream ends to join."
-    },
-    {
-      "title": "Cancel a preview, then build",
-      "body": "Preview changes are not authored structure. Cancel in Step 1, the window close button, or Escape discards the pending operation. Previous in Step 2 returns to selection without discarding inputs. Reopen the tool to start again. When ready, click Extrude (or press Enter in the length field). A successful operation is recorded in feature history. Red overlap feedback means the proposed extrusion intersects existing DNA; change direction/length or remove conflicting cells before applying."
-    },
-    {
-      "title": "Edit the recorded extrusion",
-      "body": "The feature log preserves the construction inputs. Editing the feature changes its recorded parameters and rebuilds dependent operations. Cancel abandons the edit; Apply commits it. Undo and Redo operate through Edit → Undo/Redo (Ctrl+Z/Ctrl+Y). Review later dependent features after upstream changes."
+      "title": "Build the extrusion",
+      "body": "Review the 18-cell cross-section, 64 bp length and forward direction, then apply the extrusion."
     },
     {
       "title": "Continue from an existing end",
-      "body": "Use BLUNT end rings to identify the source. Right-click an end → Extrude, or left-click the end and use the Extrude action in Properties. Amber cells represent compatible ends that can be continued. Step 1 faces the inherited source plane; Next opens the length preview in 3D. Existing geometry is shown at 15% opacity while the tool is open, making the new preview easier to see; closing or applying restores its normal display. The plane is inherited from the source; +/− defaults away from the body. Select only the ends you intend to extend. Ligate adjacent controls boundary joining; an unligated segment is a different result, not an equivalent continuation."
+      "body": "Use BLUNT end rings to identify the source. Right-click an end → Extrude, or left-click the end and use the Extrude action in Properties. Amber cells represent compatible ends that can be continued. Step 1 faces the inherited source plane; Next opens the length preview in 3D. Existing geometry is shown at 15% opacity while the tool is open, making the new preview easier to see; closing or applying restores its normal display. The plane is inherited from the source; +/− defaults away from the body. Select only the ends you intend to extend. Ligate adjacent joins compatible strand ends at the boundary."
     },
     {
-      "title": "Deformed-end continuation: current limitation",
-      "body": "For a bent or twisted source, show Deformed View, right-click an end and choose Extrude. The tool uses the local deformed frame and locks From to the source. However, the current backend places new cells using honeycomb coordinates even for a square source, and its request does not carry the strand-filter/ligation controls. This square-lattice guide therefore demonstrates entry and Cancel only. Do not treat the square deformed-continuation result as verified. GUIDE-UX-004 tracks the gap; the feature remains partially covered until it is resolved and a successful continuation is demonstrated. We add a small 10° Bend through the normal UI to show the entry point; this is geometric CAD deformation, not physical relaxation."
-    },
-    {
-      "title": "Save and troubleshoot",
-      "body": "The downloaded example includes the full demonstrated construction: the edited 3×6 extrusion, straight continuation and Bend preparation. The deformed-continuation preview is canceled because of the documented square-lattice limitation. Use the feature log to inspect the earlier stages. If a target is covered, drag the tool-window title bar or adjust the camera. If the footprint count is wrong, check full-circle enclosure for left-to-right box selection. If no preview appears, check for a nonzero length. If an overlap or backend error occurs, keep the pending inputs, correct the source/direction/length and retry. Cancel abandons the pending operation. Source-plane changes reset an unfinished footprint. Desktop controls are covered here; headset interactions require a separate VR guide."
+      "title": "Create a separate cluster",
+      "body": "Open Tools → Extrude and select another 3×6 footprint a few cells away from the existing geometry. The gap creates a separate cluster that you can select and transform independently."
     }
   ],
   "steps": [
@@ -58,7 +50,8 @@
       },
       "section": "Create a square-lattice part",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 2,
@@ -70,7 +63,8 @@
       },
       "section": "Create a square-lattice part",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 3,
@@ -82,7 +76,8 @@
       },
       "section": "Create a square-lattice part",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 4,
@@ -91,7 +86,8 @@
       "point": null,
       "section": "Create a square-lattice part",
       "annotation": null,
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 5,
@@ -103,7 +99,8 @@
       },
       "section": "Choose a source plane",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 6,
@@ -115,7 +112,8 @@
       },
       "section": "Choose a source plane",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 7,
@@ -127,7 +125,8 @@
       },
       "section": "Choose a source plane",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 8,
@@ -139,7 +138,8 @@
       },
       "section": "Choose a source plane",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 9,
@@ -154,7 +154,8 @@
       },
       "section": "Select the 3×6 footprint",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 10,
@@ -170,7 +171,8 @@
       },
       "section": "Select the 3×6 footprint",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 11,
@@ -179,656 +181,410 @@
       "point": null,
       "section": "Select the 3×6 footprint",
       "annotation": null,
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
       "number": 12,
-      "caption": "Click Next. The footprint is retained, the picker is hidden, and the camera changes to a fitted 3D view for length and direction.",
-      "file": "12.png",
-      "point": {
-        "x": 618,
-        "y": 500.15625
-      },
-      "section": "Set length, units and direction",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 13,
-      "caption": "With length 0, Extrude refuses to build and asks for a length. The footprint remains available for correction.",
-      "file": "13.png",
-      "point": {
-        "x": 599,
-        "y": 608.625
-      },
-      "section": "Set length, units and direction",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 14,
-      "caption": "Enter 64 bp. The readout should show 18 × 64 bp = 1152 bp total.",
-      "file": "14.png",
-      "point": {
-        "x": 361,
-        "y": 219.78125
-      },
-      "section": "Set length, units and direction",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 15,
-      "caption": "For the same 64 bp length, choose nm and enter 21.376. The total remains 1152 bp.",
-      "file": "15.png",
-      "point": {
-        "x": 607,
-        "y": 219.78125
-      },
-      "section": "Set length, units and direction",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 16,
-      "caption": "Click − to preview extrusion on the opposite side of the plane.",
-      "file": "16.png",
-      "point": {
-        "x": 396,
-        "y": 312.96875
-      },
-      "section": "Set length, units and direction",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 17,
-      "caption": "The negative-direction readout and preview change together. No DNA has been committed yet.",
-      "file": "17.png",
-      "point": null,
-      "section": "Set length, units and direction",
-      "annotation": null,
-      "representation": "full"
-    },
-    {
-      "number": 18,
-      "caption": "Return to + for the main example.",
-      "file": "18.png",
-      "point": {
-        "x": 361,
-        "y": 312.96875
-      },
-      "section": "Set length, units and direction",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 19,
-      "caption": "Click 7249 to fill 388 bp for 18 selected helices.",
-      "file": "19.png",
-      "point": {
-        "x": 361,
-        "y": 525.328125
-      },
-      "section": "Use scaffold-length recommendations",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 20,
-      "caption": "The recommendation sets the field to 388 bp and switches the unit to bp. Restore 64 bp for this lesson.",
-      "file": "20.png",
-      "point": {
-        "x": 361,
-        "y": 219.78125
-      },
-      "section": "Use scaffold-length recommendations",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 21,
-      "caption": "Click 8064 to fill 434 bp for 18 selected helices.",
-      "file": "21.png",
-      "point": {
-        "x": 450,
-        "y": 525.328125
-      },
-      "section": "Use scaffold-length recommendations",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 22,
-      "caption": "The recommendation sets the field to 434 bp and switches the unit to bp. Restore 64 bp for this lesson.",
-      "file": "22.png",
-      "point": {
-        "x": 361,
-        "y": 219.78125
-      },
-      "section": "Use scaffold-length recommendations",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 23,
-      "caption": "Click Previous to return to the cross-section and strand choices. The view becomes normal to the source plane again.",
-      "file": "23.png",
-      "point": {
-        "x": 507,
-        "y": 608.625
-      },
-      "section": "Choose strands and ligation",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 24,
       "caption": "Choose Scaffold to restrict the extrusion to scaffold strands.",
-      "file": "24.png",
+      "file": "12.png",
       "point": {
         "x": 420,
         "y": 402.765625
       },
       "section": "Choose strands and ligation",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 25,
+      "number": 13,
       "caption": "Choose Staples to restrict the extrusion to staple strands.",
-      "file": "25.png",
+      "file": "13.png",
       "point": {
         "x": 503,
         "y": 402.765625
       },
       "section": "Choose strands and ligation",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 26,
+      "number": 14,
       "caption": "Choose Both for the main example.",
-      "file": "26.png",
+      "file": "14.png",
       "point": {
         "x": 361,
         "y": 402.765625
       },
       "section": "Choose strands and ligation",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 27,
+      "number": 15,
       "caption": "Uncheck Ligate adjacent when the new segment should remain unligated to upstream ends.",
-      "file": "27.png",
+      "file": "15.png",
       "point": {
         "x": 361,
         "y": 430.359375
       },
       "section": "Choose strands and ligation",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 28,
+      "number": 16,
       "caption": "Restore Ligate adjacent for this example and the later continuation.",
-      "file": "28.png",
+      "file": "16.png",
       "point": {
         "x": 361,
         "y": 430.359375
       },
       "section": "Choose strands and ligation",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 29,
-      "caption": "Click Next again. The same 18 cells and 64 bp length are retained and shown in 3D.",
-      "file": "29.png",
+      "number": 17,
+      "caption": "Click Next. The footprint is retained, the picker is hidden, and the camera changes to a fitted 3D view for length and direction.",
+      "file": "17.png",
       "point": {
         "x": 618,
         "y": 500.15625
       },
-      "section": "Choose strands and ligation",
+      "section": "Set length, units and direction",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 30,
-      "caption": "Close the Extrude window to discard this preview and selection.",
-      "file": "30.png",
-      "point": {
-        "x": 650,
-        "y": 115
-      },
-      "section": "Cancel a preview, then build",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 31,
-      "caption": "Open Tools → Extrude to start a new extrusion.",
-      "file": "31.png",
-      "point": {
-        "x": 374.8125,
-        "y": 138.484375
-      },
-      "section": "Cancel a preview, then build",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 32,
-      "caption": "With the canvas focused, press Tab for box selection. Left-drag from upper left to lower right, enclosing the entire circles of the 3-row × 6-column footprint. Left-to-right requires full enclosure; right-to-left selects touching cells.",
-      "file": "32.png",
-      "point": {
-        "x": 989.9822084587287,
-        "y": 630.6488935586456,
-        "end": {
-          "x": 1208.1844489913128,
-          "y": 739.0177915412713
-        }
-      },
-      "section": "Cancel a preview, then build",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 33,
-      "caption": "The count must read 18 helices. Tab returns to ordinary cell picking; a left-drag can also paint cells along its path.",
-      "file": "33.png",
-      "point": null,
-      "section": "Cancel a preview, then build",
-      "annotation": null,
-      "representation": "full"
-    },
-    {
-      "number": 34,
-      "caption": "Click Next to set the extrusion length in 3D.",
-      "file": "34.png",
-      "point": {
-        "x": 618,
-        "y": 500.15625
-      },
-      "section": "Cancel a preview, then build",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 35,
-      "caption": "With 18 cells, 64 bp, +, Both and Ligate adjacent selected, click Extrude.",
-      "file": "35.png",
-      "point": {
-        "x": 599,
-        "y": 608.625
-      },
-      "section": "Cancel a preview, then build",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 36,
-      "caption": "Right-drag to orbit the result. Press F to fit, then scroll down slightly if the sidebars crowd the model. This is the 3×6 square-lattice, 64 bp example.",
-      "file": "36.png",
-      "point": null,
-      "section": "Cancel a preview, then build",
-      "annotation": null,
-      "representation": "full"
-    },
-    {
-      "number": 37,
-      "caption": "Click the edit control on the Extrude feature row.",
-      "file": "37.png",
-      "point": {
-        "x": 191.1875,
-        "y": 227.875
-      },
-      "section": "Edit the recorded extrusion",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 38,
-      "caption": "The recorded footprint opens in Step 1. Click Next to edit its length in 3D.",
-      "file": "38.png",
-      "point": {
-        "x": 618,
-        "y": 500.15625
-      },
-      "section": "Edit the recorded extrusion",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 39,
-      "caption": "Change the length to 72 bp. Close the window first to verify that the original 64 bp design is preserved.",
-      "file": "39.png",
+      "number": 18,
+      "caption": "Enter 64 bp. The readout should show 18 × 64 bp = 1152 bp total.",
+      "file": "18.png",
       "point": {
         "x": 361,
         "y": 219.78125
       },
-      "section": "Edit the recorded extrusion",
+      "section": "Set length, units and direction",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 40,
-      "caption": "Close the window to cancel this trial edit.",
-      "file": "40.png",
+      "number": 19,
+      "caption": "For the same 64 bp length, choose nm and enter 21.376. The total remains 1152 bp.",
+      "file": "19.png",
       "point": {
-        "x": 650,
-        "y": 115
+        "x": 607,
+        "y": 219.78125
       },
-      "section": "Edit the recorded extrusion",
+      "section": "Set length, units and direction",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 41,
-      "caption": "Reopen the feature edit to make a deliberate change.",
-      "file": "41.png",
+      "number": 20,
+      "caption": "Click − to preview extrusion on the opposite side of the plane.",
+      "file": "20.png",
       "point": {
-        "x": 191.1875,
-        "y": 227.875
+        "x": 396,
+        "y": 312.96875
       },
-      "section": "Edit the recorded extrusion",
+      "section": "Set length, units and direction",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 42,
-      "caption": "Click Next to return to the length controls.",
-      "file": "42.png",
+      "number": 21,
+      "caption": "The negative-direction readout and preview change together.",
+      "file": "21.png",
+      "point": null,
+      "section": "Set length, units and direction",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 22,
+      "caption": "Return to + for the main example.",
+      "file": "22.png",
       "point": {
-        "x": 618,
-        "y": 500.15625
+        "x": 361,
+        "y": 312.96875
       },
-      "section": "Edit the recorded extrusion",
+      "section": "Set length, units and direction",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 43,
-      "caption": "Click Apply to rebuild the recorded extrusion at 72 bp.",
-      "file": "43.png",
+      "number": 23,
+      "caption": "Click 7249 to fill 388 bp for 18 selected helices.",
+      "file": "23.png",
       "point": {
-        "x": 610,
+        "x": 361,
+        "y": 525.328125
+      },
+      "section": "Use scaffold-length recommendations",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 24,
+      "caption": "The recommendation sets the field to 388 bp and switches the unit to bp. Restore 64 bp for this lesson.",
+      "file": "24.png",
+      "point": {
+        "x": 361,
+        "y": 219.78125
+      },
+      "section": "Use scaffold-length recommendations",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 25,
+      "caption": "Click 8064 to fill 434 bp for 18 selected helices.",
+      "file": "25.png",
+      "point": {
+        "x": 450,
+        "y": 525.328125
+      },
+      "section": "Use scaffold-length recommendations",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 26,
+      "caption": "The recommendation sets the field to 434 bp and switches the unit to bp. Restore 64 bp for this lesson.",
+      "file": "26.png",
+      "point": {
+        "x": 361,
+        "y": 219.78125
+      },
+      "section": "Use scaffold-length recommendations",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 27,
+      "caption": "With 18 cells, 64 bp, +, Both and Ligate adjacent selected, click Extrude.",
+      "file": "27.png",
+      "point": {
+        "x": 599,
         "y": 608.625
       },
-      "section": "Edit the recorded extrusion",
+      "section": "Build the extrusion",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 44,
-      "caption": "Use Edit → Undo to restore 64 bp.",
-      "file": "44.png",
-      "point": {
-        "x": 333.8125,
-        "y": 58.296875
-      },
-      "section": "Edit the recorded extrusion",
-      "annotation": "numbered-arrow",
-      "representation": "full"
+      "number": 28,
+      "caption": "Right-drag to orbit the result. Press F to fit, then scroll down slightly if the sidebars crowd the model. This is the 3×6 square-lattice, 64 bp example.",
+      "file": "28.png",
+      "point": null,
+      "section": "Build the extrusion",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 45,
-      "caption": "Use Edit → Redo to restore the 72 bp edit. The saved example retains this demonstrated change.",
-      "file": "45.png",
-      "point": {
-        "x": 333.8125,
-        "y": 93.890625
-      },
-      "section": "Edit the recorded extrusion",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 46,
+      "number": 29,
       "caption": "Enable BLUNT in the toolbar to show selectable end rings.",
-      "file": "46.png",
+      "file": "29.png",
       "point": {
         "x": 568.75,
         "y": 58
       },
       "section": "Continue from an existing end",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 47,
+      "number": 30,
       "caption": "Right-click the marked far-end ring, then choose Extrude from its menu.",
-      "file": "47.png",
+      "file": "30.png",
       "point": {
-        "x": 1126.51828095263,
-        "y": 835.4200327808404,
+        "x": 1152.9106417873966,
+        "y": 841.1493243685095,
         "helixId": "h_XY_2_6",
-        "diskBp": 72,
+        "diskBp": 64,
         "openSide": 1
       },
       "section": "Continue from an existing end",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 48,
+      "number": 31,
       "caption": "Choose Extrude to continue from this end.",
-      "file": "48.png",
+      "file": "31.png",
       "point": {
-        "x": 1138,
-        "y": 889.390625
+        "x": 1164,
+        "y": 895.390625
       },
       "section": "Continue from an existing end",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 49,
+      "number": 32,
       "caption": "From is locked to the selected source end. The tool chooses the initial direction away from the existing body.",
-      "file": "49.png",
+      "file": "32.png",
       "point": {
         "x": 512,
         "y": 317.78125
       },
       "section": "Continue from an existing end",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 50,
-      "caption": "Select the amber cell at the chosen end. This focused example extends one helix within the 3×6 model; select more compatible cells to extend a wider footprint.",
-      "file": "50.png",
-      "point": {
-        "row": 2,
-        "col": 6,
-        "state": "continuable",
-        "x": 1272.526157335668,
-        "y": 527.5895370657329
-      },
+      "number": 33,
+      "caption": "Select two rows × three columns of amber cells: six compatible ends for the continuation.",
+      "file": "33.png",
+      "point": null,
       "section": "Continue from an existing end",
-      "annotation": "numbered-arrow",
-      "representation": "full"
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 51,
+      "number": 34,
       "caption": "Click Next to keep the selected end and inspect the continuation in 3D.",
-      "file": "51.png",
+      "file": "34.png",
       "point": {
         "x": 618,
         "y": 500.15625
       },
       "section": "Continue from an existing end",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 52,
-      "caption": "For this far end, − points back into existing DNA. Inspect the red overlap feedback.",
-      "file": "52.png",
-      "point": {
-        "x": 396,
-        "y": 312.96875
-      },
-      "section": "Continue from an existing end",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 53,
-      "caption": "Attempting the overlapping extrusion is refused. Correct the direction rather than forcing the operation.",
-      "file": "53.png",
-      "point": {
-        "x": 599,
-        "y": 608.625
-      },
-      "section": "Continue from an existing end",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 54,
-      "caption": "Restore + to extrude away from this far end. A near-end continuation normally defaults to −.",
-      "file": "54.png",
-      "point": {
-        "x": 361,
-        "y": 312.96875
-      },
-      "section": "Continue from an existing end",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 55,
+      "number": 35,
       "caption": "With 8 bp, Both and Ligate adjacent selected, apply the continuation.",
-      "file": "55.png",
+      "file": "35.png",
       "point": {
         "x": 599,
         "y": 608.625
       },
       "section": "Continue from an existing end",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 56,
-      "caption": "The selected end has been extended and the continuation has its own history entry. Unselected helices retain their previous extent.",
-      "file": "56.png",
+      "number": 36,
+      "caption": "The selected 2×3 cross-section is now 8 bp longer.",
+      "file": "36.png",
       "point": null,
       "section": "Continue from an existing end",
       "annotation": null,
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 57,
-      "caption": "Right-click the marked far-end ring, then choose Bend from its menu.",
-      "file": "57.png",
+      "number": 37,
+      "caption": "Open Tools → Extrude to start a new extrusion.",
+      "file": "37.png",
       "point": {
-        "x": 887.759760023871,
-        "y": 783.603039675132,
-        "helixId": "h_XY_0_6",
-        "diskBp": 72,
-        "openSide": 1
+        "x": 374.8125,
+        "y": 138.484375
       },
-      "section": "Deformed-end continuation: current limitation",
+      "section": "Create a separate cluster",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 58,
-      "caption": "Choose Bend to prepare the deformed-end example.",
-      "file": "58.png",
+      "number": 38,
+      "caption": "With the canvas focused, press Tab for box selection. Left-drag from upper left to lower right, enclosing the entire circles of the 3-row × 6-column footprint. Left-to-right requires full enclosure; right-to-left selects touching cells.",
+      "file": "38.png",
       "point": {
-        "x": 899,
-        "y": 913.390625
+        "x": 1012.7168204558844,
+        "y": 267.7802001859495,
+        "end": {
+          "x": 1295.2831795441155,
+          "y": 408.11517047137994
+        }
       },
-      "section": "Deformed-end continuation: current limitation",
+      "section": "Create a separate cluster",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 59,
-      "caption": "For this preparation step, use a 10° Bend. Review the selected scope and start/end planes.",
-      "file": "59.png",
-      "point": {
-        "x": 355,
-        "y": 530.15625
-      },
-      "section": "Deformed-end continuation: current limitation",
-      "annotation": "numbered-arrow",
-      "representation": "full"
+      "number": 39,
+      "caption": "The count must read 18 helices. Tab returns to ordinary cell picking; a left-drag can also paint cells along its path.",
+      "file": "39.png",
+      "point": null,
+      "section": "Create a separate cluster",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 60,
-      "caption": "Apply the Bend before continuing its deformed end.",
-      "file": "60.png",
-      "point": {
-        "x": 614,
-        "y": 755.90625
-      },
-      "section": "Deformed-end continuation: current limitation",
-      "annotation": "numbered-arrow",
-      "representation": "full"
+      "number": 40,
+      "caption": "Select another 3×6 footprint a few empty rows away from the existing bundle.",
+      "file": "40.png",
+      "point": null,
+      "section": "Create a separate cluster",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 61,
-      "caption": "Right-click the marked far-end ring, then choose Extrude from its menu.",
-      "file": "61.png",
+      "number": 41,
+      "caption": "Click Next to preview the separate extrusion.",
+      "file": "41.png",
       "point": {
-        "x": 918.7972445174354,
-        "y": 790.9297694012074,
-        "helixId": "h_XY_0_6",
-        "diskBp": 72,
-        "openSide": 1
-      },
-      "section": "Deformed-end continuation: current limitation",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 62,
-      "caption": "Choose Extrude to continue from this end.",
-      "file": "62.png",
-      "point": {
-        "x": 930,
-        "y": 844.390625
-      },
-      "section": "Deformed-end continuation: current limitation",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 63,
-      "caption": "The source plane is locked in deformed continuation. This entry point is available, but square-lattice placement is not verified: stop here for this model.",
-      "file": "63.png",
-      "point": {
-        "x": 512,
-        "y": 317.78125
-      },
-      "section": "Deformed-end continuation: current limitation",
-      "annotation": "numbered-arrow",
-      "representation": "full"
-    },
-    {
-      "number": 64,
-      "caption": "Cancel this deformed-continuation preview. No deformed extrusion is committed in the downloadable example.",
-      "file": "64.png",
-      "point": {
-        "x": 538,
+        "x": 618,
         "y": 500.15625
       },
-      "section": "Deformed-end continuation: current limitation",
+      "section": "Create a separate cluster",
       "annotation": "numbered-arrow",
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     },
     {
-      "number": 65,
-      "caption": "Inspect the final geometry and ordered feature log. NADOC autosaves the part; use File → Save As when you need a separately named user copy.",
-      "file": "65.png",
+      "number": 42,
+      "caption": "Enter 64 bp and click Extrude to create the second cluster.",
+      "file": "42.png",
+      "point": {
+        "x": 599,
+        "y": 608.625
+      },
+      "section": "Create a separate cluster",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 43,
+      "caption": "The two separated bundles form two clusters. Each cluster can be selected for its own tools and transformations.",
+      "file": "43.png",
       "point": null,
-      "section": "Save and troubleshoot",
+      "section": "Create a separate cluster",
       "annotation": null,
-      "representation": "full"
+      "representation": "full",
+      "view": "3d"
     }
   ]
 }

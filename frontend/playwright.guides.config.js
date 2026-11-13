@@ -4,10 +4,11 @@ import path from 'node:path'
 const root = process.env.NADOC_HISTORY_E2E_ROOT
 if (!root || !process.env.NADOC_GUIDE_OUTPUT) throw new Error('Use python -m scripts.generate_feature_guide')
 export default defineConfig({
-  testDir: './guides', testMatch: 'extrude.spec.js', workers: 1, retries: 0,
+  testDir: './guides', testMatch: process.env.NADOC_GUIDE_RECIPE ?? 'extrude.spec.js', workers: 1, retries: 0,
   timeout: 900000, globalTimeout: 960000, expect: { timeout: 20000 },
   reporter: 'list', outputDir: path.join(root, 'playwright'),
   use: { baseURL: 'http://127.0.0.1:5189', viewport: { width: 1920, height: 1080 },
+    launchOptions: { args: ['--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=gl'] },
     headless: true, trace: 'off', video: 'off', screenshot: 'off' },
   webServer: [
     { command: '.venv/bin/python -m uvicorn backend.api.main:app --host 127.0.0.1 --port 8019 --lifespan off',

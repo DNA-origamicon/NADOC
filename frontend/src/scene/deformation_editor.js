@@ -62,6 +62,7 @@ let _editOrigParams    = null   // op's params at edit-start, for cancel revert
 let _editDirty         = false  // a live preview PATCH has been applied
 let _historyTool = null
 let _historyScope = null
+let _historyPreviewAxes = null
 let _historyRayMask = null
 let _historyHover = null
 let _editCommitted     = false  // edit was confirmed (don't revert on exit)
@@ -236,10 +237,12 @@ export function startToolForCreation(creation, adapter, placementHint = null) {
 }
 
 /** Refresh only private guides from a successfully evaluated server scope. */
-export function updateHistoryScope(scope) {
+export function updateHistoryScope(scope, component = null) {
   if (!_historyTool) return
   const selected = deformationHistoryScope(_historyTool.operation, _historyTool.design, scope)
   _historyScope = selected.affected; _sessionRanges = selected.ranges
+  _historyPreviewAxes = component ? Object.fromEntries(component.helix_axes.map(axis =>
+    [axis.helix_id, { start: axis.start, end: axis.end, samples: axis.samples }])) : null
   if (_solidA && _planeA) _updateSolidPlane(_solidA, _planeA.bp)
   if (_solidB && _planeB) _updateSolidPlane(_solidB, _planeB.bp)
 }
@@ -580,7 +583,7 @@ function _exitTool() {
   }
   _historyHover = null
   _setState(STATE.IDLE)
-  _historyTool = null; _historyScope = null
+  _historyTool = null; _historyScope = null; _historyPreviewAxes = null
   if (_historyRayMask !== null) _raycaster.layers.mask = _historyRayMask
   _historyRayMask = null
   if (_onExit) _onExit()
@@ -664,9 +667,9 @@ const _sourceAxes = () => _historyTool?.helixAxes ?? store.getState().currentHel
 function _getHelixAxisData(clusterIdsOverride = null) {
   const currentDesign = _sourceDesign()
   if (!currentDesign) return []
-  // While a preview is live, the store has the bent axes — use the original snapshot
-  // so planes and hover beads track the undeformed contour.
-  const helixAxes = _historyTool ? _sourceAxes() : (_previewOriginalAxes ?? _sourceAxes())
+  // Owned guides follow the evaluated display; their fixed prefix remains separate.
+  // Legacy sessions retain their original-axis picking behavior.
+  const helixAxes = _historyTool ? (_historyPreviewAxes ?? _sourceAxes()) : (_previewOriginalAxes ?? _sourceAxes())
 
   // Restrict plane interaction to the union of selected clusters' helices so ghost
   // planes, picking, and centering are all scoped to the clusters being deformed.

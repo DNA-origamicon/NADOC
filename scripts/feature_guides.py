@@ -115,7 +115,7 @@ def promote_directory(stage, output, expected=None):
 def render_guide(steps, feature):
     lines = [f'# {steps["title"]}', '', '[All guides](../README.md) · [Coverage ledger](../LEDGER.md)', '',
              feature['introduction'], '',
-             'This is a tool demonstration, not a validated origami design. Numbered arrows point to',
+             'Numbered arrows point to',
              'mouse targets while keeping their labels visible. Dashed boxes show drag extents.',
              'Unmarked images show settings or results. This is an editorial draft for style review.', '',
              '[Download the example](example.nadoc) · [Construction verification](verification.json) ·',

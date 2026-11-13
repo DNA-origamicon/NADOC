@@ -1,0 +1,210 @@
+{
+  "title": "Bend: longer bundles, multiple directions, loops and skips",
+  "representationPolicy": "full",
+  "sections": [
+    {
+      "title": "Start with a longer model",
+      "body": "Use the Extrude workflow to make two separated 3-row × 6-column square-lattice clusters, each 256 bp long. All 3D images use Full representation. This lesson makes two successive 60° bends in different directions, then generates and inspects loop/skip marks through NADOC’s own tools."
+    },
+    {
+      "title": "Bend the first half",
+      "body": "Choose Tools → Bend, then click the original 18-helix cluster. Set Plane 1 to 0 bp and Plane 2 to 127 bp, Angle to 60° and Direction to 0°. Angle controls the amount of bending; Direction rotates its orientation around the bundle axis. The Curvature (nm) field is the linked bend radius. After applying, reopen the saved part for a clean result view if the tool overlay remains dimmed (GUIDE-UX-008)."
+    },
+    {
+      "title": "Bend in another direction",
+      "body": "Choose Tools → Bend again and select the same cluster. For the second half, use planes 128–255 bp, Angle 60° and Direction 90°. These are adjacent intervals, so the bends form one continuous multidirectional shape. Direction is measured in the bundle’s local frame; it is distinct from the camera angle."
+    },
+    {
+      "title": "Generate loops and skips",
+      "body": "Geometric Bend defines the displayed shape. Add Loops/Skips creates the discrete insertion/deletion marks that accompany that design intent; use LOOP/SKIP to display the saved marks. The routing action requires crossovers, so first run Full Autostaple with Standard settings on this demonstration bundle."
+    },
+    {
+      "title": "Inspect loops and skips in 3D",
+      "body": "Click LOOP/SKIP in the View toolbar (P). Orange loop markers indicate inserted bases and red × markers indicate deleted bases. The overlay follows the bent geometry while Full remains selected."
+    },
+    {
+      "title": "Inspect the same marks in the cadnano editor",
+      "body": "Open Origami Editor from the top bar. NADOC’s built-in cadnano-style path view shows the same document and loop/skip marks in a flat base-pair layout. Press F to fit, then zoom in to read individual symbols. The path view is a 2D topology view; the 3D window remains in Full representation."
+    }
+  ],
+  "steps": [
+    {
+      "number": 1,
+      "caption": "Start with two 3×6 square-lattice clusters, each 256 bp long. Right-drag to view the clusters from the side, then press F to fit.",
+      "file": "01.png",
+      "point": null,
+      "section": "Start with a longer model",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 2,
+      "caption": "Choose Tools → Bend to open the tool and select a cluster.",
+      "file": "02.png",
+      "point": {
+        "x": 374.8125,
+        "y": 396.640625
+      },
+      "section": "Bend the first half",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 3,
+      "caption": "Click the original 3×6 bundle to choose its cluster for bending. The second cluster provides a straight reference.",
+      "file": "03.png",
+      "point": {
+        "id": "4e75ce87-4baf-5de3-8654-89660f2147ae",
+        "x": 698.2323478254077,
+        "y": 540.7287286780902
+      },
+      "section": "Bend the first half",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 4,
+      "caption": "Set planes 0–127 bp, Angle 60° and Direction 0°. Inspect both plane guides on the preview, then click Apply.",
+      "file": "04.png",
+      "point": {
+        "x": 614,
+        "y": 722.5
+      },
+      "section": "Bend the first half",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 5,
+      "caption": "The first half now bends through 60°. The remaining half continues from its new orientation.",
+      "file": "05.png",
+      "point": null,
+      "section": "Bend the first half",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 6,
+      "caption": "Set planes 128–255 bp, Angle 60° and Direction 90°. Inspect both plane guides on the preview, then click Apply.",
+      "file": "06.png",
+      "point": {
+        "x": 614,
+        "y": 722.5
+      },
+      "section": "Bend in another direction",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 7,
+      "caption": "The second half bends through another 60°, with Direction 90°. The selected cluster turns in two directions alongside the straight second cluster.",
+      "file": "07.png",
+      "point": null,
+      "section": "Bend in another direction",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 8,
+      "caption": "Choose Tools → Routing → Full Autostaple to create the prerequisite staple routing and crossovers.",
+      "file": "08.png",
+      "point": {
+        "x": 533.8125,
+        "y": 93.890625
+      },
+      "section": "Generate loops and skips",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 9,
+      "caption": "Keep Standard selected and click OK.",
+      "file": "09.png",
+      "point": {
+        "x": 1128.5,
+        "y": 621.5
+      },
+      "section": "Generate loops and skips",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 10,
+      "caption": "Choose Tools → Routing → Add Loops/Skips to generate marks for the square lattice and its bends.",
+      "file": "10.png",
+      "point": {
+        "x": 533.8125,
+        "y": 183.078125
+      },
+      "section": "Generate loops and skips",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 11,
+      "caption": "Click LOOP/SKIP in the View toolbar to show the markers.",
+      "file": "11.png",
+      "point": {
+        "x": 972.890625,
+        "y": 58
+      },
+      "section": "Inspect loops and skips in 3D",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 12,
+      "caption": "Full 3D view with loop and skip highlights on the bent 3×6 bundle. Compare the marker distribution across the two bend intervals.",
+      "file": "12.png",
+      "point": null,
+      "section": "Inspect loops and skips in 3D",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 13,
+      "caption": "Click Origami Editor to open the same document in NADOC’s cadnano-style editor.",
+      "file": "13.png",
+      "point": {
+        "x": 583.8125,
+        "y": 19.5
+      },
+      "section": "Inspect the same marks in the cadnano editor",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 14,
+      "caption": "The cadnano-style editor shows the same routed bundle and saved loop/skip marks. Blue circles denote loops; red × symbols denote skips.",
+      "file": "14.png",
+      "point": null,
+      "section": "Inspect the same marks in the cadnano editor",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    },
+    {
+      "number": 15,
+      "caption": "Scroll up over the path view to enlarge the symbols. Blue loop circles and red skip crosses appear directly on the routed strands; LOOP/SKIP remains enabled in the View toolbar.",
+      "file": "15.png",
+      "point": null,
+      "section": "Inspect the same marks in the cadnano editor",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    }
+  ]
+}

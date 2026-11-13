@@ -1,4 +1,4 @@
-"""Render the captured Extrude guide for direct, offline browser viewing.
+"""Render the captured feature guide for direct, offline browser viewing.
 
 This presentation export does not recapture images or change their baseline.
 """
@@ -9,8 +9,8 @@ import json
 from scripts.feature_guides import GUIDES, REPO
 
 
-def render():
-    source = REPO / GUIDES / 'extrude'
+def render(guide_id='extrude'):
+    source = REPO / GUIDES / guide_id
     guide = json.loads((source / 'steps.json').read_text())
     manifest = json.loads((source / 'manifest.json').read_text())
     sections = guide['sections']
@@ -23,7 +23,7 @@ def render():
             if step['section'] != section['title']:
                 continue
             number, caption = step['number'], escape(step['caption'])
-            image = 'extrude/' + escape(step['file'], quote=True)
+            image = escape(guide_id, quote=True) + '/' + escape(step['file'], quote=True)
             steps.append(f'''<figure id="step-{number}">
 <figcaption><span class="step">Step {number}</span><p>{caption}</p></figcaption>
 <a href="{image}" aria-label="Open step {number} screenshot at full size">
@@ -57,16 +57,16 @@ footer{{margin-top:50px;color:#aab9ca}}.skip{{position:absolute;left:-9999px}}.s
 @media print{{:root{{color-scheme:light;color:#111;background:white}}nav,.skip{{display:none}}.layout{{display:block}}main{{padding:0}}figure{{break-inside:avoid;background:white}}a{{color:inherit}}}}
 </style></head><body><a class="skip" href="#guide">Skip to guide</a>
 <div class="layout"><nav aria-label="Guide chapters"><strong>NADOC / GUIDES</strong>
-<a href="#guide">Overview</a>{nav}<a href="README.md">Guide library (Markdown)</a></nav>
-<main id="guide"><header><p class="eyebrow">Extrude · desktop walkthrough · style-review draft</p>
+<a href="#guide">Overview</a>{nav}<a href="extrude.html">Extrude guide</a><a href="bend.html">Bend guide</a><a href="README.md">Guide library (Markdown)</a></nav>
+<main id="guide"><header><p class="eyebrow">{escape(guide_id.title())} · desktop walkthrough · style-review draft</p>
 <h1>{escape(guide['title'])}</h1><p>{escape(manifest['introduction'])}</p>
 <p class="meta">{len(guide['steps'])} illustrated steps · {len(sections)} chapters · Captured {escape(manifest['captured_at'])}</p>
-<p class="notice">Coverage is partial: square-lattice deformed continuation is demonstrated through entry and Cancel only. See the limitation chapter. This is a tool demonstration, not a validated origami design.</p>
+<p class="notice">Follow the illustrated steps below to use the tool.</p>
 <p>Numbered arrows indicate click targets; dashed boxes show drag extents. Click any screenshot to open it at full size.</p>
-<p class="links"><a href="extrude/example.nadoc" download>Download example</a><a href="extrude/README.md">Markdown guide</a><a href="extrude/verification.json">Construction verification</a><a href="UX_LEDGER.md">UX findings</a></p>
+<p class="links"><a href="{escape(guide_id, quote=True)}/example.nadoc" download>Download example</a><a href="{escape(guide_id, quote=True)}/README.md">Markdown guide</a><a href="{escape(guide_id, quote=True)}/verification.json">Construction verification</a><a href="UX_LEDGER.md">UX findings</a></p>
 <details><summary>Demonstrated scope</summary><ul>{scope}</ul></details></header>
 {''.join(chapters)}
-<footer>Offline viewing: keep this HTML file beside the extrude folder. No server or internet connection is required. <a href="#guide">Back to top ↑</a></footer>
+<footer>Offline viewing: keep this HTML file beside the {escape(guide_id)} folder. No server or internet connection is required. <a href="#guide">Back to top ↑</a></footer>
 </main></div></body></html>
 '''
 
@@ -74,9 +74,10 @@ footer{{margin-top:50px;color:#aab9ca}}.skip{{position:absolute;left:-9999px}}.s
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Verify the HTML matches the current captured guide')
+    parser.add_argument('--guide', choices=['extrude', 'bend'], default='extrude')
     args = parser.parse_args()
-    output = REPO / GUIDES / 'extrude.html'
-    html = render()
+    output = REPO / GUIDES / f'{args.guide}.html'
+    html = render(args.guide)
     if args.check:
         if not output.exists() or output.read_text() != html:
             raise SystemExit('HTML needs refresh: python3 -m scripts.render_feature_guide_html')

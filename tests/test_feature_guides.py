@@ -190,3 +190,25 @@ def test_successful_replace_removes_backup(tmp_path):
     promote_directory(stage, output, directory_hashes(output))
     assert (output / 'README.md').read_text() == 'new'
     assert not list(tmp_path.glob('.guide-backup-*'))
+
+
+def test_bend_html_uses_own_assets_and_scope(library, monkeypatch):
+    from scripts import render_feature_guide_html as html
+    root, _, _ = library
+    directory = root / GUIDES / 'bend'
+    directory.mkdir()
+    (directory / 'steps.json').write_text(json.dumps({
+        'title': 'Bend', 'sections': [{'title': 'Apply', 'body': 'Review the bend.'}],
+        'steps': [{'number': 1, 'section': 'Apply', 'caption': 'Click Apply.', 'file': '01.png'}],
+    }))
+    (directory / 'manifest.json').write_text(json.dumps({
+        'introduction': 'Bend the bundle.', 'covered_workflows': ['Set the bend angle'],
+        'captured_at': '2026-11-12T10:00:00-07:00',
+    }))
+    monkeypatch.setattr(html, 'REPO', root)
+    result = html.render('bend')
+    assert 'src="bend/01.png"' in result
+    assert 'href="bend/example.nadoc"' in result
+    assert 'Set the bend angle' in result
+    assert 'extrude/' not in result
+    assert 'deformed continuation' not in result

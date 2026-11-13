@@ -8,7 +8,7 @@ export async function createGuide(page, directory, title, { feature = '' } = {})
   const steps = []
   const sections = []
   let section = null
-  async function capture(caption, point = null) {
+  async function capture(caption, point = null, target = page) {
     await page.waitForFunction(() => !document.querySelector('[data-camera-transition="true"]'))
     if (await page.locator('.toast-message').filter({ hasText: 'Selection: D = dimensions' }).count()) {
       throw new Error('Selection startup hint must not appear in guide screenshots')
@@ -22,8 +22,15 @@ export async function createGuide(page, directory, title, { feature = '' } = {})
     if (feature !== 'representations' && (display.representation !== DEFAULT_GUIDE_REPRESENTATION || display.overrides !== 0)) {
       throw new Error(`Guide screenshots require Full representation without regional overrides; got ${JSON.stringify(display)}`)
     }
+    const editorView = target !== page
+    if (editorView) {
+      if (new URL(target.url()).pathname !== '/cadnano-editor.html') throw new Error('Only the native 2D editor may use an alternate guide page')
+      const sourceId = await page.evaluate(async () => (await import('/src/state/store.js')).store.getState().currentDesign?.id)
+      const editorId = await target.evaluate(async () => (await import('/src/cadnano-editor/store.js')).editorStore.getState().design?.id)
+      if (!sourceId || sourceId !== editorId) throw new Error('Guide editor must show the same document as the Full 3D view')
+    }
     const number = steps.length + 1
-    await page.evaluate(({ number, point }) => {
+    await target.evaluate(({ number, point }) => {
       document.getElementById('guide-click-marker')?.remove()
       if (!point) return
       const ns = 'http://www.w3.org/2000/svg'
@@ -56,10 +63,10 @@ export async function createGuide(page, directory, title, { feature = '' } = {})
     }, { number, point })
     const file = `${String(number).padStart(2, '0')}.png`
     try {
-      await page.screenshot({ path: path.join(directory, file) })
-      steps.push({ number, caption, file, point, section, annotation: point ? 'numbered-arrow' : null, representation: display.representation })
+      await target.screenshot({ path: path.join(directory, file) })
+      steps.push({ number, caption, file, point, section, annotation: point ? 'numbered-arrow' : null, representation: editorView ? null : display.representation, view: editorView ? 'cadnano-path' : '3d' })
     } finally {
-      await page.evaluate(() => document.getElementById('guide-click-marker')?.remove())
+      await target.evaluate(() => document.getElementById('guide-click-marker')?.remove())
     }
   }
   async function click(locator, caption) {
@@ -71,6 +78,7 @@ export async function createGuide(page, directory, title, { feature = '' } = {})
   }
   return {
     capture, click,
+    captureEditor: (editor, caption, point = null) => capture(caption, point, editor),
     section(title, body = '') { section = title; sections.push({ title, body }) },
     async pointAt(locator, caption) {
       await locator.scrollIntoViewIfNeeded()

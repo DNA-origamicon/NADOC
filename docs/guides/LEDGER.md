@@ -12,7 +12,7 @@ this table deliberately does not freeze a potentially stale “current” badge.
 | **Design and Editing** | | | | |
 | Design Readiness | planned | — | — | Not created |
 | Lattice Design | planned | — | — | Not created |
-| Extrude | partial | 2026-11-11T21:07:37-07:00 | 2026-11-12T00:21:37-07:00 | [extrude](extrude/README.md): Desktop: shared Extrude/Sweep cross-section selection normal to XY/XZ/YZ source planes, then Next for a fitted 3D length preview; Length in bp/nm, direction, scaffold-size recommendations, strand classes and ligation; Next/Previous preserves footprint and length; cancel, apply, feature editing and Undo/Redo; Straight-end continuation with overlap refusal and a recorded result; Deformed-end entry and Cancel after Bend preparation; square-lattice completion blocked by GUIDE-UX-004 |
+| Extrude | partial | 2026-11-11T21:07:37-07:00 | 2026-11-12T20:44:25-07:00 | [extrude](extrude/README.md): Desktop: select a 3×6 cross-section normal to XY/XZ/YZ source planes, then Next for a fitted 3D length preview; Length in bp/nm, forward/reverse direction, scaffold-size recommendations, strand classes and ligation; Apply a 64 bp extrusion, continue a 2×3 end cross-section by 8 bp, then create a separated 3×6 cluster |
 | Sweep | planned | — | — | Not created |
 | Primitive Library | planned | — | — | Not created |
 | Scaffold Routing | planned | — | — | Not created |
@@ -20,7 +20,7 @@ this table deliberately does not freeze a potentially stale “current” badge.
 | Strand Editing | planned | — | — | Not created |
 | 2D Origami Editor | planned | — | — | Not created |
 | Move/Rotate | planned | — | — | Not created |
-| Bend and Twist | planned | — | — | Not created |
+| Bend and Twist | partial | 2026-11-12T12:43:47-07:00 | 2026-11-12T21:06:31-07:00 | [bend](bend/README.md): Open Tools → Bend on a two-cluster 256 bp design; select one 3×6 cluster and apply two 60° bends in directions 0° and 90° with live plane guides; Generate staple routing and loops/skips with built-in tools; inspect the same marks in Full 3D and the cadnano-style editor |
 | Clusters and Joints | planned | — | — | Not created |
 | Dimensions | planned | — | — | Not created |
 | **Sequences and Ordering** | | | | |

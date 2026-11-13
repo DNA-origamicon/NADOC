@@ -232,3 +232,28 @@ it.each([{ kind: 'selection' }, { kind: 'end', helixId: 'h', bp: 14, openSide: 1
     expect(f.adapter.onPreview.mock.lastCall[0]).toMatchObject({ plane_a_bp: 0, plane_b_bp: hint.kind === 'end' ? 14 : 21, params })
     canonicalUntouched(f)
   })
+
+it('moves and rotates both solid planes with evaluated axes, restoring prefix guides when preview is off', () => {
+  const f = setup(); editor.startToolForHistory(operation, f.adapter)
+  const planes = [...f.scene.children]
+  const original = planes.map(p => ({ position: p.position.toArray(), quaternion: p.quaternion.toArray() }))
+  const scope = { id: operation.id, affected_helix_ids: ['h'], target_ranges: null }
+  const candidate = { helix_axes: [{ helix_id: 'h', start: [12, 0, 0], end: [18, 0, 5],
+    samples: [[12, 0, 0], [13, 0, 2], [15, 0, 4], [18, 0, 5]] }] }
+  editor.updateHistoryScope(scope, candidate)
+  for (const [i, bp] of [0, 21].entries()) {
+    const frame = editor.getDeformationPlaneFrame(bp)
+    expect(planes[i].position.toArray()).toEqual(frame.center)
+    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(planes[i].quaternion)
+    expect(normal.distanceTo(new THREE.Vector3(...frame.normal))).toBeLessThan(1e-10)
+    expect(planes[i].position.toArray()).not.toEqual(original[i].position)
+    expect(planes[i].quaternion.toArray()).not.toEqual(original[i].quaternion)
+  }
+  expect(f.adapter.helixAxes.h.start).toEqual([10, 0, 0])
+  canonicalUntouched(f)
+  editor.updateHistoryScope(scope, null)
+  expect(planes.map(p => ({ position: p.position.toArray(), quaternion: p.quaternion.toArray() }))).toEqual(original)
+  editor.finishHistoryTool()
+  editor.startToolForHistory(operation, f.adapter)
+  expect(editor.getDeformationPlaneFrame(0).center).toEqual([10, 0, 0])
+})

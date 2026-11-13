@@ -58,7 +58,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
         } else {
           preview.show('before'); preview.replaceCandidate(null)
         }
-        editor.updateHistoryScope(state.projection.selected_scope)
+        editor.updateHistoryScope(state.projection.selected_scope, visual ? state.projection.candidate : null)
         localError = null
       } catch (error) { localError = error }
     }
@@ -72,7 +72,10 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
   async function change(patch, options = {}) {
     if (!ready) return null
     visual = options.includeGeometry ?? visual
-    if (!visual) preview.show('before')
+    if (!visual) {
+      preview.show('before')
+      editor.updateHistoryScope(controller.getState().projection.selected_scope, null)
+    }
     return controller.update(patch, { includeGeometry: visual })
   }
   async function publication(operation) {
@@ -136,6 +139,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
       const context = controls(packet)
       preview = createPreview(); preview.open(packet); lastProjection = packet; ready = true
       configure(packet, context)
+      editor.updateHistoryScope(packet.selected_scope, packet.candidate)
       render(controller.getState()); return true
     } catch (error) {
       if (token !== generation) return false

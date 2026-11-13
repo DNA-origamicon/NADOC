@@ -1,4 +1,4 @@
-"""Generate the Extrude picture guide using real UI actions in isolated scratch.
+"""Generate a cataloged picture guide using real UI actions in isolated scratch.
 
 Persistent inventory: only the requested output directory (Markdown, PNGs, action
 manifest, audited example and verification). Everything else lives beneath a
@@ -28,9 +28,9 @@ from scripts.feature_guides import (
 )
 
 
-def main(output=None, replace=False):
+def main(output=None, replace=False, feature_id="extrude"):
     catalog = load_catalog(REPO)
-    feature = catalog['features']['extrude']
+    feature = catalog['features'][feature_id]
     source = snapshot(REPO, catalog, feature)
     if source['unmatched']:
         raise RuntimeError(f'Missing guide dependencies: {source["unmatched"]}')
@@ -40,7 +40,7 @@ def main(output=None, replace=False):
         if not replace:
             raise RuntimeError(f'Refusing to overwrite an existing guide: {output}; use --replace after review')
         previous_manifest = json.loads((output / 'manifest.json').read_text())
-        if previous_manifest.get('feature') != 'extrude':
+        if previous_manifest.get('feature') != feature_id:
             raise RuntimeError('Refusing to replace a different guide')
         expected = directory_hashes(output)
         if set(expected) != set(previous_manifest['assets']) | {'manifest.json'}:
@@ -60,6 +60,7 @@ def main(output=None, replace=False):
         env = {**os.environ, 'PLAYWRIGHT_BROWSERS_PATH': browsers,
                'NADOC_HISTORY_E2E_ROOT': str(root), 'NADOC_SMOKE_E2E_ROOT': str(root),
                'NADOC_GUIDE_OUTPUT': str(root / 'guide'),
+               'NADOC_GUIDE_RECIPE': Path(feature['recipe']).name,
                'NADOC_WORKSPACE': str(root / 'workspace'), 'NADOC_DISABLE_SESSION_CACHE': '1',
                'TMPDIR': str(root / 'tmp'), 'TEMP': str(root / 'tmp'), 'TMP': str(root / 'tmp'),
                'XDG_CACHE_HOME': str(root / 'cache'), 'PYTHONDONTWRITEBYTECODE': '1',
@@ -87,7 +88,7 @@ def main(output=None, replace=False):
         reopened = audit(Design.model_validate_json((stage / 'example.nadoc').read_text()))
         revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip()
         (stage / 'verification.json').write_text(json.dumps({
-            'guide': 'extrude', 'source_revision': revision,
+            'guide': feature_id, 'source_revision': revision,
             'source_worktree_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=REPO, text=True).strip()),
             'publication': proof, 'reopened_audit': reopened,
             'interaction': 'Real browser input; rendered cell positions are read-only observations',
@@ -97,12 +98,12 @@ def main(output=None, replace=False):
         steps = json.loads((stage / 'steps.json').read_text())
         (stage / 'README.md').write_text(render_guide(steps, feature))
         current_catalog = load_catalog(REPO)
-        if (feature != current_catalog['features']['extrude']
-                or source != snapshot(REPO, current_catalog, current_catalog['features']['extrude'])):
+        if (feature != current_catalog['features'][feature_id]
+                or source != snapshot(REPO, current_catalog, current_catalog['features'][feature_id])):
             raise RuntimeError('Source changed during capture; refusing to stamp a mixed-version guide')
         captured = datetime.now(ZoneInfo('America/Denver')).isoformat(timespec='seconds')
         (stage / 'manifest.json').write_text(json.dumps({
-            'schema': 1, 'feature': 'extrude',
+            'schema': 1, 'feature': feature_id,
             'created_at': previous_manifest['created_at'] if previous_manifest else captured,
             'captured_at': captured, 'source_revision': revision,
             'source_worktree_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=REPO, text=True).strip()),
@@ -138,5 +139,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', help='Optional preview destination; default docs/guides/extrude')
     parser.add_argument('--replace', action='store_true', help='Regenerate the existing guide after review, preserving first-created date')
+    parser.add_argument('--feature', default='extrude', choices=['extrude', 'bend-and-twist'])
     args = parser.parse_args()
-    main(args.output, args.replace)
+    main(args.output, args.replace, args.feature)

@@ -2,15 +2,30 @@
 
 [Guide library](README.md) · [Coverage ledger](LEDGER.md) · [UX findings](UX_LEDGER.md)
 
+## Writing convention
+
+Explain what each control does and the action the reader should take. Keep captions
+and introductions focused on the demonstrated workflow; omit lists of things a
+feature does not do. Apply this convention to every future guide and its capture recipe.
+
+## Lesson scope
+
+Keep each guide focused on using its named tool successfully. Do not add
+cancellation/no-commit demonstrations, Undo/Redo, feature-history editing, or
+chapters teaching another tool. Link prerequisite guides instead. The generated
+example still requires complete verified construction history.
+
 ## Representation convention
 
-Every guide uses **Full** representation, with no regional representation
+Every 3D guide image uses **Full** representation, with no regional representation
 overrides. The shared capture helper checks this before every screenshot and
 records the representation in `steps.json`; it refuses a nonconforming capture.
 Only a lesson about changing representations may opt out by passing
 `{ feature: 'representations' }` to `createGuide`. Do not switch ordinary lessons
 to Cylinders for readability; adjust framing instead. Tool previews retain the
-appearance users see in the real application.
+appearance users see in the real application. Native cadnano path-view captures are
+2D, recorded as `view: cadnano-path` with no 3D representation. The capture helper
+verifies that the editor and Full 3D window share the same document.
 
 ## Check freshness
 
@@ -50,7 +65,7 @@ watched conservatively; review false positives rather than narrowing rules just
 to clear a warning. External browsers, drivers and unlisted dependencies can also
 affect rendering and require visual review.
 
-## Regenerate Extrude
+## Generate or regenerate a guide
 
 The installed project environment and Playwright Chromium are required:
 
@@ -60,6 +75,9 @@ just validate-safe .venv/bin/python -m scripts.generate_feature_guide
 
 # Regenerate the existing guide after reviewing the stale report:
 just validate-safe .venv/bin/python -m scripts.generate_feature_guide --replace
+
+# Separate Bend lesson (use --replace on later captures):
+just validate-safe .venv/bin/python -m scripts.generate_feature_guide --feature bend-and-twist
 
 # Optional disposable editorial preview (does not update the canonical ledger):
 just validate-safe .venv/bin/python -m scripts.generate_feature_guide \
@@ -74,7 +92,9 @@ and the final view shows the operation's effect.
 Generation takes a source fingerprint before capture and compares it again after
 capture. It refuses a mixed-source run. The browser uses isolated servers on
 8019/5189, a fresh workspace/profile and real mouse/keyboard input. Existing user
-documents and the development server are not used. It waits for the actual
+documents and the development server are not used. Chromium requests ANGLE OpenGL
+for responsive Full-mode capture; it may use Mesa software rendering when a GPU
+is unavailable. This does not alter the application’s preview lifetime. It waits for the actual
 autosave, independently replays the construction and publishes the example
 through `scripts.agent_structure_guard.publish`. Saved/reopened replay is checked
 again. Parts and assemblies retain their document ownership; this part generator
@@ -126,7 +146,7 @@ editorial captures and verification during these iterations.
    contexts have guides; use `blocked` with a concrete reason when appropriate.
 3. Add a real-input recipe under `frontend/guides/`, outcome checks and source
    dependencies. Extend the generator/config to select that recipe: the current
-   executable generator supports Extrude only, not arbitrary catalog entries.
+   executable generator supports Extrude and Bend, not arbitrary catalog entries.
 4. Capture to `docs/guides/<stable-id>/`, preserve/replay the complete construction,
    review images, record UX findings and add a reader link to this library.
 5. Run the checker and the focused documentation-tool tests. Review the diff,
@@ -190,3 +210,8 @@ unchanged. Its separate `--check` detects HTML drift after a capture or renderer
 change; run it alongside the guide freshness check. Open `extrude.html` directly
 in a browser. There are no remote fonts, scripts, fetch requests or server
 requirements. Keep the entire guide directory when downloading for offline use.
+
+Render the offline browser versions with `python3 -m scripts.render_feature_guide_html`
+and `python3 -m scripts.render_feature_guide_html --guide bend`. Add `--check` to
+verify each export. Bend is registered under the existing Bend and Twist feature;
+its guide covers Bend only, so that combined feature remains partially covered.

@@ -180,7 +180,7 @@ it('refreshes private guides from successful controls-only scope, never from sta
     direction: 'FORWARD', strand_id: 'historical', domain_index: 3 }] }
   f.previewAPI.evaluate.mockImplementation(async body => ({ ...f.packet(body), candidate: null, selected_scope: scope }))
   await f.session().onChange({ targets: [{ kind: 'part_group', id: 'other-org' }] }, { includeGeometry: false })
-  expect(f.editor.updateHistoryScope).toHaveBeenLastCalledWith(scope)
+  expect(f.editor.updateHistoryScope).toHaveBeenLastCalledWith(scope, null)
   expect(f.preview.show).toHaveBeenLastCalledWith('before')
   expect(f.api.syncDesignResponse).not.toHaveBeenCalled()
   let finish
@@ -189,4 +189,14 @@ it('refreshes private guides from successful controls-only scope, never from sta
   f.switchDocument(); await tick()
   f.editor.updateHistoryScope.mockClear(); finish(); await pending
   expect(f.editor.updateHistoryScope).not.toHaveBeenCalled()
+})
+
+it('feeds evaluated preview axes to plane guides and restores prefix guides when visualization is disabled', async () => {
+  const f = setup(); await f.owner.open(f.design.feature_log[0], 0)
+  expect(f.editor.updateHistoryScope).toHaveBeenLastCalledWith(expect.any(Object), { which: 'candidate' })
+  await f.session().onChange({ params: { ...op.params, direction_deg: 90 } }, { includeGeometry: true })
+  expect(f.editor.updateHistoryScope).toHaveBeenLastCalledWith(expect.any(Object), { which: 'new' })
+  await f.session().onChange({}, { includeGeometry: false })
+  expect(f.editor.updateHistoryScope).toHaveBeenLastCalledWith(expect.any(Object), null)
+  expect(f.api.syncDesignResponse).not.toHaveBeenCalled()
 })
