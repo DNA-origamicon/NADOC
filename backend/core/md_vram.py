@@ -650,6 +650,7 @@ def estimate_profile_from_design(
     box_mode: str = 'bbox',
     box_size_nm=None,
     submodel=None,
+    counterion="auto",
 ) -> Optional[dict]:
     """Estimate a solvation profile from the *dry* design — no GROMACS run.
 
@@ -681,7 +682,7 @@ def estimate_profile_from_design(
         submodel = submodel.model_dump(mode='json')
     region_key = json.dumps({k: v for k, v in submodel.items() if k != 'visible'}, sort_keys=True) if submodel else None
     key = _profile_cache_key(design, padding_nm, atomistic_model)
-    if key is not None:key += (box_mode,tuple(box_size_nm) if box_size_nm is not None else None,float(nacl_mM),float(mgcl2_mM),region_key)
+    if key is not None:key += (box_mode,tuple(box_size_nm) if box_size_nm is not None else None,float(nacl_mM),float(mgcl2_mM),region_key,counterion)
     if key is not None and key in _PROFILE_CACHE:
         return _PROFILE_CACHE[key]
 
@@ -739,6 +740,7 @@ def estimate_profile_from_design(
         mgcl2_mM=mgcl2_mM,
         box_nm=box_nm,
         mg_hexahydrate=True,
+        counterion=counterion,
     )
     # Each MGH cluster is 19 atoms and vacates 6 waters; each monatomic ion takes
     # one water site.
@@ -763,7 +765,7 @@ def estimate_profile_from_design(
     solute_upper=exact_solute_atoms if exact_solute_atoms is not None else canonical_atoms if canonical_atoms is not None else 2*len(dna)
     upper_box=tuple(d if exact_solute_atoms is not None or (box_size_nm and box_size_nm[i] is not None) else d+.3 for i,d in enumerate(box_nm))
     upper_water=math.ceil(math.prod(upper_box)*_WATER_NUMBER_DENSITY_NM3)
-    upper_ions=ion_counts(upper_water,solute_charge if solute_charge is not None else -float(n_p),nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM,box_nm=upper_box,mg_hexahydrate=True)
+    upper_ions=ion_counts(upper_water,solute_charge if solute_charge is not None else -float(n_p),nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM,box_nm=upper_box,mg_hexahydrate=True,counterion=counterion)
     net_ions=upper_ions.n_mg*(MGH_ATOMS-3*MGH_WATERS_CONSUMED)-2*(upper_ions.n_na+upper_ions.n_cl)
     profile.update(atom_upper_bound=solute_upper+3*upper_water+max(0,net_ions),
         resource_box_nm=upper_box,atom_bound_basis='bulk-water-plus-charmm-dry-count-v2',
@@ -798,7 +800,7 @@ def classify_vram_fit(rec: Optional[dict]) -> str:
 def preflight_vram_advice(
     design, *, padding_nm: float = 6.0, devices: str = "0", atomistic_model=None,
     gpu_resident_mode: str = "auto", box_mode="rotation", box_size_nm=None,
-    nacl_mM=0.0, mgcl2_mM=12.5, threads=16, stage_overrides=None, submodel=None,
+    nacl_mM=0.0, mgcl2_mM=12.5, threads=16, stage_overrides=None, submodel=None, counterion="auto",
 ) -> dict:
     """Pre-preparation budgets for the selected box and worst planned settings.
 
@@ -819,7 +821,7 @@ def preflight_vram_advice(
     try:
         host_budget=available_for_work(available_bytes=host_mb*1024**2)/1024**2
         profile=estimate_profile_from_design(design,padding_nm=padding_nm,atomistic_model=atomistic_model,
-            box_mode=box_mode,box_size_nm=box_size_nm,nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM,submodel=submodel)
+            box_mode=box_mode,box_size_nm=box_size_nm,nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM,submodel=submodel,counterion=counterion)
         if not profile:return unknown
         atoms=profile.get('atom_upper_bound',profile['dna_atoms']+profile['full_water']*3+profile['ion_atoms'])
         box=[10*d for d in profile.get('resource_box_nm',profile.get('box_nm',[]))] or None

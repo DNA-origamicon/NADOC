@@ -1303,6 +1303,7 @@ def ion_counts(
     box_nm: tuple[float, float, float],
     volume_nm3: Optional[float] = None,
     mg_hexahydrate: bool = True,
+    counterion: str = "auto",
 ) -> IonCounts:
     """The canonical ion recipe.  ONE implementation, every caller.
 
@@ -1317,11 +1318,10 @@ def ion_counts(
     which suppressed added salt whenever neutralisation dominated. Existing
     packages retain that composition; new charge audits identify this convention.
 
-    ``counterion`` is derived, not passed: magnesium neutralises whenever
-    hexahydrate placement is on AND a nonzero Mg concentration was asked for.
-    Setting Mg to 0 is an explicit request for no magnesium, and falls back to the
-    legacy Na⁺ neutralisation so a deliberate monovalent-screening experiment still
-    works.
+    ``counterion='auto'`` preserves the legacy choice: magnesium neutralises when
+    hexahydrate placement is on and added Mg is nonzero; otherwise sodium does.
+    Explicit ``counterion='mg'`` permits neutralizing Mg with zero added MgCl2,
+    independently of bulk concentration. It requires hexahydrate placement.
 
     ``volume_nm3`` overrides the solvent volume used for the bulk-concentration
     terms. The default estimates solvent volume from the pre-ionization water
@@ -1342,7 +1342,11 @@ def ion_counts(
     n_mg_bulk = int(round(mgcl2_mM * 1e-3 * _NA * vol_L))
     dna_neg_charge = max(0, -int(round(dna_charge)))
 
-    use_mg = bool(mg_hexahydrate and mgcl2_mM > 0)
+    if counterion not in {"auto", "mg", "na"}:
+        raise ValueError("counterion must be auto, mg, or na")
+    if counterion == "mg" and not mg_hexahydrate:
+        raise ValueError("Explicit Mg counterions require hexahydrate placement")
+    use_mg = counterion == "mg" or (counterion == "auto" and mg_hexahydrate and mgcl2_mM > 0)
     if use_mg:
         # ceil(|q|/2): an odd backbone charge leaves one unit over, which the Cl⁻
         # term below absorbs (2*n_mg_neutralising - |q| == 1).
@@ -2747,6 +2751,7 @@ def build_namd_solvated_package(
     ion_conc_mM: float = 150.0,
     mg_conc_mM: float = 0.0,
     mg_hexahydrate: bool = False,
+    counterion: str = "auto",
     require_full_topology: bool = False,
     #: Intended unrestrained duration, recorded for provenance; never changes sizing.
     free_ns: "float | None" = None,
@@ -2868,10 +2873,14 @@ def build_namd_solvated_package(
             float(graphene_lines[0][i:i + 8]) / 10 for i in (30, 38, 46)
         ]
         dna_pdb = dna_pdb.rstrip().removesuffix("END").rstrip() + "\n" + "\n".join(graphene_lines) + "\nEND\n"
+    from backend.core.namd_submodel_charge import charge_policy, audit_options
+
+    submodel_charge = charge_policy(topology_metadata, dna_psf)
     dry_audit = audit_psf(
         dna_psf,
         require_dna_hydrogens=require_full_topology and not graphene_only,
         require_dna_residue_charge=require_full_topology and not graphene_only,
+        **audit_options(submodel_charge),
     )
     if require_full_topology and not graphene_only and not dry_audit.passed:
         raise RuntimeError(
@@ -2925,6 +2934,8 @@ def build_namd_solvated_package(
     #    :func:`ion_counts`. Bulk terms are based on the solvent actually placed.
     _emit(progress, "assemble", 0.5, "Placing neutralising ions…")
     dna_charge = _count_dna_charge(dna_pdb)
+    if submodel_charge:
+        dna_charge = submodel_charge["dna_charge_e"]
     ions = ion_counts(
         len(waters),
         dna_charge,
@@ -2932,6 +2943,7 @@ def build_namd_solvated_package(
         mgcl2_mM=mg_conc_mM,
         box_nm=box_nm,
         mg_hexahydrate=mg_hexahydrate,
+        counterion=counterion,
     )
     from backend.core.namd_surface_charge import charge_plan, charge_psf
     wall_charge = charge_plan(graphene_nanopore, box_nm, graphene_count) if graphene_nanopore else None
@@ -2995,9 +3007,10 @@ def build_namd_solvated_package(
     solvated_psf = charge_psf(solvated_psf, wall_charge)
     final_audit = audit_psf(
         solvated_psf,
-        require_neutral=require_full_topology,
+        require_neutral=require_full_topology and submodel_charge is None,
         require_dna_hydrogens=require_full_topology and not graphene_only,
         require_dna_residue_charge=require_full_topology and not graphene_only,
+        **audit_options(submodel_charge, final=True),
     )
     if require_full_topology and not final_audit.passed:
         raise RuntimeError(
@@ -3128,10 +3141,11 @@ def build_namd_solvated_package(
         "topology_metadata": topology_metadata,
         "production_ready": final_audit.passed
         and (graphene_only or final_audit.dna_hydrogens > 0)
-        and abs(final_audit.total_charge) <= 1.0e-3,
+        and (submodel_charge is not None or abs(final_audit.total_charge) <= 1.0e-3),
         "requirements": {
             "full_dna_topology_required": require_full_topology and not graphene_only,
-            "neutral_final_psf_required": require_full_topology,
+            "neutral_final_psf_required": require_full_topology and submodel_charge is None,
+            "submodel_charge_policy": submodel_charge,
             "photoproduct_timestep_fs": (4.0 if product_hmr_qualified else 2.0) if has_photoproducts else None,
             "photoproduct_hmr_4fs_validated": product_hmr_qualified if has_photoproducts else None,
         },
@@ -3139,7 +3153,7 @@ def build_namd_solvated_package(
         "dry_dna": dry_audit.to_dict(),
         "final_solvated": final_audit.to_dict(),
         "ionization": {
-            "dna_charge_method": "phosphate_count_legacy",
+            "dna_charge_method": "cropped_psf_nearest_integer" if submodel_charge else "phosphate_count_legacy",
             "dna_charge_used_e": dna_charge,
             # Cross-check the phosphate count against the force field's own charges.
             # They agree today (psfgen's 5TER/3TER patches carry -0.47/-0.53 e, which

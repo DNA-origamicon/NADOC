@@ -22,8 +22,19 @@ can be fully automatic, and interruptible (spot) pods become viable.
 Related: [[alpine-cluster-submission]] (the remote seam this extends — read its Resume
 model block), [[md-job-system]] (the local job system), [[project_water_shell_carve]].
 
+November 12, 2026: the shared RunPod status card refreshes pods and balance every
+15 seconds while mounted and connected, independently of job selection/polling.
+Previously stopping then deleting the final job could freeze a stale billing
+warning after successful provider termination. The card exposes `dispose()` to
+clear its timer and coalesces overlapping billing refreshes.
+
 <a id="adaptive-large-assembly-oxdna-phase-2026-08-26"></a>
 - [Adaptive large-assembly oxDNA phase (2026-08-26)](details/project_runpod_submission/01-adaptive-large-assembly-oxdna-phase-2026-08-26.md#adaptive-large-assembly-oxdna-phase-2026-08-26)
+
+November 12, 2026: capacity fallback also recognizes GraphQL
+`SUPPLY_CONSTRAINT` and “no longer any instances available.” The old matcher
+only recognized “no instances” and stopped before trying other eligible cards.
+Non-capacity failures still stop immediately; mocked API tests cover both paths.
 
 ## Architecture (decided 2026-07-13)
 

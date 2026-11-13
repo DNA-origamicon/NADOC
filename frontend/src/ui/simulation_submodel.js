@@ -2,6 +2,7 @@ import './simulation_submodel.css'
 import { setSubmodelHiddenKeys } from '../scene/submodel_visibility.js'
 import { createSubmodelShell } from '../scene/simulation_submodel_shell.js'
 import { initViewVolumes } from '../scene/view_volumes.js'
+import { hasSubmodelSelection, submodelFromSelection } from '../scene/submodel_selection.js'
 
 /** The view-volume editor owns every gesture. This adapter owns only job UI state. */
 export function initSimulationSubmodel({ document, store, api, createEditor = initViewVolumes, ...sceneDeps }) {
@@ -23,7 +24,7 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     if (!records.has(key)) records.set(key, { key, job, engine: forEngine, box: null, loaded: !job, loading: false, error: '', queue: Promise.resolve(), pending: 0 })
     return records.get(key)
   }
-  const status = {}, buttons = {}, retries = {}, shellInputs = {}, shellDirty = {}, projections = {}, details = {}, onlyInputs = {}
+  const status = {}, buttons = {}, selectionButtons = {}, retries = {}, shellInputs = {}, shellDirty = {}, projections = {}, details = {}, onlyInputs = {}
   const shell = createSubmodelShell(sceneDeps.scene)
   const mdVisibility = document.getElementById('md-box-view-details')
   let oxVisibility = null
@@ -69,7 +70,23 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
       window.dispatchEvent(new CustomEvent('nadoc:zoom-volume-box', { detail: structuredClone(r.box) }))
     })
     zoomButtons[key] = zoom
-    const actions = document.createElement('div'); actions.className = 'submodel-actions'; actions.append(button, zoom)
+    const fromSelection = document.createElement('button')
+    fromSelection.type = 'button'; fromSelection.className = 'btn btn--sm'; fromSelection.textContent = 'Define submodel from selection'; fromSelection.id = `${key}-submodel-from-selection`
+    fromSelection.title = 'Create an editable box around the selected DNA, with 1 nm padding. Nearby bases inside the box are included. The surrounding shell is added separately.'
+    fromSelection.setAttribute('aria-controls', content.id)
+    selectionButtons[key] = fromSelection
+    const actions = document.createElement('div'); actions.className = 'submodel-actions'; actions.append(button, fromSelection, zoom)
+    fromSelection.addEventListener('click', () => {
+      const r = record(key)
+      if (r.loading || !r.loaded) return
+      let bounds
+      try { bounds = submodelFromSelection(store.getState(), sceneDeps) }
+      catch (error) { r.selectionError = error.message; paint(); return }
+      r.selectionError = ''; r.opened = true; engine = key
+      if (key === 'md' && mdVisibility && !mdVisibility.checked) { mdVisibility.checked = true; mdVisibility.dispatchEvent(new Event('change', { bubbles: true })) }
+      save(r, { ...r.box, ...bounds, shell_nm: r.box?.shell_nm ?? 3, visible: true })
+      refresh(); editor.select('submodel')
+    })
     const onlyLabel = document.createElement('label')
     onlyLabel.className = 'box-solvent-toggle'
     const only = document.createElement('input'); only.type = 'checkbox'; only.id = `${key}-submodel-only`
@@ -130,16 +147,18 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
         : (r.membership?.reason || 'Available after submodel preparation identifies the simulated nucleotides.')
       details[key].hidden = !r.opened
       buttons[key].setAttribute('aria-expanded', String(!!r.opened))
-      status[key].hidden = !r.opened && !r.error
+      status[key].hidden = !r.opened && !r.error && !r.selectionError
       projections[key].textContent = r.box ? (r.projectionText || '') : ''
       buttons[key].disabled = r.loading || !r.loaded
+      selectionButtons[key].disabled = r.loading || !r.loaded || !hasSubmodelSelection(store.getState())
+      selectionButtons[key].setAttribute('aria-expanded', String(!!r.opened))
       zoomButtons[key].disabled = r.loading || !r.loaded || !r.box
       shellInputs[key].disabled = r.loading || !r.loaded || !r.box
       if (!shellDirty[key]) shellInputs[key].value = String(r.box?.shell_nm ?? 3)
       if (key === 'oxdna') { oxVisibility.checked = r.box?.visible !== false; oxVisibility.disabled = !r.box || r.loading }
       retries[key].hidden = !r.error || !r.loaded
       buttons[key].textContent = r.box ? 'Edit submodel' : 'Define submodel'
-      status[key].textContent = r.error || (r.loading ? 'Loading submodel…' : r.pending ? 'Saving submodel…' : r.box ? (r.job ? 'Submodel saved to job.' : 'Submodel ready for new job.') : 'No submodel defined.')
+      status[key].textContent = r.error || r.selectionError || (r.loading ? 'Loading submodel…' : r.pending ? 'Saving submodel…' : r.box ? (r.job ? 'Submodel saved to job.' : 'Submodel ready for new job.') : 'No submodel defined.')
     }
   }
   function save(r, box) {
@@ -155,7 +174,7 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     }
     const membershipChanged = geometry(r.box) !== geometry(box)
     if (membershipChanged) { r.membershipGeneration = (r.membershipGeneration || 0) + 1; r.membership = null; r.only = false }
-    r.box = box; if (!box) { r.projectionText = ''; r.projectionKey = null }; r.error = ''; r.loaded = true; r.loading = false
+    r.box = box; if (!box) { r.projectionText = ''; r.projectionKey = null }; r.error = ''; r.selectionError = ''; r.loaded = true; r.loading = false
     if (!r.job) { paint(); return Promise.resolve() }
     notify()
     r.pending++; paint()

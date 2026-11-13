@@ -1736,7 +1736,7 @@ def _production_steps_and_ns(
     return steps, length_ns
 
 
-def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
+def _production_fast_plan(job: MdJob, body: ProductionRequest, *, historical=False) -> dict:
     """Resolve the production timestep, step count, and fast-mode eligibility.
 
     A user can pick the production timestep by hand in the Advanced card (1/2/4 fs),
@@ -1755,6 +1755,17 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         manifest = json.loads((package_dir / "manifest.json").read_text())
     except (OSError, ValueError):
         manifest = {}
+    reference_profile = manifest.get("submodel_reference")
+    if manifest.get("submodel") and not reference_profile and not historical:
+        from backend.core.namd_submodel_reference import lookup
+        if lookup(_workspace(), design_path=job.design_source_path):
+            raise HTTPException(409, "This submodel predates its full-model reference settings. Prepare a new relaxation to match ions before creating further comparison runs.")
+    if reference_profile:
+        body = body.model_copy(update={
+            "production_timestep_fs": float(reference_profile["physics"]["timestep"]),
+            "rigid_bonds": reference_profile["physics"]["rigidBonds"],
+            "hmr": reference_profile["hmr"],
+        })
     relaxed_fast = bool(manifest.get("fast_relaxation", {}).get("enabled"))
     declash = bool(manifest.get("declash"))
     # Precedence: THIS production request > the parent relaxation's resolved integrator >
@@ -2149,7 +2160,7 @@ async def list_relax_presets() -> dict:
     return {"presets": preset_catalogue(), "default": DEFAULT_PRESET}
 
 
-def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
+def _apply_relax_preset_defaults(body: CreateJobRequest) -> CreateJobRequest:
     """Fill unset request fields from the chosen preset; DERIVE ``protocol`` from it.
 
     ``model_fields_set`` is exactly "what the caller actually sent", so a preset supplies
@@ -2196,6 +2207,14 @@ def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
     # Preset defaults are not explicit caller choices (notably for CPD safety).
     resolved.__pydantic_fields_set__ = explicit
     return resolved
+
+
+def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
+    from backend.core.namd_submodel_reference import resolve_request
+    try:
+        return resolve_request(_apply_relax_preset_defaults(body), _workspace())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 def _apply_photoproduct_integrator_policy(design, body: CreateJobRequest) -> CreateJobRequest:
@@ -2954,7 +2973,7 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     params["draft"] = False
     if "submodel" not in body.model_fields_set:
         params["submodel"] = read_selection(job.job_dir(_workspace()))["box"]
-    params.setdefault("design_source_path", job.design_source_path)
+    params["design_source_path"] = params.get("design_source_path") or job.design_source_path
     new_body = CreateJobRequest(**params)
 
     seeded = bool(
@@ -3118,6 +3137,7 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
             nacl_mM=0 if body.salt_mode=='screening' else body.ion_conc_mM,
             mgcl2_mM=12.5 if body.salt_mode=='screening' else body.mg_conc_mM,
             submodel=body.submodel,
+            counterion="mg" if body.submodel_reference_job_id else "auto",
         )
         if not profile:
             return {**forecast(target, 0), "skipped": True}
@@ -3195,6 +3215,7 @@ async def preflight_md_vram(body: CreateJobRequest) -> dict:
             threads=resolved.threads,
             stage_overrides=resolved.stage_overrides,
             submodel=resolved.submodel,
+            counterion="mg" if resolved.submodel_reference_job_id else "auto",
         )
         return advice
     except Exception as exc:  # noqa: BLE001 — unknown sizing must not authorize a launch
@@ -3640,6 +3661,11 @@ def _spawn_prep_job(
     ``existing_job`` to prepare a DRAFT in place (reusing its id + seed) instead of
     creating a fresh record — the "Relax from oxDNA" path.
     """
+    from backend.core.namd_submodel_reference import resolve_request
+    try:
+        body = resolve_request(body, _workspace())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     # The browser normally supplies the seed it displayed.  Keep direct API callers and
     # older clients equally safe, and preserve an editable draft's already-assigned seed
     # when its sparse update omits the field.
@@ -3966,7 +3992,9 @@ async def _prepare_job_bg(
                     or body.anchors or body.surface_anchors or body.anchor_atoms
                     or "package_builder" in seed_kwargs):
                 raise ValueError("NAMD submodels currently require explicit-solvent DNA without additional anchors or surfaces")
-            seed_kwargs["package_builder"] = package_builder(body.submodel.model_dump(mode="json"))
+            from backend.core.namd_submodel_reference import lookup
+            reference_profile = lookup(_workspace(), body.submodel_reference_job_id, body.design_source_path)
+            seed_kwargs["package_builder"] = package_builder(body.submodel.model_dump(mode="json"), reference_profile=reference_profile)
             seed_kwargs["fixed_cell"] = True
         from backend.core.namd_resources import prepare_with_memory_budget
         # The validated preparation envelope covers explicit-solvent DNA; other
@@ -5761,6 +5789,10 @@ def _production_restraint_plan(
     # Every new production request defaults to 1 ps^-1, including continuations
     # and submodels. A different coupling requires an explicit request.
     resolved = float(damping) if damping is not None else PRODUCTION_LANGEVIN_DAMPING
+    if manifest.get("submodel_reference"):
+        resolved = float(manifest["submodel_reference"]["physics"]["langevinDamping"])
+        enm = False
+        why = "the bound full-model comparison reference has no DNA elastic network"
     return {
         "enm_restraints": enm,
         "enm_reason": why,

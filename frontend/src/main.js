@@ -435,7 +435,7 @@ async function main() {
   const assemblyVolumes = initAssemblyViewVolumes({ scene, store, api, assemblyRenderer })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer, applyAssemblyLayers: assemblyVolumes.update })
   window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
-  const submodel = initSimulationSubmodel({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer })
+  const submodel = initSimulationSubmodel({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer, resolveBasePosition: key => selectionManager.getBaseWorldPosition?.(key) ?? null, getAssemblyCluster: () => _selectedAssemblyCluster })
   window.__NADOC_SUBMODEL__ = submodel?.debug
 
   // Debug hook (gated on shared flag for now): expose enough state for in-

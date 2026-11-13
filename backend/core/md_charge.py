@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+import math
 
 
 DNA_RESNAMES = {"DA", "DC", "DG", "DT", "ADE", "CYT", "GUA", "THY"}
@@ -120,6 +121,7 @@ def audit_psf(
     require_dna_hydrogens: bool = False,
     require_dna_residue_charge: bool = False,
     integer_tolerance: float = 1.0e-3,
+    expected_total_charge: float | None = None,
     dna_residue_charge_bounds: tuple[float, float] = (-1.25, -0.25),
 ) -> ChargeAudit:
     """Return production-readiness diagnostics for a PSF topology."""
@@ -156,7 +158,20 @@ def audit_psf(
 
     if not audit.n_atoms:
         audit.errors.append("PSF has no parseable NATOM records.")
-    if abs(audit.integer_charge_error) > integer_tolerance:
+    if expected_total_charge is not None:
+        if not math.isfinite(expected_total_charge):
+            raise ValueError("Expected PSF charge must be finite")
+        if abs(audit.total_charge - expected_total_charge) > integer_tolerance:
+            audit.errors.append(
+                f"Total PSF charge {audit.total_charge:.6f} differs from recorded "
+                f"boundary charge {expected_total_charge:.6f}."
+            )
+        if abs(expected_total_charge - round(expected_total_charge)) > integer_tolerance:
+            audit.warnings.append(
+                "Derived submodel retains fractional boundary charge; "
+                "this is an approximate periodic electrostatic boundary."
+            )
+    elif abs(audit.integer_charge_error) > integer_tolerance:
         audit.errors.append(
             f"Total PSF charge {audit.total_charge:.6f} is not close to an integer."
         )

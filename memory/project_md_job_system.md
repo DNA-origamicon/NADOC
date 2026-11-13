@@ -7,6 +7,114 @@ review_after: 2026-10-01
 
 # MD job system
 
+## Submodel full-reference binding and pose investigation (2026-11-12)
+
+`namd_submodel_reference.py` freezes actual whole-production config + PSF ion
+census, and registers per-design bindings in `workspace/submodel_reference_profiles.json`.
+24hb_2xT new submodel preparations now bind to `fc12195d0636`: 300 K,
+1 ps⁻¹ damping, 4 fs HMR and matching nonbonded/PME settings; neutralizing
+Mg(H₂O)₆ only, no added MgCl₂/NaCl. User explicitly chose matching this recipe,
+not total Mg concentration. `ion_counts(counterion='mg')` supports zero added
+Mg independently of counterion identity; default auto behavior stays unchanged.
+Fixed-shell NVT/offload, cell geometry, boundary forces and staged ENM remain
+recorded exceptions. Profile stored in submodel receipt survives production
+inheritance; legacy unbound submodels cannot start a new comparison production
+without fresh ion preparation. Historical settings views use saved receipts.
+New-job wizard previews now include their actual region and source design path.
+
+`boundary_pose.py` compares existing observed trajectories only. Late-sample
+outer-P medoid: full-model DCD frame 16864 / 168.65 ns. Shell-only endpoint
+transplant would create up to 20.17 Å connecting-bond distances; coherent crop
+initialization from one full frame is the candidate to investigate next.
+Current boundary bond D00P:59 O3′–D00P:60 P is 1.439 Å initially, 2.326 Å in
+the pilot final frame, 1.532 Å in the observed medoid. No molecular candidate
+was authored/promoted and no new simulation launched. Evidence and plots:
+`.development-artifacts/submodel-reference-20261112/pose-02/`; native input audit
+matched all 12,373 retained atom types/charges/HMR masses and 24 config templates.
+
+## Offline submodel/full-model metrics (2026-11-12)
+
+`experiments/namd_shell_calibration/comparison.py` provides `recipe` and `run`
+commands for reprocessing explicit frames into fresh, hash-audited reports,
+per-residue and observable CSVs, and a comparison SVG. It reconstructs actual
+stage clocks from config overrides, keeps short-window RMSF separate from
+long-window heterogeneity, and globally bounds direct-seek reads to 2 GiB.
+Current selection pilot `ddea66693a54` versus whole production `fc12195d0636`:
+core-heavy 50 ps RMSF 0.475 Å versus 0.638–0.793 Å across eight late windows;
+late mean outer-P pose mismatch 9.649 Å after rigid alignment. Thermostat damping
+differs (5 versus 1 ps⁻¹), so short relaxation variance cannot identify spring
+corrections. Prioritize a representative relaxed boundary/start-pose experiment,
+then damping-matched longer sampling. No native coefficients or molecular poses
+changed. Detailed methodology and caveats are in the experiment README; evidence
+is under `.development-artifacts/submodel-comparison-20261112/`.
+
+## Fractional-charge selection submodels (2026-11-12)
+
+Job `b7e7cf6ab7f1` failed before rental: its whole-residue crop retained three
+5TER and two 3TER residues, giving −386.47 e although the full PSF is integer
+charged. `namd_submodel_charge.py` now records a hash-bound charge policy after
+validating the full source. Counterions use the cropped PSF charge rounded to
+the nearest integer; dry/final audits enforce the recorded charge and residual.
+DNA parameters remain unchanged. This is an explicit approximate periodic-PME
+boundary for screening, not exact neutrality; whole-model audits remain strict.
+The final manifest carries the residual instead of claiming required neutrality.
+See `docs/simulation_submodel.md` and the charge regression tests.
+
+RunPod pilot `ddea66693a54` preserves the exact failed-job snapshot and box
+(2 nm shell, 6 nm solvent padding): 38 core nucleotides / 1,212 core atoms,
+12,373 retained DNA atoms, 846,428 total atoms. All four targeted extra Ts are
+mobile. Explicit stage overrides produced 4,800 minimization steps plus 205 ps
+of dynamics, including the final 50 ps at 4 fs without DNA ENM restraints.
+All 22 native logs have finite energies and normal exits; all checkpoints pass
+fixed-boundary displacement (<1e-5 Å), and final core positional-restraint weights
+are zero while heavy-shell weights remain 0.1. All 201 output files (4.12 GB)
+were downloaded and verified. This validates execution, not equilibration or a
+calibrated shell. Total campaign GPU spend $0.53844, both pods confirmed absent.
+The first pilot `1af0b54ca8a9` was deliberately stopped when automatic atom-count
+scaling expanded minimization to 84,660 steps; the retry records a `minimize`
+stage override. Standard minimization sizing was not changed. No local NAMD jobs
+were started. Backend FAST: 20,808 passed / 90 skipped; FULL deferred without a
+full-suite session; focused charge/submodel/RunPod/gradient tests and lint passed.
+Evidence: `.development-artifacts/selection-submodel-runpod-20261112/`.
+
+## Selection-derived submodel volume (2026-11-12)
+
+Both NAMD and oxDNA now show **Define submodel from selection** below Define/Edit
+submodel, using shared `btn btn--sm` controls. `scene/submodel_selection.js`
+resolves canonical DNA selections (including extra crossover bases) and assembly
+instances/groups/clusters into a world-space AABB with 1 nm padding. The existing
+shell setting, editor, persistence and immutable-job/new-draft behavior are reused.
+This captures a box once; persistent base-identity simulation membership remains
+future work. Selected bounds include other DNA lying inside the box.
+
+Verification: 34 focused tests; frontend 10,419 passed / one skipped; isolated
+browser exercise of both engines passed, with visual confirmation of matching
+32 px button heights and 14 px text. Lint passed. Smoke refused by the active
+native-simulation guard; no override and no NAMD jobs launched. Source design
+hash unchanged, scratch/captures/bridge credentials cleaned. `main.js` LOC delta: 0.
+Evidence: `.development-artifacts/submodel-from-selection-20261112/`.
+
+## Offline shell calibration (2026-11-12)
+
+`experiments/namd_shell_calibration/` prepares verified mappings, bounded DCD
+profiles and unvalidated scalar parameter proposals for control `85c3dc72dc59`
+versus full 24hb_2xT production `fc12195d0636`. The saved 2 nm box contains a
+reciprocal crossover pair/four extra Ts. Read its README before follow-up work:
+outer-shell preparation/reference shape mismatch and ionic recipe differences
+preclude claiming a calibrated boundary. Native candidate installation is not
+implemented. No jobs launched or modified; the user prohibits local NAMD starts
+in this task. Eleven small software tests pass; broad suites deferred while
+local production runs. Evidence: `.development-artifacts/namd-shell-calibration-20261112/`.
+
+User clarification: submodels are intended for inexpensive candidate screening,
+including deliberate changes in local ionic conditions using an approximate
+reference boundary. Do not require matched-salt whole-model simulations for
+every candidate or treat imperfect ensemble fidelity as a blocker. Distinguish
+transfer limitations from actual implementation failures. Shape follow-up finds
+initial full/control agreement at 0.063 Å outer-P RMSD, increasing to 6.181 Å
+at the full equilibrated checkpoint and 9.668 Å for the late mean: the large
+mismatch developed through whole-model relaxation, not initial registration.
+
 Remote result controls use termination wording only for active jobs or pending
 Alpine cancellation (2026-11-10). Terminal RunPod jobs show download/retry wording,
 honor persisted verification, and expose local verification failures. An explicit

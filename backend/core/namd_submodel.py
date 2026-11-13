@@ -166,7 +166,7 @@ def selection_summary(receipt):
                 shell_nm=float(receipt['box'].get('shell_nm', 3)))
 
 
-def package_builder(box):
+def package_builder(box, *, reference_profile=None):
     def build(design, **kwargs):
         from backend.core.namd_topology import build_charmm_psfgen_topology
         from backend.core.namd_solvate import build_namd_solvated_package
@@ -183,6 +183,18 @@ def package_builder(box):
             design, atomistic_model=kwargs.get("atomistic_model")
         )
         cropped, recipe = crop_topology(full, box)
+        from backend.core.namd_submodel_charge import record_charge_policy
+
+        recipe["charge_policy"] = record_charge_policy(full.psf_text, cropped.psf_text)
+        if reference_profile:
+            from backend.core.namd_submodel_reference import topology_signature
+            signature = topology_signature(json.loads(design.to_json()))
+            # Physics settings can be shared with screening variants. Coordinate
+            # transfer has stricter identity requirements and is NOT performed here.
+            recipe["reference_topology_match"] = signature == reference_profile["topology_sha256"]
+            recipe["source_topology_sha256"] = signature
+            recipe["reference_profile"] = reference_profile
+            kwargs.update(counterion=reference_profile["counterion"], ion_conc_mM=reference_profile["nacl_mM"], mg_conc_mM=reference_profile["mgcl2_mM"])
         data = build_namd_solvated_package(design, topology_override=cropped, **kwargs)
         buffer = io.BytesIO()
         with (
@@ -229,6 +241,9 @@ def finalize_package(package_dir, name_stem):
     written_markers = set()
     for conf in package_dir.glob("*.conf"):
         text = conf.read_text()
+        if recipe.get("reference_profile"):
+            from backend.core.namd_submodel_reference import apply_package_profile
+            text = apply_package_profile(package_dir, text, recipe["reference_profile"])
         prior = re.search(r"^\s*fixedAtomsFile\s+(\S+)", text, re.M | re.I)
         union = set(fixed)
         if prior:
@@ -295,6 +310,18 @@ def finalize_package(package_dir, name_stem):
             ]
             receipt.write_text(json.dumps(recipe, indent=2))
         manifest["submodel"] = recipe
+        if recipe.get("reference_profile"):
+            profile = recipe["reference_profile"]
+            manifest["submodel_reference"] = profile
+            for stage in manifest.get("segments", []):
+                stage.update(damping=float(profile["physics"]["langevinDamping"]), temp=float(profile["physics"]["langevinTemp"]), timestep_fs=float(profile["physics"]["timestep"]))
+            if manifest.get("production_recipe"):
+                manifest["production_recipe"]["langevin_damping"] = float(profile["physics"]["langevinDamping"])
+        if recipe.get("charge_policy") and "equilibrium_aware" in manifest:
+            manifest["equilibrium_aware"].update(
+                requires_neutral_final_psf=False,
+                expected_final_charge_e=recipe["charge_policy"]["residual_charge_e"],
+            )
         manifest.setdefault("solvation", {})["npt_allowed"] = False
         manifest["gpu_resident_mode"] = "off"
         for key in ("fast_relaxation", "fast_production"):

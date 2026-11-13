@@ -69,12 +69,18 @@ def test_shell_expands_context_and_empty_box_fails():
 
 def test_fixed_shell_precedes_adaptive_loop_and_preserves_other_pins(tmp_path):
     cropped, receipt = crop_topology(toy_topology(), BOX)
+    receipt["charge_policy"] = {"residual_charge_e": -0.47}
     (tmp_path / "submodel.json").write_text(json.dumps(receipt))
     (tmp_path / "toy.pdb").write_text(cropped.pdb_text)
-    (tmp_path / "manifest.json").write_text("{}")
+    (tmp_path / "manifest.json").write_text(json.dumps({
+        "equilibrium_aware": {"requires_neutral_final_psf": True},
+    }))
     conf = tmp_path / "relax.conf"
     conf.write_text("GPUresident on\nlangevinPiston on\nwhile {1} {\n minimize 20\n}\n")
     finalize_package(tmp_path, "toy")
+    assert json.loads((tmp_path / "manifest.json").read_text())["equilibrium_aware"] == {
+        "requires_neutral_final_psf": False, "expected_final_charge_e": -0.47,
+    }
     text = conf.read_text()
     assert text.index("fixedAtoms on") < text.index("while")
     assert "GPUresident on" not in text and "langevinPiston on" not in text
