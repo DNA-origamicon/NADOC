@@ -661,8 +661,8 @@ def _execute_candidate(kind, design, params, *, expensive):
         from backend.api.part_transform_references import build_annotation_with_reference_diagnostics
         updated = build_annotation_with_reference_diagnostics(kind, design, params)
     elif kind == "apply-loop-skips":
-        from backend.api.part_loop_commands import build
-        updated = build(design)
+        from backend.api.part_loop_commands import build, LEGACY_ALGORITHM
+        updated = build(design, algorithm=params.get("algorithm", LEGACY_ALGORITHM))
     elif kind in {"strand-sequence", "strand-patch"}:
         from backend.api.part_strand_patch import build
         from backend.api.crud import StrandPatchRequest

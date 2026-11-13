@@ -192,10 +192,11 @@ def test_successful_replace_removes_backup(tmp_path):
     assert not list(tmp_path.glob('.guide-backup-*'))
 
 
-def test_bend_html_uses_own_assets_and_scope(library, monkeypatch):
+@pytest.mark.parametrize('guide_id', ['bend', 'twist'])
+def test_deformation_html_uses_own_assets_and_scope(library, monkeypatch, guide_id):
     from scripts import render_feature_guide_html as html
     root, _, _ = library
-    directory = root / GUIDES / 'bend'
+    directory = root / GUIDES / guide_id
     directory.mkdir()
     (directory / 'steps.json').write_text(json.dumps({
         'title': 'Bend', 'sections': [{'title': 'Apply', 'body': 'Review the bend.'}],
@@ -206,9 +207,42 @@ def test_bend_html_uses_own_assets_and_scope(library, monkeypatch):
         'captured_at': '2026-11-12T10:00:00-07:00',
     }))
     monkeypatch.setattr(html, 'REPO', root)
-    result = html.render('bend')
-    assert 'src="bend/01.png"' in result
-    assert 'href="bend/example.nadoc"' in result
+    result = html.render(guide_id)
+    assert f'src="{guide_id}/01.png"' in result
+    assert f'href="{guide_id}/example.nadoc"' in result
     assert 'Set the bend angle' in result
     assert 'extrude/' not in result
     assert 'deformed continuation' not in result
+
+
+def test_multiple_lessons_keep_inventory_and_check_each_baseline(library):
+    import shutil
+    from scripts.feature_guides import select_guide
+    root, catalog, original = library
+    extra = {**catalog['features']['extrude'], 'guide': 'continuation',
+             'covered_workflows': ['Continue a bundle']}
+    catalog['features']['extrude']['additional_guides'] = [extra]
+    save_catalog(library)
+    target = original.parent / 'continuation'
+    shutil.copytree(original, target)
+    manifest = json.loads((target / 'manifest.json').read_text())
+    manifest.update(guide='continuation', covered_workflows=extra['covered_workflows'])
+    (target / 'manifest.json').write_text(json.dumps(manifest))
+    report = inspect_guides(root)
+    assert report['inventory_problems'] == []
+    assert [r['state'] for r in report['guides']] == ['current', 'current', 'not-created']
+    assert report['guides'][1]['feature_id'] == 'extrude'
+    assert select_guide(catalog, 'extrude', 'continuation')['guide'] == 'continuation'
+    assert '[continuation](continuation/README.md)' in render_ledger(root)
+    with pytest.raises(ValueError, match='Unknown guide'):
+        select_guide(catalog, 'extrude', 'missing')
+    (target / '01.png').write_bytes(b'changed')
+    assert [r['state'] for r in inspect_guides(root)['guides']][:2] == ['current', 'broken']
+
+
+def test_additional_guide_paths_are_validated(library):
+    from scripts.feature_guides import load_catalog
+    library[1]['features']['extrude']['additional_guides'] = [{'guide': '../outside'}]
+    save_catalog(library)
+    with pytest.raises(ValueError, match='relative'):
+        load_catalog(library[0])

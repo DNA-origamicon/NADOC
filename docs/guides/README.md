@@ -8,6 +8,7 @@ guide, with no website build, external image host or experiment folder required.
 |---|---|
 | [Extrude](extrude/README.md) · [Browser version](extrude.html) | 3×6 square-lattice walkthrough: length, 2×3 end continuation and a separate cluster |
 | [Bend](bend/README.md) · [Browser version](bend.html) | Two 256 bp clusters, Tools → Bend on one cluster, and loops/skips in 3D and the cadnano-style editor |
+| [Twist](twist/README.md) · [Browser version](twist.html) | Two 256 bp clusters, RH/LH twists on one cluster, and loops/skips in 3D and the cadnano-style editor |
 | [Feature guide ledger](LEDGER.md) | All 60 main features from [the feature inventory](../../FEATURES.md), guide coverage and capture dates |
 | [UX findings](UX_LEDGER.md) | Friction discovered while producing guides, including workarounds that still need fixes |
 | [Guide maintenance](MAINTENANCE.md) | Storage rules, source checks, regeneration and adding guides |
@@ -15,7 +16,7 @@ guide, with no website build, external image host or experiment folder required.
 Extrude is the first illustrated guide and the specimen for visual-style review.
 The standard guide model is a **3-row × 6-column square lattice (18 helices)**
 unless a lesson explicitly specifies otherwise. Length is lesson-specific;
-Extrude uses 64 bp; Bend uses 256 bp. **All 3D guide images use Full representation**, except
+Extrude uses 64 bp; Bend and Twist use 256 bp. **All 3D guide images use Full representation**, except
 lessons specifically demonstrating representation changes. Numbered arrows point
 to controls and canvas targets.
 
@@ -24,7 +25,7 @@ are distinct. Existing technical references elsewhere in `docs/` remain useful.
 Batch generation and scheduling are deferred until the guide style is approved.
 Coverage remains **partial**: square-lattice deformed continuation has an
 implementation gap ([GUIDE-UX-004](UX_LEDGER.md)). Deformed continuation is outside the Extrude lesson. Bend has its own guide;
-Twist and advanced deformation options remain separate coverage.
+Twist has a separate guide; advanced deformation options remain future coverage.
 
 From the repository root, check whether guides need attention:
 

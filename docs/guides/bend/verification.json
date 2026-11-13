@@ -1,6 +1,6 @@
 {
   "guide": "bend-and-twist",
-  "source_revision": "4860eeae7f5896e96b4e313ab007d76b110e0261",
+  "source_revision": "2ef976c8ca08554b8e9ca06c303a712e13b29954",
   "source_worktree_dirty": true,
   "publication": {
     "status": "verified",
@@ -10,7 +10,7 @@
     "document_operations": 1,
     "loadouts_checked": 1,
     "path": "example.nadoc",
-    "sha256": "83180087c275e2bfa91f740d6cf96bb13b3dc6295cf0100e49db2711e7dff6d1"
+    "sha256": "d095002abb6e0d71ff2a0e49f998da4bdeb733bdd61ecce80823ebd1974f124d"
   },
   "reopened_audit": {
     "status": "verified",

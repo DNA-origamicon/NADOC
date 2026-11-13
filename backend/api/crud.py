@@ -7878,7 +7878,7 @@ def apply_loop_skips_from_deformations() -> dict:
     Requires that the design has at least one crossover placed (crossovers break the
     bundle into 7-bp cells which are required for loop/skip placement).
     """
-    from backend.api.part_loop_commands import plan, apply
+    from backend.api.part_loop_commands import plan, apply, CURRENT_ALGORITHM
     design, revision = design_state.copy_for_persist()
     if design is None:
         raise HTTPException(404, detail="No active design.")
@@ -7894,6 +7894,7 @@ def apply_loop_skips_from_deformations() -> dict:
             "helix_count": n_helices,
             "mark_count": n_marks,
             "sq_periodic": design.lattice_type == LatticeType.SQUARE,
+            "algorithm": CURRENT_ALGORITHM,
             "deformation_count": len(design.deformations),
         },
         expected_revision=revision,

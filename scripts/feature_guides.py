@@ -53,18 +53,38 @@ def load_catalog(root=REPO):
     catalog = json.loads((root / CATALOG).read_text())
     if catalog.get('schema') != 1 or not isinstance(catalog.get('features'), dict):
         raise ValueError('Unsupported guide catalog schema')
-    for key, feature in catalog['features'].items():
+    seen_guides = set()
+    for key, feature in guide_entries(catalog):
         if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', key):
             raise ValueError(f'Invalid feature ID: {key}')
         if feature.get('status') not in {'planned', 'partial', 'complete', 'blocked'}:
             raise ValueError(f'Invalid coverage status: {key}')
         if feature.get('guide'):
             inside(root, str(GUIDES / feature['guide']))
+            if feature['guide'] in seen_guides:
+                raise ValueError(f'Duplicate guide: {feature["guide"]}')
+            seen_guides.add(feature['guide'])
             if not feature.get('watch') or not feature.get('covered_workflows'):
                 raise ValueError(f'Missing dependencies or coverage scope: {key}')
         elif feature['status'] in {'partial', 'complete'}:
             raise ValueError(f'Coverage claimed without a guide: {key}')
     return catalog
+
+
+def guide_entries(catalog):
+    """Keep inventory features intact while checking each lesson independently."""
+    for key, feature in catalog['features'].items():
+        yield key, feature
+        for lesson in feature.get('additional_guides', []):
+            yield key, {**feature, **lesson}
+
+
+def select_guide(catalog, feature_id, guide_id=None):
+    matches = [feature for key, feature in guide_entries(catalog)
+               if key == feature_id and (guide_id is None or feature.get('guide') == guide_id)]
+    if not matches:
+        raise ValueError(f'Unknown guide for {feature_id}: {guide_id}')
+    return matches[0]
 
 
 def snapshot(root, catalog, feature):
@@ -147,8 +167,8 @@ def inspect_guides(root=REPO):
         elif any(known[key][field] != catalog['features'][key].get(field)
                  for field in ('name', 'category', 'subfeatures')):
             findings.append(f'Inventory changed: {key} (reconcile catalog scope)')
-    for key, feature in catalog['features'].items():
-        row = {'id': key, 'name': feature['name'], 'coverage': feature['status'],
+    for key, feature in guide_entries(catalog):
+        row = {'id': key if feature.get('guide') == catalog['features'][key].get('guide') else f'{key}/{feature["guide"]}', 'feature_id': key, 'name': feature['name'], 'coverage': feature['status'],
                'state': 'not-created', 'created_at': None, 'captured_at': None, 'changes': [], 'problems': []}
         if not feature.get('guide'):
             rows.append(row)
@@ -156,7 +176,8 @@ def inspect_guides(root=REPO):
         directory = inside(root, str(GUIDES / feature['guide']))
         try:
             manifest = json.loads((directory / 'manifest.json').read_text())
-            if manifest['schema'] != 1 or manifest['feature'] != key:
+            if (manifest['schema'] != 1 or manifest['feature'] != key
+                    or manifest.get('guide', feature['guide']) != feature['guide']):
                 raise ValueError('Manifest identity/schema mismatch')
             row.update(created_at=manifest['created_at'], captured_at=manifest['captured_at'])
             current = snapshot(root, catalog, feature)
@@ -202,7 +223,7 @@ def render_ledger(root=REPO):
              '| Feature | Coverage | First created | Last captured | Guide / scope |',
              '|---|---|---|---|---|']
     category = None
-    for feature in catalog['features'].values():
+    for _, feature in guide_entries(catalog):
         if category != feature['category']:
             category = feature['category']
             lines.append(f'| **{category}** | | | | |')

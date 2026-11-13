@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twist: cluster selection, handedness, loops and skips · NADOC guide</title>
+<style>
+:root{color-scheme:dark; font-family:system-ui,sans-serif; line-height:1.65; color:#e6edf3; background:#10151d}
+*{box-sizing:border-box}body{margin:0}a{color:#8ecbff}a:hover{color:#fff}
+a:focus-visible{outline:3px solid #ffd54a;outline-offset:4px}
+.layout{display:grid;grid-template-columns:265px minmax(0,1fr);max-width:1700px;margin:auto}
+nav{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:32px 22px;border-right:1px solid #303b4b}
+nav strong{display:block;letter-spacing:.15em;color:#8ecbff;margin-bottom:20px}
+nav a{display:block;margin:0 0 13px;font-size:.9rem;text-decoration:none}
+main{min-width:0;padding:40px clamp(18px,4vw,64px) 70px}
+h1{font-size:clamp(1.8rem,3vw,2.8rem);line-height:1.2;max-width:900px}h2{line-height:1.3}
+.eyebrow,.meta{color:#aab9ca;font-size:.85rem}.eyebrow{letter-spacing:.12em;text-transform:uppercase}
+header>p,section>p{max-width:85ch}.links{display:flex;gap:12px 24px;flex-wrap:wrap}
+.notice{border-left:3px solid #ffd54a;padding:12px 18px;background:#202532}
+section{margin-top:58px;scroll-margin-top:24px}figure{margin:26px 0 38px;border:1px solid #344153;border-radius:10px;overflow:hidden;background:#17202c}
+figcaption{padding:18px 22px}figcaption p{margin:7px 0 0;max-width:95ch}
+.step{font-weight:700;color:#ffd54a}img{display:block;width:100%;height:auto}
+footer{margin-top:50px;color:#aab9ca}.skip{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;z-index:2;background:#10151d;padding:8px}
+@media(max-width:850px){.layout{display:block}nav{position:static;height:auto;border-right:0;border-bottom:1px solid #303b4b;padding:22px}nav a{display:inline-block;margin:0 18px 10px 0}main{padding-top:24px}}
+@media print{:root{color-scheme:light;color:#111;background:white}nav,.skip{display:none}.layout{display:block}main{padding:0}figure{break-inside:avoid;background:white}a{color:inherit}}
+</style></head><body><a class="skip" href="#guide">Skip to guide</a>
+<div class="layout"><nav aria-label="Guide chapters"><strong>NADOC / GUIDES</strong>
+<a href="#guide">Overview</a><a href="#chapter-1">Start with a longer model</a><a href="#chapter-2">Twist the first half</a><a href="#chapter-3">Change handedness for the second half</a><a href="#chapter-4">Generate loops and skips</a><a href="#chapter-5">Inspect loops and skips in 3D</a><a href="#chapter-6">Inspect the same marks in the cadnano editor</a><a href="extrude.html">Extrude guide</a><a href="bend.html">Bend guide</a><a href="twist.html">Twist guide</a><a href="README.md">Guide library (Markdown)</a></nav>
+<main id="guide"><header><p class="eyebrow">Twist · desktop walkthrough · style-review draft</p>
+<h1>Twist: cluster selection, handedness, loops and skips</h1><p>Twist one of two long 3×6 square-lattice clusters, choose the interval and handedness, then inspect NADOC’s loop/skip marks in 3D and in the cadnano-style editor.</p>
+<p class="meta">15 illustrated steps · 6 chapters · Captured 2026-11-12T22:17:07-07:00</p>
+<p class="notice">Follow the illustrated steps below to use the tool.</p>
+<p>Numbered arrows indicate click targets; dashed boxes show drag extents. Click any screenshot to open it at full size.</p>
+<p class="links"><a href="twist/example.nadoc" download>Download example</a><a href="twist/README.md">Markdown guide</a><a href="twist/verification.json">Construction verification</a><a href="UX_LEDGER.md">UX findings</a></p>
+<details><summary>Demonstrated scope</summary><ul><li>Two separated 3×6 square-lattice clusters, each 256 bp long</li><li>Tools → Twist and selection of one cluster</li><li>Adjacent intervals with 180° right-handed and left-handed total twist</li><li>Full Autostaple and Add Loops/Skips</li><li>Full 3D loop/skip overlay and cadnano-style editor views</li></ul></details></header>
+<section id="chapter-1"><h2>Start with a longer model</h2><p>Use the Extrude workflow to make two separated 3-row × 6-column square-lattice clusters, each 256 bp long. All 3D images use Full representation. This lesson makes two successive 180° twists with opposite handedness, then generates and inspects loop/skip marks through NADOC’s own tools.</p><figure id="step-1">
+<figcaption><span class="step">Step 1</span><p>Start with two 3×6 square-lattice clusters, each 256 bp long. Right-drag to view the clusters from the side, then press F to fit.</p></figcaption>
+<a href="twist/01.png" aria-label="Open step 1 screenshot at full size">
+<img src="twist/01.png" alt="Step 1: Start with two 3×6 square-lattice clusters, each 256 bp long. Right-drag to view the clusters from the side, then press F to fit." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-2"><h2>Twist the first half</h2><p>Choose Tools → Twist, then click the original 18-helix cluster. Set Plane 1 to 0 bp and Plane 2 to 127 bp. Select Total twist, enter 180° and select Right-handed. The planes bound the twisted interval. After applying, reopen the saved part for a clean result view if the tool overlay remains dimmed (GUIDE-UX-008).</p><figure id="step-2">
+<figcaption><span class="step">Step 2</span><p>Choose Tools → Twist to open the tool and select a cluster.</p></figcaption>
+<a href="twist/02.png" aria-label="Open step 2 screenshot at full size">
+<img src="twist/02.png" alt="Step 2: Choose Tools → Twist to open the tool and select a cluster." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-3">
+<figcaption><span class="step">Step 3</span><p>Click the original 3×6 bundle to select its cluster. The second cluster provides a straight reference.</p></figcaption>
+<a href="twist/03.png" aria-label="Open step 3 screenshot at full size">
+<img src="twist/03.png" alt="Step 3: Click the original 3×6 bundle to select its cluster. The second cluster provides a straight reference." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-4">
+<figcaption><span class="step">Step 4</span><p>Set planes 0–127 bp, Total twist 180° and Right-handed. Inspect the preview, then click Apply.</p></figcaption>
+<a href="twist/04.png" aria-label="Open step 4 screenshot at full size">
+<img src="twist/04.png" alt="Step 4: Set planes 0–127 bp, Total twist 180° and Right-handed. Inspect the preview, then click Apply." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-5">
+<figcaption><span class="step">Step 5</span><p>The first half twists through 180° with Right-handed selected. Compare its rotating cross-section with the straight second cluster.</p></figcaption>
+<a href="twist/05.png" aria-label="Open step 5 screenshot at full size">
+<img src="twist/05.png" alt="Step 5: The first half twists through 180° with Right-handed selected. Compare its rotating cross-section with the straight second cluster." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-3"><h2>Change handedness for the second half</h2><p>Choose Tools → Twist again and select the same cluster. Set planes 128–255 bp, Total twist 180° and Left-handed. These adjacent intervals demonstrate the two handedness controls along one bundle. Total twist specifies the rotation across the selected interval; Degrees/nm specifies rotation per unit length.</p><figure id="step-6">
+<figcaption><span class="step">Step 6</span><p>Set planes 128–255 bp, Total twist 180° and Left-handed. Inspect the preview, then click Apply.</p></figcaption>
+<a href="twist/06.png" aria-label="Open step 6 screenshot at full size">
+<img src="twist/06.png" alt="Step 6: Set planes 128–255 bp, Total twist 180° and Left-handed. Inspect the preview, then click Apply." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-7">
+<figcaption><span class="step">Step 7</span><p>The second half twists through 180° with Left-handed selected. The two intervals show opposite twist directions within the selected cluster.</p></figcaption>
+<a href="twist/07.png" aria-label="Open step 7 screenshot at full size">
+<img src="twist/07.png" alt="Step 7: The second half twists through 180° with Left-handed selected. The two intervals show opposite twist directions within the selected cluster." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-4"><h2>Generate loops and skips</h2><p>Twist rotates the bundle cross-section along the selected interval. Add Loops/Skips creates the discrete insertion/deletion marks that accompany that design intent; use LOOP/SKIP to display the saved marks. The routing action requires crossovers, so first run Full Autostaple with Standard settings on this demonstration bundle.</p><figure id="step-8">
+<figcaption><span class="step">Step 8</span><p>Choose Tools → Routing → Full Autostaple to create the prerequisite staple routing and crossovers.</p></figcaption>
+<a href="twist/08.png" aria-label="Open step 8 screenshot at full size">
+<img src="twist/08.png" alt="Step 8: Choose Tools → Routing → Full Autostaple to create the prerequisite staple routing and crossovers." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-9">
+<figcaption><span class="step">Step 9</span><p>Keep Standard selected and click OK.</p></figcaption>
+<a href="twist/09.png" aria-label="Open step 9 screenshot at full size">
+<img src="twist/09.png" alt="Step 9: Keep Standard selected and click OK." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-10">
+<figcaption><span class="step">Step 10</span><p>Choose Tools → Routing → Add Loops/Skips to generate marks for the square lattice and its twists.</p></figcaption>
+<a href="twist/10.png" aria-label="Open step 10 screenshot at full size">
+<img src="twist/10.png" alt="Step 10: Choose Tools → Routing → Add Loops/Skips to generate marks for the square lattice and its twists." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-5"><h2>Inspect loops and skips in 3D</h2><p>Click LOOP/SKIP in the View toolbar (P). Orange loop markers indicate inserted bases and red × markers indicate deleted bases. The overlay follows the twisted geometry while Full remains selected.</p><figure id="step-11">
+<figcaption><span class="step">Step 11</span><p>Click LOOP/SKIP in the View toolbar to show the markers.</p></figcaption>
+<a href="twist/11.png" aria-label="Open step 11 screenshot at full size">
+<img src="twist/11.png" alt="Step 11: Click LOOP/SKIP in the View toolbar to show the markers." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-12">
+<figcaption><span class="step">Step 12</span><p>Full 3D view with loop and skip highlights on the twisted 3×6 bundle. Compare the marker distribution across the two twist intervals.</p></figcaption>
+<a href="twist/12.png" aria-label="Open step 12 screenshot at full size">
+<img src="twist/12.png" alt="Step 12: Full 3D view with loop and skip highlights on the twisted 3×6 bundle. Compare the marker distribution across the two twist intervals." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-6"><h2>Inspect the same marks in the cadnano editor</h2><p>Open Origami Editor from the top bar. NADOC’s built-in cadnano-style path view shows the same document and loop/skip marks in a flat base-pair layout. Press F to fit, then zoom in to read individual symbols. The path view is a 2D topology view; the 3D window remains in Full representation.</p><figure id="step-13">
+<figcaption><span class="step">Step 13</span><p>Click Origami Editor to open the same document in NADOC’s cadnano-style editor.</p></figcaption>
+<a href="twist/13.png" aria-label="Open step 13 screenshot at full size">
+<img src="twist/13.png" alt="Step 13: Click Origami Editor to open the same document in NADOC’s cadnano-style editor." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-14">
+<figcaption><span class="step">Step 14</span><p>The cadnano-style editor shows the same routed bundle and saved loop/skip marks. Blue circles denote loops; red × symbols denote skips.</p></figcaption>
+<a href="twist/14.png" aria-label="Open step 14 screenshot at full size">
+<img src="twist/14.png" alt="Step 14: The cadnano-style editor shows the same routed bundle and saved loop/skip marks. Blue circles denote loops; red × symbols denote skips." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-15">
+<figcaption><span class="step">Step 15</span><p>Scroll up over the path view to enlarge the symbols. Blue loop circles and red skip crosses appear directly on the routed strands; LOOP/SKIP remains enabled in the View toolbar.</p></figcaption>
+<a href="twist/15.png" aria-label="Open step 15 screenshot at full size">
+<img src="twist/15.png" alt="Step 15: Scroll up over the path view to enlarge the symbols. Blue loop circles and red skip crosses appear directly on the routed strands; LOOP/SKIP remains enabled in the View toolbar." width="1920" height="1080" loading="lazy"></a>
+</figure></section>
+<footer>Offline viewing: keep this HTML file beside the twist folder. No server or internet connection is required. <a href="#guide">Back to top ↑</a></footer>
+</main></div></body></html>

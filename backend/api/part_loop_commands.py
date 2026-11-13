@@ -4,7 +4,14 @@ import math
 from fastapi import HTTPException
 
 
-def plan(design):
+CURRENT_ALGORITHM = 'signed-square-twist-v2'
+LEGACY_ALGORITHM = 'legacy-v1'
+
+
+def plan(design, *, algorithm=CURRENT_ALGORITHM):
+    if algorithm not in {CURRENT_ALGORITHM, LEGACY_ALGORITHM}:
+        raise ValueError(f'Unsupported loop/skip algorithm: {algorithm}')
+    current = algorithm == CURRENT_ALGORITHM
     from backend.core.part_group_consumers import require_whole_helix_realization
     require_whole_helix_realization(design)
     from backend.core.loop_skip_calculator import (
@@ -63,7 +70,7 @@ def plan(design):
     helix_map = {h.id: h for h in design.helices}
 
     # Accumulate all per-helix modifications from every DeformationOp.
-    # SQ periodic skips go first so deformation mods win at any conflicting position.
+    # Legacy placement resolves collisions by order; v2 square twist composes signed counts.
     all_mods: dict[str, list] = {}
 
     generated_sweep_ids = {
@@ -100,12 +107,12 @@ def plan(design):
             if p.total_degrees is not None:
                 target_deg = p.total_degrees
             elif p.degrees_per_nm is not None:
-                length_nm = n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP
+                length_nm = ((plane_b - plane_a) if current else n_cells * CELL_BP_DEFAULT) * BDNA_RISE_PER_BP
                 target_deg = p.degrees_per_nm * length_nm
             else:
                 continue
             mods = twist_loop_skips(
-                affected, plane_a, plane_b, target_deg, design=design
+                affected, plane_a, plane_b, -target_deg if current else target_deg, design=design
             )
         else:  # bend
             p = op.params
@@ -143,8 +150,15 @@ def plan(design):
     # (feedback_loopskip_no_crossover_ends).  Manual context-menu placement never hits this path.
     from backend.core.loop_skip_calculator import relocate_marks_off_forbidden
 
+    composed_square = current and design.lattice_type == LatticeType.SQUARE
+    if composed_square:
+        from backend.core.square_twist_correction import compose_square_twist_marks
+        try:
+            all_mods = compose_square_twist_marks(design, all_mods)
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc)) from exc
     all_mods = relocate_marks_off_forbidden(all_mods, design)
-    if not all_mods and not has_sweep:
+    if not all_mods and not has_sweep and not composed_square:
         raise HTTPException(400, detail="No loop/skip modifications were produced.")
 
     return all_mods, active_helix_ids
@@ -164,6 +178,6 @@ def apply(design, mods, helix_ids):
     )
 
 
-def build(design):
-    mods, ids = plan(design)
+def build(design, *, algorithm=LEGACY_ALGORITHM):
+    mods, ids = plan(design, algorithm=algorithm)
     return apply(design, mods, ids)

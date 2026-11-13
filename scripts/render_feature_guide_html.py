@@ -57,7 +57,7 @@ footer{{margin-top:50px;color:#aab9ca}}.skip{{position:absolute;left:-9999px}}.s
 @media print{{:root{{color-scheme:light;color:#111;background:white}}nav,.skip{{display:none}}.layout{{display:block}}main{{padding:0}}figure{{break-inside:avoid;background:white}}a{{color:inherit}}}}
 </style></head><body><a class="skip" href="#guide">Skip to guide</a>
 <div class="layout"><nav aria-label="Guide chapters"><strong>NADOC / GUIDES</strong>
-<a href="#guide">Overview</a>{nav}<a href="extrude.html">Extrude guide</a><a href="bend.html">Bend guide</a><a href="README.md">Guide library (Markdown)</a></nav>
+<a href="#guide">Overview</a>{nav}<a href="extrude.html">Extrude guide</a><a href="bend.html">Bend guide</a><a href="twist.html">Twist guide</a><a href="README.md">Guide library (Markdown)</a></nav>
 <main id="guide"><header><p class="eyebrow">{escape(guide_id.title())} · desktop walkthrough · style-review draft</p>
 <h1>{escape(guide['title'])}</h1><p>{escape(manifest['introduction'])}</p>
 <p class="meta">{len(guide['steps'])} illustrated steps · {len(sections)} chapters · Captured {escape(manifest['captured_at'])}</p>
@@ -74,7 +74,7 @@ footer{{margin-top:50px;color:#aab9ca}}.skip{{position:absolute;left:-9999px}}.s
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Verify the HTML matches the current captured guide')
-    parser.add_argument('--guide', choices=['extrude', 'bend'], default='extrude')
+    parser.add_argument('--guide', choices=['extrude', 'bend', 'twist'], default='extrude')
     args = parser.parse_args()
     output = REPO / GUIDES / f'{args.guide}.html'
     html = render(args.guide)

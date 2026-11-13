@@ -9,6 +9,19 @@ metadata:
 
 # Native CanDo FEM shape predictor
 
+## Square twist prescription comparison (2026-11-12)
+
+Audited 3×6×256 bp square examples: previous RH +180° prescription predicts
+−10.805°, revised signed prescription +42.953°; previous LH −180° predicts
++43.309°, revised −11.124°. Revised cases use 40 load increments, differ from
+20 increments by <0.031°. Standard 48-bp correction reduces intrinsic +44.250°
+to +15.205°. This supports handedness, not requested-angle calibration. Native
+uniform per-helix net eigenstrain cannot test local pair cancellation or adjacent
+opposite twist regions. No solver/constants changed. Reproducible inputs, replay
+proofs and compact results: `.development-artifacts/square-twist-review/README.md`;
+runner `scripts/validate_square_twist_cando.py`. These are native FEM results,
+not external CanDo service results.
+
 ## Topic navigation and current boundaries
 
 Reorganized October 17, 2026. Read the retained contracts here, then only the
