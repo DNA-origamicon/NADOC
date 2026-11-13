@@ -1,6 +1,6 @@
 {
   "guide": "extrude",
-  "source_revision": "4860eeae7f5896e96b4e313ab007d76b110e0261",
+  "source_revision": "2ef976c8ca08554b8e9ca06c303a712e13b29954",
   "source_worktree_dirty": true,
   "publication": {
     "status": "verified",
@@ -10,7 +10,7 @@
     "document_operations": 1,
     "loadouts_checked": 1,
     "path": "example.nadoc",
-    "sha256": "01441b549a041cd299c80bb0fc4ce17278e88ef84891868ca431d34595955fd7"
+    "sha256": "a45ef7d235609ccb969e6866963070156c58263fbdfef1075d7937efc7f12232"
   },
   "reopened_audit": {
     "status": "verified",

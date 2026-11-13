@@ -34,7 +34,7 @@ def main(argv=None):
                 for problem in row['problems']:
                     print(f'  {problem}')
         count = sum(r['state'] == 'not-created' for r in report['guides'])
-        print(f'{len(report["guides"])} features registered; {count} have no illustrated guide yet.')
+        print(f'{len({r["feature_id"] for r in report["guides"]})} features registered; {count} have no illustrated guide yet.')
     bad = bool(report['inventory_problems']) or any(r['state'] in {'stale', 'broken'} for r in report['guides'])
     incomplete = any(r['coverage'] != 'complete' for r in report['guides'])
     return int(bad or (args.require_all and incomplete))

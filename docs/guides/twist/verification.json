@@ -1,0 +1,24 @@
+{
+  "guide": "bend-and-twist",
+  "source_revision": "2ef976c8ca08554b8e9ca06c303a712e13b29954",
+  "source_worktree_dirty": true,
+  "publication": {
+    "status": "verified",
+    "commands": 6,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1,
+    "path": "example.nadoc",
+    "sha256": "10faf2e448ff59fc894155d45209292c4a3d129336c4b086f966d291292e12ef"
+  },
+  "reopened_audit": {
+    "status": "verified",
+    "commands": 6,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1
+  },
+  "interaction": "Real browser input; rendered cell positions are read-only observations"
+}

@@ -1,0 +1,210 @@
+{
+  "title": "Twist: cluster selection, handedness, loops and skips",
+  "representationPolicy": "full",
+  "sections": [
+    {
+      "title": "Start with a longer model",
+      "body": "Use the Extrude workflow to make two separated 3-row × 6-column square-lattice clusters, each 256 bp long. All 3D images use Full representation. This lesson makes two successive 180° twists with opposite handedness, then generates and inspects loop/skip marks through NADOC’s own tools."
+    },
+    {
+      "title": "Twist the first half",
+      "body": "Choose Tools → Twist, then click the original 18-helix cluster. Set Plane 1 to 0 bp and Plane 2 to 127 bp. Select Total twist, enter 180° and select Right-handed. The planes bound the twisted interval. After applying, reopen the saved part for a clean result view if the tool overlay remains dimmed (GUIDE-UX-008)."
+    },
+    {
+      "title": "Change handedness for the second half",
+      "body": "Choose Tools → Twist again and select the same cluster. Set planes 128–255 bp, Total twist 180° and Left-handed. These adjacent intervals demonstrate the two handedness controls along one bundle. Total twist specifies the rotation across the selected interval; Degrees/nm specifies rotation per unit length."
+    },
+    {
+      "title": "Generate loops and skips",
+      "body": "Twist rotates the bundle cross-section along the selected interval. Add Loops/Skips creates the discrete insertion/deletion marks that accompany that design intent; use LOOP/SKIP to display the saved marks. The routing action requires crossovers, so first run Full Autostaple with Standard settings on this demonstration bundle."
+    },
+    {
+      "title": "Inspect loops and skips in 3D",
+      "body": "Click LOOP/SKIP in the View toolbar (P). Orange loop markers indicate inserted bases and red × markers indicate deleted bases. The overlay follows the twisted geometry while Full remains selected."
+    },
+    {
+      "title": "Inspect the same marks in the cadnano editor",
+      "body": "Open Origami Editor from the top bar. NADOC’s built-in cadnano-style path view shows the same document and loop/skip marks in a flat base-pair layout. Press F to fit, then zoom in to read individual symbols. The path view is a 2D topology view; the 3D window remains in Full representation."
+    }
+  ],
+  "steps": [
+    {
+      "number": 1,
+      "caption": "Start with two 3×6 square-lattice clusters, each 256 bp long. Right-drag to view the clusters from the side, then press F to fit.",
+      "file": "01.png",
+      "point": null,
+      "section": "Start with a longer model",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 2,
+      "caption": "Choose Tools → Twist to open the tool and select a cluster.",
+      "file": "02.png",
+      "point": {
+        "x": 374.8125,
+        "y": 361.046875
+      },
+      "section": "Twist the first half",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 3,
+      "caption": "Click the original 3×6 bundle to select its cluster. The second cluster provides a straight reference.",
+      "file": "03.png",
+      "point": {
+        "id": "5a7aa622-3677-52f8-9f40-0e80cd1cabce",
+        "x": 698.2323478254077,
+        "y": 540.7287286780902
+      },
+      "section": "Twist the first half",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 4,
+      "caption": "Set planes 0–127 bp, Total twist 180° and Right-handed. Inspect the preview, then click Apply.",
+      "file": "04.png",
+      "point": {
+        "x": 614,
+        "y": 656.3125
+      },
+      "section": "Twist the first half",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 5,
+      "caption": "The first half twists through 180° with Right-handed selected. Compare its rotating cross-section with the straight second cluster.",
+      "file": "05.png",
+      "point": null,
+      "section": "Twist the first half",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 6,
+      "caption": "Set planes 128–255 bp, Total twist 180° and Left-handed. Inspect the preview, then click Apply.",
+      "file": "06.png",
+      "point": {
+        "x": 614,
+        "y": 656.3125
+      },
+      "section": "Change handedness for the second half",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 7,
+      "caption": "The second half twists through 180° with Left-handed selected. The two intervals show opposite twist directions within the selected cluster.",
+      "file": "07.png",
+      "point": null,
+      "section": "Change handedness for the second half",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 8,
+      "caption": "Choose Tools → Routing → Full Autostaple to create the prerequisite staple routing and crossovers.",
+      "file": "08.png",
+      "point": {
+        "x": 533.8125,
+        "y": 93.890625
+      },
+      "section": "Generate loops and skips",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 9,
+      "caption": "Keep Standard selected and click OK.",
+      "file": "09.png",
+      "point": {
+        "x": 1128.5,
+        "y": 621.5
+      },
+      "section": "Generate loops and skips",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 10,
+      "caption": "Choose Tools → Routing → Add Loops/Skips to generate marks for the square lattice and its twists.",
+      "file": "10.png",
+      "point": {
+        "x": 533.8125,
+        "y": 183.078125
+      },
+      "section": "Generate loops and skips",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 11,
+      "caption": "Click LOOP/SKIP in the View toolbar to show the markers.",
+      "file": "11.png",
+      "point": {
+        "x": 972.890625,
+        "y": 58
+      },
+      "section": "Inspect loops and skips in 3D",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 12,
+      "caption": "Full 3D view with loop and skip highlights on the twisted 3×6 bundle. Compare the marker distribution across the two twist intervals.",
+      "file": "12.png",
+      "point": null,
+      "section": "Inspect loops and skips in 3D",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 13,
+      "caption": "Click Origami Editor to open the same document in NADOC’s cadnano-style editor.",
+      "file": "13.png",
+      "point": {
+        "x": 583.8125,
+        "y": 19.5
+      },
+      "section": "Inspect the same marks in the cadnano editor",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 14,
+      "caption": "The cadnano-style editor shows the same routed bundle and saved loop/skip marks. Blue circles denote loops; red × symbols denote skips.",
+      "file": "14.png",
+      "point": null,
+      "section": "Inspect the same marks in the cadnano editor",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    },
+    {
+      "number": 15,
+      "caption": "Scroll up over the path view to enlarge the symbols. Blue loop circles and red skip crosses appear directly on the routed strands; LOOP/SKIP remains enabled in the View toolbar.",
+      "file": "15.png",
+      "point": null,
+      "section": "Inspect the same marks in the cadnano editor",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    }
+  ]
+}

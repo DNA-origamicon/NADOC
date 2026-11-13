@@ -9,6 +9,22 @@ metadata:
 
 # Bend/twist cluster scoping — LIVE REFERENCE
 
+## Square-lattice twist realization (2026-11-12)
+
+New Add Loops/Skips commands record `algorithm: signed-square-twist-v2`.
+The UI's RH-positive twist is converted to the low-level calculator's LH-positive
+convention explicitly; degrees/nm uses the full plane span. Square register skips
+and deformation marks are combined algebraically on each affected helix, within
+operation boundaries and contiguous duplex runs. Opposite-handed intervals stay
+separate. Collisions preserve signed counts; safe-site shortage fails instead of
+silently discarding the requested correction. Untwisted square placement retains
+the existing 48 bp seed. `core/square_twist_correction.py` owns composition.
+Unversioned Add Loops/Skips history replays with `legacy-v1`; new requests use v2.
+Existing saved parts are not migrated. The native CanDo solver's prestress is
+based on per-helix net counts, so it cannot independently validate local placement
+or distinguish separated cancelling pairs with identical per-helix net counts.
+
+
 ## Owned creation/history integration (2026-10-16, gated)
 
 The new private creation path shares the history editor's fixed native prefix,

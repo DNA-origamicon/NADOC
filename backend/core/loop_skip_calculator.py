@@ -462,12 +462,12 @@ def classify_deformation(
             if dpn is None:
                 result["message"] = "No twist specified."
                 return result
-            length_nm = n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP
+            length_nm = (plane_b_bp - plane_a_bp) * BDNA_RISE_PER_BP
             target_deg = dpn * length_nm
 
         total_mods = target_deg / _LOOP_SKIP_TWIST_PER_BP_DEG
-        # +twist (left-handed) → deletions → cell loses bp → signed delta < 0.
-        signed_delta = -total_mods / n_cells
+        # Authored +twist is RH: insertions relative to the straight baseline.
+        signed_delta = total_mods / n_cells
         status, bp_per_turn = classify_local_density(signed_delta)
         max_twist = max_twist_deg(n_cells)
 

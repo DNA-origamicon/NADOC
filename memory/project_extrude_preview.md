@@ -132,6 +132,13 @@ translation handles and the blunt-end context-menu entry as well as history/relo
 
 ## Focused guide lessons (2026-11-12)
 
+Twist now has its own 15-image lesson (`docs/guides/twist.html` and `twist/README.md`):
+two 256 bp clusters, Tools → Twist on one cluster, adjacent 180° RH/LH intervals,
+then Full 3D and cadnano loop/skip inspection. Its six real commands are independently
+replayed at publication and after reopening. `additional_guides` in the catalog
+supports separate lesson baselines under the existing Bend and Twist inventory
+feature; select Twist with `--feature bend-and-twist --guide twist`.
+
 Extrude teaches creation and straight-end continuation only. Cancellation,
 Undo/Redo, history editing and Bend preparation have been removed from its lesson.
 Extrude continues a 2×3 end footprint and creates a separated second 3×6 cluster.

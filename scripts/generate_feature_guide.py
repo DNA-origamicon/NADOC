@@ -24,13 +24,13 @@ from scripts.run_deformation_history_e2e import (
 )
 from scripts.feature_guides import (
     GUIDES, directory_hashes, load_catalog, promote_directory,
-    render_guide, render_ledger, snapshot,
+    render_guide, render_ledger, snapshot, select_guide,
 )
 
 
-def main(output=None, replace=False, feature_id="extrude"):
+def main(output=None, replace=False, feature_id="extrude", guide_id=None):
     catalog = load_catalog(REPO)
-    feature = catalog['features'][feature_id]
+    feature = select_guide(catalog, feature_id, guide_id)
     source = snapshot(REPO, catalog, feature)
     if source['unmatched']:
         raise RuntimeError(f'Missing guide dependencies: {source["unmatched"]}')
@@ -40,7 +40,8 @@ def main(output=None, replace=False, feature_id="extrude"):
         if not replace:
             raise RuntimeError(f'Refusing to overwrite an existing guide: {output}; use --replace after review')
         previous_manifest = json.loads((output / 'manifest.json').read_text())
-        if previous_manifest.get('feature') != feature_id:
+        if (previous_manifest.get('feature') != feature_id
+                or previous_manifest.get('guide', feature['guide']) != feature['guide']):
             raise RuntimeError('Refusing to replace a different guide')
         expected = directory_hashes(output)
         if set(expected) != set(previous_manifest['assets']) | {'manifest.json'}:
@@ -98,12 +99,12 @@ def main(output=None, replace=False, feature_id="extrude"):
         steps = json.loads((stage / 'steps.json').read_text())
         (stage / 'README.md').write_text(render_guide(steps, feature))
         current_catalog = load_catalog(REPO)
-        if (feature != current_catalog['features'][feature_id]
-                or source != snapshot(REPO, current_catalog, current_catalog['features'][feature_id])):
+        current_feature = select_guide(current_catalog, feature_id, feature['guide'])
+        if feature != current_feature or source != snapshot(REPO, current_catalog, current_feature):
             raise RuntimeError('Source changed during capture; refusing to stamp a mixed-version guide')
         captured = datetime.now(ZoneInfo('America/Denver')).isoformat(timespec='seconds')
         (stage / 'manifest.json').write_text(json.dumps({
-            'schema': 1, 'feature': feature_id,
+            'schema': 1, 'feature': feature_id, 'guide': feature['guide'],
             'created_at': previous_manifest['created_at'] if previous_manifest else captured,
             'captured_at': captured, 'source_revision': revision,
             'source_worktree_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=REPO, text=True).strip()),
@@ -140,5 +141,6 @@ if __name__ == '__main__':
     parser.add_argument('--output', help='Optional preview destination; default docs/guides/extrude')
     parser.add_argument('--replace', action='store_true', help='Regenerate the existing guide after review, preserving first-created date')
     parser.add_argument('--feature', default='extrude', choices=['extrude', 'bend-and-twist'])
+    parser.add_argument('--guide', help='Choose a lesson within the feature, e.g. twist')
     args = parser.parse_args()
-    main(args.output, args.replace, args.feature)
+    main(args.output, args.replace, args.feature, args.guide)

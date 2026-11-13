@@ -79,6 +79,9 @@ just validate-safe .venv/bin/python -m scripts.generate_feature_guide --replace
 # Separate Bend lesson (use --replace on later captures):
 just validate-safe .venv/bin/python -m scripts.generate_feature_guide --feature bend-and-twist
 
+# Separate Twist lesson under the same feature:
+just validate-safe .venv/bin/python -m scripts.generate_feature_guide --feature bend-and-twist --guide twist
+
 # Optional disposable editorial preview (does not update the canonical ledger):
 just validate-safe .venv/bin/python -m scripts.generate_feature_guide \
   --output .development-artifacts/feature-guides/extrude-preview
@@ -145,8 +148,11 @@ editorial captures and verification during these iterations.
    the guide teaches. Use `partial` until all listed subfeatures and intended
    contexts have guides; use `blocked` with a concrete reason when appropriate.
 3. Add a real-input recipe under `frontend/guides/`, outcome checks and source
-   dependencies. Extend the generator/config to select that recipe: the current
-   executable generator supports Extrude and Bend, not arbitrary catalog entries.
+   dependencies. Extend the generator/config to select that recipe: the generator selects the feature’s primary lesson by default. Use
+   `additional_guides` for more lessons under the same inventory feature, each with
+   its own `guide`, `recipe`, `watch`, `covered_workflows` and `introduction`.
+   Select these with `--feature <feature-id> --guide <guide-id>`; the checker and
+   ledger track every lesson independently.
 4. Capture to `docs/guides/<stable-id>/`, preserve/replay the complete construction,
    review images, record UX findings and add a reader link to this library.
 5. Run the checker and the focused documentation-tool tests. Review the diff,
@@ -214,4 +220,5 @@ requirements. Keep the entire guide directory when downloading for offline use.
 Render the offline browser versions with `python3 -m scripts.render_feature_guide_html`
 and `python3 -m scripts.render_feature_guide_html --guide bend`. Add `--check` to
 verify each export. Bend is registered under the existing Bend and Twist feature;
-its guide covers Bend only, so that combined feature remains partially covered.
+Bend and Twist have separate lessons, dates and freshness checks under that entry.
+Use `--guide twist` to render or check the Twist browser version.
