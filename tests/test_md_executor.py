@@ -792,6 +792,33 @@ def test_fetch_outputs_prioritizes_failure_log_before_checkpoints(tmp_path):
     assert source == "nadoc_failure.log"
 
 
+@pytest.mark.parametrize("remote_size", [106, 0, 107, None])
+def test_fetch_outputs_rechecks_late_slurm_log_size(tmp_path, monkeypatch, remote_size):
+    job = _make_prepared_job(tmp_path)
+    job.remote_scratch_dir = "/scratch/x/" + job.job_id
+    inventories = iter([{"run.err": 0}, {"run.err": remote_size}])
+
+    async def inventory(*args, **kwargs):
+        result = next(inventories)
+        if remote_size is None and result["run.err"] is None:
+            raise RuntimeError("SSH unavailable")
+        return result
+
+    monkeypatch.setattr(ex, "remote_output_inventory", inventory)
+    conn = FakeConn(get_contents={"run.err": "x" * 106})
+    assert _run(ex.fetch_outputs(job, tmp_path, conn=conn)) is (remote_size == 106)
+    saved = MdJob.load(job.job_id, tmp_path).download_status
+    if remote_size == 106:
+        assert saved["state"] == "verified"
+        assert saved["inventory"] == {"run.err": 106}
+        assert saved["total_bytes"] == saved["verified_bytes"] == 106
+        assert saved["files_verified"] == 1
+    else:
+        assert saved["state"] == "interrupted"
+        assert saved["failed_files"] == ["run.err"]
+        assert saved["inventory"] == {"run.err": 0}
+
+
 def test_fetch_outputs_aborts_remaining_inventory_when_transport_drops(tmp_path):
     job = _make_prepared_job(tmp_path)
     job.remote_scratch_dir = "/scratch/x/" + job.job_id

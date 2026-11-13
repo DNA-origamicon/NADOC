@@ -1,5 +1,16 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-188 — Late Slurm stderr makes complete downloads appear incomplete (2026-11-12)
+
+- [x] Gerling WITHOUT_EXTRA_T run created November 5 12:47: initial remote
+  inventory said stderr was zero bytes; downloaded TIMEOUT message was 106 bytes.
+  All trajectory/checkpoint bytes were present, but strict old-inventory matching
+  left the job interrupted. Fresh remote inventory independently confirmed all 18
+  files. Normal worker retry repaired saved status while preserving paused/resumable.
+- [x] Refresh remote inventory on size mismatch; require an exact remote/local
+  match before updating counts. Regression covers log growth, persistent mismatch,
+  and unavailable SSH. Focused executor suite: 105 passed.
+
 ## ISSUE-187 — Trajectory readiness rail loses live progress (2026-11-12)
 
 - [x] Player events dropped trajectory identity/range and compilation intercepted them

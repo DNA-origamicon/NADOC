@@ -7,6 +7,20 @@ review_after: 2026-10-01
 
 # MD job system
 
+## Alpine late stderr inventory race (2026-11-12)
+
+Gerling WITHOUT_EXTRA_T production created November 5 12:47 MST reached Alpine's
+168-hour limit with 62.08/100 ns. All 18 local files match a fresh remote inventory
+(79,007,422,950 bytes); the DCD has 1,552 complete frames with no trailing partial
+frame and passes sampled structural checks. The initial inventory recorded an
+empty Slurm stderr before its 106-byte TIMEOUT message arrived, incorrectly
+leaving the transfer interrupted despite playable trajectory data. Retried through
+the normal worker fetch: verified, still paused/resumable, no new simulation.
+`md_executor` now refreshes remote inventory on a downloaded-size mismatch and
+accepts only an exact match to the refreshed remote size. Failed remote checks or
+continued mismatches remain interrupted. Existing detached workers require their
+next normal restart to load the code; this job was repaired without restarting one.
+
 ## Submodel full-reference binding and pose investigation (2026-11-12)
 
 `namd_submodel_reference.py` freezes actual whole-production config + PSF ion

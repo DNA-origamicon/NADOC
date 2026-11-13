@@ -21,6 +21,15 @@ Detailed phase notes and historical evidence are preserved in
 archive only when investigating a past decision. The live entry-path matrix is
 [selection_behavior_matrix.md](selection_behavior_matrix.md).
 
+## Camera gesture compatibility (2026-11-12)
+
+Shared desktop mouse bindings support Ctrl + right-drag (also Cmd + right-drag)
+for pan in Turntable, Trackball and Multiscale. Plain right-drag rotates and
+middle-drag pans; left gestures retain selection ownership. OrbitControls maps
+modified rotation to pan internally; Trackball needs the explicit pan mapping.
+Real-controller unit tests cover translation without rotation and subsequent
+plain rotation. App verification remains MV-63 while NAMD blocks smoke.
+
 ## Current model
 
 ```js

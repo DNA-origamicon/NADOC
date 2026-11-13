@@ -1553,3 +1553,11 @@ limitation remains GUIDE-UX-004.
   molecular structures). Covers delayed response, stale refresh, and failure.
 - App exercise and smoke are pending: `scripts/sim_guard.py smoke` refused on
   November 12 because a production NAMD process was running. No override used.
+
+### MV-63 — Ctrl-right camera pan (PENDING, 2026-11-12)
+
+Exercise Ctrl + right-drag in Turntable, Trackball and Multiscale, in part and
+assembly views. Camera and target should translate together without rotation;
+plain right-drag still rotates and middle-drag still pans. Regression exercise:
+`frontend/e2e/mouse_pan.spec.js` (camera only, no authored structures or jobs).
+App exercise/smoke blocked by the active-NAMD simulation guard; no override used.

@@ -1,5 +1,11 @@
 # Issues fix log
 
+## ISSUE-188 — Late Slurm stderr inventory (2026-11-12)
+
+- [x] Recheck mismatching downloaded files against fresh remote sizes; preserve
+  rejection when remote verification fails. Repaired Gerling's saved download
+  state through normal worker retry, preserving its continuation checkpoint.
+
 ## ISSUE-187 — Live trajectory readiness and compiled-video indicators (2026-11-12)
 
 - [x] Preserve preparation-event identity through preview and compilation, retain
