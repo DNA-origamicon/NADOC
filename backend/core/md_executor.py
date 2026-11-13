@@ -1264,6 +1264,21 @@ async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -
             failed.append(rel)
             continue
         expected = inventory[rel]
+        if local.is_file() and local.stat().st_size != expected:
+            # Slurm may append its TIMEOUT message after the initial inventory.
+            # Recheck the remote size, never bless a mismatch from local bytes alone.
+            try:
+                refreshed = await remote_output_inventory(job, conn=conn)
+            except Exception:  # Preserve the failed verification if SSH is unavailable.
+                refreshed = {}
+            current_size = refreshed.get(rel)
+            if current_size is not None and local.stat().st_size == current_size:
+                total_bytes += current_size - expected
+                inventory[rel] = expected = current_size
+                job.download_status.update(
+                    total_bytes=total_bytes,
+                    dcd_bytes=sum(size for name, size in inventory.items() if name.endswith(".dcd")),
+                )
         if not local.exists() or local.stat().st_size != expected:
             failed.append(rel)
             continue

@@ -103,6 +103,7 @@ describe('read-only wizard', () => {
     // prep_params dump instead would mark every default as an explicit choice.
     const body = api.fetchProtocolPlan.mock.calls[0][0]
     expect(body).toMatchObject({ relax_preset: 'literature', fast: false, threads: 8 })
+    expect(body.saved_job_id).toBe(JOB.job_id)
     expect(body).not.toHaveProperty('padding_nm')
     expect(body).not.toHaveProperty('minimize_steps')
   })

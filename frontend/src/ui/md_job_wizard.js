@@ -493,6 +493,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       ...(!readOnly && state.mode !== 'production' ? getPreparationContext() : {}),
       ...planPayload({ ...state, touched: { ...ladderPin(), ...withoutInapplicableProduction(state.touched, plan) } }),
       ...(!readOnly && state.mode !== 'production' ? preparation?.payload() : {}),
+      ...(readOnly && viewJob ? { saved_job_id: viewJob.job_id } : {}),
     }
     try {
       const next = await api.fetchProtocolPlan(payload)

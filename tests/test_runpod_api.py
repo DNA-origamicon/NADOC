@@ -774,3 +774,50 @@ class TestResolveApiKey:
             )
         finally:
             f.chmod(0o600)
+
+
+@pytest.mark.parametrize('message', [
+    'There are no instances currently available',
+    'There are no longer any instances available with the requested specifications.',
+    "RunPod GraphQL create failed: [{'extensions': {'code': 'SUPPLY_CONSTRAINT'}}]",
+])
+def test_capacity_error_tries_next_payload(monkeypatch, message):
+    async def exercise():
+        client = RunpodClient('test-key')
+        calls = []
+
+        async def create(payload):
+            calls.append(payload)
+            if len(calls) == 1:
+                raise RunpodError(message)
+            return parse_pod(_pod_json())
+
+        monkeypatch.setattr(client, 'create_pod', create)
+        try:
+            result = await client.create_pod_first_available([{'card': 1}, {'card': 2}])
+            assert result.id == 'p1'
+            assert calls == [{'card': 1}, {'card': 2}]
+        finally:
+            await client.aclose()
+
+    asyncio.run(exercise())
+
+
+def test_noncapacity_error_does_not_try_other_cards(monkeypatch):
+    async def exercise():
+        client = RunpodClient('test-key')
+        calls = []
+
+        async def create(payload):
+            calls.append(payload)
+            raise RunpodError('Authentication failed')
+
+        monkeypatch.setattr(client, 'create_pod', create)
+        try:
+            with pytest.raises(RunpodError, match='Authentication failed'):
+                await client.create_pod_first_available([{'card': 1}, {'card': 2}])
+            assert len(calls) == 1
+        finally:
+            await client.aclose()
+
+    asyncio.run(exercise())

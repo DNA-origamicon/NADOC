@@ -7,6 +7,28 @@ NAMD now prepares cropped explicit-solvent DNA packages with a uniformly restrai
 for relaxation and production. The dated experiments below are historical evidence,
 not descriptions of the current managed execution path.
 
+2026-11-12: the isolated [24hb_2xT shell-calibration framework](../experiments/namd_shell_calibration/README.md)
+maps the saved RunPod control selection to archived whole-model production,
+profiles box-frame covariance and extra-base observables, and provides tentative
+scalar stiffness updates from matched profile pairs. It does not launch engines,
+modify managed inputs, or install calibrated restraints. Initial sparse sampling
+revealed substantial preparation/reference shape mismatch and different recorded
+ion recipes; calibration remains unqualified. The user's local NAMD job stays
+undisturbed; only bounded offline analysis and small synthetic tests were run.
+
+The NAMD and oxDNA cards also provide **Define submodel from selection**, directly
+below Define/Edit submodel, using the shared `btn btn--sm` styling. Select DNA
+bases (including crossover inserts), ends, bonds, domains, strands, crossovers,
+overhangs, extensions, or clusters, then derive an editable axis-aligned box with
+1 nm padding around the selected positions. Assembly instances, nested groups,
+and selected instance clusters use their live world transforms. The surrounding
+shell remains separate and retains its existing value. Empty/unavailable
+selections cannot silently replace a region with a default box. Immutable NAMD
+jobs retain their saved inputs; redefining their region starts a fresh setup.
+This action captures bounds once; it does not yet persist base identities as an
+independent simulation membership definition. Other bases inside the resulting
+box are included by the existing preparation rules.
+
 ## Launch estimates and confirmations (2026-11-10)
 
 Duration alone never opens a launch confirmation: relaxation stages can be skip
@@ -901,3 +923,69 @@ and copy menu, pointer transforms, shell input, refresh during drag, and saved-b
 restoration. It requires `NADOC_SUBMODEL_ZOOM_SOURCE` and an isolated
 `NADOC_WORKSPACE`; the caller must remove the workspace and bridge in `finally`.
 It reads an existing source and creates disposable job records only.
+
+### Fractional terminal charge in NAMD crops
+
+Whole-residue cropping preserves CHARMM partial charges. Natural 5′ and 3′
+terminal residues carry −0.47 and −0.53 e, respectively; a spatial crop need not
+retain them in pairs. Consequently a valid crop can have noninteger net charge
+although its complete source topology is integer charged.
+
+New preparations record a hash-bound `charge_policy` in `submodel.json`. The
+source must pass the ordinary all-atom topology audit. Counterions are chosen
+from the actual cropped PSF charge rounded to the nearest integer, leaving at
+most 0.5 e residual. Both dry and solvated audits check the specific recorded
+charge; the final residual and `neutral: false` remain explicit in
+`charge_audit.json`. No DNA charges, atoms, coordinates or terminal patches are
+changed to force neutrality. This is an approximate periodic-PME boundary for
+screening, not an exactly neutral whole molecule. Whole-model audits still
+require integer charge and neutral solvated packages. Historical packages are
+not rewritten; prepare a new copy to use this policy.
+
+
+Validation on 2026-11-12 used the user's saved 24hb_2xT selection in managed
+RunPod pilot `ddea66693a54`: 4,800 minimization steps and 205 ps across the
+shortened relaxation ladder, including 50 ps of final 4 fs dynamics without
+internal DNA ENM restraints. All four target extra Ts were mobile; fixed atoms
+remained unchanged, final core positional restraints were zero, and the uniform
+heavy-shell coefficient remained 0.1. All 22 native stages exited normally with
+finite energies and all 201 output files were verified. Campaign GPU cost was
+$0.54 of a $3 budget, with both pods destroyed. No local NAMD jobs were started.
+This is preliminary execution validation; it does not establish equilibration
+or validate calibrated restraints. The original failed job and design were kept.
+
+## Matching a full-model reference for NAMD comparisons
+
+A registered `submodel_reference_job_id` now supplies a frozen native physics
+profile to new submodel preparations. A per-design binding in
+`workspace/submodel_reference_profiles.json` applies automatically to new jobs;
+register it with `python -m backend.core.namd_submodel_reference --workspace
+workspace --reference-job JOB_DIRECTORY`. The current importer supports a
+whole-model production reference with neutralizing Mg(H₂O)₆ only. It verifies
+actual PSF ion counts, rather than treating nominal legacy Mg concentration as
+added salt. Explicit `counterion='mg'` permits zero added MgCl₂ without changing
+ordinary zero-Mg requests, which still use sodium counterions.
+
+The wizard supplies the selected region and source path to the same resolver used
+by preparation. Reference-controlled values appear as forced settings. The
+profile is embedded in `submodel.json` and inherited by production descendants;
+existing jobs and their inputs are untouched. New production off a pre-binding
+submodel is refused because its old ion box cannot be changed by editing a conf.
+Copies can be prepared under the new binding. Reference settings override stage
+physics edits, while run lengths and output intervals remain editable. Topology
+agreement is recorded but not required for configuration-only screening variants;
+no reference coordinates are transferred by this feature.
+
+For `24hb_2xT.nadoc`, the reference is `fc12195d0636`: 300 K, 1 ps⁻¹ damping,
+4 fs HMR, rigid bonds, matching force-field file hashes, PME and nonbonded settings,
+zero added NaCl/MgCl₂ and magnesium counterions. The fixed-shell implementation
+still uses NVT and CUDA offload. Cell dimensions, boundary restraints, preparation
+ladder, run duration and ion number density differ; the receipt explicitly lists
+these exceptions. This is configuration matching, not a claim of ensemble equality
+or new native stability validation.
+
+The observed-pose investigation and repeatable comparison commands are documented
+in `experiments/namd_shell_calibration/README.md`. Moving shell coordinates alone
+would stretch connecting bonds; coherent initialization of all retained atoms and
+restraint references from a recorded whole-model frame is the next candidate to
+investigate. No altered molecular pose has been installed by these settings changes.

@@ -5,7 +5,7 @@ import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
 import { configureMouseBindings, attachMouseBindings } from './mouse_bindings.js'
 
 for (const Controller of [OrbitControls, TrackballControls]) {
-  it(`${Controller.name}: only right-drag orbits, middle pans, left and Ctrl-drags do not navigate`, () => {
+  it(`${Controller.name}: right-drag orbits, middle and Ctrl-right pan, left stays available for selection`, () => {
     const canvas = document.createElement('canvas')
     canvas.setPointerCapture = () => {}; canvas.releasePointerCapture = () => {}
     canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 200 })
@@ -25,9 +25,14 @@ for (const Controller of [OrbitControls, TrackballControls]) {
       }
     }
     const position = camera.position.clone(), target = controls.target.clone()
-    drag(0); drag(0, true); drag(2, true)
+    drag(0); drag(0, true)
     expect(camera.position.distanceTo(position)).toBeLessThan(1e-8)
     expect(controls.target.distanceTo(target)).toBeLessThan(1e-8)
+    const direction = camera.position.clone().sub(controls.target)
+    drag(2, true)
+    expect(controls.target.distanceTo(target)).toBeGreaterThan(.1)
+    expect(camera.position.clone().sub(controls.target).distanceTo(direction)).toBeLessThan(1e-8)
+    camera.position.copy(position); controls.target.copy(target); controls.update()
     drag(2)
     expect(camera.position.distanceTo(position)).toBeGreaterThan(.1)
     expect(controls.target.distanceTo(target)).toBeLessThan(1e-8)

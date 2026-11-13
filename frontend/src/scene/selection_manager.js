@@ -14,7 +14,8 @@ import { vrDeformationSelection, resolveVRDeformationSelection, vrDeformationRef
  *
  * Modifier semantics (remapped 2026-05-17):
  *   Left-drag                  → directional rectangle multi-select.
- *   Ctrl+left/right-drag       → no action.
+ *   Ctrl+left-drag             → no action.
+ *   Ctrl+right-drag            → camera pan (shared mouse bindings).
  *   Ctrl+left-click (no drag)   → toggle selection.
  *   Alt+left-click             → toggle a legacy dimension anchor.
  *   Plain click (Dimensions)   → select one of the two live dimension bases.

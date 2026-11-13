@@ -4204,7 +4204,11 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   }
 
   const _wizard = initJobWizard({
-    getPreparationContext: () => _physicalRelaxPayload(),
+    getPreparationContext: () => ({
+      ..._physicalRelaxPayload(),
+      design_source_path: _currentPartPath() || null,
+      submodel: submodel?.capture('md') ?? null,
+    }),
     preparation: boxSolvent,
     api: {
       getRelaxPresets: () => api.getRelaxPresets(),

@@ -3,17 +3,67 @@ import { describe, it, expect, vi } from 'vitest'
 import { initSimulationSubmodel } from './simulation_submodel.js'
 
 const box = { shape: 'box', min_corner: [-2, -3, -4], max_corner: [2, 3, 4], rotation: [0, 0, 0, 1] }
-function setup(api = {}) {
+function setup(api = {}, initialState = {}, sceneDeps = {}) {
   document.body.innerHTML = '<div id="oxdna-submodel"></div><div id="md-submodel"></div><input type="checkbox" id="md-box-view-details">'
   let adapter
-  const store = { getState: () => ({ currentDesign: { id: 'part' } }), subscribe: () => () => {} }
+  let current = { currentDesign: { id: 'part' }, ...initialState }
+  const listeners = new Set()
+  const store = { getState: () => current, subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn) } }
+  const update = patch => { current = { ...current, ...patch }; for (const fn of listeners) fn(current) }
   const editor = { select: vi.fn(), add: vi.fn(() => edit(box)), dispose: vi.fn() }
   const saves = []
   const service = { getSimulationSubmodel: vi.fn(async () => ({ box: null })), saveSimulationSubmodel: vi.fn(async (engine, id, value) => { saves.push({engine,id,box:value}); return { box: value } }), ...api }
-  const controller = initSimulationSubmodel({ document, store, api: service, createEditor: args => { adapter = args.store; return editor } })
+  const controller = initSimulationSubmodel({ document, store, api: service, createEditor: args => { adapter = args.store; return editor }, ...sceneDeps })
   function edit(value) { adapter.setState({ currentDesign: { view_volumes: value ? [value] : [] } }) }
-  return { controller, edit, service, saves, state: () => adapter.getState() }
+  return { controller, edit, service, saves, update, editor, state: () => adapter.getState() }
 }
+
+const selectedBase = { selection: { items: [{ kind: 'base', key: 'h:1:FORWARD' }] }, currentGeometry: [{ helix_id: 'h', bp_index: 1, direction: 'FORWARD', backbone_position: [2, 3, 4] }] }
+
+it('places the standard selection button below Define and updates its enabled state', () => {
+  const x = setup()
+  for (const engine of ['md', 'oxdna']) {
+    const define = document.getElementById(`${engine}-define-submodel`)
+    const selection = document.getElementById(`${engine}-submodel-from-selection`)
+    expect(define.nextElementSibling).toBe(selection)
+    expect(define.className).toBe('btn btn--sm'); expect(selection.className).toBe('btn btn--sm')
+    expect(selection.disabled).toBe(true)
+  }
+  x.update(selectedBase)
+  const selection = document.getElementById('md-submodel-from-selection')
+  expect(selection.disabled).toBe(false); selection.click()
+  expect(x.controller.capture('md')).toMatchObject({ min_corner: [1, 2, 3], max_corner: [3, 4, 5], shell_nm: 3, visible: true })
+  expect(document.getElementById('md-submodel-controls').hidden).toBe(false)
+  expect(document.getElementById('md-box-view-details').checked).toBe(true)
+  expect(x.editor.select).toHaveBeenCalledWith('submodel')
+  x.update({ selection: { items: [] } }); expect(selection.disabled).toBe(true)
+  x.controller.dispose()
+})
+
+it('persists selection-derived bounds, retains shell settings, and leaves immutable jobs unchanged', async () => {
+  const x = setup({ getSimulationSubmodel: vi.fn(async () => ({ box: { ...box, shell_nm: 2 } })) }, selectedBase)
+  await x.controller.select('md', 'editable', { editable: true })
+  document.getElementById('md-submodel-from-selection').click()
+  await x.controller.flush('md')
+  expect(x.saves.at(-1)).toMatchObject({ engine: 'md', id: 'editable', box: { shell_nm: 2, min_corner: [1, 2, 3] } })
+  await x.controller.select('md', 'running', { editable: false })
+  const before = x.saves.length
+  document.getElementById('md-submodel-from-selection').click()
+  expect(x.saves.length).toBe(before)
+  expect(x.controller.capture('md')).toMatchObject({ shell_nm: 2, min_corner: [1, 2, 3] })
+  await x.controller.select('md', 'running')
+  expect(x.controller.capture('md')).toEqual({ ...box, shell_nm: 2 })
+  x.controller.dispose()
+})
+
+it('reports unresolved selection without replacing an existing submodel', () => {
+  const x = setup({}, { selection: { items: [{ kind: 'base', key: '__xb__:missing:0' }] } })
+  x.edit(box)
+  document.getElementById('oxdna-submodel-from-selection').click()
+  expect(x.controller.capture('oxdna')).toEqual(box)
+  expect(document.querySelector('#oxdna-submodel [role=status]').textContent).toContain('positions are not available')
+  x.controller.dispose()
+})
 
 describe('job submodel selection', () => {
   it('carries a pre-job box into a job, saves edits and restores it after switching jobs', async () => {

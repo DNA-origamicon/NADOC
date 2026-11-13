@@ -685,7 +685,10 @@ class RunpodClient:
             try:
                 return await self.create_pod(payload)
             except RunpodError as exc:
-                if "no instances" not in str(exc).lower():
+                message = str(exc).lower()
+                if not any(marker in message for marker in (
+                    "no instances", "no longer any instances", "supply_constraint",
+                )):
                     raise
                 last = exc
         raise last or RunpodError("no pod payloads to try")

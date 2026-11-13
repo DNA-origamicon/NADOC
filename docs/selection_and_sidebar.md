@@ -11,7 +11,8 @@ In the 3D viewport, right-drag orbits, middle-button drag pans, and the scroll
 wheel zooms. A plain left click selects. Left-drag draws a selection rectangle:
 left-to-right uses a solid box and selects only fully contained elements;
 right-to-left uses a dashed box and selects elements that overlap the box.
-Ctrl+left-drag and Ctrl+right-drag do nothing. Ctrl-click still toggles a selection.
+Ctrl+right-drag pans the camera in every orbit mode, as an alternative to
+middle-button dragging. Ctrl+left-drag does nothing; Ctrl-click still toggles a selection.
 
 ## Right sidebar
 

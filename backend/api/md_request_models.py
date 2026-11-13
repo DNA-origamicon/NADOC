@@ -28,6 +28,9 @@ MAX_PRODUCTION_NS = 10_000.0
 
 class CreateJobRequest(BaseModel):
     submodel: SubmodelBox | None = None
+    submodel_reference_job_id: str | None = Field(
+        None, description="Frozen full-model configuration profile for submodel comparisons; defaults to the design's registered reference."
+    )
     protocol: str = Field(
         EQUILIBRIUM_AWARE_PROTOCOL, description="Protocol preset name"
     )

@@ -1,5 +1,11 @@
 # Issues fix log
 
+## ISSUE-189 — Late Slurm stderr inventory (2026-11-12)
+
+- [x] Recheck mismatching downloaded files against fresh remote sizes; preserve
+  rejection when remote verification fails. Repaired Gerling's saved download
+  state through normal worker retry, preserving its continuation checkpoint.
+
 ## ISSUE-188 — Exact zoom-volume base selections (2026-11-12)
 
 - [x] Resolve extension, loop-copy, crossover-insert and separately rendered
@@ -15,6 +21,7 @@
   496 s against 90 s, zero per-test violators; no limits or markers changed.
   FULL remains deferred in `.nadoc-slow-pending`. Evidence:
   `.development-artifacts/zoom-volume-bases/validation.json`. Test artifacts cleaned.
+
 
 
 ## ISSUE-187 — Live trajectory readiness and compiled-video indicators (2026-11-12)

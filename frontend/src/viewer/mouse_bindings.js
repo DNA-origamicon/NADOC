@@ -11,7 +11,11 @@ export function attachMouseBindings(canvas, getControls) {
   const down = event => {
     const controls = getControls()
     configureMouseBindings(controls)
-    if (event.ctrlKey || event.metaKey) controls.mouseButtons.RIGHT = null
+    // OrbitControls already turns modified ROTATE gestures into pans.
+    // TrackballControls (also used by Multiscale) needs an explicit binding.
+    if ((event.ctrlKey || event.metaKey) && 'noPan' in controls) {
+      controls.mouseButtons.RIGHT = MOUSE.PAN
+    }
   }
   canvas.addEventListener('pointerdown', down, true)
   return () => canvas.removeEventListener('pointerdown', down, true)

@@ -1721,6 +1721,7 @@ export function initAssemblyRenderer(scene, store, api) {
     return {
       entries:     entry.helixCtrl?.backboneEntries ?? [],
       nucleotides: entry.nucleotides,
+      extraBaseGeometry: entry.xoverResult,
       matrixWorld: entry.group.matrixWorld.clone(),
     }
   }

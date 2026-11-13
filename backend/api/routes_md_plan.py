@@ -63,6 +63,7 @@ class ProtocolPlanRequest(CreateJobRequest):
     computed — means exactly what it means on the real create path.
     """
 
+    saved_job_id: str | None = Field(None, description="Read-only settings view: use this job's embedded submodel reference, never today's binding.")
     kind: str = Field("relaxation", description="'relaxation' or 'production'")
     parent_job_id: Optional[str] = Field(
         None, description="Production only: the relaxation job to seed from."
@@ -243,6 +244,9 @@ def _provenance(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
         )
         out["declash"] = {"value": True, "provenance": "forced", "reason": reason}
         out["force_soft"] = {"value": True, "provenance": "forced", "reason": reason}
+    if resolved.submodel_reference_job_id:
+        for name in ("submodel_reference_job_id", "salt_mode", "ion_conc_mM", "mg_conc_mM", "relax_timestep_fs", "relax_rigid_bonds", "relax_hmr", "production_timestep_fs", "production_rigid_bonds", "production_hmr", "stage_overrides"):
+            out[name] = {"value": getattr(resolved, name), "provenance": "forced", "reason": f"Matches full-model reference {resolved.submodel_reference_job_id}; Mg counterions only, no added salt. Fixed-shell NVT/offload exceptions remain."}
     return out
 
 
@@ -347,7 +351,7 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             _p.HIGH_ASPECT_NPT_MARGIN_ANG if high_aspect_ratio else _p.NPT_MARGIN_ANG
         ),
         n_atoms=body.n_atoms_hint,
-        force_resident={"on": True, "off": False}.get(
+        force_resident=False if resolved.submodel else {"on": True, "off": False}.get(
             str(resolved.gpu_resident or "auto").lower()
         ),
         anchors_file="anchors_fixed.pdb" if resolved.anchors else None,
@@ -361,10 +365,10 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             ctx,
             soft=force_soft,
             gentle=gentle_ladder,
-            nvt_only=carved or bool(resolved.two_electrodes),
-            fixed_cell_settle=resolved.protocol == "electrode_equilibration_namd" and flags.get("has_dna",False),
+            nvt_only=carved or bool(resolved.two_electrodes) or bool(resolved.submodel),
+            fixed_cell_settle=bool(resolved.submodel) or (resolved.protocol == "electrode_equilibration_namd" and flags.get("has_dna",False)),
             timestep_fs=ladder_dt,
-            stage_overrides=body.stage_overrides or None,
+            stage_overrides=resolved.stage_overrides or None,
             high_aspect_ratio=high_aspect_ratio,
         )
     except ValueError as exc:  # a protected directive — say which, do not 500
@@ -566,7 +570,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         hmr=(resolved.production_hmr if "production_hmr" in explicit else None),
         gpu_resident=(resolved.gpu_resident if "gpu_resident" in explicit else None),
     )
-    plan = production_fast_plan(parent, req)
+    plan = production_fast_plan(parent, req, historical=True) if body.saved_job_id else production_fast_plan(parent, req)
 
     # Continuing a PRODUCTION run is a different act from sampling off a relaxation, and
     # almost every sentence this endpoint emits has to know which: a continuation carries
@@ -643,6 +647,10 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         ),
     )
     timestep_fs = float(plan["timestep_fs"])
+    production_overrides = body.stage_overrides or {}
+    if manifest.get("submodel_reference"):
+        from backend.core.namd_submodel_reference import merge_overrides
+        production_overrides = merge_overrides(production_overrides, manifest["submodel_reference"]["physics"])
     # The stage table of the run this wizard is about to CREATE.  `production_stages` (the
     # 10/40/50 % chunk ladder) belongs to the other production route — the legacy one that
     # appends segments onto the parent job.  `POST /md/jobs/{parent}/production-run` builds
@@ -656,7 +664,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         enm_file=enm_file,
         dcd_freq=plan.get("dcd_freq"),
         continuation=chained and not cpd_mass_reseed,
-        stage_overrides=body.stage_overrides or None,
+        stage_overrides=production_overrides or None,
     )
 
     # The column to diff against: the parent's own recorded segment, put back through the
@@ -1279,6 +1287,11 @@ def _production_provenance(
             reason="off — an undersized cell refuses by default",
         ),
     }
+    if manifest.get("submodel_reference"):
+        profile = manifest["submodel_reference"]
+        for key in ("production_timestep_fs", "production_rigid_bonds", "production_hmr", "langevin_damping", "enm_restraints"):
+            provenance[key].update(provenance="forced", reason=f"Matches frozen full-model reference {profile['job_id']}.")
+        provenance["gpu_resident"] = {"value": "off", "provenance": "forced", "reason": "The fixed submodel shell requires CUDA offload."}
     if not ion_transport_available:
         # No pore, no voltage-driven protocol: its settings are not part of this run.
         for key in ("ion_transport_mode", "ion_transport_voltage_mV",

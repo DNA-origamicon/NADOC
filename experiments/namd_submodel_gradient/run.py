@@ -17,6 +17,7 @@ import numpy as np
 from backend.core.models import Design
 from backend.core.namd_topology import CharmmTopologyBuild
 from backend.core.namd_submodel import crop_topology, sections, canonical_bonded_lines
+from backend.core.namd_submodel_charge import record_charge_policy
 from backend.core.namd_solvate import build_namd_solvated_package
 from backend.physics.oxdna_submodel import box_distance
 from backend.core.md_shell_reprep import read_namd_coor
@@ -129,6 +130,7 @@ def prepare(prior, root):
         (root / "source.pdb").read_text(), (root / "source.psf").read_text(), meta
     )
     cropped, receipt = crop_topology(source, box)
+    receipt["charge_policy"] = record_charge_policy(source.psf_text, cropped.psf_text)
     rows = [s.split() for s in sections(source.psf_text)["NATOM"][1]]
     full_rows = [
         s.split() for s in sections((fp / f"{stem}.psf").read_text())["NATOM"][1]
