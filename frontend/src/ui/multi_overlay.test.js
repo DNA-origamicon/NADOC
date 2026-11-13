@@ -147,3 +147,39 @@ it('reports a refused overlay button transition without an unhandled rejection',
     expect(api.getCount()).toBe(0)
   } finally { window.removeEventListener('nadoc:comparison-mode', block); api.dispose() }
 })
+
+it('refreshes every simulation layer, preserves the camera, and ignores identical reapplies', async () => {
+  document.body.innerHTML = '<div id="right-multi-overlay-body"></div><canvas id="canvas"></canvas>'
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera()
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial())
+  scene.add(mesh)
+  let updates = null, notify
+  const representation = vi.fn(async () => { mesh.position.x = updates?.[0].backbone_position[0] ?? 0; notify?.() })
+  const controls = { target: new THREE.Vector3(), update: vi.fn() }
+  const api = initMultiOverlay({ document, scene, camera, canvas: document.getElementById('canvas'), renderer: {}, controls,
+    store: { getState: () => ({}) }, setRenderFn: vi.fn(), resetRenderFn: vi.fn(),
+    setRepresentation: representation, setColoringMode: vi.fn(),
+    simulationDisplay: { active: () => !!updates },
+    designRenderer: { getFemPositions: () => updates, subscribeSimulation: fn => { notify = fn; return () => { notify = null } } },
+  })
+  try {
+    await api.configure({ count: 4, representations: ['beads', 'surface', 'oxdna', 'cylinders'] })
+    await vi.waitFor(() => expect(() => api.getBroadcastView()).not.toThrow())
+    camera.position.set(21,22,23)
+    updates = [{ backbone_position: [12,0,0] }]; notify()
+    await vi.waitFor(() => {
+      expect(() => api.getBroadcastView()).not.toThrow()
+      expect(api.layers.map(l => l.renderScene.children[0].position.x)).toEqual([12,12,12,12])
+    })
+    expect(api.layers[3].effectiveRepresentation).toBe('full')
+    expect(camera.position.toArray()).toEqual([21,22,23])
+    const calls = representation.mock.calls.length
+    notify(); await new Promise(resolve => setTimeout(resolve, 80))
+    expect(representation).toHaveBeenCalledTimes(calls)
+    updates = [{ backbone_position: [-7,0,0] }]; notify()
+    await vi.waitFor(() => expect(api.layers.every(l => l.renderScene.children[0].position.x === -7)).toBe(true))
+    updates = null; notify()
+    await vi.waitFor(() => expect(api.layers.every(l => l.renderScene.children[0].position.x === 0)).toBe(true))
+    expect(api.layers[3].effectiveRepresentation).toBe('cylinders')
+  } finally { api.dispose() }
+})

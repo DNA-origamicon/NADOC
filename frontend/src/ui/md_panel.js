@@ -27,6 +27,7 @@
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { initFrameSteppers } from './frame_steppers.js'
+import { scheduleMdRepresentationFrame } from './md_representation_frame.js'
 import {
   isMdAtomFrameBin,
   makeMdAtomFrameTopology,
@@ -593,6 +594,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _setShowNadoc(false)               // hide the CG design under the heavy rep
       if (rebuildHeavy) onRestoreDesignHeavy?.()
     }
+    _emitMdDisplayEvent({ state: 'off', message: 'MD display stopped' }, _jobId)
   }
 
   showNadocChk?.addEventListener('change', () => {
@@ -786,6 +788,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
           copy:              p.copy ?? 0,   // loop-insertion copy → right bead
           backbone_position: [p.x, p.y, p.z],
           base_position: p.bx === undefined ? undefined : [p.bx, p.by, p.bz],
+          measured_base: p.measured_base === true,
           nx: p.nx, ny: p.ny, nz: p.nz,
           tx: p.tx, ty: p.ty, tz: p.tz,
         })),
@@ -1074,7 +1077,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     const nextMode = _targetStreamMode()
     const modeChanged = _repr !== nextMode
     _repr = nextMode
-    if (_sceneUsesNativeCg() || _sceneUsesAtomistic()) {
+    if (_sceneUsesNativeCg() || _sceneUsesAtomistic() || ['surface', 'oxdna', 'mrdna-coarse', 'mrdna-fine'].includes(_sceneRepr)) {
       // The representation switcher has already enabled CG and disabled atoms in
       // this task. Undo that provisional swap until the authoritative coarse frame
       // arrives. A phosphorus-only atom->CG conversion omits base centers, slab
@@ -1106,7 +1109,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       } else if (!modeChanged) {
         _displayedSceneRepr = _sceneRepr
       }
-      requestAnimationFrame(() => {
+      const apply = () => {
         if (modeChanged && _configPath) {
           // While atomistic remains the rendered fallback, keep its frame marked
           // active so the VR bridge continues publishing the exact visible atoms
@@ -1121,7 +1124,9 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         }
         _reapplyCachedFrame()
         if (_ws?.readyState === WebSocket.OPEN) _sendPoll()
-      })
+      }
+      if (evt.detail?.waits && (_configPath || _lastFrameMsg)) evt.detail.waits.push(scheduleMdRepresentationFrame(apply, _jobId))
+      else requestAnimationFrame(apply)
     }
   })
 

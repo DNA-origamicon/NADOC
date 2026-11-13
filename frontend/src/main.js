@@ -1267,7 +1267,7 @@ async function main() {
     }
     if (_atomSurface.getSurfaceMode?.() !== 'off') {
       _atomSurface.invalidateSurfaceCache()
-      _atomSurface.applySurfaceMode(_atomSurface.getSurfaceMode())
+      return _atomSurface.applySurfaceMode(_atomSurface.getSurfaceMode())
     }
   }
 
@@ -1398,7 +1398,7 @@ async function main() {
   }
   // When the scene representation changes while an oxDNA overlay is active, re-apply
   // the current frame to the freshly-built atomistic/surface mesh.
-  window.addEventListener('nadoc:representation-change', () => oxdnaDisplay.reapplyForRepr())
+  window.addEventListener('nadoc:representation-change', event => { const ready = oxdnaDisplay.reapplyForRepr({ strict: !!event.detail?.waits }); event.detail?.waits?.push(ready) })
   // Ephemeral "Live" oxDNA mode (in-process oxpy, nothing stored): owns the Live
   // toggle, seeds from the panel's selected relaxed job, and pushes field re-aims.
   // Lazy getters resolve the panel + field/anchor cards (all declared below).
@@ -1470,10 +1470,10 @@ async function main() {
     // it a NAMD trajectory in vdw/ballstick draws the CG beads through the atoms.
     onHeavyApplied: () => _atomSurface?.setCGVisible(false),
   })
-  if (import.meta.env.DEV) { window.__nadocMdViz = mdViz; window.__nadocMdPanel = mdPanel }
-  window.addEventListener('nadoc:representation-change', () => {
+  if (import.meta.env.DEV) { window.__nadocMdViz = mdViz; window.__nadocMdPanel = mdPanel; window.__nadocMdDisplay = mdDisplayController }
+  window.addEventListener('nadoc:representation-change', event => {
     if (mdPanel?.ionPathsActive()) mdPanel.reapplyIonPaths()
-    else if (mdViz.isActive?.()) mdViz.reapplyForRepr()
+    else if (mdViz.isActive?.()) { const ready = mdViz.reapplyForRepr({ strict: !!event.detail?.waits }); event.detail?.waits?.push(ready) }
   })
   // oxDNA jobs panel — uses the remote's Live wiring (oxdnaLive); the MD viz panel
   // (initMdJobsPanel) is wired to mdViz separately above via getMdViz.
@@ -6018,7 +6018,7 @@ async function main() {
     _lastMrdnaRepresentationWarning = message
     showToast(message, { severity: 'warn' })
   }
-  const simulationRepresentations = createSimulationRepresentations({ scene, store, designRenderer, setCGVisible: _setCGVisible, getRepresentation: () => _currentRepr, prepareSource: async () => { for (const source of [candoDisplay, snupiDisplay, mrdnaDisplay]) await source.prepareRepresentation() }, clearPreview: () => mrdnaDisplay.clearRepresentationPreview(), restoreRepresentation: () => _setRepresentation(_currentRepr), restoreAtoms: _restoreDesignHeavy, atomisticRenderer, heavyOwner: () => oxdnaDisplay.drivesHeavy?.("atomistic") || mdViz.drivesHeavy?.("atomistic") || mdDisplayController.drivesHeavy?.("atomistic"), onError: message => showToast(message, { severity: "error" }) })
+  const simulationRepresentations = createSimulationRepresentations({ scene, store, designRenderer, setCGVisible: _setCGVisible, getRepresentation: () => _currentRepr, prepareSource: async () => { for (const source of [candoDisplay, snupiDisplay, mrdnaDisplay]) await source.prepareRepresentation() }, clearPreview: () => mrdnaDisplay.clearRepresentationPreview(), restoreRepresentation: () => _setRepresentation(_currentRepr), restoreAtoms: _restoreDesignHeavy, atomisticRenderer, surfaceRenderer, getSurfaceData: () => _atomSurface.getSurfaceData(), heavyOwner: kind => oxdnaDisplay.drivesHeavy?.(kind) || mdViz.drivesHeavy?.(kind) || mdDisplayController.drivesHeavy?.(kind), onError: message => showToast(message, { severity: "error" }) })
   const _reprSwitcher = initRepresentationSwitcher({
     simulationDisplay: simulationRepresentations,
     store,
@@ -6100,7 +6100,7 @@ async function main() {
   const _multiOverlay = initMultiOverlay({
     document, scene, camera, renderer, canvas, controls, store,
     setRenderFn, resetRenderFn,
-    getRepresentation: () => _currentRepr, setRepresentation: _setComparisonRepresentation,
+    getRepresentation: () => _currentRepr, setRepresentation: _setComparisonRepresentation, simulationDisplay: simulationRepresentations, designRenderer, getSimulationStamp: () => [mdDisplayController.mode(), mdDisplayController.trajectoryInfo()],
     buildAssemblyScene: (representation, coloring) => buildAssemblyVisualization({ state: store.getState(), api, sourceScene: scene, representation, coloring }),
     setColoringMode: _setColoringMode,
   })

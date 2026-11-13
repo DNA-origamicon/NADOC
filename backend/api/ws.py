@@ -660,6 +660,17 @@ async def md_run_ws(websocket: WebSocket) -> None:
         else:
             model = build_atomistic_model_cached(design)
             cm = build_chain_map(model)
+        if is_namd and model is not None:
+            # Heavy and coarse displays must align against the same active
+            # reference, just as md_trajectory does. Generated model P sites can
+            # differ slightly and must not introduce a representation-dependent pose.
+            from backend.core.atomistic_to_nadoc import md_pkey
+
+            p_reference = {
+                md_pkey(a): np.array([a.x, a.y, a.z])
+                for a in model.atoms if a.name == "P"
+            }
+            p_reference.update(build_active_design_reference(design))
         _mark("design model + chain map")
 
         # Open the Universe up front — for NAMD we build p_order from the PSF's own
@@ -1022,6 +1033,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "heavy_idx": None,
             "c1p_idx": c1p_idx,
             "base_ring_idx": base_ring_idx,
+            "full_base_layout": None,  # invalidate measured-ring indices on every load
             "term_specs": term_specs,  # 5'-terminal bases recovered via O5'
             "dna_p_idx": dna_p_sel.indices,  # cached for the O(1) last-frame fast path
             "logs": logs,
@@ -1318,25 +1330,6 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 norms = _np.where(norms > 1e-6, norms, 1.0)
                 normals = dn / norms  # unit vectors
 
-            # Actual base-ring centroid in the same final pose as p_nm. Reconstruct it
-            # residue-locally from the raw P (minimum image when a cell exists), then
-            # apply the identical Kabsch rotation. This is the Full slab's authoritative
-            # live base_position and can be compared directly to the atomistic ring.
-            base_centers = [None] * len(p_order)
-            for i, idx in enumerate(_ctx.get("base_ring_idx") or []):
-                if i >= len(p_raw) or len(idx) < 5:
-                    continue
-                ring_raw = (
-                    _all_pos[idx] if _injected is not None else u.atoms[idx].positions
-                ) / 10.0
-                delta = ring_raw.mean(axis=0) - p_raw[i]
-                if dims is not None and dims[0] > 0:
-                    box_nm = dims[:3] / 10.0
-                    delta -= _np.round(delta / box_nm) * box_nm
-                if R_align is not None:
-                    delta = delta @ R_align.T
-                base_centers[i] = p_nm[i] + delta
-
             positions = []
             for i, key in enumerate(p_order):
                 hid, bpi, d = key[0], key[1], key[2]
@@ -1353,10 +1346,6 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     entry["nx"] = float(normals[i, 0])
                     entry["ny"] = float(normals[i, 1])
                     entry["nz"] = float(normals[i, 2])
-                if i < len(base_centers) and base_centers[i] is not None:
-                    entry["bx"] = float(base_centers[i][0])
-                    entry["by"] = float(base_centers[i][1])
-                    entry["bz"] = float(base_centers[i][2])
                 positions.append(entry)
 
             # 5'-terminal bases (no P atom) recovered via O5', anchored off the aligned
@@ -1395,6 +1384,15 @@ async def md_run_ws(websocket: WebSocket) -> None:
             from backend.core.md_trajectory import _add_mean_axis_tangents
 
             _add_mean_axis_tangents(positions)
+            # Use the same measured residue frames as recorded trajectory playback.
+            # This also covers O5'-anchored termini and crossover insert residues.
+            from backend.core.md_base_frames import apply_measured_display_frames
+
+            apply_measured_display_frames(
+                _ctx, positions, R_align,
+                (dims[:3] / 10.0) if dims is not None and dims[0] > 0 else None,
+                raw_positions_ang=_all_pos if _injected is not None else None,
+            )
             return {
                 "type": "frame",
                 "frame_idx": frame_idx,

@@ -310,7 +310,7 @@ export function mdDisplayReadinessFromMeta(meta) {
  * versa — re-applying it would paint stale/garbage positions.
  */
 export function canReapplyFrame(repr, sceneRepr) {
-  if (repr === 'nadoc' && !sceneUsesNativeCg(sceneRepr)) return false
+  if (repr === 'nadoc' && !sceneUsesNativeCg(sceneRepr) && !['surface', 'oxdna', 'mrdna-coarse', 'mrdna-fine'].includes(sceneRepr)) return false
   if (repr === 'ballstick' && !sceneUsesAtomistic(sceneRepr)) return false
   return true
 }

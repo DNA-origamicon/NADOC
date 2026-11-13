@@ -78,3 +78,34 @@ def measured_base_frames(raw_nm, anchor_indices, groups, aligned_anchors, rotati
             good = valid & (length > 1e-8)
             inward_out[rows[good]] = inward[good] / length[good, None]
     return centers, tangents
+
+
+def apply_measured_display_frames(ctx, positions, rotation, box_nm, *, raw_positions_ang=None):
+    """Enrich live MD rows without changing their shared backbone display affine.
+
+    Missing/degenerate rings retain the caller's coarse fallback. Read the injected
+    live frame when supplied, never a potentially stale Universe timestep.
+    """
+    anchors, groups = base_frame_layout(ctx)
+    count = min(len(positions), len(anchors))
+    if not count or not groups:
+        return
+    groups = [(rows[rows < count], rings[rows < count]) for rows, rings in groups
+              if np.any(rows < count)]
+    if not groups:
+        return
+    last = max(int(anchors[:count].max()), max(int(rings.max()) for _, rings in groups))
+    raw = (ctx["universe"].atoms[:last + 1].positions if raw_positions_ang is None
+           else raw_positions_ang[:last + 1]) / 10.0
+    aligned = np.asarray([[p["x"], p["y"], p["z"]] for p in positions[:count]])
+    inward = np.asarray([[p.get("nx", 0), p.get("ny", 0), p.get("nz", 1)]
+                         for p in positions[:count]], dtype=float)
+    centers, planes = measured_base_frames(raw, anchors[:count], groups, aligned,
+                                           rotation, box_nm, inward_out=inward)
+    for i, row in enumerate(positions[:count]):
+        if not (np.isfinite(centers[i]).all() and np.isfinite(planes[i]).all()):
+            continue
+        row.update(zip(("bx", "by", "bz"), map(float, centers[i])))
+        row.update(zip(("tx", "ty", "tz"), map(float, planes[i])))
+        row.update(zip(("nx", "ny", "nz"), map(float, inward[i])))
+        row["measured_base"] = True

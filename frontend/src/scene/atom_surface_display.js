@@ -907,6 +907,7 @@ export function initAtomSurfaceDisplay({
     getRegionStickRenderer:     () => volumeStick,
     getRegionSurfaceRenderer:   () => volumeSurface,
     getSurfaceMode: () => _surfaceMode,
+    getSurfaceData: () => _surfaceDataCache,
     getSurfaceProbeRadius: () => _surfaceProbeRadius,
     debugAtomLoadState: () => ({
       atomisticMode: atomisticRenderer.getMode(),

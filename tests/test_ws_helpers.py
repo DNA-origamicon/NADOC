@@ -264,6 +264,7 @@ def namd_dcd_fixture(demo_design_loaded):
             "dcd": dcd,
             "pdb": pdb_path,
             "n_p_order": n,
+            "p_order": p_order,
             "eq_positions": eq_positions,
             "rigid_mask": rigid_mask,
             "write": write,
@@ -603,7 +604,7 @@ def test_md_run_ws_dcd_seek_discovers_frames_appended_after_load(
         assert got["n_frames"] == 6
 
 
-def test_md_run_ws_dcd_alignment_matches_design_eq(client, namd_dcd_fixture):
+def test_md_run_ws_dcd_alignment_matches_design_eq(client, namd_dcd_fixture, monkeypatch):
     """Numeric regression pin for the PBC + Kabsch pipeline (Fix 6).
 
     Frame 0 of the fixture IS the design's P geometry, so the full
@@ -613,6 +614,11 @@ def test_md_run_ws_dcd_alignment_matches_design_eq(client, namd_dcd_fixture):
     tests above only assert message shape, not numerics.
     """
     fix = namd_dcd_fixture
+    from backend.core import atomistic_to_nadoc as mapping
+    # This identity-alignment case explicitly makes the active display reference
+    # equal to frame 0. Generated-model P sites are not generally that reference.
+    monkeypatch.setattr(mapping, 'build_active_design_reference',
+                        lambda design: dict(zip(fix['p_order'], fix['eq_positions'])))
     with client.websocket_connect("/ws/md-run") as ws:
         _load_namd(ws, fix)
         _await_md_ready(ws, expect_frames=3)
@@ -878,3 +884,25 @@ class TestUniverseCacheHelpers:
         big.write_text(f"PSF\n\n {ws._UNWRAP_MAX_ATOMS + 1} !NATOM\n" + "x" * 4096)
         note = ws._preload_size_note("", str(big))
         assert note is not None and f"{ws._UNWRAP_MAX_ATOMS + 1:,}" in note
+
+
+def test_md_display_atomistic_uses_active_reference_like_full(
+    client, namd_dcd_fixture, monkeypatch
+):
+    """Generated-model P sites must not override the active display reference."""
+    from backend.core import atomistic_to_nadoc as mapping
+
+    fix = namd_dcd_fixture
+    shift = np.array([.25, -.1, .15])
+    monkeypatch.setattr(mapping, 'build_active_design_reference',
+                        lambda design: {k: v + shift for k, v in
+                                        zip(fix['p_order'], fix['eq_positions'])})
+    with client.websocket_connect('/ws/md-run') as ws:
+        _load_namd(ws, fix, 'ballstick')
+        _await_md_ready(ws, expect_frames=3)
+        ws.send_json({'action': 'seek', 'frame_idx': 0})
+        frame = ws.receive_json()
+    atom_p = np.array([[a['x'], a['y'], a['z']] for a in frame['atoms']
+                       if a['serial'] % 2 == 0])
+    delta = atom_p[fix['rigid_mask']] - fix['eq_positions'][fix['rigid_mask']]
+    np.testing.assert_allclose(delta.mean(axis=0), shift, atol=.01)
