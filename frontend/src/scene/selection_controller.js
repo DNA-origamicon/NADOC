@@ -7,9 +7,10 @@ import { createSelectionState, reduceSelection, reconcileSelection } from './sel
 export function createSelectionController({ store, context = 'design' }) {
   if (!store?.getState || !store?.setState) throw new TypeError('selection controller requires a store')
 
-  const commit = selection => {
+  const commit = (selection, skipUnchanged = false) => {
     const related = selection.context === 'design' ? conjugateStrandRefs(store.getState().currentDesign, selection.items) : []
     const canonical = createSelectionState({ ...selection, items: [...selection.items, ...related], primary: selection.primary })
+    if (skipUnchanged && JSON.stringify(canonical) === JSON.stringify(createSelectionState(store.getState().selection))) return canonical
     store.setState({ selection: canonical })
     return canonical
   }
@@ -37,7 +38,7 @@ export function createSelectionController({ store, context = 'design' }) {
     reload: context => dispatch({ type: 'reload', context }),
     reconcile: isLive => {
       const current = createSelectionState(store.getState().selection)
-      return current.context === context ? commit(reconcileSelection(current, isLive)) : current
+      return current.context === context ? commit(reconcileSelection(current, isLive), true) : current
     },
     getState: () => createSelectionState(store.getState().selection),
   }

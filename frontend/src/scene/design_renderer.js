@@ -28,7 +28,7 @@ import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { installInstanceAlpha, setInstanceAlpha } from './instance_alpha.js'
 import { markOperationTiming, finishOperationAfterRender } from '../perf/operation_timing.js'
 import { designRebuildAwaitingGeometry } from './design_render_readiness.js'
-import { sameConnectionTopology, sameCrossoverTopology, sameForcedLigationTopology } from './connection_topology.js'
+import { sameConnectionTopology, sameCrossoverTopology, sameForcedLigationTopology, sameStrandJunctionTopology } from './connection_topology.js'
 
 /**
  * Initialise the design renderer.
@@ -894,6 +894,7 @@ export function initDesignRenderer(scene, storeRef) {
     // This overlay replaces helix meshes but not unfold_view's persistent arc
     // group. Force-ligation edits therefore require the full rebuild path.
     if (!sameForcedLigationTopology(prevState.currentDesign, newState.currentDesign)) return false
+    if (!sameStrandJunctionTopology(prevState.currentDesign, newState.currentDesign)) return false
     // Full/bead representations retain the conservative original contract.
     // In cylinder LOD, crossover cones are not visible and whole-helix cylinder
     // instances can be suppressed safely, so local crossover/scaffold changes
@@ -961,7 +962,7 @@ export function initDesignRenderer(scene, storeRef) {
       )
     }
     if (!_designVisible) ctrl.root.visible = false
-    _structuralOverlay = { ctrl, geometry: newGeo, design: fullDesign }
+    _structuralOverlay = { ctrl, geometry: newGeo, design: fullDesign, helixIds: realSet }
     markOperationTiming('structural-partial-render', {
       helices: realIds.length, nucleotides: patchGeometry.length,
     })
@@ -1149,7 +1150,7 @@ export function initDesignRenderer(scene, storeRef) {
       }
       // Seam closure changes bond/arc membership even if all nucleotide IDs
       // remain the same; a geometry-only patch cannot update that membership.
-      if (!_coverageChanged && sameForcedLigationTopology(prevState.currentDesign, newState.currentDesign) && _tryPatchInPlace(
+      if (!_coverageChanged && sameConnectionTopology(prevState.currentDesign, newState.currentDesign) && _tryPatchInPlace(
         newState.lastPartialChangedHelixIds,
         newState.currentGeometry,
         prevState.currentGeometry,
@@ -1949,8 +1950,13 @@ export function initDesignRenderer(scene, storeRef) {
      * @param {Set<string>} keys
      */
     setHiddenNucs(keys) {
-      _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
-      _helixCtrl?.setHiddenNucs(new Set([..._hiddenNucKeys, ...[..._previewHelices].map(id => `h:${id}`)]))
+      const next = keys instanceof Set ? keys : new Set(keys)
+      // Rebuilds and structural overlays already inherit the current hide set.
+      if (next.size === _hiddenNucKeys.size && [...next].every(key => _hiddenNucKeys.has(key))) return
+      _hiddenNucKeys = new Set(next)
+      const suppressed = [..._previewHelices, ...(_structuralOverlay?.helixIds ?? [])]
+      _helixCtrl?.setHiddenNucs(new Set([...next, ...suppressed.map(id => `h:${id}`)]))
+      _structuralOverlay?.ctrl.setHiddenNucs(next)
       this.refreshAllGlow()
     },
 

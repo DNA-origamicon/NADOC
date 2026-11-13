@@ -515,3 +515,25 @@ it('layers submodel visibility without persisting it or losing existing hidden b
   expect(persist).not.toHaveBeenCalled()
   api.destroy()
 })
+
+it('does not refresh visibility consumers on identical geometry/design notifications', () => {
+  let listener
+  const state = { currentDesign: { id: 'part', strands: [], extensions: [] }, currentGeometry: geometry }
+  const onChange = vi.fn()
+  const api = initVisibilityController({
+    store: { getState: () => state, subscribe: fn => { listener = fn; return () => {} } },
+    designRenderer: { setHiddenNucs() {}, setHiddenCrossovers() {} },
+    onChange,
+  })
+  listener(state)
+  state.currentDesign = { ...state.currentDesign }
+  listener(state)
+  const notified = onChange.mock.calls.length
+  state.currentDesign = { ...state.currentDesign }
+  state.currentGeometry = [...geometry]
+  listener(state)
+  expect(onChange).toHaveBeenCalledTimes(notified)
+  api.hide({ strandIds: ['s1'] })
+  expect(onChange).toHaveBeenCalledTimes(notified + 1)
+  api.destroy()
+})

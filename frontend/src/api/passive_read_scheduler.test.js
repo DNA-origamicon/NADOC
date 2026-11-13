@@ -64,3 +64,18 @@ it('never dispatches a cancelled foreground waiter and bounds duplicate subscrib
   ctrl.abort(); expect(await foreground).toBe('AbortError')
   hold.resolve(); await active; expect(await queued).toBe(1); expect(task).not.toHaveBeenCalled()
 })
+
+it('lets one history gesture pass a passive read without releasing its lane or fanning out writes', async () => {
+  const lane = createPassiveReadScheduler(), read = deferred(), undo = deferred(), order = []
+  const background = lane.run('read', () => read.promise, { passive: true })
+  await vi.advanceTimersByTimeAsync(0)
+  const first = lane.run('undo', () => { order.push('undo'); return undo.promise }, { interactive: true })
+  const second = lane.run('redo', () => { order.push('redo'); return 2 }, { interactive: true })
+  const pending = lane.run('next-read', () => { order.push('read'); return 3 }, { passive: true })
+  expect(order).toEqual(['undo'])
+  undo.resolve(1); await first; await vi.advanceTimersByTimeAsync(0)
+  expect(await second).toBe(2)
+  expect(order).toEqual(['undo', 'redo'])
+  read.resolve(); await background; await vi.advanceTimersByTimeAsync(0)
+  expect(await pending).toBe(3)
+})

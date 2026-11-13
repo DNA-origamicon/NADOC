@@ -1,3 +1,4 @@
+import { runSequenceWork } from './overhang_sequence_work.js'
 // Overhang endpoint helpers extracted from client.js (refactor 05-A-v2).
 // `relaxLinker` remains in client.js because it depends on the still-private
 // `_syncClusterOnlyDiff` / `_syncPositionsOnlyDiff` helpers.
@@ -48,7 +49,7 @@ export async function extrudeOverhang({ helixId, bpIndex, direction, isFivePrime
   return _syncFromDesignResponse(json)
 }
 
-export async function patchOverhang(overhangId, { sequence, label, rotation, deferReassign } = {}) {
+async function _patchOverhang(overhangId, { sequence, label, rotation, deferReassign } = {}) {
   const body = {}
   if (sequence !== undefined) body.sequence = sequence
   if (label    !== undefined) body.label    = label
@@ -56,7 +57,7 @@ export async function patchOverhang(overhangId, { sequence, label, rotation, def
   // Skip the per-write staple re-derivation when the caller (the connection-creation
   // flow) will re-derive once at apply — avoids redundant full re-assignments.
   if (deferReassign) body.defer_reassign = true
-  const json = await _request('PATCH', `/design/overhang/${encodeURIComponent(overhangId)}`, body)
+  const json = await _request('PATCH', `/design/overhang/${encodeURIComponent(overhangId)}`, body, { suppressBusy: sequence !== undefined, interactive: sequence !== undefined })
   // Connection setup always caps the sequence to the live backing-domain length
   // before setting deferReassign.  It therefore changes bases only; the atomic
   // connection-version Apply that follows performs the one required geometry sync.
@@ -71,9 +72,9 @@ export async function patchOverhangRotationsBatch(ops) {
   return _syncFromDesignResponse(json)
 }
 
-export async function generateOverhangRandomSequence(overhangId, { deferReassign, preview } = {}) {
+async function _generateOverhangRandomSequence(overhangId, { deferReassign, preview } = {}) {
   const q = preview ? '?preview=true' : deferReassign ? '?defer_reassign=true' : ''
-  const json = await _request('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random${q}`)
+  const json = await _request('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random${q}`, undefined, { suppressBusy: !preview, interactive: !preview })
   if (!json) {
     throw new Error(store.getState().lastError?.message ?? 'Sequence generation failed; the existing sequence was preserved.')
   }
@@ -148,7 +149,7 @@ export async function createConnectionVersion(payload) {
 
 /** First-time Connect: create the version and materialize it in one backend
  * snapshot, so one Undo removes both topology and the sidebar version group. */
-export async function createAndApplyConnectionVersion(payload) {
+async function _createAndApplyConnectionVersion(payload) {
   const json = await _request('POST', '/design/connection-versions/connect', payload)
   return _syncFromDesignResponse(json)
 }
@@ -180,7 +181,7 @@ export async function relaxOverhangBinding(bindingId) {
   return _syncFromDesignResponse(json)
 }
 
-export async function applyConnectionVersion(versionId) {
+async function _applyConnectionVersion(versionId) {
   // Atomically materializes the version: sets both overhang sequences (resizing
   // each overhang to the sequence length), tears down the pair's current
   // connection/binding, and (re)creates the version's connection type.
@@ -208,8 +209,8 @@ export async function generateRandomSequence(length) {
   return json?.sequence ?? null
 }
 
-export async function generateAllOverhangSequences() {
-  const json = await _request('POST', '/design/generate-overhang-sequences')
+async function _generateAllOverhangSequences() {
+  const json = await _request('POST', '/design/generate-overhang-sequences', undefined, { suppressBusy: true, interactive: true })
   if (!json) return null
   const ok = await _syncFromDesignResponse(json)
   _showGenerationWarnings(json)
@@ -243,16 +244,16 @@ export async function mergeSubDomains(overhangId, { sub_domain_a_id, sub_domain_
   return _syncFromDesignResponse(json)
 }
 
-export async function patchSubDomain(overhangId, subDomainId, body) {
+async function _patchSubDomain(overhangId, subDomainId, body) {
   const json = await _request(
     'PATCH',
     `/design/overhang/${encodeURIComponent(overhangId)}/sub-domains/${encodeURIComponent(subDomainId)}`,
-    body,
+    body, { suppressBusy: true, interactive: true },
   )
   return _syncFromDesignResponse(json)
 }
 
-export async function recomputeSubDomainAnnotations(overhangId, subDomainId) {
+async function _recomputeSubDomainAnnotations(overhangId, subDomainId) {
   const json = await _request(
     'POST',
     `/design/overhang/${encodeURIComponent(overhangId)}/sub-domains/${encodeURIComponent(subDomainId)}/recompute-annotations`,
@@ -260,12 +261,12 @@ export async function recomputeSubDomainAnnotations(overhangId, subDomainId) {
   return _syncFromDesignResponse(json)
 }
 
-export async function generateSubDomainRandom(overhangId, subDomainId, { seed } = {}) {
+async function _generateSubDomainRandom(overhangId, subDomainId, { seed } = {}) {
   const body = (seed !== undefined && seed !== null) ? { seed } : {}
   const json = await _request(
     'POST',
     `/design/overhang/${encodeURIComponent(overhangId)}/sub-domains/${encodeURIComponent(subDomainId)}/generate-random`,
-    body,
+    body, { suppressBusy: true, interactive: true },
   )
   const ok = await _syncFromDesignResponse(json)
   _showGenerationWarnings(json)
@@ -418,3 +419,19 @@ export async function patchOverhangStrandAnimSetup(overhangId, setup) {
   )
   return _syncFromDesignResponse(json)
 }
+
+export function patchOverhang(overhangId, patch = {}) { return patch.sequence === undefined ? _patchOverhang(overhangId, patch) : runSequenceWork(`overhang:${overhangId}`, () => _patchOverhang(overhangId, patch)) }
+
+export function generateOverhangRandomSequence(overhangId, options = {}) { return options.preview ? _generateOverhangRandomSequence(overhangId, options) : runSequenceWork(`generate:${overhangId}`, () => _generateOverhangRandomSequence(overhangId, options)) }
+
+export function patchSubDomain(overhangId, subDomainId, body) { return body.sequence_override === undefined ? _patchSubDomain(overhangId, subDomainId, body) : runSequenceWork(`subdomain:${overhangId}:${subDomainId}`, () => _patchSubDomain(overhangId, subDomainId, body)) }
+
+export function generateSubDomainRandom(overhangId, subDomainId, options = {}) { return runSequenceWork(`generate:${overhangId}:${subDomainId}`, () => _generateSubDomainRandom(overhangId, subDomainId, options)) }
+
+export function generateAllOverhangSequences() { return runSequenceWork("generate-all", _generateAllOverhangSequences) }
+
+export function applyConnectionVersion(versionId) { return runSequenceWork(`apply-version:${versionId}`, () => _applyConnectionVersion(versionId)) }
+
+export function createAndApplyConnectionVersion(payload) { return runSequenceWork('connect-version', () => _createAndApplyConnectionVersion(payload)) }
+
+export function recomputeSubDomainAnnotations(overhangId, subDomainId) { return runSequenceWork(`annotations:${overhangId}:${subDomainId}`, () => _recomputeSubDomainAnnotations(overhangId, subDomainId)) }

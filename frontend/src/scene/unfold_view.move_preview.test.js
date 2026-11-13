@@ -44,3 +44,30 @@ it.each([0, 0.4, 1].flatMap(fraction => [0, 1].map(movingEnd => [fraction, movin
     expect(new THREE.Vector3().fromBufferAttribute(reset, 0).distanceTo(new THREE.Vector3(0, fraction * 2, 0))).toBeLessThan(1e-6)
   } finally { view.dispose() }
 })
+
+it('refreshes visible arc endpoints when Domain Designer flushes a deferred undo', () => {
+  let state = { unfoldSpacing: 3, currentGeometry: [],
+    currentDesign: { helices: [], strands: [], crossovers: [], deformations: [], extensions: [], overhangs: [] },
+    domainDesigner: { modalActive: true },
+  }
+  store.getState.mockImplementation(() => state)
+  let endpoint = 4
+  const a = { helix_id: 'a', bp_index: 0, direction: 'FORWARD' }
+  const b = { helix_id: 'b', bp_index: 0, direction: 'FORWARD' }
+  const renderer = { getCrossHelixConnections: () => [{ from: new THREE.Vector3(),
+    to: new THREE.Vector3(endpoint, 0, 0), fromHelixId: 'a', toHelixId: 'b', fromNuc: a, toNuc: b }],
+    flushExtraBaseMeshes() {},
+  }
+  const offset = store.subscribe.mock.calls.length
+  const scene = new THREE.Scene()
+  const view = initUnfoldView(scene, renderer)
+  try {
+    view.refreshExternalGeometry()
+    const previous = state
+    state = { ...state, domainDesigner: { modalActive: false } }
+    endpoint = 6 // helix renderer has now flushed the queued undo
+    store.subscribe.mock.calls[offset][0](state, previous)
+    const positions = scene.getObjectByName('xoverArcMerged_staple').geometry.attributes.position
+    expect(new THREE.Vector3().fromBufferAttribute(positions, positions.count - 1).x).toBe(6)
+  } finally { view.dispose() }
+})

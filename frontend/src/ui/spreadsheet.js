@@ -1,3 +1,4 @@
+import { createSequenceDraftGuard } from './sequence_draft_guard.js'
 import { junctionIndex } from '../design/strand_junctions.js'
 import { selectedSequenceKeys, highlightOverhangCell } from './sequence_selection.js'
 /**
@@ -290,6 +291,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   const body        = document.getElementById('spreadsheet-body')
   const theadRow    = document.getElementById('spreadsheet-thead-row')
   const tbody       = document.getElementById('spreadsheet-tbody')
+  const sequenceDraftGuard = createSequenceDraftGuard(tbody)
   const toggleBar   = document.getElementById('spreadsheet-col-toggles')
   const sheetEdge   = document.getElementById('sheet-edge')
   const sheetToggle = document.getElementById('sheet-toggle')
@@ -515,6 +517,9 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
 
   // ── Build table body ──────────────────────────────────────────────
   function _rebuildTable(state) {
+    sequenceDraftGuard(state.currentDesign?.id, () => _rebuildTableContents(state))
+  }
+  function _rebuildTableContents(state) {
     if (!isOpen) return
     _rebuildHeader()
 
@@ -1061,6 +1066,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       const input = document.createElement('input')
       input.type        = 'text'
       input.className   = 'sheet-cell-input'
+      input.dataset.overhangSequence = ovhg.id
       input.value       = ovhg.sequence
       let lastVal       = input.value
 
@@ -1110,6 +1116,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     label.style.cursor = 'text'
 
     const editInput = document.createElement('input')
+    editInput.dataset.overhangSequence = ovhg.id
     editInput.type      = 'text'
     editInput.className = 'sheet-cell-input'
     editInput.placeholder = overhangLen ? `N\xd7${overhangLen}` : 'sequence…'

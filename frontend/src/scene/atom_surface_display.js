@@ -485,9 +485,13 @@ export function initAtomSurfaceDisplay({
       if (!_hidden(n) && !localStrands.has(n.strand_id)) continue
       nucAlphas.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, 0)
     }
-    for (const strand of d?.strands ?? []) {
-      const members = geometry.filter(n => n.strand_id === strand.id)
-      if (members.length && members.every(_hidden)) surfaceMaps.strandAlphas.set(strand.id, 0)
+    // One geometry pass, rather than filtering every nucleotide for every strand.
+    const allHidden = new Map()
+    for (const n of geometry) {
+      allHidden.set(n.strand_id, (allHidden.get(n.strand_id) ?? true) && _hidden(n))
+    }
+    for (const [id, hidden] of allHidden) {
+      if (hidden) surfaceMaps.strandAlphas.set(id, 0)
     }
     atomisticRenderer.setClusterDisplay(nucAlphas, nucColors)
     surfaceRenderer.applyClusterDisplay(surfaceMaps)

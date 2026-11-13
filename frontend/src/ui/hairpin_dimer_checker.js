@@ -1,3 +1,4 @@
+import { sequenceActivity } from './sequence_activity.js'
 /**
  * Hairpin/Dimer Checker — the Tools → Sequencing toggle ('0') and the automatic
  * check that follows every overhang-sequence generation.
@@ -65,6 +66,7 @@ export function initHairpinDimerChecker({
   let _active = _readActive()
   let _report = null            // every check received (published only while active)
   let _running = false
+  let _recheckDone = null
   let _recheckTimer = null
   let _inFlight = 0             // partial checks (generation hook / live re-check) awaiting a response
   const _menuBtn = () => document.getElementById(menuButtonId)
@@ -143,6 +145,7 @@ export function initHairpinDimerChecker({
       try { broadcast?.emit(TOGGLE_MSG, { active: _active }) } catch { /* best-effort */ }
     }
     clearTimeout(_recheckTimer)
+    _recheckDone?.(); _recheckDone = null
     _publish()
     if (_active) await runAll({ announce })
   }
@@ -172,7 +175,13 @@ export function initHairpinDimerChecker({
 
   function _scheduleRecheck() {
     clearTimeout(_recheckTimer)
-    _recheckTimer = setTimeout(_recheck, recheckDelayMs)
+    _recheckDone?.()
+    const done = sequenceActivity.begin()
+    _recheckDone = done
+    _recheckTimer = setTimeout(async () => {
+      _recheckDone = null
+      try { await _recheck() } finally { done() }
+    }, recheckDelayMs)
   }
 
   /** Check only *overhangIds* (and the linkers bound to them) — generation hook. */
@@ -180,11 +189,13 @@ export function initHairpinDimerChecker({
     const ids = [...new Set(overhangIds ?? [])].filter(Boolean)
     if (!ids.length || !_getDesign()) return null
     _inFlight++
+    const done = sequenceActivity.begin()
     let report = null
     try {
       report = await checkHairpinDimer({ overhang_ids: ids }, { quiet: true })
     } finally {
       _inFlight--
+      done()
     }
     if (!report) return null
     const flagged = _merge(report)
@@ -221,6 +232,7 @@ export function initHairpinDimerChecker({
     checkOverhangs,
     destroy() {
       clearTimeout(_recheckTimer)
+      _recheckDone?.(); _recheckDone = null
       _unsubGenerated?.()
       _unsubStore?.()
       _unsubBroadcast?.()

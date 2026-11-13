@@ -6,6 +6,36 @@ review_after: 2026-10-01
 ---
 # Response-diffing backlog
 
+## Current undo/redo transport (2026-11-12)
+
+Undo/redo now accept SHA-256 content acknowledgements for recovery bodies, not
+entry-ID or metadata-revision guesses. Full wire bodies have acknowledgements in a separate transport map; authored
+feature records contain no cache metadata. Slim responses omit tokens for bodies
+they did not transmit, until the client reconstructs the identical body. Same-ID changed
+or deliberately cleared bodies are sent authoritatively. The response names reused
+entries explicitly, and the client merges against the request's source design,
+preventing an intervening response from substituting a different cached body.
+Canonical history and saved files are unchanged. Cold/older clients receive full
+history. Edit/delete-feature remain on the conservative full-history path.
+
+The client also retains the immediately preceding history request's original entries
+for the same design and document scope. Undo removes an entry that redo needs;
+acknowledging that retained body avoids retransmitting it. The current entry wins
+on same-ID collisions, and retained entries are never attached to authored history.
+The cache is bounded to one preceding source, not an accumulating union.
+
+The replacement diff retains the previous design object because state undo/redo
+replace it, and stable domain ordinals now narrow geometry to changed domains.
+QD_OH1 undo shrank from four helices/7,107 nucleotides to one helix/63 nucleotides,
+with partial-vs-full geometry equality tested. Passive reads no longer hold an
+undo/redo behind their in-flight transport: one interactive write may pass, while
+background reads remain serialized. Selection/visibility no-ops, identity-pose
+lerps, and repeated atom-visibility scans were also removed from the critical path.
+Complete local recovery serialization runs after paint and flushes on pagehide.
+
+The dated inventory below describes the earlier implementation; ISSUE-191 and
+`issues_fix_log.md` carry current performance/validation evidence.
+
 Driver for burning down "ship a diff instead of the whole design" work. Every mutating
 API response currently re-serializes state proportional to the whole design, not the
 edit — `_design_response`/`_design_response_with_geometry` (`backend/api/crud.py:298`/`:397`)
@@ -175,3 +205,14 @@ response cannot acknowledge newer bodies), and
 position-only/cluster-only response handlers now merge bodies as well. Cold or
 stale acknowledgements get full history. General undo/redo/edit/delete stripping
 remains deferred; this does not claim those operations preserve history bodies.
+
+### Sequence-edit performance follow-up (2026-11-12)
+
+Overhang PATCH uses an explicit ORJSON response to avoid a second recursive
+encoding pass. `_design_response` tags only transmitted complete history bodies,
+not bodies about to be stripped. Recovery serialization caches exact entry JSON
+using metadata plus all body values (including child diffs); it still saves the
+complete document. Same-length sequence-only changes reuse geometry only after
+all non-sequence/non-history model fields compare equal under the conservative
+pose guard. Resizes remain above one second in the live GPU-contended benchmark;
+see ISSUE-192 rather than treating backend latency as visible completion.
