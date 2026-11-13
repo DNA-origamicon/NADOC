@@ -1554,7 +1554,7 @@ limitation remains GUIDE-UX-004.
 - App exercise and smoke are pending: `scripts/sim_guard.py smoke` refused on
   November 12 because a production NAMD process was running. No override used.
 
-### MV-64 — Ctrl-right camera pan (PENDING, 2026-11-12)
+### MV-65 — Ctrl-right camera pan (PENDING, 2026-11-12)
 
 Exercise Ctrl + right-drag in Turntable, Trackball and Multiscale, in part and
 assembly views. Camera and target should translate together without rotation;
@@ -1575,4 +1575,3 @@ Review collapse-header affordances and View Actions label legibility at unusuall
 narrow sidebar widths and nondefault UI scale. Browser checks cover keyboard
 activation, reload persistence, mirrored cards and uniform button metrics; a
 rendered default-width screenshot was inspected during implementation.
-

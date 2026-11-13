@@ -28,7 +28,7 @@ for pan in Turntable, Trackball and Multiscale. Plain right-drag rotates and
 middle-drag pans; left gestures retain selection ownership. OrbitControls maps
 modified rotation to pan internally; Trackball needs the explicit pan mapping.
 Real-controller unit tests cover translation without rotation and subsequent
-plain rotation. App verification remains MV-64 while NAMD blocks smoke.
+plain rotation. App verification remains MV-65 while NAMD blocks smoke.
 
 ## Current model
 
