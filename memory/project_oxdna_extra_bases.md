@@ -53,9 +53,9 @@ assigns `half_a = 3′ side` by construction.
 Fix lives entirely in the renderer (display layer — no topology touched):
 `domainEndKeys(design)` + `extraBaseOrderReversed(xo, endKeys)` (pure, mirroring the
 backend rule including its tie-break) stamp `simReversed` on each `arcData` at build
-time; `simBeadIndex(k, n, reversed)` (self-inverse) is applied at all **three** sites
-that map k↔bead: both sim branches in `design_renderer.js` and the `__xb__` scalar
-(RMSF) colour lookup — the colours were swapped too. Real regression fixture in
+time; `simBeadIndex(k, n, reversed)` (self-inverse) is applied wherever k↔bead
+is mapped: the display-frame insert producer, pose bindings/picking and the
+`__xb__` scalar (RMSF) colour lookup — the colours were swapped too. Real regression fixture in
 `crossover_connections.test.js` uses the `2hb_2xT` shape (one crossover of each
 direction), verified against that run's PSF covalent bonds.
 
@@ -79,8 +79,9 @@ Phase 1 (CG beads/slabs, oxDNA display + trajectory) — DONE:
   bp_index:crossover_id, direction:k}`); `design_renderer.applyFemPositions` routes
   `__xb__` to `setExtraBaseInstanceFromSim` (bead at real pos, slab oriented from a1 —
   through `simBeadIndex`, see the ordering law above),
-  marks those arcs sim-driven, and `applyClusterCrossoverUpdate` SKIPS Bézier for them
-  (Bézier stays for static design view / revert).
+  through the shared display-frame producer. Missing insert sites derive from the
+  current endpoints; a partial frame cannot retain stale positions. Visibility
+  refresh no longer writes inserts. See [display ownership](feedback_design_renderer_visibility_rule.md).
 - Verified: pytest (`test_display_route_surfaces_extra_bases`,
   `test_display_readers_surface_extra_bases_on_request`), vitest
   (`crossover_connections.test.js`), and a live Playwright e2e

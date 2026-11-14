@@ -1,4 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
+function frame(arcs, updates, amp = 1) { const d = arcs.getDisplayGeometry(); d.transaction('simulation', () => d.setSimulation(updates, amp)) }
+
 import * as THREE from 'three'
 
 import { initFlexibleArcs } from './flexible_arcs.js'
@@ -66,7 +68,7 @@ describe('flexible arcs — sim-position mode', () => {
     const scene = new THREE.Scene()
     const arcs = initFlexibleArcs(scene, makeRenderer(), () => ({}))
     arcs.rebuild(makeDesign())
-    arcs.applySimPositions([
+    frame(arcs, [
       { helix_id: 'h_a', bp_index: 0, direction: 'FORWARD', backbone_position: [1, 2, 0], nx: 0, ny: 1, nz: 0 },
       { helix_id: 'h_b', bp_index: 0, direction: 'FORWARD', backbone_position: [3, 2, 0], nx: 0, ny: 1, nz: 0 },
     ])
@@ -79,11 +81,11 @@ describe('flexible arcs — sim-position mode', () => {
     const scene = new THREE.Scene()
     const arcs = initFlexibleArcs(scene, makeRenderer(), () => ({}))
     arcs.rebuild(makeDesign())
-    arcs.applySimPositions([
+    frame(arcs, [
       { helix_id: 'h_a', bp_index: 0, direction: 'FORWARD', backbone_position: [1, 2, 0] },
       { helix_id: 'h_b', bp_index: 0, direction: 'FORWARD', backbone_position: [3, 2, 0] },
     ])
-    arcs.applySimPositions(null)
+    frame(arcs, null)
     // back on the arc between the anchors — no longer at the sim y=2.
     for (const p of beadTranslations(arcs.group)) {
       expect(Math.abs(p.y - 2)).toBeGreaterThan(0.01)
@@ -94,7 +96,7 @@ describe('flexible arcs — sim-position mode', () => {
     const scene = new THREE.Scene()
     const arcs = initFlexibleArcs(scene, makeRenderer(), () => ({}))
     arcs.rebuild(makeDesign())
-    arcs.applySimPositions([   // only ONE of the two run beads present
+    frame(arcs, [   // only ONE of the two run beads present
       { helix_id: 'h_a', bp_index: 0, direction: 'FORWARD', backbone_position: [1, 2, 0] },
     ])
     // no bead lands exactly on the lone sim point → geometric arc was used.

@@ -1,3 +1,4 @@
+import { createDisplayGeometry } from './display_geometry.js'
 /**
  * Tests for scene/response_delta.js — the backend response-delta application
  * subsystem extracted from main.js (undo/redo/seek in-place renderer updates).
@@ -178,7 +179,7 @@ describe('initResponseDelta', () => {
     expect(noCtrl.helixCtrl.commitClusterPositions).not.toHaveBeenCalled()
   })
 
-  it('positions_only diff calls applyPositionsUpdate + cross-helix arc refresh', () => {
+  it('positions_only diff publishes the geometry-controller mutation to its registered layers', () => {
     const state = {
       currentDesign: { helices: [{ id: 'h1' }, { id: 'h2' }] },
       currentGeometry: [{}],
@@ -186,11 +187,13 @@ describe('initResponseDelta', () => {
       unligatedCrossoverIds: [],
     }
     const { deps, helixCtrl } = makeDeps(state)
+    const display = createDisplayGeometry(), redraw = vi.fn()
+    display.register('connections', { update: redraw })
+    deps.designRenderer.getHelixCtrl = () => display.observe(helixCtrl)
     const rd = initResponseDelta(deps)
     rd.applyPositionsOnlyDiff({ positions_by_helix: { h1: [] }, helix_axes: { h1: {} } })
     expect(helixCtrl.applyPositionsUpdate).toHaveBeenCalledWith({ h1: [] }, { h1: {} })
-    expect(deps.designRenderer.applyClusterCrossoverUpdate).toHaveBeenCalledWith(['h1', 'h2'])
-    expect(deps.flexibleArcs.rebuild).toHaveBeenCalledWith(state.currentDesign)
+    expect(redraw).toHaveBeenCalledTimes(1)
   })
 
   it('positions_only with no helixCtrl no-ops', () => {

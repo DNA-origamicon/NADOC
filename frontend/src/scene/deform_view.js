@@ -160,7 +160,6 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     designRenderer.setAxisShaftMode(_shaftMode)
     designRenderer.applyDeformLerp(_straightPosMap, _straightAxesMap, _straightBnMap, _straightBaseMap, t)
     getBluntEnds?.()?.applyDeformLerp(_straightAxesMap, t)
-    getUnfoldView?.()?.applyDeformLerp(_straightPosMap, t)
     getLoopSkipHighlight?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
     getOverhangLocations?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
     getJointRenderer?.()?.applyDeformLerp(t)

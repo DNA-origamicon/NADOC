@@ -1,5 +1,17 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-196 — Connection geometry escapes the active display frame (2026-11-14)
+
+- [x] Replace part-editor per-operation arc/insert/link refresh fanout with one
+  document-local display owner, exact nucleotide identities and ordered producers.
+- [x] Crossover visibility refresh reads live endpoints; it cannot reset a
+  simulation or transform to cached native positions.
+- [x] Adopt molecular layers under a stable scene root; extensions, inserted
+  bases and flexible/linker sites participate in the shared pose lookup.
+- [x] Real renderer tests cover amplification, partial frames, copies, extensions,
+  inserted-base previews, rebuilds, layout motion, reset and visibility.
+- Browser validation and final regression results are recorded in the fix log.
+
 ## ISSUE-195 — Auto-sized annotation wraps its final glyph (2026-11-14)
 
 - [x] Reproduced “Anchors” at 13 px as two rendered browser lines (Anchor + s).

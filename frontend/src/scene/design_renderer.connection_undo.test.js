@@ -12,7 +12,7 @@ vi.mock('./helix_renderer.js', async importOriginal => ({
   buildHelixObjects: (geometry, design) => {
     const root = new THREE.Group()
     const connection = { toBp: design.strands[0].domains[1].start_bp }
-    return new Proxy({ root,
+    return new Proxy({ root, backboneEntries: [], getFluoroEntries: () => [],
       setHiddenNucs: hiddenUpdates,
       getCrossHelixConnections: () => [connection],
       getBackboneEntries: () => [],

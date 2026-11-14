@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 const layers=vi.hoisted(()=>({
   locations:{isVisible:()=>false,rebuild:vi.fn()},
-  links:{rebuild:vi.fn(),applyFemPositions:vi.fn()},
+  links:{rebuild:vi.fn()},
   flex:{rebuild:vi.fn()},markers:{rebuild:vi.fn()},
 }))
 vi.mock('./overhang_locations.js',()=>({initOverhangLocations:()=>layers.locations}))
@@ -15,9 +15,7 @@ import { initOverhangSceneSync } from './overhang_scene_sync.js'
 it('annotation edits retain live connector buffers; geometry edits still rebuild them',()=>{
   const design={id:'d',annotations:[]}, geometry=[{id:'base'}]
   const store=createMockStore({currentDesign:design,currentGeometry:geometry})
-  let frame
-  initOverhangSceneSync({scene:{},store,designRenderer:{getHelixCtrl:()=>null,subscribeSimulation:fn=>{frame=fn}},assemblyRenderer:{onRebuildComplete:vi.fn()}})
-  frame([{backbone_position:[8,0,0]}],1)
+  initOverhangSceneSync({scene:{},store,designRenderer:{getHelixCtrl:()=>null},assemblyRenderer:{onRebuildComplete:vi.fn()}})
   vi.clearAllMocks()
   store.setState({currentDesign:{...design,annotations:[{id:'note',highlight_type:'silhouette'}]}})
   store.setState({currentDesign:{...store.getState().currentDesign,annotations_enabled:false}})

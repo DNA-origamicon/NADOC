@@ -1871,3 +1871,33 @@ standard width. Validation: 10,398 frontend tests passed, 18 focused tests, app
 exercise and lint passed. Smoke: 23 passed/2 skipped; assembly fixture setup timed
 out and passed its isolated retry. Evidence: `.development-artifacts/visualization-cards/validation.json`.
 Main.js LOC delta: 0; visual follow-up MV-64.
+
+## ISSUE-196 — Shared part-editor display geometry ownership (2026-11-14)
+
+Crossover lines previously kept independent native endpoints and simulation
+buffer writes. A visibility refresh could overwrite the frame; callers also had
+to remember separate insert, extension, and flexible-link refresh methods.
+
+The part editor now owns a stable molecular scene root and an exact-key display
+frame. Observed geometry mutations publish ordered producer/consumer updates;
+simulation frames, animation batches, residue previews, copy identities, extension
+sites, inserted bases and flexible/linker positions use that owner. Removed the
+arc-specific simulation, cluster, deformation and spacing update APIs. Whole-model
+visibility inherits through the root; representation gates remain per layer.
+Assembly instancing and physical atomistic/surface pipelines remain separate hosts.
+
+Validation: 956 frontend files, 10,542 tests passed / one skipped; lint passed;
+memory hygiene has zero errors (16 existing warnings). Real renderer tests cover
+amplification, partial-frame replacement, exact copies/extensions, inserted-base
+previews/reset, unfold, transforms, visibility and display rebuilds.
+Read-only browser checks passed for 6hb_test and VoltronCoreArmV2 with saved oxDNA
+job 34992198f43a. Voltron: 3,050 endpoint comparisons, max error 0.0000153 nm;
+deliberately displacing the line buffer failed the audit by 5 nm. Real line pixels
+were verified with the helix meshes temporarily hidden to remove occlusion.
+Both original design hashes were unchanged. Main.js is eight lines smaller.
+Compact validation/cleanup results: .development-artifacts/display-geometry-refactor/validation.json.
+Smoke: 23 passed / two skipped; existing ISSUE-180 Square New Part request
+assertion failed (missing captured lattice_type). Boot, real-design render,
+assembly exit and Close Session passed. Temporary images/traces/logs were
+removed after review; no new files remain in the inventoried workspace test,
+project or session roots. Unrelated worktree changes were preserved.

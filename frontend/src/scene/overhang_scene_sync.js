@@ -13,16 +13,12 @@ import {
 /** Owns reactive overhang overlays and the orientation lookup-map pipeline. */
 export function initOverhangSceneSync({ scene, store, designRenderer, assemblyRenderer }) {
   const locations = initOverhangLocations(scene)
-  const linkArcs = initOverhangLinkArcs(scene)
+  const linkArcs = initOverhangLinkArcs(scene, { displayGeometry: designRenderer.getDisplayGeometry?.() })
   const flexibleArcs = initFlexibleArcs(
     scene, designRenderer, () => store.getState().currentHelixAxes,
   )
   const unligatedMarkers = initUnligatedCrossoverMarkers(scene)
   let rootMap = new Map()
-  // Playback mutates scene positions without changing the design store.
-  designRenderer.subscribeSimulation?.((updates, amp) => {
-    if (updates !== undefined) linkArcs.applyFemPositions(updates, amp)
-  })
 
   function rebuildLocations() {
     if (!locations.isVisible()) return

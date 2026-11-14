@@ -178,9 +178,6 @@ export function initResponseDelta({
       // Apply: world = R_delta * (current - oldOrigin) + newOrigin.
       helixCtrl.applyClusterTransform(helixIds, oldOrigin, newOrigin, deltaQ, null)
       bluntEnds?.applyClusterTransform?.(helixIds, oldOrigin, newOrigin, deltaQ)
-      unfoldView?.applyClusterArcUpdate?.(helixIds)
-      unfoldView?.applyClusterExtArcUpdate?.(helixIds)
-      designRenderer.applyClusterCrossoverUpdate(helixIds)
       // Rebake currentHelixAxes for these helices so jointRenderer.rebuildHulls
       // (called below) reads post-delta axes when constructing the hull prism.
       // Sub-cluster (domain_ids) moves don't rigidly transform the helix —
@@ -226,23 +223,7 @@ export function initResponseDelta({
     const helixCtrl = designRenderer.getHelixCtrl()
     if (!helixCtrl) return
     helixCtrl.applyPositionsUpdate(json.positions_by_helix, json.helix_axes)
-    // Cross-helix arcs (unfold_view's _arcGroup) and crossover extra-base
-    // beads pull from helixCtrl.getNucLivePos() via applyClusterArcUpdate /
-    // applyClusterCrossoverUpdate. Live drag refreshes these per frame; for
-    // a seek we have to invoke them once with every potentially-affected
-    // helix. Topology is unchanged so design.helices covers every real helix
-    // (extension and __lnk__ ones inherit through the cluster-arc helpers).
-    const cd = store.getState().currentDesign
-    const allHelixIds = (cd?.helices ?? []).map(h => h.id)
-    if (allHelixIds.length) {
-      unfoldView?.applyClusterArcUpdate?.(allHelixIds)
-      unfoldView?.applyClusterExtArcUpdate?.(allHelixIds)
-      designRenderer.applyClusterCrossoverUpdate(allHelixIds)
-    }
-    // Overlays that derive positions from currentDesign + currentGeometry
-    // need a refresh now that backbone_position has shifted (incl. the
-    // anchor-derived flexible ssDNA arcs).
-    refreshClusterOverlays({ withFlexibleArcs: true })
+
   }
 
   /** Apply whichever delta path the response signals — registered with

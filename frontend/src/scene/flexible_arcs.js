@@ -1,3 +1,4 @@
+import { createDisplayGeometry, displayKey } from './display_geometry.js'
 /**
  * Flexible ssDNA segment arcs.
  *
@@ -16,7 +17,7 @@
  *
  *   const arcs = initFlexibleArcs(scene, designRenderer, () => store.currentHelixAxes)
  *   arcs.rebuild(design)
- *   arcs.applyLiveUpdate(helixIds, centerVec, dummyPos, incrQuat)   // per drag frame
+ *   // Geometry mutations publish automatically through the shared display owner.
  */
 import * as THREE from 'three'
 import { store } from '../state/store.js'
@@ -116,24 +117,29 @@ export function flexAnchorKey(design) {
     if (!anc) return null
     const s = byId.get(anc.strand_id)
     const d = s?.domains?.[anc.domain_index]
-    return d ? `${d.helix_id}:${anc.bp_index}:${anc.direction}` : null
+    return d ? displayKey({ helix_id: d.helix_id, bp_index: anc.bp_index, direction: anc.direction, copy: anc.copy ?? anc.copy_k ?? 0 }) : null
   }
 }
 
 export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => null, { storeRef = store } = {}) {
   // Pane owners coexist: releasing one must not dispose another's templates.
   const beadGeometry = GEO_BEAD.clone(), slabGeometry = GEO_SLAB.clone()
+  const ownsDisplay = !designRenderer.getDisplayGeometry
+  const displayGeometry = designRenderer.getDisplayGeometry?.() ?? createDisplayGeometry(scene)
   let disposed = false
   const group = new THREE.Group()
   group.name = 'flexibleArcs'
-  scene.add(group)
+  const releaseDisplayLayer = displayGeometry.register('flexible-segments', { group, phase: 0, update: frame => {
+    const args = frame.changed('applyClusterTransform') ? frame.operation('applyClusterTransform') : null
+    _render(args ? { helixIds: new Set(args[0]), centerVec: args[1], dummyPos: args[2], incrQuat: args[3] } : null)
+  } })
   let _design = null
   let _visible = true
   let _reprVisible = true
   // When an oxDNA/MD display overlay is active, the flexible run's beads are drawn
   // at their SIMULATED positions (keyed "helix:bp:dir" → {pos, n:a1}) instead of the
   // geometric arc. null = geometric-arc mode (the default).
-  let _simByKey = null
+
   const _lastBow = new Map()   // connection id -> THREE.Vector3 (hysteresis)
 
   // ── Per-cluster display (colour + opacity) ────────────────────────────────
@@ -195,15 +201,6 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     }
     for (const m of Object.values(mats)) m.userData.photoForceDepthWrite = true
     return mats
-  }
-
-  function _entryPosMap() {
-    const m = new Map()
-    for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
-      const n = e.nuc
-      if (n) m.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, e.pos)
-    }
-    return m
   }
 
   const _helixResolver = flexAnchorKey
@@ -370,36 +367,38 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
 
   function _render(live = null) {
     _clear()
+    const published = []
+    displayGeometry.publishDerived('flexible-segments', published)
     if (!_design || !_visible || !_reprVisible) return
     _syncClusterLookups(_design)
     const conns = _design.flexible_connections ?? []
     if (!conns.length) return
-    const posMap = _entryPosMap()
+    const posMap = { get: key => displayGeometry.position(key) }
     const helixOf = _helixResolver(_design)
-    const obstacles = _simByKey ? [] : _obstacleSegments(live)
+    const obstacles = displayGeometry.simulated ? [] : _obstacleSegments(live)
     for (const c of conns) {
       const pA = posMap.get(helixOf(c.anchor_a) ?? '')
       const pB = posMap.get(helixOf(c.anchor_b) ?? '')
       if (!pA || !pB) continue
       // oxDNA/MD active: place beads at simulated positions when every run bead is
       // present in the frame; otherwise fall through to the geometric arc.
-      if (_simByKey) {
-        const entries = (c.segment_bead_keys ?? []).map(k => _simByKey.get(helixOf(k) ?? ''))
+      if (displayGeometry.simulated) {
+        const entries = (c.segment_bead_keys ?? []).map(k => {
+          const key = helixOf(k), sample = displayGeometry.simulationRecord(key)
+          return sample ? { pos: displayGeometry.position(key), n: Number.isFinite(sample.nx) ? new THREE.Vector3(sample.nx, sample.ny, sample.nz) : null } : null
+        })
         if (entries.length && entries.every(Boolean)) { _drawSimSegment(pA, entries, pB, c.id, _makeMats(_connDisplay(_design, c))); continue }
       }
       const bow = _bowDir(pA, pB, c.id, obstacles)
-      _drawArc(pA, pB, _arcPoints(pA, pB, c.contour_length_nm, c.n_ss_bases, bow), bow, c.id,
+      const points = _arcPoints(pA, pB, c.contour_length_nm, c.n_ss_bases, bow)
+      points.forEach((pos, i) => { const key = helixOf(c.segment_bead_keys?.[i]); if (key) published.push([key, pos]) })
+      _drawArc(pA, pB, points, bow, c.id,
                _makeMats(_connDisplay(_design, c)))
     }
+    displayGeometry.publishDerived('flexible-segments', published)
   }
 
-  function rebuild(design) { if (disposed) return; _design = design; if (!design?.flexible_connections?.length) _lastBow.clear(); _render(null) }
-  function applyLiveUpdate(helixIds, centerVec, dummyPos, incrQuat) {
-    const live = (helixIds && centerVec && dummyPos && incrQuat)
-      ? { helixIds: new Set(helixIds), centerVec, dummyPos, incrQuat }
-      : null
-    _render(live)
-  }
+  function rebuild(design) { if (disposed) return; if (ownsDisplay) { displayGeometry.beginGeneration(); displayGeometry.bind(designRenderer.getBackboneEntries?.()) } _design = design; if (!design?.flexible_connections?.length) _lastBow.clear(); _render(null) }
   function _syncVisibility() {
     group.visible = _visible && _reprVisible
     if (group.visible) _render()
@@ -410,34 +409,12 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     _reprVisible = (repr === 'full' || repr === 'beads')
     _syncVisibility()
   }
-  /** Switch to SIMULATED-position mode from an oxDNA/MD frame's applyFemPositions
-   *  updates (array of {helix_id,bp_index,direction,backbone_position,nx,ny,nz}), or
-   *  pass null/empty to revert to the geometric arc.  Called by the oxDNA display
-   *  controller's frame chokepoint so the flexible run tracks the relaxed ssDNA
-   *  instead of leaving a stale geometric arc floating over the sim. */
-  function applySimPositions(updates) {
-    if (!Array.isArray(updates) || !updates.length) {
-      _simByKey = null
-    } else {
-      const map = new Map()
-      for (const u of updates) {
-        const p = u.backbone_position
-        if (!p) continue
-        map.set(`${u.helix_id}:${u.bp_index}:${u.direction}`, {
-          pos: new THREE.Vector3(p[0], p[1], p[2]),
-          n: Number.isFinite(u.nx) ? new THREE.Vector3(u.nx, u.ny, u.nz) : null,
-        })
-      }
-      _simByKey = map.size ? map : null
-    }
-    _render()
-  }
   function dispose() {
     if (disposed) return
-    disposed = true; unsubscribe?.(); _design = null; _simByKey = null; _lastBow.clear()
+    disposed = true; unsubscribe?.(); releaseDisplayLayer(); if (ownsDisplay) displayGeometry.dispose(); _design = null; _lastBow.clear()
     // _clear() disposes the per-connection materials; only the shared geometries
     // are left to release here.
-    _clear(); scene.remove(group)
+    _clear(); group.removeFromParent()
     beadGeometry.dispose(); slabGeometry.dispose()
   }
 
@@ -475,5 +452,5 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     refreshClusterDisplay(newState.currentDesign)
   })
 
-  return { rebuild, applyLiveUpdate, setVisible, setRepresentation, applySimPositions, dispose, hitTest, group, refreshClusterDisplay }
+  return { rebuild, setVisible, setRepresentation, getDisplayGeometry: () => displayGeometry, dispose, hitTest, group, refreshClusterDisplay }
 }

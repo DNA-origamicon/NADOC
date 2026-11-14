@@ -1,3 +1,4 @@
+import { createDisplayGeometry } from './display_geometry.js'
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
 import { vi } from 'vitest'
@@ -183,12 +184,14 @@ describe('atomistic transform commit', () => {
     const scene = new THREE.Scene(), positions = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(2, 0, 0)]
     const state = { selection: { items: [1, 2].map(bp => ({ kind: 'base', key: `h:${bp}:FORWARD` })) } }
     const snapshots = []
-    const unfoldView = { applyClusterArcUpdate: vi.fn(() => snapshots.push(positions.map(p => p.toArray()))) }
-    const designRenderer = {
+    const display = createDisplayGeometry()
+    display.register('connections', { update: () => snapshots.push(positions.map(p => p.toArray())) })
+    const unfoldView = {}
+    const designRenderer = display.observe({
+      getDisplayGeometry: () => display,
       residueTransformInfo: target => ({ centroid: positions[target.bp_index - 1].clone(), index: target.bp_index - 1 }),
       applyResidueTransformMatrix: (info, matrix) => positions[info.index].set(info.index + 1, 0, 0).applyMatrix4(matrix),
-      applyClusterCrossoverUpdate: vi.fn(),
-    }
+    })
     const tool = initNucleotideTransformTool({ store: { getState: () => state, setState: patch => Object.assign(state, patch) },
       scene, camera: new THREE.PerspectiveCamera(), canvas: document.createElement('canvas'),
       controls: { enabled: true }, designRenderer, unfoldView })
@@ -199,8 +202,6 @@ describe('atomistic transform commit', () => {
       tc.object.position.y += 3
       tc.dispatchEvent({ type: 'change' })
       expect(snapshots.at(-1)).toEqual([[1, 3, 0], [2, 3, 0]])
-      expect(unfoldView.applyClusterArcUpdate).toHaveBeenLastCalledWith(['h'])
-      expect(designRenderer.applyClusterCrossoverUpdate).toHaveBeenCalledTimes(1)
       tc.object.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2)
       tc.dispatchEvent({ type: 'change' })
       expect(snapshots.at(-1)[0][1]).toBeCloseTo(2.5)
@@ -210,7 +211,6 @@ describe('atomistic transform commit', () => {
       expect(snapshots.at(-1)).toEqual([[1, 0, 0], [2, 0, 0]])
       tool.cancel()
       expect(snapshots.at(-1)).toEqual([[1, 0, 0], [2, 0, 0]])
-      expect(designRenderer.applyClusterCrossoverUpdate).toHaveBeenCalledTimes(4)
     } finally { tool.detach() }
   })
 

@@ -2450,10 +2450,8 @@ export function initOxdnaDisplay({
       }
       return
     }
-    // Restoring a CG rep: setCGVisible → refreshArcVisibility may have re-driven the
-    // extra-base / connector arcs from NATIVE geometry.  Re-apply the last relaxed overlay
-    // so __xb__ extra-base beads and __ext_ extension tails return to their simulated
-    // positions with the rest of the structure (idempotent for the already-relaxed duplex).
+    // A representation switch can rebuild instance buffers. Restore the retained
+    // frame through the shared display owner; visibility itself never sets poses.
     if (_repKind() === 'cg') {
       if (_lastCgUpdates) _applyFem(_lastCgUpdates)
       return

@@ -1,3 +1,4 @@
+import { createDisplayGeometry } from './display_geometry.js'
 import { strandDisplayOverrides } from './strand_representation.js'
 import { createClusterSelection } from './selection_tint.js'
 /**
@@ -38,11 +39,11 @@ import { sameConnectionTopology, sameCrossoverTopology, sameForcedLigationTopolo
  * @returns {{ setMode, getBackboneEntries, setStrandColor, getHelixCtrl, dispose }}
  */
 export function initDesignRenderer(scene, storeRef) {
+  const displayGeometry = createDisplayGeometry(scene)
   const simulationListeners = new Set()
   let simulationGeometry = null, simulationDesign = null
   const notifySimulation = (...args) => { for (const fn of simulationListeners) fn(...args) }
   let _helixCtrl        = null
-  let _femArcUpdater    = null   // unfold_view.applyFemArcs — keeps arcs synced with applyFemPositions
   let _scalarArcUpdater = null   // unfold_view.applyFemArcColors — recolours arcs with the RMSF scalar map
   // Last simulation/FEM displacement applied to the shared design model.  Keeping
   // the source payload here lets non-rendering consumers (notably PDB export) use
@@ -56,10 +57,8 @@ export function initDesignRenderer(scene, storeRef) {
   let _femSerial = -1
   let _scalarSerial = -1
   let _designVisible    = true   // controlled by setDesignVisible(); re-applied after every _rebuild
-  // VISIBILITY RULE: design_renderer has ONE scene object — _helixCtrl.root.
-  // Extra-base beads+slabs (from buildCrossoverConnections) are children of root,
-  // so _helixCtrl.root.visible covers them automatically.
-  // Arc LINE geometry lives in unfold_view._arcGroup (separate module — see main.js SCENE GEOMETRY RULE).
+  // The stable display root owns all molecular layers. Representation-specific
+  // visibility stays on its children and survives whole-design hide/show.
   let _cpdSlabBonds     = null
   let _xoverArcData     = null   // arc metadata for extra-base crossovers
   let _xoverBeadsMesh   = null   // InstancedMesh for extra-base beads
@@ -71,7 +70,9 @@ export function initDesignRenderer(scene, storeRef) {
   // Extra-base inserts driven by a simulation frame (oxDNA/MD relaxed or trajectory):
   // Map<crossover_id, Map<k, {pos:THREE.Vector3, normal:[nx,ny,nz]}>>.  When an arc
   // is present here, its beads are placed at the REAL simulated positions and the
-  // geometric Bezier interpolation is skipped for it.  Null/empty → all arcs Bezier.
+  // geometric Bezier positions supply any missing sites. Null → all arcs Bezier.
+  let _insertBindings = []
+  const _insertPreviews = new Map()
   let _simXbByCrossover = null
   let _detailLevel      = 0      // current LOD (0=full,1=beads,2=cylinders); re-applied to xover extras after _rebuild
   // Base-pair slab display tuning from the sidebar (Full representation). Held
@@ -440,10 +441,7 @@ export function initDesignRenderer(scene, storeRef) {
   const _clusterXoverCtrl = new THREE.Vector3()
 
   function _liveXoverPos(nuc, out) {
-    const live = _helixCtrl?.getNucLivePos?.(nuc)
-    if (live) return out.copy(live)
-    const bp = nuc?.backbone_position
-    return bp ? out.set(bp[0], bp[1], bp[2]) : null
+    return displayGeometry.position(nuc, out)
   }
 
   // Reusable point buffer for connector threading (grown on demand, never freed).
@@ -535,13 +533,14 @@ export function initDesignRenderer(scene, storeRef) {
       _structuralConsolidateTimer = null
     }
     if (!_structuralOverlay) return
-    scene.remove(_structuralOverlay.ctrl.root)
+    _structuralOverlay.ctrl.root.removeFromParent()
     _disposeRoot(_structuralOverlay.ctrl.root)
     if (restoreBase && _helixCtrl) {
       _helixCtrl.setHiddenNucs(_hiddenNucKeys)
       _helixCtrl.setStructuralHelicesSuppressed?.(new Set())
     }
     _structuralOverlay = null
+    if (restoreBase) displayGeometry.bind(_helixCtrl?.backboneEntries)
   }
 
   // Re-apply the capture-strand highlight glow after a rebuild (glow layers are cleared on
@@ -568,7 +567,7 @@ export function initDesignRenderer(scene, storeRef) {
     // root — disposed with it automatically.
     if (_helixCtrl?.root) {
       const oldRoot = _helixCtrl.root
-      scene.remove(oldRoot)
+      oldRoot.removeFromParent()
       if (_captureNextAsFrozen) {
         // First preview rebuild: keep the committed design as the "where the
         // design is now" reference; the new (deformed) root below renders as the
@@ -613,6 +612,8 @@ export function initDesignRenderer(scene, storeRef) {
 
     if (!geometry || !design || geometry.length === 0) {
       _helixCtrl = null
+      displayGeometry.beginGeneration()
+      displayGeometry.invalidate('clear')
       _activeFemUpdates = null
       _activeFemAmp = 1
       return
@@ -622,7 +623,10 @@ export function initDesignRenderer(scene, storeRef) {
     const _eff = _effectiveColors(strandColors, strandGroups)
     // Colour the capture strands (cyan by default) so they read as a distinct set.
     if (_extraNucs.length && _extraColor) for (const n of _extraNucs) _eff[n.strand_id] = _extraColor
-    _helixCtrl = buildHelixObjects(geometry, design, scene, _eff, loopStrandIds ?? [], helixAxes)
+    displayGeometry.beginGeneration(geometry)
+    _helixCtrl = displayGeometry.observe(buildHelixObjects(geometry, design, displayGeometry.root, _eff, loopStrandIds ?? [], helixAxes))
+    displayGeometry.bind(_helixCtrl.backboneEntries)
+    displayGeometry.bind(_helixCtrl.getFluoroEntries?.())
     markOperationTiming('helix-meshes-built')
     _helixCtrl.setMode(_currentMode)
     if (coloringMode && coloringMode !== 'strand') {
@@ -702,6 +706,18 @@ export function initDesignRenderer(scene, storeRef) {
     } else if (storeRef.getState().deformToolActive) {
       _traverseSetOpacity(_helixCtrl.root, 0.15)
     }
+    _insertBindings = []
+    _insertPreviews.clear()
+    const insertMatrix = new THREE.Matrix4()
+    for (const ad of _xoverArcData ?? []) for (let i = 0; i < ad.beadCount; i++) {
+      const id = ad.beadStartIdx + i
+      _xoverBeadsMesh.getMatrixAt(id, insertMatrix)
+      const pos = new THREE.Vector3().setFromMatrixPosition(insertMatrix)
+      _insertBindings.push({ id, pos, nuc: { helix_id: '__xb__', bp_index: ad.xoId,
+        direction: simBeadIndex(i, ad.beadCount, ad.simReversed), backbone_position: pos.toArray() } })
+    }
+    displayGeometry.bind(_insertBindings)
+    displayGeometry.invalidate('rebuild')
     markOperationTiming('scene-postbuild-complete')
   }
 
@@ -935,10 +951,11 @@ export function initDesignRenderer(scene, storeRef) {
       ..._hiddenNucKeys, ...changedHelixIds.map(id => `h:${id}`),
     ]))
     _helixCtrl.setStructuralHelicesSuppressed?.(realSet)
-    const ctrl = buildHelixObjects(
-      patchGeometry, patchDesign, scene, customColors,
+    const ctrl = displayGeometry.observe(buildHelixObjects(
+      patchGeometry, patchDesign, displayGeometry.root, customColors,
       newState.loopStrandIds ?? [], patchAxes,
-    )
+    ))
+    displayGeometry.bind(ctrl.backboneEntries)
     ctrl.setMode(_currentMode)
     ctrl.setDetailLevel(_detailLevel)
     if (_slabThickness !== 0.06) ctrl.setSlabThickness(_slabThickness)
@@ -1220,7 +1237,7 @@ export function initDesignRenderer(scene, storeRef) {
     }
 
     // Extra-base beads+slabs now track arc positions during all transitions
-    // (unfold, deform) via updateExtraBaseArc() — no need to hide.
+    // (unfold, deform) via the display-frame insert producer — no need to hide.
   })
 
   // Build immediately if the store already has data (e.g. on hot reload).
@@ -1233,7 +1250,89 @@ export function initDesignRenderer(scene, storeRef) {
     }
   }
 
-  return {
+  function updateCrossoverInserts() {
+      if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+      let dirty = false
+      for (const ad of _xoverArcData) {
+        if (_hiddenCrossoverIds.has(ad.xoId)) continue
+
+        // Geometric fallback: Bezier-interpolate from the live endpoint positions.
+        const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
+        const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
+        if (!posA || !posB) continue
+        arcControlPoint(posA, posB, ad.nucA, ad.nucB, _clusterXoverCtrl)
+        updateExtraBaseInstances(
+          _xoverBeadsMesh, _xoverSlabsMesh,
+          ad.beadStartIdx, ad.beadCount,
+          posA, _clusterXoverCtrl, posB, ad.avgAx,
+          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence, ad.productGeometry,
+        )
+        const placements = buildCrossoverExtraPlacements({
+          xoId: ad.xoId, count: ad.beadCount, pointA: posA,
+          control: _clusterXoverCtrl, pointB: posB, helixAxis: ad.avgAx,
+          sequence: ad.sequence, simReversed: ad.simReversed,
+          localFrameReversed: ad.localFrameReversed,
+          savedTransforms: ad.savedTransforms, productGeometry: ad.productGeometry,
+        })
+        for (const g of _xoverGlowLive) {
+          if (g.arcData === ad) g.pos.copy(placements[g.localIdx].center)
+        }
+        // Simulation-driven: place each extra base at its REAL simulated position.
+        const sim = _simXbByCrossover?.get(ad.xoId)
+        if (sim) {
+          for (let k = 0; k < ad.beadCount; k++) {
+            const s = sim.get(k)
+            if (!s) continue
+            // Simulated k is 5′→3′ from the strand's exit half; beads run A→B.
+            const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
+            setExtraBaseInstanceFromSim(
+              _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx, s)
+            for (const g of _xoverGlowLive) {
+              if (g.arcData === ad && g.localIdx === bi) g.pos.set(s.pos[0], s.pos[1], s.pos[2])
+            }
+          }
+        }
+
+        dirty = true
+      }
+      if (dirty) renderer.flushExtraBaseMeshes()
+    }
+
+  function applyInsertPreview(info, matrix) {
+      if (!info?.entry || !_xoverBeadsMesh || !_xoverSlabsMesh) return false
+      _xoverBeadsMesh.setMatrixAt(info.entry.id, matrix.clone().multiply(info.beadMatrix))
+      _xoverSlabsMesh.setMatrixAt(info.entry.id, matrix.clone().multiply(info.slabMatrix))
+      if (info.arcData && _xoverConnMesh) {
+        const points = [info.arcData.pointA.clone()]
+        const m = new THREE.Matrix4()
+        for (let i = 0; i < info.beadMatrices.length; i++) {
+          // Other members may already have received the same group preview.
+          // Read live matrices so redrawing this arc preserves all moved beads.
+          _xoverBeadsMesh.getMatrixAt(info.arcData.beadStartIdx + i, m)
+          points.push(new THREE.Vector3().setFromMatrixPosition(m))
+        }
+        points.push(info.arcData.pointB.clone())
+        setExtraBaseConnectors(
+          _xoverConnMesh, info.arcData.connStartIdx, points,
+          info.arcData.beadCount + 1, null,
+        )
+        _xoverConnMesh.instanceMatrix.needsUpdate = true
+      }
+      if (_xoverSlabConnMesh) {
+        setExtraBaseSlabConnectors(
+          _xoverBeadsMesh, _xoverSlabsMesh, _xoverSlabConnMesh,
+          info.entry.id, 1, null,
+        )
+        _xoverSlabConnMesh.instanceMatrix.needsUpdate = true
+      }
+      _xoverBeadsMesh.instanceMatrix.needsUpdate = true
+      _xoverSlabsMesh.instanceMatrix.needsUpdate = true
+      _cpdSlabBonds?.sync(_detailLevel === 0)
+      return true
+  }
+
+  const renderer = {
+    getDisplayGeometry() { return displayGeometry },
     applyViewVolumeLayers(layers = []) {
       if (!_helixCtrl?.applyRepOverrides) return
       const { columnRep } = resolveRepOverrides(storeRef.getState().currentDesign)
@@ -1480,6 +1579,7 @@ export function initDesignRenderer(scene, storeRef) {
      * separately (see main.js _setDesignGeometryVisible for the coordinated entry point).
      */
     setDesignVisible(visible) {
+      displayGeometry.root.visible = visible
       _designVisible = visible
       if (_helixCtrl?.root) _helixCtrl.root.visible = visible
       if (_structuralOverlay?.ctrl.root) _structuralOverlay.ctrl.root.visible = visible
@@ -1532,19 +1632,12 @@ export function initDesignRenderer(scene, storeRef) {
       // frame carries their REAL positions, which the helix renderer can't place
       // (no design key). Route them to the extra-base bead/slab instances below.
       // simXb is null when the frame has no inserts or updates===null → Bezier.
-      const { real: realUpdates, simXb } = partitionExtraBaseUpdates(updates)
-      _simXbByCrossover = simXb
-
-      _helixCtrl?.applyFemPositions(realUpdates, amp)
-      // Keep crossover arc lines (owned by unfold_view) in sync — applyFemPositions
-      // moves beads/cones/slabs but not the arcs, which otherwise lag at the
-      // original design positions during an mrDNA/oxDNA display overlay.
-      _femArcUpdater?.(realUpdates, amp)
-      // Extra-base crossover beads live in a separate group and are not touched
-      // by the helix renderer's FEM/MD overlay. Drive them from the simulation
-      // frame when present, else re-interpolate from the now-live endpoint
-      // positions (reverted-to-geometry when updates===null).
-      this.applyClusterCrossoverUpdate([])
+      displayGeometry.transaction('simulation', () => {
+        const resolved = displayGeometry.setSimulation(updates, amp)
+        const { real, simXb } = partitionExtraBaseUpdates(resolved)
+        _simXbByCrossover = simXb
+        _helixCtrl?.applyFemPositions(real, 1)
+      })
       // Simulation frames mutate the existing backbone entry positions rather than
       // replacing currentGeometry. Refresh position-backed overlays on every frame;
       // the store subscriber cannot observe these playback/scrub mutations.
@@ -1593,9 +1686,6 @@ export function initDesignRenderer(scene, storeRef) {
         ? new Map(_activeScalarColors)
         : { ..._activeScalarColors }
     },
-
-    /** Register unfold_view's applyFemArcs so the arcs follow applyFemPositions. */
-    setFemArcUpdater(fn) { _femArcUpdater = fn },
 
     /** Register unfold_view's applyFemArcColors so crossover arcs follow the
      *  scalar (RMSF) recolour. */
@@ -1764,7 +1854,7 @@ export function initDesignRenderer(scene, storeRef) {
 
     /**
      * Return live {pos} glow entries for extra-base crossover beads on the given strand IDs.
-     * The pos vectors are updated in-place by updateExtraBaseArc so that
+     * The pos vectors are updated in-place by the insert producer so that
      * refreshAllGlow() keeps the glow aligned during expanded-spacing animation.
      * Used by selection_manager to include xover beads in the selection glow.
      */
@@ -1837,37 +1927,12 @@ export function initDesignRenderer(scene, storeRef) {
       }
     },
 
-    /** Preview a world-space delta from an xoverResidueInfo source snapshot. */
+    /** Preview insert residues through the same ordered frame as endpoints. */
     applyXoverResidueMatrix(info, matrix) {
       if (!info?.entry || !_xoverBeadsMesh || !_xoverSlabsMesh) return false
-      _xoverBeadsMesh.setMatrixAt(info.entry.id, matrix.clone().multiply(info.beadMatrix))
-      _xoverSlabsMesh.setMatrixAt(info.entry.id, matrix.clone().multiply(info.slabMatrix))
-      if (info.arcData && _xoverConnMesh) {
-        const points = [info.arcData.pointA.clone()]
-        const m = new THREE.Matrix4()
-        for (let i = 0; i < info.beadMatrices.length; i++) {
-          // Other members may already have received the same group preview.
-          // Read live matrices so redrawing this arc preserves all moved beads.
-          _xoverBeadsMesh.getMatrixAt(info.arcData.beadStartIdx + i, m)
-          points.push(new THREE.Vector3().setFromMatrixPosition(m))
-        }
-        points.push(info.arcData.pointB.clone())
-        setExtraBaseConnectors(
-          _xoverConnMesh, info.arcData.connStartIdx, points,
-          info.arcData.beadCount + 1, null,
-        )
-        _xoverConnMesh.instanceMatrix.needsUpdate = true
-      }
-      if (_xoverSlabConnMesh) {
-        setExtraBaseSlabConnectors(
-          _xoverBeadsMesh, _xoverSlabsMesh, _xoverSlabConnMesh,
-          info.entry.id, 1, null,
-        )
-        _xoverSlabConnMesh.instanceMatrix.needsUpdate = true
-      }
-      _xoverBeadsMesh.instanceMatrix.needsUpdate = true
-      _xoverSlabsMesh.instanceMatrix.needsUpdate = true
-      _cpdSlabBonds?.sync(_detailLevel === 0)
+      if (matrix.equals(new THREE.Matrix4())) _insertPreviews.delete(info.entry.id)
+      else _insertPreviews.set(info.entry.id, { info, matrix: matrix.clone() })
+      displayGeometry.invalidate('insert-preview')
       return true
     },
 
@@ -2056,129 +2121,7 @@ export function initDesignRenderer(scene, storeRef) {
       return best
     },
 
-    /**
-     * Update extra-base crossover meshes after a cluster drag frame.
-     * Line rendering is handled by unfold_view.js (applyClusterArcUpdate),
-     * but extra-base beads/slabs are owned by this renderer and need to track
-     * the live nucleotide positions immediately.
-     *
-     * @param {string[]} helixIds  IDs of helices that just moved.
-     */
-    applyClusterCrossoverUpdate(helixIds) {
-      if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
-      const moved = new Set(helixIds ?? [])
-      let dirty = false
-      for (const ad of _xoverArcData) {
-        if (_hiddenCrossoverIds.has(ad.xoId)) continue
-        if (moved.size && !moved.has(ad.nucA?.helix_id) && !moved.has(ad.nucB?.helix_id)) continue
-
-        // Simulation-driven: place each extra base at its REAL simulated position.
-        const sim = _simXbByCrossover?.get(ad.xoId)
-        if (sim) {
-          for (let k = 0; k < ad.beadCount; k++) {
-            const s = sim.get(k)
-            if (!s) continue
-            // Simulated k is 5′→3′ from the strand's exit half; beads run A→B.
-            const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
-            setExtraBaseInstanceFromSim(
-              _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx, s)
-            for (const g of _xoverGlowLive) {
-              if (g.arcData === ad && g.localIdx === bi) g.pos.set(s.pos[0], s.pos[1], s.pos[2])
-            }
-          }
-          dirty = true
-          continue
-        }
-
-        // Geometric fallback: Bezier-interpolate from the live endpoint positions.
-        const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
-        const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
-        if (!posA || !posB) continue
-        arcControlPoint(posA, posB, ad.nucA, ad.nucB, _clusterXoverCtrl)
-        updateExtraBaseInstances(
-          _xoverBeadsMesh, _xoverSlabsMesh,
-          ad.beadStartIdx, ad.beadCount,
-          posA, _clusterXoverCtrl, posB, ad.avgAx,
-          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence, ad.productGeometry,
-        )
-        const placements = buildCrossoverExtraPlacements({
-          xoId: ad.xoId, count: ad.beadCount, pointA: posA,
-          control: _clusterXoverCtrl, pointB: posB, helixAxis: ad.avgAx,
-          sequence: ad.sequence, simReversed: ad.simReversed,
-          localFrameReversed: ad.localFrameReversed,
-          savedTransforms: ad.savedTransforms, productGeometry: ad.productGeometry,
-        })
-        for (const g of _xoverGlowLive) {
-          if (g.arcData === ad) g.pos.copy(placements[g.localIdx].center)
-        }
-        dirty = true
-      }
-      if (dirty) this.flushExtraBaseMeshes()
-    },
-
-    /**
-     * Reposition extra-base beads+slabs for a single crossover arc.
-     * Called per-arc per-frame by unfold_view animation loops.
-     */
-    updateExtraBaseArc(crossoverId, posA, _lineControl, posB) {
-      if (!_xoverArcDataMap || !_xoverBeadsMesh || !_xoverSlabsMesh) return
-      if (_hiddenCrossoverIds.has(crossoverId)) return
-      const ad = _xoverArcDataMap.get(crossoverId)
-      if (!ad) return
-      // Arc lines are emitted in strand traversal order, which is B→A for half of
-      // crossovers. Placement identity is always geometric half_a→half_b. Normalize
-      // the two live points before they enter the residue placement core.
-      const direct = posA.distanceToSquared(ad.pointA) + posB.distanceToSquared(ad.pointB)
-      const swapped = posA.distanceToSquared(ad.pointB) + posB.distanceToSquared(ad.pointA)
-      const liveA = swapped < direct ? posB : posA
-      const liveB = swapped < direct ? posA : posB
-      ad.pointA.copy(liveA)
-      ad.pointB.copy(liveB)
-      // Regular crossover lines have their own view-animation control point (historically
-      // a global-Z bow). It is not a residue placement input. Recompute the canonical
-      // insert control from the live endpoints so no caller can re-place extra bases.
-      arcControlPoint(liveA, liveB, ad.nucA, ad.nucB, _clusterXoverCtrl)
-      // Simulation overlay active: pin the extra-base beads to their REAL relaxed
-      // positions, NOT this arc's (native/geometric) Bezier.  Without this, any arc-layout
-      // pass that drives a native Bezier — refreshArcVisibility on a rep switch, unfold,
-      // deform — snaps the __xb__ beads back to native while the rest of the structure
-      // stays simulated.  Mirrors applyClusterCrossoverUpdate's sim branch.
-      const sim = _simXbByCrossover?.get(ad.xoId)
-      if (sim) {
-        for (let k = 0; k < ad.beadCount; k++) {
-          const s = sim.get(k)
-          if (!s) continue
-          const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
-          setExtraBaseInstanceFromSim(
-            _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx, s)
-          for (const g of _xoverGlowLive) {
-            if (g.arcData === ad && g.localIdx === bi) g.pos.set(s.pos[0], s.pos[1], s.pos[2])
-          }
-        }
-        return
-      }
-      updateExtraBaseInstances(
-        _xoverBeadsMesh, _xoverSlabsMesh,
-        ad.beadStartIdx, ad.beadCount,
-        liveA, _clusterXoverCtrl, liveB, ad.avgAx,
-        ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence, ad.productGeometry,
-      )
-      // Keep selection glow positions on the exact same placement records as the meshes.
-      const placements = buildCrossoverExtraPlacements({
-        xoId: ad.xoId, count: ad.beadCount, pointA: liveA, control: _clusterXoverCtrl,
-        pointB: liveB, helixAxis: ad.avgAx, simReversed: ad.simReversed,
-        localFrameReversed: ad.localFrameReversed,
-        sequence: ad.sequence, savedTransforms: ad.savedTransforms, productGeometry: ad.productGeometry,
-      })
-      for (const g of _xoverGlowLive) {
-        if (g.arcData === ad) g.pos.copy(placements[g.localIdx].center)
-      }
-    },
-
-    /**
-     * Flush extra-base InstancedMesh matrices to GPU.
-     * Call once after batching all updateExtraBaseArc() calls for a frame.
-     */
+    /** Publish insert and connector instance matrices after the frame producers. */
     flushExtraBaseMeshes() {
       if (_xoverBeadsMesh) _xoverBeadsMesh.instanceMatrix.needsUpdate = true
       if (_xoverSlabsMesh) _xoverSlabsMesh.instanceMatrix.needsUpdate = true
@@ -2238,8 +2181,17 @@ export function initDesignRenderer(scene, storeRef) {
       _piercingMarkers.dispose()
       _clusterSelection.dispose()
       if (_frozenRoot) { scene.remove(_frozenRoot); _frozenRoot = null }
-      if (_helixCtrl?.root) scene.remove(_helixCtrl.root)
+      if (_helixCtrl?.root) _helixCtrl.root.removeFromParent()
       _helixCtrl = null
+      displayGeometry.dispose()
     },
   }
+  displayGeometry.register('crossover-inserts', { phase: 0, update: () => {
+    updateCrossoverInserts()
+    for (const { info, matrix } of _insertPreviews.values()) applyInsertPreview(info, matrix)
+    renderer.flushExtraBaseMeshes()
+    const matrix = new THREE.Matrix4()
+    for (const e of _insertBindings) { _xoverBeadsMesh?.getMatrixAt(e.id, matrix); e.pos.setFromMatrixPosition(matrix) }
+  } })
+  return renderer
 }

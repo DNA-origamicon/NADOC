@@ -1034,8 +1034,6 @@ async function main() {
       clusterPanel?.syncVisibility?.(hiddenClusterIds)
     },
   })
-  // Crossover arcs (owned by unfold_view) follow applyFemPositions (mrDNA/oxDNA display).
-  designRenderer.setFemArcUpdater?.((updates) => unfoldView.applyFemArcs(updates))
   // …and follow the RMSF scalar recolour (oxDNA flexibility map).
   designRenderer.setScalarArcUpdater?.((colorByKey) => unfoldView.applyFemArcColors(colorByKey))
 
@@ -1376,7 +1374,6 @@ async function main() {
     // never moves them — redraw them at the frame's simulated positions instead of
     // leaving a stale geometric arc floating over the sim (null reverts to the arc).
     onFrame: (u) => {
-      flexibleArcs.applySimPositions(u)
       surfaceStrandsOverlay?.applyPegFrame?.(u)
     },
     // A displayed job's real relaxed capture strands replace the seed preview overlay
@@ -1466,7 +1463,6 @@ async function main() {
     onRestoreDesignHeavy: _restoreDesignHeavy,
     onHeavyStatus: (d) => window.dispatchEvent(
       new CustomEvent('nadoc:md-heavy-status', { detail: d })),
-    onFrame: (u) => flexibleArcs.applySimPositions(u),
     // Required now that this controller is counted by getSimOverlayWillDriveHeavy: when
     // the design heavy build is skipped, the CG is deliberately left up and ONLY this
     // callback takes it down, at the moment the simulated atoms/surface land.  Without
@@ -2378,7 +2374,7 @@ async function main() {
   // Owns #extrude-panel visibility, the "Extrude from" origin-plane dropdown, and
   // the tool lifecycle. Replaces the retired workspace.js plane-picker as the entry
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
-  const beginAuthoringDisplay = createAuthoringDisplay({ getRoots: () => [designRenderer.getHelixCtrl()?.root, unfoldView.getArcRoot()], addFrameCallback, removeFrameCallback })
+  const beginAuthoringDisplay = createAuthoringDisplay({ getRoots: () => [designRenderer.getDisplayGeometry().root], addFrameCallback, removeFrameCallback })
   _extrudePanel = initExtrudePanel({ beginAuthoringDisplay, store, slicePlane, expandedSpacing, getCamera: getRenderCamera, getControls: getActiveControls, canvas })
   const extrudeHistoryEditor = createExtrudeHistoryEditor({ store, api, slicePlane, panel: _extrudePanel, getCamera: getRenderCamera, getControls: getActiveControls, setPreviewHelices: ids => { designRenderer.setPreviewHelices(ids); unfoldView.setPreviewHelices(ids) }, showToast })
   initSavedSweepWarnings(scene,store,{canvas,getCamera:getRenderCamera,addFrameCallback,removeFrameCallback,getHelixCtrl:()=>designRenderer.getHelixCtrl()})
@@ -4383,10 +4379,6 @@ async function main() {
       if (!domainIds?.length) jointRenderer?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
       if (!domainIds?.length) overhangLocations.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
       // Keep crossover arcs, xb beads, and extension beads in sync with the moved cluster.
-      unfoldView.applyClusterArcUpdate(helixIds)
-      unfoldView.applyClusterExtArcUpdate(helixIds)
-      designRenderer.applyClusterCrossoverUpdate(helixIds)
-      flexibleArcs.applyLiveUpdate(helixIds, centerVec, dummyPos, incrRotQuat)   // re-solve arcs + bow-away from live cylinders
       selectionManager.refreshBaseGlow()   // flexibleArcs just rebuilt its meshes; re-resolve base-pool glow (no-op when empty)
       // Extra-base beads now live in crossoverConnections group — rebuilt on full scene rebuild.
       // DEBUG — log once per frame so you can see cone state during a drag
