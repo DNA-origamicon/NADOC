@@ -1,5 +1,17 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-193 — Atomistic inset depends on main representation during MD flex/playback (2026-11-14)
+
+- [x] Full flex/playback did not request atom coordinates, so the inset transformed
+  native atoms from coarse nucleotide poses. Atomistic main views instead supplied
+  real trajectory atoms, producing different inset geometry.
+- [x] Give MD insets an independent exact source with selected-residue snapshots,
+  PSF topology, bounded frame retention, stale-response rejection and direct atom
+  interpolation. Hide pending exact data rather than reconstruct it from slabs.
+- Read-only P1 check: all 265 saved-inset atoms, including inserts/attachments,
+  match in Full and ballstick for flex means, saved frames and interpolated frames.
+  Evidence: `.development-artifacts/inset-exact-app.log`.
+
 ## ISSUE-192 — Sequence work has no continuous nonblocking feedback (2026-11-12)
 
 - [x] Shared spinner spans queued sequence writes, geometry application, the final
@@ -253,6 +265,9 @@ files carry all the state a cold session needs.
 - Validation evidence: `.development-artifacts/wizard-numbers-20261110/`.
 ## ISSUE-179 — Smoke setup timeouts during local presentation validation (2026-11-10)
 
+- November 14 exact-inset validation reproduced the scaffold-mesh setup timeout
+  in `assembly_exit_cleanup`; the two real-P1 inset app checks passed.
+  Evidence: `.development-artifacts/inset-exact-smoke.log`.
 - [ ] `just smoke`: 21 passed, two skipped, two failed before presentation mode
   was entered. `assembly_exit_cleanup.spec.js` timed out waiting for backbone
   meshes in `loadScaffoldedPart` (20 seconds). `smoke.spec.js` “Create dismisses
@@ -282,6 +297,10 @@ files carry all the state a cold session needs.
 
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
 
+- November 13 flex-settings validation reproduced the Square request assertion
+  at `smoke.spec.js:200`; Honeycomb also timed out waiting for its creation
+  request. Both dedicated flex app checks passed. The New Part path was unchanged;
+  evidence: `.development-artifacts/flex-settings-smoke.log`.
 - [ ] During inset zoom-button validation, `just smoke` passed 22 checks and
   skipped two, but `smoke.spec.js:180` expected captured `lattice_type` SQUARE
   and received undefined. The focused rerun reproduces the failure.

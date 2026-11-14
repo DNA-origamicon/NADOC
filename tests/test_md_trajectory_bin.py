@@ -29,7 +29,7 @@ def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
     monkeypatch.setitem(
         sys.modules, "MDAnalysis", SimpleNamespace(Universe=FakeUniverse)
     )
-    monkeypatch.setattr(mt, "_build_md_nadoc_ctx", lambda *_a, **_k: ctx)
+    monkeypatch.setattr(mt, "_build_playback_ctx", lambda *_a, **_k: ctx)
 
     def extract(_ctx, frame):
         base = np.arange(n_p * 3, dtype=np.float64).reshape(n_p, 3) / 17 + frame
@@ -42,6 +42,7 @@ def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
 
     monkeypatch.setattr(mt, "_extract_md_full_frame", extract)
     segments = [("production", "md", tmp_path / "run.dcd")]
+    monkeypatch.setattr(mt, "_build_md_nadoc_ctx", mt._build_playback_ctx)
     legacy = mt.md_composite_trajectory("x.psf", segments, "x.pdb", object())
     progress = tmp_path / "progress.json"
     payload = mt.md_composite_trajectory_bin(
@@ -77,7 +78,7 @@ def test_range_extracts_only_selected_composite_frames(monkeypatch, tmp_path, st
     from backend.core import md_trajectory as mt
     monkeypatch.setitem(sys.modules, "MDAnalysis", SimpleNamespace(
         Universe=lambda *_: SimpleNamespace(trajectory=range(10))))
-    monkeypatch.setattr(mt, "_build_md_nadoc_ctx", lambda *_a, **_k: {
+    monkeypatch.setattr(mt, "_build_playback_ctx", lambda *_a, **_k: {
         "p_order": [("h", 0, "F")], "term_specs": []})
     monkeypatch.setattr(mt, "_dcd_complete_frame_count", lambda _: 10)
     seen = []

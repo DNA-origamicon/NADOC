@@ -1,3 +1,4 @@
+import { flexRangeQuery } from '../ui/md_flex_range.js'
 import { createRecoverySerializer } from './recovery_serializer.js'
 const _serializeRecovery = createRecoverySerializer()
 import { sequenceActivity } from '../ui/sequence_activity.js'
@@ -3612,15 +3613,15 @@ export const getMdTrajectoryProgress = (id) =>
   _oxdnaJSON('GET', `/md/jobs/${id}/trajectory-progress`)
 /** Per-nucleotide flexibility map (RMSF) over the NAMD run — same shape as
  *  getOxdnaRmsf, so the flexibility-map display code is shared. */
-export const getMdRmsf           = (id, signal)  => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf`, undefined, { signal })
+export const getMdRmsf           = (id, signal, frameRange)  => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf${flexRangeQuery(frameRange)}`, undefined, { signal })
 /** NAMD atom coordinates for the flexibility ensemble's average structure. */
-export const getMdRmsfAtomistic  = (id, signal) =>
-  _oxdnaJSON('POST', `/md/jobs/${id}/rmsf-atomistic`, undefined, { signal })
-export const getMdFlexProgress = (id, kind, signal) =>
-  _oxdnaJSON('GET', `/md/jobs/${id}/flex-progress?kind=${encodeURIComponent(kind)}`, undefined, { signal })
+export const getMdRmsfAtomistic  = (id, signal, frameRange) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/rmsf-atomistic${flexRangeQuery(frameRange)}`, undefined, { signal })
+export const getMdFlexProgress = (id, kind, signal, since = 0) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/flex-progress?kind=${encodeURIComponent(kind)}&since=${since}`, undefined, { signal })
 /** NAMD molecular surface for the average structure, carrying per-vertex RMSF. */
-export const getMdRmsfSurface    = (id, params = {}, signal) =>
-  _oxdnaJSON('POST', `/md/jobs/${id}/rmsf-surface`, params, { signal })
+export const getMdRmsfSurface    = (id, params = {}, signal, frameRange) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/rmsf-surface${flexRangeQuery(frameRange)}`, params, { signal })
 /** Occupancy clouds for a NAMD run — same payload shape as the oxDNA twin, so the same
  *  overlay draws it. Only PRODUCTION (unrestrained) dynamics is clustered — frames from
  *  the restrained relaxation ladder describe the ramp, not the structure. */

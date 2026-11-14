@@ -147,6 +147,8 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     # atomistic_validation.py is a leaf (the atomistic BASE is a full-trigger above)
     ("atomistic_validation", ("atomistic",)),
     ("vr_representation", ("atomistic",)),
+    ("vr_view_transport", ("headless",)),
+    ("view_snapshot_inbox", ("headless",)),
     # CPD conversion exercises the atomistic multi-start attachment relaxation.
     ("cpd_design", ("atomistic",)),
     ("part_cpd", ("atomistic",)),

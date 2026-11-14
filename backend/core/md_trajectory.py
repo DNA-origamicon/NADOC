@@ -1279,11 +1279,9 @@ def heavy_bond_pairs(u, heavy_indices, *, nested: bool = False):
 def _build_playback_ctx(topology_path, paths, coordinate_path, design, **kwargs):
     from backend.core.md_playback_context import playback_context
 
-    try:
-        return playback_context(topology_path, paths, coordinate_path, design)
-    except (OSError, ValueError, KeyError, IndexError, StopIteration):
-        # Older/non-NAMD packages and synthetic mappings keep their original path.
-        return _build_md_nadoc_ctx(topology_path, paths, coordinate_path, design, **kwargs)
+    # Unsupported/mismatched packages must fail explicitly, never allocate a full
+    # solvent Universe or reconstruct molecular geometry behind the user's back.
+    return playback_context(topology_path, paths, coordinate_path, design)
 
 
 def md_atomistic_model_bin(*args):
@@ -1679,27 +1677,10 @@ def md_frames_surface(
 
 def md_flex_analysis(analysis, args, progress_path):
     """Killable flex worker with atomic, measured per-stage progress snapshots."""
-    import json
-    import time
     from threadpoolctl import threadpool_limits
+    from backend.core.md_flex_progress import progress_reporter, selection_from_args
 
-    path = Path(progress_path)
-    started = time.monotonic()
-    phase_started = started
-    last_phase = None
-
-    def report(phase, done, total):
-        nonlocal last_phase, phase_started
-        now = time.monotonic()
-        if phase != last_phase:
-            last_phase, phase_started = phase, now
-        state = dict(phase=phase, done=done, total=total, updated_at=time.time(),
-                     elapsed_seconds=now - started,
-                     phase_elapsed_seconds=now - phase_started)
-        temporary = path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(state))
-        temporary.replace(path)
-
+    report = progress_reporter(progress_path, selection_from_args(args))
     # These fits are tiny (three columns). BLAS thread-team startup costs more
     # than the arithmetic and competes with the simulation/browser.
     with threadpool_limits(limits=1, user_api='blas'):
@@ -1713,64 +1694,20 @@ def md_flex_analysis(analysis, args, progress_path):
             result = md_rmsf_surface(*args, progress=report)
         else:
             raise ValueError(f'Unknown flex analysis: {analysis}')
-    report('transfer', 0, 1)
+    if not result.get('continue_calculation'):
+        report('transfer', 0, 1)
     return result
 
 
 @persistent_analysis
-def md_rmsf_atomistic(
-    topology_path, segments, coordinate_path, design, max_frames: int = 0,
-    *, include_model=False, progress=None,
-) -> dict:
-    """Average the simulation's own DNA atoms using bounded DNA-only DCD reads."""
-    report = progress or (lambda *args: None)
-    report('atomistic_setup', 0, 1)
-    ctx = _build_playback_ctx(
-        topology_path, [s[2] for s in segments], coordinate_path, design, with_atoms=True
-    )
-    report('atomistic_setup', 1, 1)
-    try:
-        n = ctx['n_frames']
-        meta = ctx.get('atom_meta') or []
-        if n <= 0 or not meta:
-            return {'ready': False, 'atomistic': [], 'n_frames': 0}
-        idxs = list(range(n)) if max_frames <= 0 or n <= max_frames else _stride_pick(list(range(n)), max_frames)
-        serials = np.asarray([m['serial'] for m in meta], dtype=np.int64)
-        sums = np.zeros((len(meta), 3), dtype=np.float64)
-        used = 0
-        for sample, gidx in enumerate(idxs):
-            report('atomistic_average', sample, len(idxs))
-            positions = _extract_md_atoms_frame(ctx, gidx, positions_only=True)
-            if len(positions) != len(meta):
-                continue
-            sums += positions
-            used += 1
-        if used == 0:
-            return {'ready': False, 'atomistic': [], 'n_frames': 0}
-        sums /= used
-        flat = np.zeros((int(serials.max()) + 1, 3), dtype=np.float32)
-        flat[serials] = sums
-        result = {'ready': True, 'atomistic': flat.ravel().tolist(), 'n_frames': used}
-        report('atomistic_average', len(idxs), len(idxs))
-        if include_model:
-            report('atomistic_topology', 0, 1)
-            atoms = [{**m, 'x': float(p[0]), 'y': float(p[1]), 'z': float(p[2]),
-                      # Pre-intern the exact RMSF key; representation rebuilds
-                      # should not format it again for every atom and bond.
-                      'scalar_key': m.get('scalar_key') or
-                          f"{m.get('helix_id', '')}:{m.get('bp_index', 0)}:{m.get('direction', '')}:{m.get('copy_k', 0)}"}
-                     for m, p in zip(meta, sums)]
-            bonds = (ctx['heavy_bonds'].tolist() if 'heavy_bonds' in ctx else
-                     heavy_bond_pairs(ctx['universe'], ctx['heavy_idx'], nested=True))
-            result['model'] = {'atoms': atoms, 'bonds': bonds or [],
-                               'bonds_available': bool(bonds), 'n_serials': len(flat)}
-            report('atomistic_topology', 1, 1)
-        return result
-    finally:
-        if ctx.get('dcd_prefix') is not None:
-            ctx['dcd_prefix'].close()
-        if ctx.get('universe') is not None:
-            ctx['universe'].trajectory.close()
+def md_rmsf_atomistic(topology_path, segments, coordinate_path, design, max_frames: int = 0,
+                      frame_range=None, *, include_model=False, progress=None) -> dict:
+    from backend.core.md_flex_stream import calculate_flex
+    result = dict(calculate_flex(topology_path, segments, coordinate_path, design,
+                                max_frames, frame_range=frame_range, progress=progress)['average'])
+    if not include_model:
+        result.pop('model', None)
+    return result
 
 
 @persistent_analysis
@@ -1784,23 +1721,23 @@ def md_rmsf_surface(
     radius_inflate: float = 1.30,
     smooth: int = 15,
     max_frames: int = 0,
-    *, average=None, rmsf=None, model=None, progress=None,
+    frame_range=None, *, average=None, rmsf=None, model=None, progress=None,
 ) -> dict:
     """Surface of the NAMD mean all-atom structure with per-vertex nucleotide RMSF."""
     from backend.core.oxdna_health import _vertex_rmsf
     from backend.core.surface import compute_surface, smooth_mesh, vertex_index_tables
 
     report = progress or (lambda *args: None)
-    average = average or md_rmsf_atomistic(
-        topology_path, segments, coordinate_path, design, max_frames=max_frames,
-        include_model=True, progress=report,
-    )
+    if average is None or rmsf is None:
+        from backend.core.md_flex_stream import calculate_flex
+        shared = calculate_flex(topology_path, segments, coordinate_path, design,
+                                max_frames, frame_range=frame_range, progress=progress)
+        average = average if average is not None else shared['average']
+        rmsf = rmsf if rmsf is not None else shared['rmsf']
+    if average.get("continue_calculation"):
+        return average
     if not average.get("ready"):
         return {"ready": False, "surface": None, "n_frames": 0}
-    rmsf = rmsf or md_rmsf(
-        topology_path, segments, coordinate_path, design, max_frames=max_frames,
-        progress=report,
-    )
     if not rmsf.get("ready"):
         return {"ready": False, "surface": None, "n_frames": 0}
 
@@ -1856,199 +1793,15 @@ def md_rmsf_surface(
 
 
 @persistent_analysis
-def md_rmsf(
-    topology_path, segments, coordinate_path, design, max_frames: int = 0,
-    include_reference_frame: bool = False, progress=None,
-) -> dict:
-    """Per-nucleotide average backbone position + RMSF over the NAMD run.
-
-    The MD analogue of ``oxdna_health.production_rmsf``: pools frames from EVERY
-    written segment (the user's flex-map gating is "all segments"), Kabsch-aligns
-    each frame to the design equilibrium (rigid-body motion removed, identical math
-    to the live Display-MD path via ``_extract_md_nadoc_frame``), and computes per
-    nucleotide the mean backbone-bead position, measured mean base-ring centroid,
-    mean base normal (a1), live helix tangent, and the RMSF =
-    sqrt(mean_f |p_f - mean|^2).
-
-    Returns the SAME payload shape as ``GET /oxdna/jobs/{id}/rmsf`` so the frontend
-    flexibility-map code (rmsfColorMap / displayRmsf) consumes it unchanged:
-    ``{ready, n_frames, positions:[{helix_id, bp_index, direction, backbone_position,
-    base_position, nx, ny, nz, tx, ty, tz, rmsf}], min_rmsf, max_rmsf, mean_rmsf}``.
-
-    By default every frame is included. A positive ``max_frames`` explicitly opts
-    into evenly sampled preview data; each sampled frame is aligned independently (the sequential rotation-flip
-    guard only fires for adjacent frames, which strided sampling never hits).
-    ``include_reference_frame`` adds the first frame's display affine and backbone
-    adjacency for placing this same mean beside static simulation companions."""
-    report = progress or (lambda *args: None)
-    report("rmsf_setup", 0, 1)
-    seg_paths = [s[2] for s in segments]
-    # with_termini: also recover each strand's 5'-terminal base (no P atom → absent from
-    # p_order) so the flexibility map positions + colours every nucleotide, not only the
-    # P-bearing ones.  Only md_rmsf opts in — the metrics / live-display P path is unchanged.
-    # Use the same DNA-only reader as playback/atomistic averaging. Full-frame
-    # backfill must not load solvent coordinates or rebuild a whole PSF Universe
-    # for every job. Companion adjacency still uses the original Universe path.
-    build_ctx = _build_md_nadoc_ctx if include_reference_frame else _build_playback_ctx
-    ctx = build_ctx(
-        topology_path, seg_paths, coordinate_path, design, with_termini=True
-    )
-    report("rmsf_setup", 1, 1)
-    p_order = ctx["p_order"]
-    n = ctx["n_frames"]
-    n_keys = len(p_order)
-    n_dna_p = ctx.get("n_dna_p", n_keys)
-    if n <= 0 or n_keys == 0:
-        return {
-            "ready": False,
-            "n_frames": 0,
-            "positions": [],
-            "reason": "no trajectory frames or no mapped nucleotides",
-        }
-
-    idxs = (
-        list(range(n)) if max_frames <= 0 or n <= max_frames else _stride_pick(list(range(n)), max_frames)
-    )
-
-    report("rmsf", 0, len(idxs))
-    term_specs = ctx.get("term_specs") or []
-    n_term = len(term_specs)
-
-    # One-pass accumulation: RMSF^2 = mean_f|p_f|^2 - |mean_f p_f|^2 (per nucleotide).
-    sum_pos = np.zeros((n_keys, 3))
-    sum_sq = np.zeros(n_keys)  # Σ_f |p_f|^2
-    sum_norm = np.zeros((n_keys, 3))
-    sum_base = np.zeros((n_keys, 3))
-    count_base = np.zeros(n_keys, dtype=np.int64)
-    sum_tpos = np.zeros((n_term, 3))
-    sum_tsq = np.zeros(n_term)
-    sum_tnorm = np.zeros((n_term, 3))
-    have_norm = False
-    used = 0
-    reference_frame = {}
-    for sample_index, gidx in enumerate(idxs):
-        report("rmsf", sample_index, len(idxs))
-        p_nm, normals, base_centers, tpos, tnorm = _extract_md_nadoc_frame(
-            ctx, gidx, with_termini=True, with_base_centers=True,
-            **({"frame_out": reference_frame} if include_reference_frame and gidx == 0 else {}),
-        )
-        if p_nm is None or len(p_nm) != n_keys:
-            continue
-        sum_pos += p_nm
-        sum_sq += np.einsum("ij,ij->i", p_nm, p_nm)
-        if normals is not None and len(normals) == n_keys:
-            sum_norm += normals
-            have_norm = True
-        if base_centers is not None and len(base_centers) == n_keys:
-            valid_base = np.isfinite(base_centers).all(axis=1)
-            sum_base[valid_base] += base_centers[valid_base]
-            count_base[valid_base] += 1
-        if n_term and tpos is not None and len(tpos) == n_term:
-            sum_tpos += tpos
-            sum_tsq += np.einsum("ij,ij->i", tpos, tpos)
-            sum_tnorm += tnorm
-        used += 1
-    if used == 0:
-        reason = "no usable trajectory frames"
-        if n_dna_p != n_keys:
-            reason = (
-                f"design/topology atom mismatch: the loaded design maps {n_keys} "
-                f"nucleotides but the simulated structure has {n_dna_p} DNA phosphate "
-                f"atoms (P-order source: {ctx.get('p_order_source', '?')}). Load the "
-                "design this job was prepared from."
-            )
-        return {"ready": False, "n_frames": 0, "positions": [], "reason": reason}
-
-    mean_pos = sum_pos / used
-    msd = sum_sq / used - np.einsum("ij,ij->i", mean_pos, mean_pos)
-    rmsf = np.sqrt(np.maximum(msd, 0.0))
-
-    if have_norm:
-        nrm = np.linalg.norm(sum_norm, axis=1, keepdims=True)
-        mean_norm = sum_norm / np.where(nrm > 1e-6, nrm, 1.0)
-    else:
-        mean_norm = np.tile([0.0, 0.0, 1.0], (n_keys, 1))
-
-    positions = []
-    for i, key in enumerate(p_order):
-        hid, bp, direction = key[0], key[1], key[2]
-        copy = key[3] if len(key) > 3 else 0  # loop-insertion copy index (0 = base)
-        position = {
-            "helix_id": hid,
-            "bp_index": bp,
-            "direction": direction,
-            "copy": copy,
-            "backbone_position": [
-                float(mean_pos[i, 0]),
-                float(mean_pos[i, 1]),
-                float(mean_pos[i, 2]),
-            ],
-            "nx": float(mean_norm[i, 0]),
-            "ny": float(mean_norm[i, 1]),
-            "nz": float(mean_norm[i, 2]),
-            "rmsf": float(rmsf[i]),
-        }
-        if count_base[i] > 0:
-            position["base_position"] = (sum_base[i] / count_base[i]).tolist()
-        positions.append(position)
-
-    # Append the recovered 5'-terminal nucleotides (same payload shape, real keys).
-    rmsf_all = rmsf
-    if n_term:
-        mean_t = sum_tpos / used
-        rmsf_t = np.sqrt(
-            np.maximum(sum_tsq / used - np.einsum("ij,ij->i", mean_t, mean_t), 0.0)
-        )
-        tn = np.linalg.norm(sum_tnorm, axis=1, keepdims=True)
-        mean_tnorm = sum_tnorm / np.where(tn > 1e-6, tn, 1.0)
-        for j, (key, *_rest) in enumerate(term_specs):
-            positions.append(
-                {
-                    "helix_id": key[0],
-                    "bp_index": key[1],
-                    "direction": key[2],
-                    "copy": key[3]
-                    if len(key) > 3
-                    else 0,  # 5'-termini are base copies (0)
-                    "backbone_position": [
-                        float(mean_t[j, 0]),
-                        float(mean_t[j, 1]),
-                        float(mean_t[j, 2]),
-                    ],
-                    "nx": float(mean_tnorm[j, 0]),
-                    "ny": float(mean_tnorm[j, 1]),
-                    "nz": float(mean_tnorm[j, 2]),
-                    "rmsf": float(rmsf_t[j]),
-                }
-            )
-        rmsf_all = np.concatenate([rmsf, rmsf_t]) if len(rmsf_t) else rmsf
-
-    context = {}
-    if include_reference_frame:
-        # Actual PSF strand/residue order, including recovered 5' termini. Do not
-        # connect spatially close nucleotides belonging to different strands.
-        indices = list(ctx["dna_p_idx"]) + [spec[1] for spec in term_specs]
-        strands = {}
-        for row, atom in enumerate(ctx["universe"].atoms[indices]):
-            strands.setdefault(str(atom.segid), []).append((int(atom.resid), row))
-        edges = []
-        for strand in strands.values():
-            strand.sort()
-            edges.extend([a[1], b[1]] for a, b in zip(strand, strand[1:]) if b[0] == a[0] + 1)
-        context = {"reference_frame": {k: v.tolist() for k, v in reference_frame.items()},
-                   "backbone_edges": edges}
-
-    _add_mean_axis_tangents(positions)
-    report("rmsf", len(idxs), len(idxs))
-    return {
-        "ready": True,
-        "n_frames": used,
-        "positions": positions,
-        "min_rmsf": float(rmsf_all.min()),
-        "max_rmsf": float(rmsf_all.max()),
-        "mean_rmsf": float(rmsf_all.mean()),
-        **context,
-    }
+def md_rmsf(topology_path, segments, coordinate_path, design, max_frames: int = 0,
+            include_reference_frame: bool = False, frame_range=None, progress=None) -> dict:
+    from backend.core.md_flex_stream import calculate_flex
+    result = dict(calculate_flex(topology_path, segments, coordinate_path, design,
+                                max_frames, frame_range=frame_range, progress=progress)['rmsf'])
+    if not include_reference_frame:
+        result.pop('reference_frame', None)
+        result.pop('backbone_edges', None)
+    return result
 
 
 # Native-MD Watson-Crick pairing cutoff: two designed-partner nucleotides count as

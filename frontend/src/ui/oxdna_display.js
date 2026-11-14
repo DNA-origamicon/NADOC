@@ -1,3 +1,6 @@
+import { flexDisplayProgress } from './md_flex_progress.js'
+import { initMdInsetSource } from '../scene/md_inset_source.js'
+import { mdInsetAtoms } from '../scene/md_inset_atoms.js'
 /**
  * oxDNA display controller.
  *
@@ -539,6 +542,8 @@ export function initOxdnaDisplay({
   let _active = false
   let _jobId = null
   let _mode = null     // 'relaxed' | 'rmsf' | 'deviation' | 'strain' | 'trajectory' | 'occupancy'
+  let _rmsfFrameRange = null
+  let _rmsfRangeKey = "null"
   let _rmsfResp = null // cached /rmsf payload so the scale can recolour without re-fetching
   let _devResp = null  // cached /deviation payload so the scale can recolour without re-fetching
   let _strainResp = null // cached /strain payload (same reason)
@@ -632,6 +637,7 @@ export function initOxdnaDisplay({
   let _vrPage = false
   const vrExactAtoms = createVRExactAtomCache({ context: () => JSON.stringify([_epoch, _jobId, _align, _trajScope, _trajStride]), fetchFrames: (indices, live) => _queueFrameFetch(() => live() ? api.getOxdnaFramesAtomistic(_jobId, indices, _align, _trajScope, _trajStride) : null) })
   const sourceFrame = i => i * (_vrPage ? (_traj?.frame_step ?? 1) : 1) + (_traj?.frame_start ?? 0)
+  const insetSource = api.exactInsetAtoms && !preparationOnly ? initMdInsetSource({ api, hub: mdInsetAtoms }) : null
   let _frameIdx = 0          // current trajectory frame (for re-apply on rep change)
   let _granularity = 'coarse'  // 'coarse' = downsample+snap | 'fine' = exact frame
   let _playing = false       // play loop running → force coarse (every frame must be instant)
@@ -788,7 +794,7 @@ export function initOxdnaDisplay({
     // Use the existing depth-correct sphere shader for NAMD playback: two
     // triangles per atom instead of a tessellated sphere. The flag belongs to
     // this display payload, so restoring design data restores its rendering too.
-    ar.update(api.trajectoryImpostors && _mode === 'trajectory'
+    ar.update(api.trajectoryImpostors && (_mode === 'trajectory' || _mode === 'rmsf')
       ? { ..._pendingTopoModel, sphereImpostors: true } : _pendingTopoModel)
     _atomTopoJob = _jobId
     _heavyActive = true                                 // restore design reps on stop
@@ -1342,11 +1348,11 @@ export function initOxdnaDisplay({
           if (live() && mesh) _pushSurface(mesh)
         }
       } else if (_mode === 'rmsf') {
-        const onProgress = state => { if (live()) onRmsfProgress?.({ ...state, jobId: _jobId }) }
+        const onProgress = state => { if (live()) onRmsfProgress?.({ ...flexDisplayProgress(state, _rmsfResp), jobId: _jobId }) }
         const signal = _loadAbort?.signal
         if (kind === 'atomistic') {
           const r = await _memoHeavy(kind,
-            () => api.getOxdnaRmsfAtomistic(_jobId, { align: _align, signal, onProgress }))
+            () => api.getOxdnaRmsfAtomistic(_jobId, { align: _align, signal, onProgress, frameRange: _rmsfFrameRange }))
           if (live() && strict && !r?.ready) throw new Error(r?.reason || 'Could not load average atom positions')
           if (live() && r?.ready) {
             // NAMD already built this exact model while averaging its atoms.
@@ -1371,7 +1377,7 @@ export function initOxdnaDisplay({
           }
         } else {
           const r = await _memoHeavy(kind,
-            () => api.getOxdnaRmsfSurface(_jobId, getSurfaceParams(), { align: _align, signal, onProgress }))
+            () => api.getOxdnaRmsfSurface(_jobId, getSurfaceParams(), { align: _align, signal, onProgress, frameRange: _rmsfFrameRange }))
           if (live() && strict && !r?.ready) throw new Error(r?.reason || 'Could not load average surface')
           if (live() && r?.ready) {
             onProgress({ phase: 'display', done: 0, total: 1 })
@@ -1691,9 +1697,12 @@ export function initOxdnaDisplay({
     return { ok: true, verdict: resp.verdict, k: resp.k, nClusters: resp.clusters.length }
   }
 
-  async function displayRmsf(jobId, { refetch = false, align = true, response = null, awaitHeavy = false, representations = null } = {}) {
+  async function displayRmsf(jobId, { refetch = false, align = true, response = null, awaitHeavy = false, representations = null, frameRange = null } = {}) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
+    _rmsfFrameRange = frameRange
+    _rmsfRangeKey = JSON.stringify(frameRange)
+    _rmsfBounds = null
     if (refetch) _dropJobCompanions(jobId) // protein pose/caps may have moved too
     // Re-use the cached flex map for this job (instant re-toggle) unless a refetch
     // is forced (e.g. refresh after more production frames accumulated).
@@ -1701,21 +1710,27 @@ export function initOxdnaDisplay({
     const signal = _beginLoad()
     if (response) {
       resp = response
-    } else if (!refetch && _rmsfCache && _rmsfCache.jobId === jobId && _rmsfCache.align === align) {
+    } else if (!refetch && _rmsfCache && _rmsfCache.jobId === jobId && _rmsfCache.align === align && _rmsfCache.rangeKey === _rmsfRangeKey) {
       resp = _rmsfCache.resp
     } else {
-      resp = await api.getOxdnaRmsf(jobId, { align, signal,
+      resp = await api.getOxdnaRmsf(jobId, { align, signal, frameRange,
         onProgress: state => { if (epoch === _epoch) onRmsfProgress?.({ ...state, jobId }) },
+        onPartial: (partial, reps) => epoch === _epoch && !signal.aborted
+          ? _renderRmsf(jobId, partial, { align, epoch, signal, representations: reps, awaitHeavy: true }) : null,
       })
       if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     }
-    const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
+    return _renderRmsf(jobId, resp, { align, epoch, signal, representations, awaitHeavy })
+  }
+
+  async function _renderRmsf(jobId, resp, { align, epoch, signal, representations, awaitHeavy }) {
+    if (epoch !== _epoch || signal.aborted) return { ok: false, reason: 'superseded' }
+    const map = rmsfColorMap(resp, _rmsfBounds?.lo, _rmsfBounds?.hi, _rmsfCmap)
     if (!map) {
       return { ok: false, reason: resp?.reason || 'not ready' }
     }
-    _rmsfCache = { jobId, align, resp }   // keep across toggle-off
+    if (!resp.preliminary) _rmsfCache = { jobId, align, resp, rangeKey: _rmsfRangeKey }   // keep across toggle-off
     _rmsfResp = resp
-    _rmsfBounds = null             // fresh display → default data-range scale
     // This may rebuild the CG renderer. It therefore belongs immediately before the FEM
     // move, matching displayJob's surface-strand integration order.
     if (!await _applyJobCompanions(jobId, align, epoch, signal)) {
@@ -1727,6 +1742,8 @@ export function initOxdnaDisplay({
     _mode = 'rmsf'
     _jobId = jobId
     _align = align
+    onRmsfProgress?.({ mapped: true, preliminary: !!resp.preliminary, min: map.min, max: map.max, jobId })
+    const insetReady = insetSource?.flex(jobId, resp, representations, _rmsfFrameRange)
     if (representations) {
       // Seed the same caches used by every simulation view. The nanopore loader
       // already prepared all averages in one reported, cancellable request.
@@ -1745,14 +1762,19 @@ export function initOxdnaDisplay({
         // The first representation switch then builds directly from that model
         // instead of building native atoms and immediately replacing them.
         const ar = getAtomisticRenderer?.()
-        if (ar?.getMode?.() === 'off') {
+        if (!resp.preliminary && ar?.getMode?.() === 'off') {
           _applyJobTopology(ar)
           ar.applyScalarColors?.(map.colorByKey)
         }
       }
     }
-    const heavy = _applyHeavy({ strict: awaitHeavy })
+    // Surface meshing waits for the final average; provisional updates reuse the
+    // already supplied atom model and never launch another trajectory pass.
+    if (!resp.preliminary && !representations) _heavyMemo.clear()
+    const heavy = resp.preliminary && _repKind() === 'surface'
+      ? Promise.resolve() : _applyHeavy({ strict: awaitHeavy })
     if (awaitHeavy) await heavy
+    if (awaitHeavy) await insetReady
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     return {
       ok: true, n: map.updates.length, min: map.min, max: map.max, mean: resp.mean_rmsf,
@@ -2245,6 +2267,7 @@ export function initOxdnaDisplay({
     }
     _stream?.cancelPendingSeeks()
     _frameIdx = idx
+    void insetSource?.frame(_jobId, sourceFrame(idx), _trajStride)
     _stream?.prefetch(idx)
     proteinRenderer?.applyOxdnaTransforms?.(trajectoryProteinTransforms(_traj.keys, _traj.frames[idx]))
     nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _traj.frames[idx])
@@ -2253,6 +2276,7 @@ export function initOxdnaDisplay({
   }
 
   async function ensureTrajectoryFrame(index, { latest = false, heavy = true } = {}) {
+    await insetSource?.prepare(_jobId, [sourceFrame(index)], _trajStride)
     if (!_stream) return true
     const stream = _stream
     if (!await (latest ? stream.seek(index) : stream.ensure(index)) || stream !== _stream) return false
@@ -2295,6 +2319,8 @@ export function initOxdnaDisplay({
     if (_mode !== 'trajectory' || !_traj) return false
     const frames = [...new Set([from, to, before == null ? null : before - offset,
       after == null ? null : after - offset].filter(i => i != null))]
+    await insetSource?.prepare(_jobId, frames.map(sourceFrame), _trajStride)
+    if (!live()) return false
     for (const index of frames) {
       if (!await ensureTrajectoryFrame(index, {heavy: _repKind() !== 'surface'}) || !live()) return false
     }
@@ -2367,6 +2393,8 @@ export function initOxdnaDisplay({
     proteinRenderer?.applyOxdnaTransforms?.(interpolateProteinTransforms(_traj.keys, a, b, t))
     nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _interpolationCg)
     _applyFem(framesToUpdates(_traj.keys, _interpolationCg))
+    insetSource?.interpolate(_jobId, sourceFrame(from), sourceFrame(to), t,
+      before == null ? null : sourceFrame(before), after == null ? null : sourceFrame(after), _trajStride)
     if (_repKind() === 'surface') {
       _paintSurfaceMotion(_interpolationCg)
       return
@@ -2452,6 +2480,7 @@ export function initOxdnaDisplay({
 
   /** Clear the overlay (positions + colours) and restore the design. */
   function stopAndRestore({ restoreDesign = true } = {}) {
+    insetSource?.clear()
     _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null; _surfaceMotion = null
     trajectoryDownloads.clear()
     trajectoryMemory.release(_previewLease); _preview?.frames.clear(); _preview?.atoms.clear(); _preview = null

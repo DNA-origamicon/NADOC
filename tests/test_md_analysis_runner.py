@@ -218,3 +218,22 @@ def test_playback_drops_idle_worker_during_simulation():
             finally:R._PLAYBACK=original
     try:asyncio.run(scenario())
     finally:pool.close()
+
+
+def test_queued_flex_resume_preserves_snapshot_revision(tmp_path, monkeypatch):
+    import json
+    from backend.core import memory_budget as budget
+    path = tmp_path / 'progress.json'
+    path.write_text(json.dumps(dict(revision=7, elapsed_seconds=21)))
+    async def admitted(*args, **kwargs):
+        return {'ready': True}
+    monkeypatch.setattr(R, '_run_analysis_admitted', admitted)
+    async def scenario():
+        with budget.reserve(1024, kind='simulation'):
+            task = asyncio.create_task(R.run_analysis('resume', 'rmsf', 'unused',
+                'md_flex_analysis', ('md_rmsf', (), str(path))))
+            await asyncio.sleep(.15)
+            state = json.loads(path.read_text())
+            assert state['revision'] == 7 and state['elapsed_seconds'] == 21
+        return await task
+    assert asyncio.run(scenario()) == {'ready': True}

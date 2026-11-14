@@ -97,6 +97,9 @@ def test_atomistic_flex_mean_positions_every_synthetic_residue_by_serial(monkeyp
             {"serial": 4, "x": 14.0, "y": 24.0, "z": 34.0},
         ],
     ]
+    from tests.md_flex_context import complete_context, coarse_stub
+    complete_context(ctx)
+    monkeypatch.setattr(md_trajectory, '_extract_md_nadoc_frame', coarse_stub)
     monkeypatch.setattr(md_trajectory, "_build_playback_ctx", lambda *a, **k: ctx)
     monkeypatch.setattr(
         md_trajectory, "_extract_md_atoms_frame", lambda _ctx, idx, **kw: np.array([[a[k] for k in ("x", "y", "z")] for a in frames[idx]])
@@ -128,3 +131,21 @@ def test_flex_worker_returns_existing_topology_and_measured_progress(monkeypatch
     assert (seen[-1]['done'], seen[-1]['total']) == (30, 150)
     assert json.loads(path.read_text())['phase'] == 'transfer'
     assert not path.with_suffix('.tmp').exists()
+
+
+def test_partial_revision_is_visible_immediately_and_survives_worker_handoff(tmp_path):
+    from backend.core.md_flex_progress import progress_reporter, read_progress
+    path = tmp_path / 'progress.json'
+    report = progress_reporter(path)
+    report('tail_preview', 32, 32)
+    report.publish({'ready': True, 'n_frames': 32}, 'tail_preview', 32, 100,
+                   {'ready': True, 'atomistic': [1, 2, 3], 'model': {'atoms': [{'serial': 0}]}})
+    representations = read_progress(path)['representations']
+    assert 'model' not in representations['atomistic_average']
+    assert representations['atomistic_model']['atoms'] == [{'serial': 0}]
+    assert read_progress(path)['partial']['coverage']['window'] == 'last_chunk'
+    assert read_progress(path)['revision'] == 1
+    resumed = progress_reporter(path)
+    resumed.publish({'ready': True, 'n_frames': 64}, 'backfill', 64, 100)
+    assert read_progress(path, 1)['revision'] == 2
+    assert 'partial' not in read_progress(path, 2)

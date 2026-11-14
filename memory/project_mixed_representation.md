@@ -106,6 +106,20 @@ magnification, limits, all four corners and independent zoom settings. Lint pass
 Smoke repeated the two pre-pull setup/progress failures (21 passed, two skipped).
 Cleanup and compact results: `.development-artifacts/zoom-volume-pull/validation.json`.
 
+Zoom interaction follow-up (2026-11-14): each card has a persistent **Highlight
+selected elements** toggle. Its cyan overlay follows live positions independently
+of the editing selection and is disposed with the entry. The size slider is replaced
+by eight inset edge/corner handles; width and height persist separately, with legacy
+`size` restored as a square. Opposite edges stay anchored, dimensions are bounded
+to the viewport, and focused handles support arrow keys (Shift for larger steps).
+Export composition uses the rectangular dimensions too. No molecular state changes.
+Validation: 14 focused tests, 10,496 frontend tests passed (one skipped), and the
+real-browser highlight/independent edge-and-corner resize workflow passed twice.
+Inspected the rendered rectangular inset; main-view pixels change with the highlight.
+Smoke: 22 passed, two skipped, existing Honeycomb/Square New Part request checks
+failed. Lint passed; `main.js` LOC delta 0. Evidence logs:
+`.development-artifacts/zoom-interaction-*`.
+
 ## Explicit presentation checkpoints (2026-11-06)
 
 **Save to feature log** at the top of View Volumes records the complete volume list,
