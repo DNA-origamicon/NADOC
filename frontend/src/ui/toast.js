@@ -19,6 +19,9 @@
  * Styling pulls from components.css (.toast / .toast--success/--warning/--error).
  */
 
+import { recordNotification } from '../settings/notification_history.js'
+import { preference } from '../settings/preferences.js'
+
 const STACK_GAP_PX = 8
 const _toasts = []  // { el, timer }
 const ATOMISTIC_LOADING_TEXT = 'Loading atomistic model…'
@@ -70,6 +73,7 @@ function _removeToast(t) {
 }
 
 function _createToast(msg, severity) {
+  recordNotification(msg, severity)
   const el = document.createElement('div')
   el.className = 'toast'
   el.setAttribute('role', severity === 'error' ? 'alert' : 'status')
@@ -135,9 +139,10 @@ function _normalizeOpts(arg2) {
  */
 export function showToast(msg, optsOrDuration) {
   const opts = _normalizeOpts(optsOrDuration)
-  const duration = opts.duration ?? 2200
+  const duration = opts.duration ?? preference('toastSeconds') * 1000
   const severity = opts.severity ?? 'info'
 
+  if (severity === 'error' && preference('persistentErrors')) return showPersistentToast(msg, opts)
   const el = _createToast(msg, severity)
   const t = { el, timer: null }
   _toasts.push(t)
@@ -162,6 +167,7 @@ export function showPersistentToast(msg, opts = {}) {
   // Find existing persistent toast (timer === null marks persistent)
   const existing = _toasts.find((t) => t.timer === null && t.el.dataset.persistent === '1')
   if (existing) {
+    recordNotification(msg, opts.severity ?? 'info')
     const span = existing.el.querySelector('.toast-message')
     if (span) span.textContent = msg
     existing.el.classList.remove('toast--success', 'toast--warning', 'toast--error')

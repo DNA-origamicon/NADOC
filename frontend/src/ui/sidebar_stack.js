@@ -4,6 +4,8 @@ import { mountDetachedControlView } from './detached_control_view.js'
 import { createSharedPanelViews, enableSharedPanelStyles } from './shared_panel_views.js'
 import { sidebarBudget, fitSidebarWidths, MIN_SIDEBAR_WIDTH, DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_WORKSPACE_WIDTH } from './sidebar_stack_layout.js'
 
+import { preference } from '../settings/preferences.js'
+
 export function initSidebarStack({ side, labels, panePrefix, defaultTab, defaultCollapsed = false,
   storage = globalThis.localStorage, storageKey, legacyKeys = [], getAvailableWidth = null,
   onChange = () => {}, titleSuffix = () => '', document = globalThis.document }) {
@@ -38,13 +40,15 @@ export function initSidebarStack({ side, labels, panePrefix, defaultTab, default
   strip.append(notice)
   let noticeTimer = null
   let detached = false
+  const preferredTab = preference(side === 'left' ? 'leftTab' : 'rightTab')
+  if (allowed(preferredTab)) defaultTab = preferredTab
   let activeTab = defaultTab
   let collapsed = defaultCollapsed
   let serial = 0
   let instances = []
   let savedInstances = [{ type: defaultTab, width: DEFAULT_SIDEBAR_WIDTH }]
   try {
-    const raw = [storageKey, ...legacyKeys].map(key => storage?.getItem(key)).find(Boolean)
+    const raw = !preference('rememberLayout') ? null : [storageKey, ...legacyKeys].map(key => storage?.getItem(key)).find(Boolean)
     const saved = raw ? (raw.startsWith('{') ? JSON.parse(raw) : { activeTab: raw }) : null
     if (saved) {
       if (allowed(saved.activeTab)) activeTab = saved.activeTab
@@ -65,7 +69,7 @@ export function initSidebarStack({ side, labels, panePrefix, defaultTab, default
     noticeTimer = setTimeout(() => { notice.hidden = true }, 5000)
   }
   function persist() {
-    try { storage?.setItem(storageKey, JSON.stringify({ activeTab, collapsed, instances: instances.map(({ type, width }) => ({ type, width })) })) } catch {}
+    try { if (!preference('rememberLayout')) return; storage?.setItem(storageKey, JSON.stringify({ activeTab, collapsed, instances: instances.map(({ type, width }) => ({ type, width })) })) } catch {}
   }
   function render() {
     const shut = collapsed || !instances.length || locked()

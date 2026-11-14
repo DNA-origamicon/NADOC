@@ -1025,8 +1025,10 @@ _SLOW_TESTS = {
 # would throw away a fast gate that costs almost nothing.
 _SLOW_PARAMS = {
     # Repeated seamless routing, extrusion edits, independent replay and undo/redo
-    # of a six-helix bundle (5.08 s). Keep the seamed parameter in the fast gate.
+    # of a six-helix bundle (5.08 s seamless; November 13 FAST: 5.04 s seamed).
+    # Preserve both full replay/undo workloads in the focused headless suite.
     "test_resize_routed_six_helix_bundle[auto-scaffold-seamless]",
+    "test_resize_routed_six_helix_bundle[auto-scaffold-seamed]",
     # Default atomistic linker minimization on the smallest existing two-helix
     # fixture (49.30s/10.75s). Keep every display variant in the fast suite.
     "test_crossover_endpoint_pose_preserves_every_unselected_atom[default-build-half_b-TT]",

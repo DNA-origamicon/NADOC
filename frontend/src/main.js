@@ -50,6 +50,9 @@ import { initTwoElectrodePreview } from './scene/namd_two_electrode_preview.js'
 import { initNamdPegCoatingPreview } from './scene/namd_peg_coating_preview.js'
 import { initNamdPegReview } from './ui/namd_peg_review.js'
 import { initSectionView } from './scene/section_view.js'
+import { initSettingsDialog } from './settings/dialog.js'
+import { initPreferenceEffects } from './settings/runtime.js'
+import { preference } from './settings/preferences.js'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
 import { createVRJoin }              from './scene/vr_join.js'
@@ -641,7 +644,7 @@ async function main() {
   // A "Show preview" toggle in each extrude popup (slice-plane ctx-menu, handled
   // inside slice_plane.js; and the overhang-extrude dialog, handled here) shows a
   // translucent preview of the DNA the extrude will add. Default ON, persisted.
-  let _extrudePreviewEnabled = localStorage.getItem('NADOC_EXTRUDE_PREVIEW') !== 'false'  // default ON
+  let _extrudePreviewEnabled = preference('preview')  // default ON
   let _ovhgGhost = null              // THREE.Mesh — overhang preview cylinder, or null
   let _refreshOverhangGhost = () => {}  // set by the overhang dialog while it is open
 
@@ -5727,6 +5730,8 @@ async function main() {
   })
 
   // ── Sidebar resize handles ───────────────────────────────────────────────────
+  initSettingsDialog({ api })
+  initPreferenceEffects({ store, controls, renderer, canvas, setPreviewEnabled: enabled => { _extrudePreviewEnabled = enabled; slicePlane.setPreviewEnabled(enabled); _refreshOverhangGhost() } })
   initSidebarResize({ getWorkspacePath: () => _workspacePath })
 
   // ── Scene inspector (debug overlay) ──────────────────────────────────────────

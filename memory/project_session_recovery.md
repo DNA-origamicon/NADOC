@@ -15,6 +15,15 @@ Reorganized October 17, 2026. Read the retained contracts here, then only the
 matching detail below. Dated results and old handoffs are not new verification
 or authorization; current user instructions and `CLAUDE.md` take precedence.
 
+## File Settings — 2026-11-13
+
+`File → Settings…` adds browser-local autosave enablement and save-delay controls,
+shared by part and assembly workspace write-back in `app/lifecycle.js`. Session
+recovery remains independent. Pending writes check autosave again before starting;
+explicit File Save remains available. Full preference scope and persistence are
+recorded in [application settings](../docs/settings.md). This does not introduce
+recovery retention/version-backup controls or alter simulation workflow.
+
 ## Close-session display lifecycle — 2026-10-08
 
 - Desktop `api.closeSession()` sends `docHeaders()` on DELETE `/design`; omitting

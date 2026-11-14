@@ -11,6 +11,7 @@
 // — only DOM + the shared `createModal`/`createButton` primitives. The pure
 // style-resolution core is `computeBackgroundStyle`.
 
+import { preference, SETTINGS_EVENT } from '../settings/preferences.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 
@@ -78,7 +79,7 @@ export function initBackgroundModal() {
 
   const state = {
     mode: 'color',
-    color: '#0d1117',
+    color: preference('background'),
     imageUrl: '',
     imageName: '',
     imageFit: 'cover',
@@ -195,6 +196,14 @@ export function initBackgroundModal() {
     applyStyle()
   })
 
+  let savedColor = preference('background')
+  window.addEventListener(SETTINGS_EVENT, () => {
+    const color = preference('background')
+    if (color === savedColor) return
+    savedColor = color
+    state.mode = 'color'; state.color = color
+    syncModal(); applyStyle()
+  })
   container && applyStyle()
 
   return { applyStyle, getState: () => state }

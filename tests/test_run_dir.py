@@ -65,6 +65,7 @@ def test_run_dir_status_creates_default_but_not_missing_preference(tmp_path, mon
 
     default = rm.md_run_dir_status()
     assert default["ok"] is True
+    assert default["free_bytes"] >= 0
     assert default["default"] is True
     assert default["path"] == str((workspace / "md_jobs").resolve())
 
@@ -72,6 +73,7 @@ def test_run_dir_status_creates_default_but_not_missing_preference(tmp_path, mon
     chosen = rm.md_run_dir_status(str(missing))
     assert chosen["ok"] is False
     assert chosen["exists"] is False
+    assert chosen["free_bytes"] is None
     assert not missing.exists()
 
 

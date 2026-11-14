@@ -1,6 +1,6 @@
 // ── Recent files ─────────────────────────────────────────────────────────────
 const LS_RECENT_KEY = 'nadoc:recent'
-const RECENT_MAX    = 2
+import { preference } from '../settings/preferences.js'
 
 /**
  * Return the recent-files list: [{ name, content, type, ts }, ...] newest first.
@@ -9,7 +9,7 @@ const RECENT_MAX    = 2
 export function getRecentFiles() {
   try {
     const raw = localStorage.getItem(LS_RECENT_KEY)
-    return raw ? JSON.parse(raw) : []
+    return raw ? JSON.parse(raw).slice(0, preference('recentLimit')) : []
   } catch { return [] }
 }
 
@@ -23,7 +23,7 @@ export function addRecentFile(name, content, type = 'nadoc') {
   try {
     let recent = getRecentFiles().filter(r => r.name !== name)
     recent.unshift({ name, content, type, ts: Date.now() })
-    recent = recent.slice(0, RECENT_MAX)
+    recent = recent.slice(0, preference('recentLimit'))
     localStorage.setItem(LS_RECENT_KEY, JSON.stringify(recent))
   } catch { /* quota exceeded — ignore */ }
 }

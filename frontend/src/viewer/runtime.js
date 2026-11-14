@@ -45,7 +45,10 @@ function _makeTrackballControls(camera, canvas, target) {
   return c
 }
 
+import { preference, readPreferences, SETTINGS_EVENT } from '../settings/preferences.js'
+
 export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, placementStore, stopNativeVR } = {}) {
+  let displayPreferences = placementStore ? readPreferences() : null
   let disposed = false
   let finishAnimation = null
   const pendingFrames = new Set()
@@ -54,7 +57,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
   function _w() { return container.clientWidth  || window.innerWidth  }
   function _h() { return container.clientHeight || window.innerHeight }
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, stencil: true })
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: displayPreferences?.antialias ?? true, alpha: true, stencil: true })
   renderer.setSize(_w(), _h())
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelRatioCap))
   renderer.setClearColor(0x000000, 0)
@@ -100,6 +103,19 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
   let _navSegments = () => new Float64Array(0)
   function setNavScaleProvider(fn) { _navSegments = fn }
 
+  function applyNavigationPreferences() {
+    if (!placementStore) return
+    const values = readPreferences()
+    displayPreferences = values
+    const trackball = _inner instanceof TrackballControls
+    _inner.rotateSpeed = (trackball ? 3 : 1) * values.rotateSpeed
+    _inner.zoomSpeed = (trackball ? 1.2 : 1) * values.zoomSpeed
+    _inner.panSpeed = (trackball ? .8 : 1) * values.panSpeed
+    _inner.zoomToCursor = values.zoomToCursor
+  }
+  applyNavigationPreferences()
+  window.addEventListener(SETTINGS_EVENT, applyNavigationPreferences)
+
   function switchOrbitMode(mode) {
     _currentOrbitMode = mode
     const savedTarget = _inner.target.clone()
@@ -111,6 +127,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
     } else {
       _inner = _makeOrbitControls(camera, canvas, savedTarget)
     }
+    applyNavigationPreferences()
   }
 
   // ── Camera capture / animation helpers ─────────────────────────────────────
@@ -184,10 +201,10 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
   const fastZoom = e => {
     if (!e.shiftKey) return
     const isTrackball = _inner instanceof TrackballControls
-    _inner.zoomSpeed = isTrackball ? 4.8 : 4.0
+    _inner.zoomSpeed = (isTrackball ? 4.8 : 4.0) * (placementStore ? preference('zoomSpeed') : 1)
     const frame = requestAnimationFrame(() => {
       pendingFrames.delete(frame)
-      _inner.zoomSpeed = isTrackball ? 1.2 : 1.0
+      _inner.zoomSpeed = (isTrackball ? 1.2 : 1.0) * (placementStore ? preference('zoomSpeed') : 1)
     })
     pendingFrames.add(frame)
   }
@@ -205,7 +222,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
     const base = (e.shiftKey && e.buttons !== 0)
       ? (isTrackball ? 3.2 : 4.0)
       : (isTrackball ? 0.8 : 1.0)
-    _inner.panSpeed = isTrackball ? base * fovPanScale(camera.fov) : base
+    _inner.panSpeed = (isTrackball ? base * fovPanScale(camera.fov) : base) * (placementStore ? preference('panSpeed') : 1)
   }
   canvas.addEventListener('pointermove', fastPan, { capture: true, passive: true })
 
@@ -262,6 +279,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
   // _viewerFrame is a global frame counter used by diagnostics and render tests.
   let renderingPaused = false
   function setRenderingPaused(paused) { renderingPaused = Boolean(paused) }
+  let lastDraw = 0
   let _viewerFrame = 0
   const trajectoryClock = attachTrajectoryRenderClock()
   window._viewerFrame = 0
@@ -279,6 +297,12 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
     if (placementGuard.blocked()) return
     if (nativeVRActive && !renderer.xr.isPresenting &&
         (!nativeVRDesktopEnabled || (canvas.ownerDocument.hidden || !canvas.ownerDocument.hasFocus()))) return
+    if (!renderer.xr.isPresenting && displayPreferences) {
+      if (displayPreferences.pauseHidden && canvas.ownerDocument.hidden) return
+      const now = performance.now()
+      if (displayPreferences.frameLimit && now - lastDraw < 1000 / displayPreferences.frameLimit) return
+      lastDraw = now
+    }
     _renderFn()
   })
 
@@ -303,6 +327,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
     detachMouseBindings()
     if (disposed) return
     disposed = true
+    window.removeEventListener(SETTINGS_EVENT, applyNavigationPreferences)
     trajectoryClock.dispose()
     placementGuard.dispose()
     renderer.setAnimationLoop(null)

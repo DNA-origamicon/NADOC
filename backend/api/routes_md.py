@@ -3441,6 +3441,10 @@ def md_run_dir_status(path: Optional[str] = None, engine: str = "namd") -> dict:
         detail = "The selected path is not a folder."
     elif not writable:
         detail = "The selected folder is not writable."
+    try:
+        free_bytes = shutil.disk_usage(target).free if is_dir else None
+    except OSError:
+        free_bytes = None
     return {
         "ok": bool(exists and is_dir and writable),
         "path": str(target.resolve()) if exists else str(target),
@@ -3448,6 +3452,7 @@ def md_run_dir_status(path: Optional[str] = None, engine: str = "namd") -> dict:
         "exists": exists,
         "is_dir": is_dir,
         "writable": writable,
+        "free_bytes": free_bytes,
         "detail": detail,
     }
 
