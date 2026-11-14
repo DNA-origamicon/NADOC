@@ -288,10 +288,17 @@ export function initRepresentationSwitcher({
     reprOptionSliders(repr)
     await simulationDisplay?.refresh?.(repr)
     if (ticket !== generation) return false
-    settledRepr = repr
+    const waits = []
     window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
-      detail: { representation: repr },
+      detail: { representation: repr, waits },
     }))
+    // Scene snapshots must include the job-owned coordinates, not the provisional
+    // native mesh (or the previous representation held while a frame loads).
+    await Promise.all(waits)
+    if (ticket !== generation) return false
+    await simulationDisplay?.refresh?.(repr)
+    if (ticket !== generation) return false
+    settledRepr = repr
   }
 
   for (const { id, repr, external, detail } of _ALL_REPRS) {

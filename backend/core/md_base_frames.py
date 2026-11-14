@@ -78,3 +78,83 @@ def measured_base_frames(raw_nm, anchor_indices, groups, aligned_anchors, rotati
             good = valid & (length > 1e-8)
             inward_out[rows[good]] = inward[good] / length[good, None]
     return centers, tangents
+
+
+def apply_measured_display_frames(ctx, positions, rotation, box_nm, *, raw_positions_ang=None):
+    """Enrich live MD rows without changing their shared backbone display affine.
+
+    Missing/degenerate rings retain the caller's coarse fallback. Read the injected
+    live frame when supplied, never a potentially stale Universe timestep.
+    """
+    anchors, groups = base_frame_layout(ctx)
+    count = min(len(positions), len(anchors))
+    if not count or not groups:
+        return
+    groups = [(rows[rows < count], rings[rows < count]) for rows, rings in groups
+              if np.any(rows < count)]
+    if not groups:
+        return
+    last = max(int(anchors[:count].max()), max(int(rings.max()) for _, rings in groups))
+    raw = (ctx["universe"].atoms[:last + 1].positions if raw_positions_ang is None
+           else raw_positions_ang[:last + 1]) / 10.0
+    aligned = np.asarray([[p["x"], p["y"], p["z"]] for p in positions[:count]])
+    inward = np.asarray([[p.get("nx", 0), p.get("ny", 0), p.get("nz", 1)]
+                         for p in positions[:count]], dtype=float)
+    centers, planes = measured_base_frames(raw, anchors[:count], groups, aligned,
+                                           rotation, box_nm, inward_out=inward)
+    for i, row in enumerate(positions[:count]):
+        if not (np.isfinite(centers[i]).all() and np.isfinite(planes[i]).all()):
+            continue
+        row.update(zip(("bx", "by", "bz"), map(float, centers[i])))
+        row.update(zip(("tx", "ty", "tz"), map(float, planes[i])))
+        row.update(zip(("nx", "ny", "nz"), map(float, inward[i])))
+        row["measured_base"] = True
+
+
+def display_row_key(row) -> str:
+    """Frontend base key (scene/base_ref.js baseKey) for one live display row.
+
+    Crossover inserts arrive as ``("__xb__", crossover_id, k)`` rows, which this
+    formats as the canonical ``__xb__:<crossover_id>:<k>`` extra-base key.
+    """
+    copy = int(row.get("copy", 0) or 0)
+    key = f"{row['helix_id']}:{row['bp_index']}:{row['direction']}"
+    return f"{key}:{copy}" if copy and row["helix_id"] != "__xb__" else key
+
+
+def measured_residue_atoms(ctx, positions, rotation, box_nm, keys, *, raw_positions_ang=None):
+    """Exact heavy atoms of the requested residues in the live display frame.
+
+    Each atom is imaged relative to its residue anchor (P, or O5' for a 5'
+    terminus), rotated by the frame's display rotation and added to the anchor's
+    displayed position: the same transform as the measured ring centres, so the
+    atoms sit on the displayed Full model. Coordinates come from the trajectory;
+    no atom is reconstructed. Returns ``[[base_key, atom_name, x, y, z], ...]`` (nm).
+    """
+    wanted = {str(k) for k in keys or ()}
+    if not wanted:
+        return []
+    anchors, _ = base_frame_layout(ctx)
+    count = min(len(positions), len(anchors))
+    rows = [(i, display_row_key(positions[i])) for i in range(count)]
+    rows = [(i, key) for i, key in rows if key in wanted]
+    if not rows:
+        return []
+    u = ctx["universe"]
+    rotation = np.eye(3) if rotation is None else np.asarray(rotation, float)
+    good = None if box_nm is None else np.asarray(box_nm, float) > 0
+    out = []
+    for i, key in rows:
+        residue = [a for a in u.atoms[int(anchors[i])].residue.atoms
+                   if not str(a.name).startswith("H") and not str(a.name)[:1].isdigit()]
+        indices = np.asarray([int(a.index) for a in residue] + [int(anchors[i])])
+        raw = (u.atoms[indices].positions if raw_positions_ang is None
+               else np.asarray(raw_positions_ang)[indices]) / 10.0
+        delta = raw[:-1] - raw[-1]
+        if good is not None and good.any():
+            box = np.asarray(box_nm, float)
+            delta[:, good] -= np.round(delta[:, good] / box[good]) * box[good]
+        anchor = np.asarray([positions[i]["x"], positions[i]["y"], positions[i]["z"]], float)
+        placed = anchor + delta @ rotation.T
+        out.extend([key, str(a.name), *map(float, p)] for a, p in zip(residue, placed))
+    return out

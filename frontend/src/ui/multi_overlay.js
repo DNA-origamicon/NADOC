@@ -3,6 +3,8 @@ export { overlayRenderOrder } from '../viewer/shared_overlay.js'
 import * as THREE from 'three'
 import { COLORING_LABELS, supportedColoringSet } from '../scene/coloring_modes.js'
 import { showToast } from './toast.js'
+import { simulationRepresentationAllowed } from '../scene/simulation_representations.js'
+import { simulationViewActive } from '../scene/vr_simulations.js'
 import { MULTI_VIEW_REPRESENTATIONS, cloneMultiScene, disposeMultiScene,
   multiViewContentBounds, multiViewDesignCentroid } from './multi_view.js'
 import './multi_overlay.css'
@@ -57,7 +59,8 @@ function setSceneOpacity(scene, opacity) {
 }
 
 export function initMultiOverlay({ document, scene, camera, renderer, canvas, controls,
-  store, setRenderFn, resetRenderFn, setRepresentation, setColoringMode, getRepresentation = () => 'full', buildAssemblyScene }) {
+  store, setRenderFn, resetRenderFn, setRepresentation, setColoringMode, getRepresentation = () => 'full', buildAssemblyScene,
+  simulationDisplay, designRenderer, getSimulationStamp = () => null }) {
   const host = document?.getElementById('right-multi-overlay-body')
   if (!host) return null
   const sharedScene = new THREE.Scene()
@@ -67,6 +70,13 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   let separation = 0
   let longestDimension = 1
   let savedCamera = null
+  let building = false, refreshAgain = false, simulationSignature = '', controlsSimulationActive = false
+  const simulationActive = () => !!(simulationDisplay?.active() || simulationViewActive(document))
+  const effectiveRepresentation = repr => simulationActive() && !simulationRepresentationAllowed(repr) ? 'full' : repr
+  const displayState = () => {
+    const state = store.getState(), positions = designRenderer?.getFemPositions?.()
+    return positions?.length ? { ...state, currentGeometry: positions } : state
+  }
   const layers = Array.from({ length: 4 }, (_, i) => ({
     representation: 'cylinders',
     coloring: 'strand',
@@ -100,6 +110,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   canvas.parentElement?.append(viewportControls)
 
   function renderControls() {
+    controlsSimulationActive = simulationActive()
     viewportControls.replaceChildren()
     viewportControls.hidden = count === 0
     for (let i = 0; i < count; i++) {
@@ -107,13 +118,15 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
       const number = document.createElement('span'); number.className = 'mv-panel-label'; number.textContent = String(i + 1)
       const select = document.createElement('select'); select.className = 'mo-representation'; select.title = `Layer ${i + 1} representation`
       for (const [value, text] of MULTI_VIEW_REPRESENTATIONS) {
-        const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option)
+        const option = document.createElement('option'); option.value = value
+        option.disabled = simulationActive() && !simulationRepresentationAllowed(value)
+        option.textContent = option.disabled ? `${text} (Full during simulation)` : text; select.append(option)
       }
       select.value = layers[i].representation
       const coloring = document.createElement('select'); coloring.className = 'mo-coloring'; coloring.title = `Layer ${i + 1} coloring`
       const fillColors = () => {
         coloring.replaceChildren()
-        const modes = [...supportedColoringSet(select.value, !!store.getState().assemblyActive)]
+        const modes = [...supportedColoringSet(effectiveRepresentation(select.value), !!store.getState().assemblyActive)]
         if (!modes.length) {
           const option = document.createElement('option'); option.value = ''; option.textContent = 'Not available'; coloring.append(option)
         }
@@ -153,12 +166,13 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     // Frame the design itself, not layer 1. Otherwise changing the first layer
     // (e.g. Hull → mrDNA Fine) changes camera distance and makes identical beads
     // appear to have different radii across overlay combinations.
-    const designBox = designGeometryBounds(store.getState())
+    const state = displayState()
+    const designBox = designGeometryBounds(state)
     const box = designBox.isEmpty() ? multiViewContentBounds(first) : designBox
     if (box.isEmpty()) return
     const size = box.getSize(new THREE.Vector3())
-    longestDimension = designLongestDimension(store.getState(), size)
-    const center = multiViewDesignCentroid(store.getState(), box.getCenter(new THREE.Vector3()))
+    longestDimension = designLongestDimension(state, size)
+    const center = multiViewDesignCentroid(state, box.getCenter(new THREE.Vector3()))
     const radius = Math.max(size.length() / 2, 1)
     controls.target.copy(center)
     camera.position.copy(center).add(new THREE.Vector3(1, 0.75, 1).normalize().multiplyScalar(radius * 2.6))
@@ -168,32 +182,39 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   }
 
   async function build(mine, refit) {
-    sharedScene.children = []
-    for (const layer of layers) { disposeMultiScene(layer.renderScene); layer.renderScene = null }
+    const replacements = []
     for (const row of viewportControls.children) row.dataset.ready = 'false'
-    for (let i = 0; i < count; i++) {
-      const assemblyMode = store.getState().assemblyActive && buildAssemblyScene
-      const rendered = assemblyMode ? await buildAssemblyScene(layers[i].representation, layers[i].coloring) : null
-      const available = assemblyMode ? true : await setRepresentation(layers[i].representation)
-      if (mine !== generation || count === 0) { disposeMultiScene(rendered); return }
-      if (available === false) {
-        layers[i].renderScene = new THREE.Scene()
-        const row = viewportControls.children[i]
-        const loading = row?.querySelector('.mo-loading')
-        if (loading) loading.textContent = 'Unavailable'
-        if (row) row.dataset.ready = 'unavailable'
-        continue
+    try {
+      for (let i = 0; i < count; i++) {
+        const assemblyMode = store.getState().assemblyActive && buildAssemblyScene
+        const representation = assemblyMode ? layers[i].representation : effectiveRepresentation(layers[i].representation)
+        const rendered = assemblyMode ? await buildAssemblyScene(representation, layers[i].coloring) : null
+        const available = assemblyMode ? true : await setRepresentation(representation)
+        if (mine !== generation || count === 0) { disposeMultiScene(rendered); return }
+        if (available === false) {
+          throw new Error(`Could not load overlay layer ${i + 1} (${representation})`)
+        }
+        if (!assemblyMode && layers[i].coloring) setColoringMode(layers[i].coloring)
+        if (!assemblyMode) await simulationDisplay?.refresh?.(representation)
+        if (mine !== generation || count === 0) return
+        const copy = rendered ?? cloneMultiScene(scene)
+        replacements.push(copy)
+        setSceneOpacity(copy, layers[i].opacity)
+        layers[i].effectiveRepresentation = representation
+        const loading = viewportControls.children[i]?.querySelector('.mo-loading')
+        if (loading) loading.textContent = 'Loading…'
       }
-      if (!assemblyMode && layers[i].coloring) setColoringMode(layers[i].coloring)
-      if (mine !== generation || count === 0) return
-      layers[i].renderScene = rendered ?? cloneMultiScene(scene)
-      setSceneOpacity(layers[i].renderScene, layers[i].opacity)
-      const loading = viewportControls.children[i]?.querySelector('.mo-loading')
-      if (loading) loading.textContent = 'Loading…'
-      viewportControls.children[i].dataset.ready = 'true'
-    }
-    if (refit) fitInitial()
-    else { longestDimension = designLongestDimension(store.getState(), multiViewContentBounds(layers[0].renderScene).getSize(new THREE.Vector3())); positionLayers() }
+      sharedScene.children = []
+      for (let i = 0; i < count; i++) {
+        disposeMultiScene(layers[i].renderScene)
+        layers[i].renderScene = replacements[i]
+        viewportControls.children[i].dataset.ready = 'true'
+      }
+      replacements.length = 0
+      for (let i = count; i < layers.length; i++) { disposeMultiScene(layers[i].renderScene); layers[i].renderScene = null }
+      if (refit) fitInitial()
+      else { longestDimension = designLongestDimension(displayState(), multiViewContentBounds(layers[0].renderScene).getSize(new THREE.Vector3())); positionLayers() }
+    } finally { for (const replacement of replacements) disposeMultiScene(replacement) }
   }
 
   function rebuild({ refit = true } = {}) {
@@ -201,21 +222,52 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     sourceDirty = true
     rebuildFlight = rebuildFlight.catch(() => {}).then(async () => {
       if (mine !== generation || !count) return
-      await build(mine, refit)
-      if (mine === generation) sourceDirty = false
+      building = true; refreshAgain = false
+      try {
+        await build(mine, refit)
+        if (mine === generation && !refreshAgain) sourceDirty = false
+      } finally {
+        building = false
+        if (refreshAgain && count) queueRefresh()
+      }
     })
     return rebuildFlight
   }
-  const unsubscribe = store.subscribe?.((next, previous) => {
-    if (!count || !['currentDesign', 'currentGeometry', 'currentHelixAxes', 'currentAssembly', 'assemblyActive'].some(key => next[key] !== previous[key])) return
-    sourceDirty = true; generation++
-    clearTimeout(refreshTimer)
+  function queueRefresh() {
+    if (!count) return
+    sourceDirty = true
+    if (building) { refreshAgain = true; return }
+    if (refreshTimer != null) return
     refreshTimer = setTimeout(() => {
       refreshTimer = null
+      if (controlsSimulationActive !== simulationActive()) renderControls()
       void rebuild({ refit: false }).catch(error => {
-        for (const loading of viewportControls.querySelectorAll('.mo-loading')) loading.textContent = error.message
+        for (const row of viewportControls.children) {
+          row.dataset.ready = 'false'
+          row.querySelector('.mo-loading').textContent = error.message
+        }
       })
-    }, 250)
+    }, 50)
+  }
+  const simulationChanged = () => {
+    if (!count) return
+    // Reapplying a representation republishes the same coordinates. Ignore it
+    // so capturing a layer cannot recursively restart the entire overlay.
+    const colors = designRenderer?.getScalarColors?.()
+    const signature = JSON.stringify([simulationActive(), getSimulationStamp(), designRenderer?.getFemPositions?.(),
+      colors instanceof Map ? [...colors] : colors])
+    if (signature === simulationSignature) return
+    simulationSignature = signature
+    queueRefresh()
+  }
+  const unsubscribeSimulation = designRenderer?.subscribeSimulation?.(simulationChanged)
+  globalThis.window?.addEventListener('nadoc:simulation-display', simulationChanged)
+  globalThis.window?.addEventListener('nadoc:md-display-state', simulationChanged)
+  document.addEventListener('change', simulationChanged)
+  const unsubscribe = store.subscribe?.((next, previous) => {
+    if (!count || !['currentDesign', 'currentGeometry', 'currentHelixAxes', 'currentAssembly', 'assemblyActive'].some(key => next[key] !== previous[key])) return
+    generation++
+    queueRefresh()
   })
 
   function renderOverlay() {
@@ -360,7 +412,10 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
       }
     }),
     dispose: () => {
-    unsubscribe?.(); clearTimeout(refreshTimer)
+    unsubscribe?.(); unsubscribeSimulation?.(); clearTimeout(refreshTimer)
+    globalThis.window?.removeEventListener('nadoc:simulation-display', simulationChanged)
+    globalThis.window?.removeEventListener('nadoc:md-display-state', simulationChanged)
+    document.removeEventListener('change', simulationChanged)
     globalThis.window?.removeEventListener('nadoc:comparison-mode', exclusiveMode)
     activate(0); viewportControls.remove()
   } }

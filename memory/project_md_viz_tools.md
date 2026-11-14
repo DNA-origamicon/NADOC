@@ -21,6 +21,45 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- Display MD measured slabs (2026-11-13): live WebSocket frames now reuse
+  `md_base_frames` for ring centroids, plane normals, and named in-plane directions,
+  including crossover inserts and O5'-anchored termini. `md_panel` preserves the
+  `measured_base` marker; missing rings retain coarse fallback. Reset the cached ring
+  layout on each load. Atomistic and Full use the same active design alignment
+  reference (generated-model P sites had introduced a small representation-dependent
+  offset). This is display-only; no design atoms or saved simulation inputs change.
+  Read-only R1 local check: 2hb_2xT, August 5 2026 18:52 MDT, final available MGHH p50
+  frame 29, all 98 centers within 9.2e-9 nm and plane normals within 7.5e-6 degrees
+  of the real atomistic WebSocket reply. Browser replay verifies all 98 rendered
+  slab centers one-to-one within 1e-5 nm and plane angles within .01 degrees.
+  Evidence/reproduction scripts: `.development-artifacts/slab-audit/`; optional
+  local app audit: `NADOC_SLAB_AUDIT=1` with `playwright.md-slab.config.js` (provide
+  a temporary SCRYWRITE_TEST_WORKSPACE and clean it up after the run).
+  Inspected `app/.../r1-base-closeup.png`; first overview retained separately because
+  its bases were too small for visual review. Browser run uses real backend-recorded
+  transport replies, not a live user session. Source file hash unchanged, temporary
+  workspace removed and port5293 bridge credentials absent after both app runs.
+  Checks: 5 measured-frame tests, 28 final WebSocket tests, 10,463 frontend tests
+  (one skipped), lint; initial `test-smart` FAST passed 20,847 (90 skipped), FULL
+  deferred because no test-dedicated session was open. The alignment-reference
+  follow-up was checked by the final focused WebSocket run and real-run audit.
+
+- Multi-overlay simulation refresh (2026-11-12): layers rebuild together on physical
+  coordinate/scalar changes and retain the previous complete scenes while loading.
+  Representation switching awaits job-owned heavy coordinates and Display MD's
+  applied frame, including atom-to-CG wire reloads. Beads and Surface are enabled
+  during simulation; Hull/Cylinders remain reference-only and temporarily use Full
+  in existing overlay layers. Surface uses exact job meshes when available and
+  the existing nucleotide-frame skinning for displays without a surface endpoint.
+  Camera/separation follow display positions without resetting the camera on frames.
+  `multi_overlay_simulation.spec.js` covers all nine supported styles, oxDNA live/
+  relaxed/trajectory, Display MD, frame changes and Off restoration using intercepted
+  simulation responses and a read-only duplex. Screenshots were inspected under
+  `.development-artifacts/multi-overlay-app/`; the source hash stayed unchanged and
+  temporary workspaces were removed. Full frontend suite: 10,462 passed, one skipped;
+  final focused checks: 90 passed. Earlier browser attempts retained separately
+  document binary-fixture and pre-navigation WebSocket-interception corrections.
+
 - P1 RunPod periodic-image correction (2026-10-12): shared reassembly includes
   the intact, sequentially unwrapped assembly as a scored candidate and rounds
   strand-median lattice indices before scaling. Previously the circular-centroid

@@ -179,6 +179,35 @@ describe('live solvent side-channel', () => {
     return { c, ws }
   }
 
+  it('awaits authoritative CG coordinates when switching Display MD from atoms to oxDNA or surface', async () => {
+    const applyFemPositions = vi.fn()
+    const { c } = connected({ designRenderer: { setDesignVisible: vi.fn(), applyFemPositions } })
+    setSceneRepr('ballstick')
+    c.displayLatest('/tmp/run.json', { forceReload: true, live: true, jobId: 'j1' })
+    vi.advanceTimersByTime(220)
+    const ws = sockets.at(-1); ws.open()
+    ws.onmessage({ data: JSON.stringify({ type: 'ready', n_frames: 2, n_p_atoms: 1 }) })
+    ws.onmessage({ data: JSON.stringify({ type: 'frame', frame_idx: 1, atoms: [] }) })
+    let done = false
+    const waits = []
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', { detail: { representation: 'oxdna', waits } }))
+    expect(waits.length).toBeGreaterThan(0)
+    const ready = Promise.all(waits).then(() => { done = true })
+    await vi.advanceTimersByTimeAsync(220)
+    expect(done).toBe(false)
+    const fresh = sockets.at(-1); fresh.open()
+    fresh.onmessage({ data: JSON.stringify({ type: 'ready', n_frames: 2, n_p_atoms: 1 }) })
+    expect(done).toBe(false)
+    fresh.onmessage({ data: JSON.stringify({ type: 'frame', frame_idx: 1, positions: [{ helix_id: 'h', bp_index: 0, direction: 'FORWARD', x: 11, y: 12, z: 13 }] }) })
+    await ready
+    expect(applyFemPositions).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ backbone_position: [11,12,13] })]), 1)
+    const surfaceWaits = []
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', { detail: { representation: 'surface', waits: surfaceWaits } }))
+    await vi.advanceTimersByTimeAsync(20)
+    await Promise.all(surfaceWaits)
+    c.stopAndRestore()
+  })
+
   it('does not send the open design when a job id resolves the frozen snapshot', () => {
     store.setState({ currentDesign: { id: 'large', loadouts: [{ design_snapshot_gz_b64: 'x'.repeat(1024) }] } })
     const { ws } = connected()
@@ -559,13 +588,13 @@ describe('rep-switch progress signal', () => {
       type: 'frame', frame_idx: 17, n_frames: 20,
       positions: [{
         helix_id: 'h0', bp_index: 3, direction: 'FORWARD',
-        x: 1, y: 2, z: 3, bx: 4, by: 5, bz: 6,
+        x: 1, y: 2, z: 3, bx: 4, by: 5, bz: 6, measured_base: true,
         nx: 0, ny: 1, nz: 0, tx: 1, ty: 0, tz: 0,
       }],
     })
     expect(deps.designRenderer.applyFemPositions).toHaveBeenCalledWith([
       expect.objectContaining({
-        backbone_position: [1, 2, 3], base_position: [4, 5, 6],
+        backbone_position: [1, 2, 3], base_position: [4, 5, 6], measured_base: true,
         nx: 0, ny: 1, nz: 0, tx: 1, ty: 0, tz: 0,
       }),
     ], 1)

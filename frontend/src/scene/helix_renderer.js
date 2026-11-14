@@ -1986,16 +1986,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   function resetAllToDefault(dimmed = false) {
     const dimHex = C.dim
     for (const entry of backboneEntries) {
-      _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
+      _writeEntryColor(entry, dimmed ? dimHex : entry.defaultColor)
       _setBeadScale(entry, _isNucHidden(entry.nuc) ? 0 : _beadScale)
     }
     for (const entry of coneEntries) {
-      _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
+      _writeEntryColor(entry, dimmed ? dimHex : entry.defaultColor)
       // Cross-helix cones stay hidden (rendered as arc lines instead).
       if (!entry.isCrossHelix) _setConeXZScale(entry, _isNucHidden(entry.fromNuc) ? 0 : CONE_RADIUS)
     }
     for (const entry of slabEntries) {
-      _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
+      _writeEntryColor(entry, dimmed ? dimHex : entry.defaultColor)
     }
     const axisOpacity = dimmed ? 0.15 : 1.0
     for (const arrow of axisArrows) {
@@ -2022,7 +2022,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   function highlightBackbone(nuc, color, scale = 1) {
     const entry = _nucToEntry.get(nuc)
     if (!entry) return
-    _setInstColor(entry, color)
+    _writeEntryColor(entry, color)
     _setBeadScale(entry, scale)
   }
 
@@ -2039,10 +2039,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     clearOverlay()
     resetAllToDefault(false)
     for (const entry of backboneEntries) {
-      if (entry.nuc.direction === 'REVERSE') _setInstColor(entry, C.dim)
+      if (entry.nuc.direction === 'REVERSE') _writeEntryColor(entry, C.dim)
     }
     for (const entry of slabEntries) {
-      if (entry.nuc.direction === 'REVERSE') _setInstColor(entry, C.dim)
+      if (entry.nuc.direction === 'REVERSE') _writeEntryColor(entry, C.dim)
     }
   }
 
@@ -2078,7 +2078,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     if (!bp0) return
     highlightBackbone(bp0, C.highlight_red, 2.0)
     const se = _slabByNuc.get(bp0)
-    if (se) _setInstColor(se, C.highlight_yellow)
+    if (se) _writeEntryColor(se, C.highlight_yellow)
     const spike = new THREE.ArrowHelper(
       new THREE.Vector3(...bp0.base_normal),
       new THREE.Vector3(...bp0.backbone_position),
@@ -2133,10 +2133,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     clearOverlay()
     resetAllToDefault(true)
     for (const entry of backboneEntries) {
-      if (entry.nuc.strand_type === 'scaffold') _setInstColor(entry, entry.defaultColor)
+      if (entry.nuc.strand_type === 'scaffold') _writeEntryColor(entry, entry.defaultColor)
     }
     for (const entry of slabEntries) {
-      if (entry.nuc.strand_type === 'scaffold') _setInstColor(entry, entry.defaultColor)
+      if (entry.nuc.strand_type === 'scaffold') _writeEntryColor(entry, entry.defaultColor)
     }
     for (const entry of backboneEntries) {
       if (entry.nuc.strand_type === 'scaffold' && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) {
@@ -2231,11 +2231,55 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
   _slabConnectorsReady = true
   _refreshSlabConnectors()
-  // Per-instance colour captured before a scalar (RMSF) recolour overlay (beads +
-  // cones + slabs), so it can be restored when the overlay is cleared.  null = no
-  // overlay active.
-  let _savedScalarColors = null
+  // ── False-colour overlay layers (flex/RMSF/deviation maps, staple Tm, length) ──
+  // Keyed per instance ("mesh-uuid:instance-id"): `base` is the colour the instance
+  // would show without any overlay (its strand/group/mode colour, or a selection
+  // highlight), `layers` the overlay colours in paint order — the last one is
+  // visible.  Every non-overlay colour write (selection highlight + restore,
+  // setStrandColor, applyColoring) goes through _writeEntryColor, which updates
+  // `base` instead of the visible colour while an overlay owns the instance, so
+  // selecting a strand under a flexibility map neither drops the map during the
+  // selection nor reverts to native colour after it.
+  const _falseColors = new Map()
   const _scalarColorScratch = new THREE.Color()
+  function _paintFalse(layer, mesh, id, hex) {
+    if (!mesh || id == null) return
+    const tok = `${mesh.uuid}:${id}`
+    let rec = _falseColors.get(tok)
+    if (!rec) {
+      let base = null
+      if (mesh.instanceColor) {
+        mesh.getColorAt(id, _scalarColorScratch)
+        base = _scalarColorScratch.getHex()
+      }
+      rec = { mesh, id, base, layers: new Map() }
+      _falseColors.set(tok, rec)
+    }
+    rec.layers.delete(layer)
+    rec.layers.set(layer, hex)
+    mesh.setColorAt(id, _tColor.setHex(hex))
+  }
+  function _clearFalseLayer(layer) {
+    let touched = false
+    for (const [tok, rec] of _falseColors) {
+      if (!rec.layers.delete(layer)) continue
+      touched = true
+      let top = rec.base
+      for (const hex of rec.layers.values()) top = hex
+      if (top != null) rec.mesh.setColorAt(rec.id, _tColor.setHex(top))
+      if (!rec.layers.size) _falseColors.delete(tok)
+    }
+    return touched
+  }
+  function _writeEntryColor(entry, hex) {
+    const rec = _falseColors.get(`${entry.instMesh.uuid}:${entry.id}`)
+    if (!rec) { _setInstColor(entry, hex); return }
+    rec.base = hex
+    if (entry.connectorMesh && entry.connectorId != null) {
+      const crec = _falseColors.get(`${entry.connectorMesh.uuid}:${entry.connectorId}`)
+      if (crec) crec.base = hex
+    }
+  }
   function _flagScalarColorMeshes() {
     for (const m of [iSpheres, iCubes, iCones, iSlabs, iSlabConnectors]) {
       if (m && m.instanceColor) m.instanceColor.needsUpdate = true
@@ -3340,7 +3384,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     overhangCylData: _overhangCylData,
 
     // Instance update helpers — used by selection_manager.js and design_renderer.js
-    setEntryColor:  _setInstColor,
+    setEntryColor:  _writeEntryColor,
     setBeadScale:   _setBeadScale,
     setConeXZScale: _setConeXZScale,
 
@@ -3592,7 +3636,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         data.mod.push(nuc.modification)
         const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
         entry.defaultColor = color
-        _setInstColor(entry, color)
+        _writeEntryColor(entry, color)
       }
       // Reuse the positions-only renderer path so beads, cones, slabs and slab
       // connectors all consume the same authoritative coordinates atomically.
@@ -3605,26 +3649,26 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // Re-derive cone color from the (now-updated) fromNuc strand
         const color = nucColor(fn, stapleColorMap, customColors, loopSet)
         cone.defaultColor = color
-        _setInstColor(cone, color)
+        _writeEntryColor(cone, color)
       }
     },
 
     setStrandColor(strandId, hexColor) {
       for (const entry of backboneEntries) {
         if (entry.nuc.strand_id === strandId) {
-          _setInstColor(entry, hexColor)
+          _writeEntryColor(entry, hexColor)
           entry.defaultColor = hexColor
         }
       }
       for (const entry of slabEntries) {
         if (entry.nuc.strand_id === strandId) {
-          _setInstColor(entry, hexColor)
+          _writeEntryColor(entry, hexColor)
           entry.defaultColor = hexColor
         }
       }
       for (const entry of coneEntries) {
         if (entry.strandId === strandId) {
-          _setInstColor(entry, hexColor)
+          _writeEntryColor(entry, hexColor)
           entry.defaultColor = hexColor
         }
       }
@@ -3742,18 +3786,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const entry of backboneEntries) {
         const c = perNuc(entry.nuc) ?? strandBeadColor(entry.nuc)
         entry.defaultColor = c
-        _setInstColor(entry, c)
+        _writeEntryColor(entry, c)
       }
       for (const entry of slabEntries) {
         const c = perNuc(entry.nuc) ?? strandSlabColor2(entry.nuc)
         entry.defaultColor = c
-        _setInstColor(entry, c)
+        _writeEntryColor(entry, c)
       }
       for (const entry of coneEntries) {
         const fn = entry.fromNuc
         const c = (fn ? perNuc(fn) : null) ?? strandArrowCol2(fn, entry.strandId)
         entry.defaultColor = c
-        _setInstColor(entry, c)
+        _writeEntryColor(entry, c)
       }
 
       // Cylinders: skip 'base' (cylinders span multiple bps).  In 'cluster'
@@ -3974,30 +4018,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       if (strandId === null) {
         // Restore defaults
         for (const entry of backboneEntries) {
-          if (entry.nuc.strand_type !== 'scaffold') _setInstColor(entry, entry.defaultColor)
+          if (entry.nuc.strand_type !== 'scaffold') _writeEntryColor(entry, entry.defaultColor)
         }
         for (const entry of coneEntries) {
           if (strandTypeById.get(entry.strandId) !== 'scaffold') {
-            _setInstColor(entry, entry.defaultColor)
+            _writeEntryColor(entry, entry.defaultColor)
           }
         }
         for (const entry of slabEntries) {
-          if (entry.nuc.strand_type !== 'scaffold') _setInstColor(entry, entry.defaultColor)
+          if (entry.nuc.strand_type !== 'scaffold') _writeEntryColor(entry, entry.defaultColor)
         }
       } else {
         const DIM = C.dim
         for (const entry of backboneEntries) {
           if (entry.nuc.strand_type === 'scaffold') continue
-          _setInstColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
+          _writeEntryColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
         }
         for (const entry of coneEntries) {
           const isScaff = strandTypeById.get(entry.strandId) === 'scaffold'
           if (isScaff) continue
-          _setInstColor(entry, entry.strandId === strandId ? entry.defaultColor : DIM)
+          _writeEntryColor(entry, entry.strandId === strandId ? entry.defaultColor : DIM)
         }
         for (const entry of slabEntries) {
           if (entry.nuc.strand_type === 'scaffold') continue
-          _setInstColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
+          _writeEntryColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
         }
       }
     },
@@ -4321,15 +4365,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const get = colorByKey instanceof Map
         ? (k) => colorByKey.get(k)
         : (k) => colorByKey[k]
-      if (!_savedScalarColors) _savedScalarColors = new Map()
-      const recolor = (mesh, id, hex) => {
-        const tok = `${mesh.uuid}:${id}`
-        if (!_savedScalarColors.has(tok) && mesh.instanceColor) {
-          mesh.getColorAt(id, _scalarColorScratch)
-          _savedScalarColors.set(tok, { mesh, id, hex: _scalarColorScratch.getHex() })
-        }
-        mesh.setColorAt(id, _tColor.setHex(hex))
-      }
+      const recolor = (mesh, id, hex) => _paintFalse('scalar', mesh, id, hex)
       // colorByKey is keyed "helix:bp:dir:copy" so each loop copy recolours its own
       // bead/slab/cone (copy defaults 0 for plain nucleotides).
       for (const [key, entry] of _copyKeyToEntry) {
@@ -4356,12 +4392,23 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /** Restore the colours captured before the scalar-colour overlay. */
     clearScalarColors() {
-      if (!_savedScalarColors) return
-      for (const { mesh, id, hex } of _savedScalarColors.values()) {
-        mesh.setColorAt(id, _tColor.setHex(hex))
+      if (_clearFalseLayer('scalar')) _flagScalarColorMeshes()
+    },
+
+    /** Paint one entry (bead/cone/slab + its connector) on a named false-colour
+     *  layer.  Selection and colour-mode writes land underneath it. */
+    paintFalseColor(layer, entry, hex) {
+      if (!entry?.instMesh || hex == null) return
+      _paintFalse(layer, entry.instMesh, entry.id, hex)
+      if (entry.connectorMesh && entry.connectorId != null) {
+        _paintFalse(layer, entry.connectorMesh, entry.connectorId, hex)
       }
       _flagScalarColorMeshes()
-      _savedScalarColors = null
+    },
+
+    /** Remove a false-colour layer, revealing the next layer or the base colour. */
+    clearFalseColors(layer) {
+      if (_clearFalseLayer(layer)) _flagScalarColorMeshes()
     },
 
     /**

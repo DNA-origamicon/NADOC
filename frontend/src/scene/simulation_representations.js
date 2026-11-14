@@ -1,4 +1,5 @@
 import { createSimulationAtomistic } from './simulation_atomistic.js'
+import { createSimulationSurface } from './simulation_surface.js'
 import * as THREE from 'three'
 import { initMdOverlay } from './md_overlay.js'
 import { initMrdnaConnections } from './mrdna_connections.js'
@@ -6,7 +7,7 @@ import { initOxdnaInputOverlay } from './oxdna_input_overlay.js'
 import { buildMrdnaInputPreview } from '../ui/mrdna_input_preview.js'
 import { activeDesignGeometry, buildOxdnaInputPreview, applySimulationToOxdnaFrames } from '../ui/oxdna_input_preview.js'
 
-export const SIMULATION_REPRESENTATIONS = Object.freeze(['full', 'vdw', 'ballstick', 'stick', 'oxdna', 'mrdna-coarse', 'mrdna-fine'])
+export const SIMULATION_REPRESENTATIONS = Object.freeze(['full', 'beads', 'surface', 'surface-detail', 'vdw', 'ballstick', 'stick', 'oxdna', 'mrdna-coarse', 'mrdna-fine'])
 export const simulationRepresentationAllowed = repr => SIMULATION_REPRESENTATIONS.includes(repr)
 const comparison = repr => repr === 'oxdna' || repr.startsWith('mrdna-')
 const key = n => `${n.helix_id}:${n.bp_index}:${n.direction}:${n.copy ?? 0}`
@@ -25,9 +26,11 @@ export function simulationGeometry(geometry, updates) {
   })
 }
 
-export function createSimulationRepresentations({ scene, store, designRenderer, setCGVisible, getRepresentation, prepareSource = async () => {}, clearPreview = () => {}, atomisticRenderer, heavyOwner = () => false, onError = console.error, restoreRepresentation = () => {}, restoreAtoms = () => {} }) {
+export function createSimulationRepresentations({ scene, store, designRenderer, setCGVisible, getRepresentation, prepareSource = async () => {}, clearPreview = () => {}, atomisticRenderer, surfaceRenderer, getSurfaceData = () => null, heavyOwner = () => false, onError = console.error, restoreRepresentation = () => {}, restoreAtoms = () => {} }) {
   const beads = initMdOverlay(scene), connections = initMrdnaConnections(scene), oxdna = initOxdnaInputOverlay(scene)
   const atoms = atomisticRenderer && createSimulationAtomistic({ renderer: atomisticRenderer, getDesign: () => designRenderer.getSimulationDesign?.() ?? store.getState().currentDesign, setCGVisible })
+  const surface = surfaceRenderer && createSimulationSurface({ renderer: surfaceRenderer, getSurfaceData,
+    getGeometry: () => designRenderer.getSimulationGeometry?.() ?? store.getState().currentGeometry, setCGVisible })
   let queued = false, representation = null, atomic = false, disposed = false
   const active = () => designRenderer.hasFemPositions?.() ?? !!designRenderer.getFemPositions()?.length
   const clear = () => { beads.update([]); connections.clear(); oxdna.clear(); representation = null }
@@ -67,12 +70,16 @@ export function createSimulationRepresentations({ scene, store, designRenderer, 
   }
   async function refresh(repr = getRepresentation()) {
     if (!active()) {
-      const restore = representation != null; clear(); atoms?.cancel()
+      const restore = representation != null; clear(); atoms?.cancel(); surface?.clear()
       if (atomic) { atomic = false; await restoreAtoms() }
       if (restore) await restoreRepresentation()
       return
     }
-    if (["vdw","ballstick","stick"].includes(repr) && active() && !heavyOwner()) { atomic = true; await atoms?.apply(designRenderer.getFemPositions(), designRenderer.getScalarColors()) }
+    if (repr === 'surface' && !heavyOwner('surface')) {
+      atoms?.cancel(); if (representation) clear()
+      surface?.apply(designRenderer.getFemPositions(), designRenderer.getScalarColors(), designRenderer.getBackboneEntries?.())
+    }
+    else if (["vdw","ballstick","stick"].includes(repr) && active() && !heavyOwner('atomistic')) { atomic = true; await atoms?.apply(designRenderer.getFemPositions(), designRenderer.getScalarColors()) }
     else { atoms?.cancel(); apply(repr) }
   }
   const unsubscribe = designRenderer.subscribeSimulation?.(() => {

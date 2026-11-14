@@ -8,7 +8,9 @@ it('projects only matched Physical positions without mutating authored geometry'
   const original = JSON.stringify(geometry)
   expect(simulationGeometry(geometry,positions)[2].axis_position).toEqual([10,20,2])
   expect(JSON.stringify(geometry)).toBe(original)
-  expect(simulationRepresentationAllowed('surface')).toBe(false)
+  expect(simulationRepresentationAllowed('surface')).toBe(true)
+  expect(simulationRepresentationAllowed('beads')).toBe(true)
+  expect(simulationRepresentationAllowed('cylinders')).toBe(false)
   expect(simulationRepresentationAllowed('mrdna-fine')).toBe(true)
 })
 it('renders both mrDNA resolutions at simulated positions, keeps scalar colours and follows frame updates', async () => {

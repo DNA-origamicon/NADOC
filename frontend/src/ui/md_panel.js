@@ -27,6 +27,7 @@
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { initFrameSteppers } from './frame_steppers.js'
+import { scheduleMdRepresentationFrame } from './md_representation_frame.js'
 import {
   isMdAtomFrameBin,
   makeMdAtomFrameTopology,
@@ -44,6 +45,7 @@ import {
   toBondPairs,
 } from './md_display_state.js'
 import { webSocketUrl } from '../shared/websocket_url.js'
+import { mdInsetAtoms } from '../scene/md_inset_atoms.js'
 
 const _WS_URL  = webSocketUrl('/ws/md-run')
 const _BASE_FPS = 10   // target fps at 1× speed
@@ -209,6 +211,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   let _latestOnceOnReady = false
   let _autoDisplayActive = false
   let _displayVisible = true
+  let _insetFrameIdx = null   // Full frame whose inset atoms are published, if any
   let _lastFrameMsg = null
   let _sceneRepr = _activeSceneRepresentation()
   let _displayedSceneRepr = _sceneRepr
@@ -458,6 +461,13 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   // stack N concurrent server builds — coalesce them into a single open so only
   // the latest survives.  The backend cache (atomistic_cache.py) is the real
   // safety net; this just stops us asking for redundant work.
+  /** Ask the open Display-MD socket for exact atoms of the zoom insets' residues. */
+  function _sendInsetResidues(keys = mdInsetAtoms.residueKeys()) {
+    if (_ws?.readyState !== WebSocket.OPEN) return
+    _ws.send(JSON.stringify({ action: 'set_inset_residues', keys }))
+  }
+  mdInsetAtoms.onRequest(keys => _sendInsetResidues(keys))
+
   function _openWebSocket() {
     _emitMdProcess('socket-scheduled', { configPath: _configPath, mode: _repr }, _jobId)
     if (_reopenTimer) clearTimeout(_reopenTimer)
@@ -585,6 +595,8 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     _displayedSceneRepr = _sceneRepr
     _setSwitchBusy(false, null)   // a stop mid-switch must not strand the toast
     designRenderer?.applyFemPositions(null)   // always drop MD-displaced CG positions
+    _insetFrameIdx = null
+    mdInsetAtoms.clear()
     const { showNativeCg, rebuildHeavy } = restorePlan(_sceneRepr)
     if (showNativeCg) {
       atomisticRenderer?.setMode?.('off')
@@ -593,6 +605,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _setShowNadoc(false)               // hide the CG design under the heavy rep
       if (rebuildHeavy) onRestoreDesignHeavy?.()
     }
+    _emitMdDisplayEvent({ state: 'off', message: 'MD display stopped' }, _jobId)
   }
 
   showNadocChk?.addEventListener('change', () => {
@@ -617,6 +630,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
 
     if (msg.type === 'ready') {
       _emitMdProcess('load-ready', { nFrames: msg.n_frames, nPositions: msg.n_p_atoms }, eventJobId)
+      _sendInsetResidues()
       _loadInFlight = false
       _atomIdent = msg.atom_ident ?? null
       _atomBonds = toBondPairs(msg.atom_bonds)
@@ -764,6 +778,13 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       }
     }
 
+    if (msg.type === 'inset_atoms') {
+      // Reply to set_inset_residues for the frame already on screen.
+      if (_lastFrameMsg?.frame_idx === msg.frame_idx) _lastFrameMsg.inset_atoms = msg.atoms
+      if (_repr === 'nadoc' && _insetFrameIdx != null && _insetFrameIdx === msg.frame_idx) mdInsetAtoms.publish(msg.atoms)
+      return
+    }
+
     if (msg.type === 'error') {
       _loadInFlight = false
       _setSwitchBusy(false, null)   // never leave the switch toast up on a dead load
@@ -778,6 +799,9 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     _lastAtomisticGeometryPath = null
     if (_repr === 'nadoc') {
       if (!msg.positions) return
+      // Exact atoms for atomistic zoom insets ride with the Full frame they belong to.
+      _insetFrameIdx = msg.frame_idx
+      mdInsetAtoms.publish(msg.inset_atoms)
       designRenderer?.applyFemPositions(
         msg.positions.map(p => ({
           helix_id:          p.helix_id,
@@ -786,6 +810,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
           copy:              p.copy ?? 0,   // loop-insertion copy → right bead
           backbone_position: [p.x, p.y, p.z],
           base_position: p.bx === undefined ? undefined : [p.bx, p.by, p.bz],
+          measured_base: p.measured_base === true,
           nx: p.nx, ny: p.ny, nz: p.nz,
           tx: p.tx, ty: p.ty, tz: p.tz,
         })),
@@ -793,6 +818,9 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       )
     } else if (_repr === 'ballstick') {
       if (!msg.atoms) return
+      // The main atomistic renderer already carries every exact atom.
+      _insetFrameIdx = null
+      mdInsetAtoms.clear()
       atomisticRenderer?.setMode(_sceneRepr === 'vdw' ? 'vdw' : (_sceneRepr === 'stick' ? 'stick' : 'ballstick'))
       const frameData = msg.atoms?.columnar ? {
         ...msg.atoms,
@@ -1074,7 +1102,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     const nextMode = _targetStreamMode()
     const modeChanged = _repr !== nextMode
     _repr = nextMode
-    if (_sceneUsesNativeCg() || _sceneUsesAtomistic()) {
+    if (_sceneUsesNativeCg() || _sceneUsesAtomistic() || ['surface', 'oxdna', 'mrdna-coarse', 'mrdna-fine'].includes(_sceneRepr)) {
       // The representation switcher has already enabled CG and disabled atoms in
       // this task. Undo that provisional swap until the authoritative coarse frame
       // arrives. A phosphorus-only atom->CG conversion omits base centers, slab
@@ -1106,7 +1134,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       } else if (!modeChanged) {
         _displayedSceneRepr = _sceneRepr
       }
-      requestAnimationFrame(() => {
+      const apply = () => {
         if (modeChanged && _configPath) {
           // While atomistic remains the rendered fallback, keep its frame marked
           // active so the VR bridge continues publishing the exact visible atoms
@@ -1121,7 +1149,9 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         }
         _reapplyCachedFrame()
         if (_ws?.readyState === WebSocket.OPEN) _sendPoll()
-      })
+      }
+      if (evt.detail?.waits && (_configPath || _lastFrameMsg)) evt.detail.waits.push(scheduleMdRepresentationFrame(apply, _jobId))
+      else requestAnimationFrame(apply)
     }
   })
 

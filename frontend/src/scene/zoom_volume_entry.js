@@ -1,7 +1,8 @@
 import { ANNOTATION_FONT_SIZES, ANNOTATION_FONTS } from './annotation_model.js'
-import { zoomBaseEntries, buildZoomBaseExtras, zoomBackbonePairs } from './zoom_volume_bases.js'
+import { zoomBaseEntries, buildZoomBaseExtras, zoomBackbonePairs, completeZoomJunctions } from './zoom_volume_bases.js'
 import { copyZoomBox, zoomBoxBounds, entriesInZoomBox } from './zoom_volume_box.js'
-import { createZoomLayerMotion, zoomMotionFrame, zoomLiveAtoms } from './zoom_volume_motion.js'
+import { createZoomLayerMotion, zoomMotionFrame, zoomLiveAtoms, zoomExactAtoms } from './zoom_volume_motion.js'
+import { mdInsetAtoms } from './md_inset_atoms.js'
 import './zoom_volume.css'
 import * as THREE from 'three'
 import { matchTargetEntries, describeTarget } from './annotation_targets.js'
@@ -186,7 +187,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     }
     return false
   }
-  $('representation').title = 'Trajectory playback uses live nucleotide poses. For exact atom coordinates, use an atomistic main viewport; otherwise inset atoms follow rigid nucleotide poses. Surfaces use playback skinning. Reference-axis cylinders switch to Full during playback.'
+  $('representation').title = 'Atomistic insets use exact available MD atoms, otherwise live nucleotide poses. Complete selected inserts include their attachment bases. Surfaces use playback skinning. Reference-axis cylinders switch to Full during playback.'
   syncPlaybackRepresentation()
   const unsubscribeMotion = designRenderer.subscribeSimulation?.(() => {
     motionRevision++
@@ -215,8 +216,16 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     loading = true
     loadingOverlay.hidden = false; host.setAttribute('aria-busy', 'true')
   }
+  // Atomistic insets ask Display MD for their residues' exact atoms.
+  const insetOwner = Symbol(id)
+  function registerInsetResidues() {
+    const atomistic = ['ballstick', 'vdw', 'stick'].includes($('representation').value)
+    mdInsetAtoms.setResidues(insetOwner, atomistic && !mode
+      ? motionLayers.flatMap(layer => layer.geometry.map(n => baseKey(n, n.copy_k ?? 0))).filter(Boolean) : null)
+  }
   function clear() {
     motionLayers = []; motionConnections = []; motionExtraEntries = []
+    mdInsetAtoms.setResidues(insetOwner, null)
     loading = false; hasFrozenImage = false; frozen.hidden = true; loadingOverlay.hidden = true
     host.setAttribute('aria-busy', 'false'); displayedBounds.makeEmpty()
     abort.abort(); revision++; ready = false; targets = []; volume = null; bounds.makeEmpty()
@@ -275,7 +284,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
       await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)))
       if (disposed || current !== revision) return
       const state = store.getState()
-      let count = 0, externalCount = 0
+      let count = 0, externalCount = 0, attachmentCount = 0
       const selectedBySource = new Map()
       async function buildDna(root, design, entries, instanceId, id, opacity, sourceEntries = entries) {
         if (!entries.length) return
@@ -309,7 +318,9 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
         const design = target.instanceId ? assemblyRenderer.getInstanceDesign(target.instanceId) : state.currentDesign
         if (!design) continue
         const entries = target.instanceId ? zoomBaseEntries(design, data?.entries, data?.nucleotides) : zoomBaseEntries(design, designRenderer.getBackboneEntries(), state.currentGeometry ?? [], designRenderer, resolveBasePosition)
-        const matched = volume ? entriesInZoomBox(entries, volume, data?.matrixWorld) : target.refs ? matchTargetEntries(target.refs, design, entries) : entries
+        const selectedEntries = volume ? entriesInZoomBox(entries, volume, data?.matrixWorld) : target.refs ? matchTargetEntries(target.refs, design, entries) : entries
+        const matched = volume ? selectedEntries : completeZoomJunctions(selectedEntries, entries)
+        attachmentCount += matched.length - selectedEntries.length
         const sourceId = target.instanceId ?? 'design'
         if (!selectedBySource.has(sourceId)) selectedBySource.set(sourceId, { keys: new Set(), refs: [], whole: false })
         const selected = selectedBySource.get(sourceId)
@@ -390,7 +401,8 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
       else bounds.expandByScalar(1.5)
       renderer ??= getInsetRenderer()
       ready = true
-      $('status').textContent = `${volume ? 'Submodel box' : targets[0]?.instanceId ? 'Assembly selection' : describeTarget(targets[0].refs, state.currentDesign)} · ${count} bases${externalCount ? ` · ${externalCount} attached objects` : ''}`
+      registerInsetResidues()
+      $('status').textContent = `${volume ? 'Submodel box' : targets[0]?.instanceId ? 'Assembly selection' : describeTarget(targets[0].refs, state.currentDesign)} · ${count} bases${attachmentCount ? ` · ${attachmentCount} attachment bases included` : ''}${externalCount ? ` · ${externalCount} attached objects` : ''}`
     } catch (error) { if (current === revision && !disposed) { $('status').textContent = `Zoom Volume failed: ${error.message}`; ready = false } }
     finally {
       // Superseded requests must not hide the spinner for the current build.
@@ -422,20 +434,28 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     zoomButtons[0].disabled = zoomStep === 8
     zoomButtons[1].disabled = zoomStep === -8
     if (loading || !ready) { svg.style.display = 'none'; return }
-    const currentAtomVersion = getAtomisticRenderer?.()?.positionVersion?.()
+    const mainAtoms = getAtomisticRenderer?.()
+    const currentAtomVersion = `${mainAtoms?.getMode?.()}|${mainAtoms?.positionVersion?.()}|${mdInsetAtoms.version()}`
     if ((motionLayers.length || motionExtraEntries.length) && (appliedMotionRevision !== motionRevision || currentAtomVersion !== atomVersion)) {
       const updates = designRenderer.getFemPositions?.()
       const live = [...designRenderer.getBackboneEntries(), ...motionExtraEntries.map(e => ({ ...e,
         pos: designRenderer.xoverResidueInfo?.(e.zoomExtra.target)?.centroid ?? e.pos }))]
-      const atoms = updates?.length ? zoomLiveAtoms(getAtomisticRenderer?.()) : null
+      // Atomistic MD has no coarse positions. Its visible atom renderer is still
+      // authoritative; visitAtoms excludes a renderer switched off for Full MD.
+      const atoms = zoomExactAtoms(mainAtoms, mdInsetAtoms.atoms())
       if (!volume) bounds.copy(externalBounds)
       for (const layer of motionLayers) {
         const positions = zoomMotionFrame(layer.geometry, updates, live)
-        layer.motion.apply(positions, atoms, !!updates?.length)
-        if (!volume && !layer.context) for (const n of positions) bounds.expandByPoint(new THREE.Vector3(...n.backbone_position))
+        const atomBounds = layer.motion.apply(positions, atoms, !!updates?.length)
+        if (!volume && !layer.context) {
+          if (!atomBounds.isEmpty()) bounds.union(atomBounds)
+          else for (const n of positions) bounds.expandByPoint(new THREE.Vector3(...n.backbone_position))
+        }
       }
       if (!volume) {
-        for (const e of live) if (e.zoomExtra && !e.context) bounds.expandByPoint(e.pos)
+        if (!['ballstick', 'vdw', 'stick'].includes($('representation').value)) {
+          for (const e of live) if (e.zoomExtra && !e.context) bounds.expandByPoint(e.pos)
+        }
         bounds.expandByScalar(1.5)
       }
       for (const connections of motionConnections) connections.update?.(live, updates)

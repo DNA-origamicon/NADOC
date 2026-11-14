@@ -42,6 +42,8 @@ _MD_SEEK_DIAG = os.environ.get("NADOC_MD_SEEK_QUIET", "") not in ("1", "true", "
 # this only drops redundant, pathologically-slow work.  Small (validated) systems
 # keep the transformation unchanged.
 _UNWRAP_MAX_ATOMS = 200_000
+# Zoom-volume insets are local views; bound the per-frame exact-atom request.
+_MAX_INSET_RESIDUES = 2000
 
 # ── Parsed-Universe cache ─────────────────────────────────────────────────────
 # A solvated origami PSF is 100–200 MB and MDAnalysis parses it in ~8 s (pure-Python,
@@ -451,6 +453,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # every _seek_sync; `solvent_ctx` is topology and is built once.
         "solvent_opts": None,
         "solvent_ctx": None,
+        # Zoom-volume inset residues and the last Full frame's display affine.
+        "inset_residue_keys": None,
+        "inset_frame": None,
         "xf_parts": None,
         "heavy_raw": None,
         "heavy_pre": None,
@@ -660,6 +665,17 @@ async def md_run_ws(websocket: WebSocket) -> None:
         else:
             model = build_atomistic_model_cached(design)
             cm = build_chain_map(model)
+        if is_namd and model is not None:
+            # Heavy and coarse displays must align against the same active
+            # reference, just as md_trajectory does. Generated model P sites can
+            # differ slightly and must not introduce a representation-dependent pose.
+            from backend.core.atomistic_to_nadoc import md_pkey
+
+            p_reference = {
+                md_pkey(a): np.array([a.x, a.y, a.z])
+                for a in model.atoms if a.name == "P"
+            }
+            p_reference.update(build_active_design_reference(design))
         _mark("design model + chain map")
 
         # Open the Universe up front — for NAMD we build p_order from the PSF's own
@@ -1022,6 +1038,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "heavy_idx": None,
             "c1p_idx": c1p_idx,
             "base_ring_idx": base_ring_idx,
+            "full_base_layout": None,  # invalidate measured-ring indices on every load
             "term_specs": term_specs,  # 5'-terminal bases recovered via O5'
             "dna_p_idx": dna_p_sel.indices,  # cached for the O(1) last-frame fast path
             "logs": logs,
@@ -1318,25 +1335,6 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 norms = _np.where(norms > 1e-6, norms, 1.0)
                 normals = dn / norms  # unit vectors
 
-            # Actual base-ring centroid in the same final pose as p_nm. Reconstruct it
-            # residue-locally from the raw P (minimum image when a cell exists), then
-            # apply the identical Kabsch rotation. This is the Full slab's authoritative
-            # live base_position and can be compared directly to the atomistic ring.
-            base_centers = [None] * len(p_order)
-            for i, idx in enumerate(_ctx.get("base_ring_idx") or []):
-                if i >= len(p_raw) or len(idx) < 5:
-                    continue
-                ring_raw = (
-                    _all_pos[idx] if _injected is not None else u.atoms[idx].positions
-                ) / 10.0
-                delta = ring_raw.mean(axis=0) - p_raw[i]
-                if dims is not None and dims[0] > 0:
-                    box_nm = dims[:3] / 10.0
-                    delta -= _np.round(delta / box_nm) * box_nm
-                if R_align is not None:
-                    delta = delta @ R_align.T
-                base_centers[i] = p_nm[i] + delta
-
             positions = []
             for i, key in enumerate(p_order):
                 hid, bpi, d = key[0], key[1], key[2]
@@ -1353,10 +1351,6 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     entry["nx"] = float(normals[i, 0])
                     entry["ny"] = float(normals[i, 1])
                     entry["nz"] = float(normals[i, 2])
-                if i < len(base_centers) and base_centers[i] is not None:
-                    entry["bx"] = float(base_centers[i][0])
-                    entry["by"] = float(base_centers[i][1])
-                    entry["bz"] = float(base_centers[i][2])
                 positions.append(entry)
 
             # 5'-terminal bases (no P atom) recovered via O5', anchored off the aligned
@@ -1395,13 +1389,31 @@ async def md_run_ws(websocket: WebSocket) -> None:
             from backend.core.md_trajectory import _add_mean_axis_tangents
 
             _add_mean_axis_tangents(positions)
-            return {
+            # Use the same measured residue frames as recorded trajectory playback.
+            # This also covers O5'-anchored termini and crossover insert residues.
+            from backend.core.md_base_frames import apply_measured_display_frames
+
+            _box_nm = (dims[:3] / 10.0) if dims is not None and dims[0] > 0 else None
+            apply_measured_display_frames(
+                _ctx, positions, R_align, _box_nm,
+                raw_positions_ang=_all_pos if _injected is not None else None,
+            )
+            frame = {
                 "type": "frame",
                 "frame_idx": frame_idx,
                 "n_frames": n_frames,
                 "time_ps": time_ps,
                 "positions": positions,
             }
+            # Zoom-volume insets ask for their residues' exact heavy atoms. Keep this
+            # frame's display affine so a later request is answered without a re-seek.
+            _ctx["inset_frame"] = {
+                "frame_idx": frame_idx, "positions": positions, "rotation": R_align,
+                "box_nm": _box_nm, "raw": _all_pos if _injected is not None else None,
+            }
+            if _ctx.get("inset_residue_keys"):
+                frame["inset_atoms"] = _inset_atoms_sync()
+            return frame
         else:  # ballstick
             heavy_idx = _ctx["heavy_idx"]
             atom_meta = _ctx["atom_meta"]
@@ -1585,6 +1597,19 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     for i, m in enumerate(atom_meta)
                 ]
             return frame
+
+    def _inset_atoms_sync() -> list:
+        """Exact heavy atoms of the requested inset residues for the last Full frame."""
+        from backend.core.md_base_frames import measured_residue_atoms
+
+        stash = _ctx.get("inset_frame")
+        keys = _ctx.get("inset_residue_keys")
+        if not stash or not keys or _ctx.get("universe") is None:
+            return []
+        return measured_residue_atoms(
+            _ctx, stash["positions"], stash["rotation"], stash["box_nm"], keys,
+            raw_positions_ang=stash["raw"],
+        )
 
     def _trajectory_signature() -> tuple[int, int] | None:
         from pathlib import Path
@@ -1918,6 +1943,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         pass
 
                 _ctx.update(loaded)
+                # A newly loaded trajectory invalidates the previous frame's affine.
+                _ctx["inset_frame"] = None
                 _ctx["mode"] = mode
                 _ctx["binary_atom_frames"] = binary_atom_frames
                 _ctx["binary_atom_prefix"] = None
@@ -2034,6 +2061,31 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         continue
                     if buf:
                         await websocket.send_bytes(buf)
+
+            elif action == "set_inset_residues":
+                # Residue base keys owned by zoom-volume insets (bounded: an inset is
+                # a local view, never the whole structure). Reply with the frame on
+                # screen so the inset turns exact without waiting for the next frame.
+                keys = [str(k) for k in (msg.get("keys") or [])][:_MAX_INSET_RESIDUES]
+                _ctx["inset_residue_keys"] = keys or None
+                atoms = []
+                if keys and _ctx.get("inset_frame"):
+                    try:
+                        atoms = await asyncio.to_thread(_inset_atoms_sync)
+                    except Exception as exc:  # noqa: BLE001
+                        await websocket.send_json(
+                            {"type": "error", "message": f"Inset atoms: {exc}"}
+                        )
+                        continue
+                stash = _ctx.get("inset_frame") or {}
+                cached = _ctx.get("latest_frame_cache")
+                if cached is not None and cached.get("frame_idx") == stash.get("frame_idx"):
+                    cached["inset_atoms"] = atoms
+                await websocket.send_json({
+                    "type": "inset_atoms",
+                    "frame_idx": stash.get("frame_idx"),
+                    "atoms": atoms,
+                })
 
             elif action == "get_latest":
                 if _ctx["universe"] is None:

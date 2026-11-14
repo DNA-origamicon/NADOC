@@ -62,3 +62,72 @@ def test_named_ring_direction_ignores_topology_order_and_out_of_plane_sugar():
     np.testing.assert_allclose(center, [[0, 0, 0]], atol=1e-12)
     np.testing.assert_allclose(inward, [[-1, 0, 0]], atol=1e-12)
     np.testing.assert_allclose(plane, [[0, 0, 1]], atol=1e-12)
+
+
+def test_live_display_uses_injected_rings_for_insert_and_terminal():
+    from backend.core.md_base_frames import apply_measured_display_frames
+
+    t = np.arange(6) * np.pi / 3
+    ring = np.column_stack([np.cos(t), np.zeros(6), np.sin(t)]) * .15
+    anchors = np.array([[9.9, 2, 1], [2, 3, 4]])
+    centers = anchors + [.2, .3, .1]
+    raw = np.vstack([anchors, ring + centers[0], ring + centers[1]]) % 10
+    # No Universe: this must consume the injected latest frame, including PBC.
+    ctx = {'full_base_layout': (np.array([0, 1]),
+           [(np.array([0, 1]), np.arange(2, 14).reshape(2, 6))])}
+    positions = [dict(helix_id='__xb__', bp_index='crossover', direction=0,
+                     x=9.9, y=2., z=1., nx=0., ny=0., nz=1., tx=0., ty=0., tz=1.),
+                 dict(helix_id='h', bp_index=0, direction='FORWARD',
+                     x=2., y=3., z=4., nx=0., ny=0., nz=1.)]
+    apply_measured_display_frames(ctx, positions, None, np.array([10.,10.,10.]),
+                                  raw_positions_ang=raw * 10)
+    for row, center in zip(positions, centers):
+        assert row['measured_base'] is True
+        np.testing.assert_allclose([row[k] for k in ('bx','by','bz')], center, atol=1e-12)
+        np.testing.assert_allclose(np.abs([row[k] for k in ('tx','ty','tz')]), [0,1,0], atol=1e-12)
+        np.testing.assert_allclose([row[k] for k in ('nx','ny','nz')], [-1,0,0], atol=1e-12)
+
+
+def test_live_display_missing_ring_preserves_coarse_fallback():
+    from backend.core.md_base_frames import apply_measured_display_frames
+
+    row = dict(x=1., y=2., z=3., nx=1., ny=0., nz=0., tx=0., ty=1., tz=0.)
+    before = row.copy()
+    apply_measured_display_frames({'full_base_layout': (np.array([0]), [])},
+                                  [row], None, None)
+    assert row == before
+
+
+def test_inset_residue_atoms_are_exact_trajectory_atoms_in_display_frame():
+    """Requested residues return their real heavy atoms (H excluded), imaged against
+    the residue anchor across a periodic face and placed in the display affine."""
+    import MDAnalysis as mda
+    from backend.core.md_base_frames import display_row_key, measured_residue_atoms
+
+    u = mda.Universe.empty(9, n_residues=3, atom_resindex=[0, 0, 0, 1, 1, 1, 2, 2, 2],
+                           trajectory=True)
+    u.add_TopologyAttr('names', ['P', "O3'", 'H1', 'P', 'C5M', 'O1P', "O5'", "C1'", 'N1'])
+    # Residue 0 straddles x=10: its O3' is stored one box away from its P.
+    raw_ang = np.array([[99., 20, 10], [1., 20, 10], [99., 21, 10],
+                        [30., 30, 30], [31., 30, 30], [30., 31, 30],
+                        [50., 50, 50], [50., 50, 51], [50., 51, 51]])
+    u.atoms.positions = raw_ang
+    rotation = np.array([[0., 0., 1.], [0., 1., 0.], [-1., 0., 0.]])
+    translation = np.array([5., 6., 7.])
+    ctx = {'universe': u, 'full_base_layout': (np.array([0, 3, 6]), [])}
+    positions = [
+        dict(helix_id='h', bp_index=4, direction='FORWARD', copy=0),
+        dict(helix_id='__xb__', bp_index='xo', direction=1, copy=0),
+        dict(helix_id='h', bp_index=9, direction='REVERSE'),
+    ]
+    for row, anchor in zip(positions, raw_ang[[0, 3, 6]] / 10):
+        row.update(zip('xyz', anchor @ rotation.T + translation))
+    assert [display_row_key(r) for r in positions] == ['h:4:FORWARD', '__xb__:xo:1', 'h:9:REVERSE']
+    got = measured_residue_atoms(ctx, positions, rotation, np.array([10., 10., 10.]),
+                                 ['h:4:FORWARD', '__xb__:xo:1'])
+    assert [(k, n) for k, n, *_ in got] == [('h:4:FORWARD', 'P'), ('h:4:FORWARD', "O3'"),
+        ('__xb__:xo:1', 'P'), ('__xb__:xo:1', 'C5M'), ('__xb__:xo:1', 'O1P')]
+    unwrapped = np.array([[9.9, 2, 1], [10.1, 2, 1], [3, 3, 3], [3.1, 3, 3], [3, 3.1, 3]])
+    np.testing.assert_allclose([g[2:] for g in got],
+                               unwrapped @ rotation.T + translation, atol=1e-5)
+    assert measured_residue_atoms(ctx, positions, rotation, None, []) == []

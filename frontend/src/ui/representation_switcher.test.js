@@ -578,12 +578,12 @@ it('locks only unsupported simulation styles, including programmatic requests, a
   const deps = makeDeps({ currentDesign: {} })
   deps.simulationDisplay = { active: () => active, beforeChange: vi.fn(), apply: vi.fn(() => true), refresh: vi.fn() }
   const ui = initRepresentationSwitcher(deps)
-  for (const id of ['menu-view-hull-prism','menu-view-detail-cylinders','menu-view-detail-beads','menu-view-surface','menu-view-surface-detail']) {
+  for (const id of ['menu-view-hull-prism','menu-view-detail-cylinders']) {
     expect(document.getElementById(id).disabled).toBe(true)
   }
-  for (const repr of ['hull-prism','cylinders','beads','surface','surface-detail']) expect(await ui.setRepresentation(repr)).toBe(false)
+  for (const repr of ['hull-prism','cylinders']) expect(await ui.setRepresentation(repr)).toBe(false)
   expect(deps.beforeRepresentationChange).toBeUndefined()
-  for (const repr of ['full','vdw','ballstick','stick','oxdna','mrdna-coarse','mrdna-fine']) {
+  for (const repr of ['full','beads','surface','vdw','ballstick','stick','oxdna','mrdna-coarse','mrdna-fine']) {
     expect(await ui.setRepresentation(repr)).not.toBe(false)
     expect(deps.setCurrentRepr).toHaveBeenLastCalledWith(repr)
   }
@@ -658,4 +658,21 @@ it('F7 changes only the selected strand and repeated presses cycle its local col
   expect(deps.applyAtomisticMode).not.toHaveBeenCalled()
   expect(deps.api.clearRepresentationOverrides).not.toHaveBeenCalled()
   expect(document.getElementById('menu-view-detail-full').classList.contains('is-checked')).toBe(true)
+})
+
+it('does not finish a representation until job coordinates have landed', async () => {
+  mountIds(DOM)
+  const deps = makeDeps({ currentDesign: {} })
+  let release, finished = false
+  const ready = new Promise(resolve => { release = resolve })
+  const listener = event => event.detail.waits.push(ready)
+  window.addEventListener('nadoc:representation-change', listener)
+  const ui = initRepresentationSwitcher(deps)
+  try {
+    const pending = ui.setRepresentation('vdw').then(() => { finished = true })
+    await vi.waitFor(() => expect(deps.setCurrentRepr).toHaveBeenCalledWith('vdw'))
+    expect(finished).toBe(false)
+    release(); await pending
+    expect(finished).toBe(true)
+  } finally { release(); window.removeEventListener('nadoc:representation-change', listener); ui.dispose() }
 })
