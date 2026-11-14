@@ -1,3 +1,4 @@
+import { wireSpreadsheetRowSelection } from './spreadsheet_row_selection.js'
 import { createSequenceDraftGuard } from './sequence_draft_guard.js'
 import { junctionIndex } from '../design/strand_junctions.js'
 import { selectedSequenceKeys, highlightOverhangCell } from './sequence_selection.js'
@@ -299,6 +300,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   const nameCommits = new Map()
 
   if (!panel || !body) return
+  const rowSelection = wireSpreadsheetRowSelection({ tbody, store })
 
   const { order: sortOrder, element: sortWrap } = initSpreadsheetSort({
     toolbar: toggleBar.parentNode,
@@ -560,11 +562,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       if (isOhBinder)                       tr.classList.add('sheet-oh-binder')
       if (highlightedIds.has(strand.id))    tr.classList.add('sheet-selected')
 
-      // Left-click → select strand in 3D exactly as a manual click would
-      tr.addEventListener('click', e => {
-        if (e.target.tagName === 'INPUT') return
-        selectionManager?.selectStrand(strand.id)
-      })
+      tr.title = 'Click to select; Shift-click for a range; Ctrl/Cmd-click to toggle'
 
       // Right-click → context menu
       tr.addEventListener('contextmenu', e => {
@@ -1243,7 +1241,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     for (const row of tbody.children) {
       const sel = selectedIds.has(row.dataset.strandId)
       row.classList.toggle('sheet-selected', sel)
-      if (sel && !scrolled) { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); scrolled = true }
+      if (sel && !scrolled && !rowSelection.isApplying()) { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); scrolled = true }
     }
   }
 

@@ -19,7 +19,7 @@ matrix whenever a selection kind, representation, or command consumer changes.
 | Logical kind | Plain/fixed 3D | Default drill | Additive/lasso | Sidebar/programmatic | Current endpoint | Known divergence / fallback |
 |---|---|---|---|---|---|---|
 | Cluster | cluster level | n/a | canonical toggle/extend | cluster panel `selectCluster`/`toggleCluster` | `selection.items: cluster[]` | Member strands are derived highlight relations, never selected refs. |
-| Strand | strand level | first click | canonical toggle/extend | spreadsheet, histogram, groups, `selectStrand` | `selection.items: strand[]` | None known. |
+| Strand | strand level | first click | canonical toggle/extend | spreadsheet replace/range/toggle, histogram, groups, `selectStrand` | `selection.items: strand[]` | None known. |
 | Domain | domain level | cylinder/surface leaf fallback | canonical toggle/extend | related-target consumers | `selection.items: domain[]` | Representation fallback remains explicit behavior. |
 | Base | base level | second default-drill click | canonical toggle/extend | `selectNucleotide`, transform/anchors | `selection.items: base[]` | Fixed Base and default drill share the same base-key endpoint. |
 | End | end level | n/a | canonical toggle/extend | end tools | `selection.items: end[]` | Alt-click measurement anchors remain separate transient state. |
