@@ -22,6 +22,9 @@
  *   document.addEventListener('keydown', dispatchKeyEvent)
  */
 
+import { preference } from '../settings/preferences.js'
+import { parseShortcut, shortcutId } from '../settings/shortcut_bindings.js'
+
 const _registry = []
 
 export function isEditableTarget(target) {
@@ -75,7 +78,7 @@ export function clearShortcuts() {
  * Return metadata for all registered shortcuts.
  * Useful for building a help overlay or command palette entry list.
  */
-export function getShortcuts() {
+export function getShortcutDefinitions() {
   return _registry.map(({ key, ctrl, shift, alt, description }) => ({
     key,
     ctrl:        ctrl        ?? null,
@@ -83,6 +86,15 @@ export function getShortcuts() {
     alt:         alt         ?? null,
     description: description ?? '',
   }))
+}
+
+/** Shortcut help reflects the currently configured bindings. */
+export function getShortcuts() {
+  const bindings = preference('shortcutBindings')
+  return getShortcutDefinitions().map(spec => {
+    const chord = bindings[shortcutId(spec)]
+    return chord ? { ...spec, ...parseShortcut(chord) } : spec
+  })
 }
 
 /**
@@ -97,7 +109,10 @@ export async function dispatchKeyEvent(e) {
   // This is a registry invariant, including registrations without blockedInInput.
   if (/^[0-9]$/.test(e.key) && (inInput || hasOpenPopup(doc))) return
 
-  for (const s of _registry) {
+  const bindings = preference('shortcutBindings')
+  for (const original of _registry) {
+    const chord = bindings[shortcutId(original)]
+    const s = chord ? { ...original, ...parseShortcut(chord) } : original
     // Key match (case-insensitive)
     if (e.key.toLowerCase() !== s.key.toLowerCase()) continue
 

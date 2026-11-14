@@ -25,6 +25,8 @@
  * colour so transient sync state is never masked. `countCoeditingSiblings` is the
  * pure detector main.js feeds from the doc-presence broadcast.
  */
+import { preference } from '../settings/preferences.js'
+
 export function initSyncBadge() {
   const dot   = document.querySelector('#sync-status .sync-dot')
   const text  = document.getElementById('sync-status-text')
@@ -69,7 +71,7 @@ export function initSyncBadge() {
 
   function syncLog(level, tag, msg) {
     const cls = level === 'err' ? 'error' : level === 'warn' ? 'warn' : 'log'
-    if (debugLogging) console[cls](`[SYNC][${tag}] ${msg}`)
+    if (debugLogging || preference('consoleLogging')) console[cls](`[SYNC][${tag}] ${msg}`)
     const body = document.getElementById('sync-debug-body')
     if (!body) return
     const ts = new Date().toLocaleTimeString('en-US', { hour12: false })
@@ -79,7 +81,7 @@ export function initSyncBadge() {
     const msgEl= document.createElement('span'); msgEl.className= 'sdp-msg';        msgEl.textContent = msg
     row.append(tsEl, tagEl, msgEl)
     body.insertBefore(row, body.firstChild)
-    while (body.children.length > 150) body.removeChild(body.lastChild)
+    while (body.children.length > preference('logRows')) body.removeChild(body.lastChild)
   }
 
   return {

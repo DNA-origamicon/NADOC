@@ -1,3 +1,4 @@
+import { preference } from '../settings/preferences.js'
 import * as connectionMonitor from '../shared/connection_monitor.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 
@@ -186,14 +187,19 @@ export function initAutosaveSync({
     // Coalesce annotation, glow and view-volume gestures before flushing the
     // large portable file. Their small metadata PUTs still reach server state
     // immediately; full Voltron snapshots should not run between card edits.
-    const saveDelay = displayMetadataOnly ? 10_000 : 1_500
+    const saveDelay = displayMetadataOnly ? Math.max(10_000, preference('autosaveSeconds') * 1000) : preference('autosaveSeconds') * 1000
+    if (!preference('autosave')) {
+      clearTimeout(_partSaveTimer); clearTimeout(_designSaveTimer)
+      if (newState.currentDesign !== prevState.currentDesign) syncBadge.setSyncStatus('yellow', 'unsaved — autosave off')
+      return
+    }
     if (getPartEditContext()) {
       if (newState.currentDesign === prevState.currentDesign) return
       syncBadge.setSyncStatus('yellow', 'auto-saving…')
       clearTimeout(_partSaveTimer)
       _partSaveTimer = setTimeout(() => {
-        fileIo.savePartToAssembly({ silent: true })
-      }, displayMetadataOnly ? 10_000 : 900)
+        if (preference('autosave')) fileIo.savePartToAssembly({ silent: true })
+      }, displayMetadataOnly ? saveDelay : preference('autosaveSeconds') === 1.5 ? 900 : saveDelay)
       return
     }
     if (!getWorkspacePath() || _reloadingFromSSE) return
@@ -204,6 +210,7 @@ export function initAutosaveSync({
     const designId = newState.currentDesign?.id
     const path = getWorkspacePath()
     _designSaveTimer = setTimeout(async () => {
+      if (!preference('autosave')) return
       const previousSave = _designSaveInFlight
       const pending = (async () => {
         // A large file may take longer to save than the debounce interval.
@@ -243,12 +250,18 @@ export function initAutosaveSync({
   })
 
   store.subscribeSlice('assembly', (newState, prevState) => {
+    if (!preference('autosave')) {
+      clearTimeout(_assemblySaveTimer)
+      if (newState.currentAssembly !== prevState.currentAssembly) syncBadge.setSyncStatus('yellow', 'unsaved — autosave off')
+      return
+    }
     const assemblyWorkspacePath = getAssemblyWorkspacePath()
     if (!assemblyWorkspacePath || _savingAssembly) return
     if (newState.currentAssembly === prevState.currentAssembly) return
     syncBadge.setSyncStatus('yellow', 'saving…')
     clearTimeout(_assemblySaveTimer)
     _assemblySaveTimer = setTimeout(async () => {
+      if (!preference('autosave')) return
       const path = getAssemblyWorkspacePath()
       if (!path || _savingAssembly) return
       _savingAssembly = true
@@ -269,7 +282,7 @@ export function initAutosaveSync({
         _savingAssembly = false
         setTimeout(() => { for (const p of _savedPaths) _selfSavedPaths.delete(p) }, 5000)
       }
-    }, 1500)
+    }, preference('autosaveSeconds') * 1000)
   })
 
   function _scheduleLibraryRefresh() {

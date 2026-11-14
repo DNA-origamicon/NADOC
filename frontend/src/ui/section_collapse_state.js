@@ -14,9 +14,12 @@
  *   }
  */
 
+import { preference } from '../settings/preferences.js'
+
 const STORAGE_KEY = 'nadoc.leftSidebar.sections.v1'
 
 function _read() {
+  if (!preference('rememberSections')) return {}
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return {}
@@ -28,6 +31,7 @@ function _read() {
 }
 
 function _write(state) {
+  if (!preference('rememberSections')) return
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch {}
 }
 

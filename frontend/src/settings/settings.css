@@ -1,0 +1,29 @@
+.nadoc-settings { width: min(1000px, 94vw); max-width: 94vw; }
+.nadoc-settings .modal__body { display: flex; overflow: hidden; padding: 16px; height: min(70vh, 720px); }
+.nadoc-settings .modal__body > div { display: flex; flex-direction: column; width: 100%; min-height: 0; }
+.settings-layout { display: grid; grid-template-columns: minmax(160px, 225px) minmax(0, 1fr); gap: 16px; flex: 1; min-height: 0; }
+.settings-tabs { display: flex; flex-direction: column; gap: 4px; overflow: auto; }
+.settings-tabs button { text-align: left; white-space: normal; padding: 10px; }
+.settings-tabs [aria-selected=true] { background: var(--color-accent-soft); border-color: var(--color-accent); }
+.settings-panels { overflow: auto; padding: 2px 12px 12px 2px; }
+.settings-panel[hidden] { display: none; }
+.settings-panel h2 { font-size: var(--text-lg); margin: 0 0 12px; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-border-muted); }
+.settings-row > label { flex: 1; min-width: 180px; }
+.settings-row input:not([type=checkbox]):not([type=color]), .settings-row select { width: 150px; max-width: 100%; }
+.settings-row input, .settings-row select, .settings-search { color: var(--color-text-primary); background: var(--color-bg-inset); border: 1px solid var(--color-border-default); padding: 7px; border-radius: 4px; font: inherit; }
+.settings-row input[type=checkbox] { width: 18px; height: 18px; }
+.settings-note { color: var(--color-text-muted); line-height: 1.5; }
+.settings-path { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.settings-path input { flex: 1; min-width: 160px; width: auto !important; }
+.settings-path-status { width: 100%; overflow-wrap: anywhere; font-size: var(--text-sm); }
+.settings-search { flex-shrink: 0; width: 100%; box-sizing: border-box; margin-bottom: 12px; }
+.settings-status { flex-shrink: 0; min-height: 1.5em; color: var(--color-danger); }
+.settings-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.settings-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-sm); }
+:root[data-nadoc-motion=reduced] *, :root[data-nadoc-motion=reduced] *::before, :root[data-nadoc-motion=reduced] *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+:root[data-nadoc-density=compact] { --control-xs: 24px; --control-sm: 28px; --control-md: 30px; --control-lg: 34px; --control-xl: 38px; }
+:root[data-nadoc-contrast=true] { --color-text-muted: #e6edf3; --color-text-dim: #e6edf3; --color-border-default: #8b949e; }
+:root[data-nadoc-theme=light] { color-scheme: light; --color-bg-inset: #f6f8fa; --color-bg-canvas: #ffffff; --color-bg-surface: #f6f8fa; --color-bg-raised: #eaeef2; --color-bg-elevated: #ffffff; --color-text-primary: #1f2328; --color-text-secondary: #24292f; --color-text-muted: #57606a; --color-text-dim: #57606a; --color-text-inverse: #ffffff; --color-border-muted: #d8dee4; --color-border-default: #afb8c1; --color-border-strong: #8c959f; --color-accent: #0969da; }
+:root[data-nadoc-theme=light][data-nadoc-contrast=true] { --color-text-muted: #1f2328; --color-text-dim: #1f2328; --color-border-default: #57606a; }
+@media (max-width: 650px) { .settings-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } .settings-tabs { flex-direction: row; max-height: 100px; } .settings-tabs button { flex: 0 0 140px; } }
