@@ -6,6 +6,7 @@ guide, with no website build, external image host or experiment folder required.
 
 | Start here | What it covers |
 |---|---|
+| [Feature Log](feature-log/README.md) · [Browser version](feature-log.html) | 3×6 body plus 2×6 continuation, Bend and routing; history controls, recipe verification and loadouts; individual end resizes within a Fine Routing group in Origami Editor |
 | [Extrude](extrude/README.md) · [Browser version](extrude.html) | 3×6 square-lattice walkthrough: length, 2×3 end continuation and a separate cluster |
 | [Bend](bend/README.md) · [Browser version](bend.html) | Two 256 bp clusters, Tools → Bend on one cluster, and loops/skips in 3D and the cadnano-style editor |
 | [Twist](twist/README.md) · [Browser version](twist.html) | Two 256 bp clusters, RH/LH twists on one cluster, and loops/skips in 3D and the cadnano-style editor |

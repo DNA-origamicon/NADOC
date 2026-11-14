@@ -140,7 +140,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', help='Optional preview destination; default docs/guides/extrude')
     parser.add_argument('--replace', action='store_true', help='Regenerate the existing guide after review, preserving first-created date')
-    parser.add_argument('--feature', default='extrude', choices=['extrude', 'bend-and-twist'])
+    parser.add_argument('--feature', default='extrude', choices=['extrude', 'bend-and-twist', 'feature-history'])
     parser.add_argument('--guide', help='Choose a lesson within the feature, e.g. twist')
     args = parser.parse_args()
     main(args.output, args.replace, args.feature, args.guide)

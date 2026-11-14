@@ -1865,10 +1865,15 @@ def open_library_part(body: OpenLibraryPartRequest) -> dict:
     design, disposition = _reconcile_nadoc_file(dest, body.path)
     if design is None:
         raise HTTPException(400, detail=f"Failed to load design: {body.path!r}")
-    if body.name:
+    if body.name and body.name != design.metadata.name:
+        from backend.core.document_operations import record
+        before = design
         design = design.model_copy(
             update={"metadata": design.metadata.model_copy(update={"name": body.name})}
         )
+        design = record(before, design, "document-metadata", {
+            "before": {"name": before.metadata.name}, "changes": {"name": body.name},
+        })
     resp = _install_loaded_design(design)
     resp["identity_disposition"] = disposition
     return resp
@@ -6988,6 +6993,9 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
     design = restore_dissolve_fields(design, snap_design)
     design = restore_authored_fields(design, snap_design)
     design = restore_diagnostic_reference(design, snap_design)
+    from backend.core.routing_deformation_scope import has_inherited_routing
+    if has_inherited_routing(design.feature_log):
+        design = design.copy_with(deformations=snap_design.deformations)
     if any(getattr(e, "op_kind", None) == "placement-poses"
            or getattr(e, "params", {}).get("reclassify_unpaired") for e in design.feature_log):
         # These snapshots own cluster poses or membership remapped by unpairing.
@@ -7434,6 +7442,10 @@ def _seek_feature_log_recovery(
 
         # Collect cluster IDs that have ANY cluster_op anywhere in the full log.
         clusters_with_ops = {e.cluster_id for e in log if e.feature_type == "cluster_op"}
+
+    from backend.core.routing_deformation_scope import has_inherited_routing, recover_scopes
+    if has_inherited_routing(active):
+        new_deformations = recover_scopes(new_deformations, design.deformations)
 
     cluster_last, clusters_with_ops, pattern_baselines = filter_group_pose_overlays(
         log, pose_windows, cluster_last, clusters_with_ops, pattern_baselines)

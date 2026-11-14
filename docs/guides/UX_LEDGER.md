@@ -52,3 +52,42 @@ retain their original replay behavior. Native CanDo-style FEM confirms the
 corrected handedness on a 3×6×256 bp bundle; requested-angle calibration remains
 open (RH +180° predicts +43.0°, LH −180° predicts −11.1°). The native model uses
 per-helix net strain and cannot validate the local cancellation pattern itself.
+
+Feature Log guide review:
+
+| ID | Workflow | Finding | Guide handling | Status |
+|---|---|---|---|---|
+| GUIDE-UX-014 | Embedded part history | The part-instance delete branches in `feature_log_panel.js` splice feature records without rebuilding molecular state, unlike standalone-part dependency-aware deletion. | Explain the current difference and direct provenance-preserving edits to the source part editor. Do not exercise those deletion paths in authored examples. | Open; identified by implementation review, not an assembly deletion capture. |
+| GUIDE-UX-015 | History navigation | The standalone part rail requires dragging its blue handle; clicking a bare notch does not seek. The Feature Log launcher can open another sidebar rather than focus the existing one. | Teach handle dragging and use the already open Feature Log sidebar. | Open; observed during guide capture preparation. |
+
+Capture review: the helper now waits for finite CSS animations to finish before
+taking a screenshot, preventing modal captures at their transparent opening
+frame. The Feature Log recipe waits for the saved indicator before opening
+source-bound context actions; the successful run verifies suppression and
+unsuppression as separate operations.
+
+| ID | Workflow | Finding | Guide handling | Status |
+|---|---|---|---|---|
+| GUIDE-UX-016 | Repair proposal comparison | The 18-helix, 80 → 96 bp proposal evaluates, but Compare authored geometry returns HTTP 413 and shows only “Repair request failed (413)”; Fit comparison stays disabled. | Observed in the earlier capture; the advanced proposal exercise is now excluded from the designer guide. | Open; expose an actionable limit explanation and qualify supported comparison sizes. No limits were changed for the guide. |
+
+
+| ID | Workflow | Finding | Guide handling | Status |
+|---|---|---|---|---|
+| GUIDE-UX-017 | Bend → Autoscaffold → Autostaple | Autoscaffold added 268 scaffold bases outside the earlier Bend ranges. Their straight coordinates displaced the terminal runs; scrubbing faithfully restored the defect. | New Autoscaffold commands explicitly inherit each extended scaffold root's deformation membership. Include complementary views before and after routing and after scrubbing, plus a consecutive-base continuity check. | Fixed in new recorded routing commands; legacy recipes preserve their original replay behavior. |
+
+Multi-perspective review, November 14: inspected F3 images 18–19, F4 images
+20–22, F5 images 24–25 and the returned-to-F5 images 30–31. The end-region
+angle exposes the loops on both sides that the main oblique view overlaps with
+the body. The caps follow the bent structure; Autostaple changes staple routing
+and assigns scaffold sequence while preserving scaffold topology and coordinates.
+The first alternate-view attempt clipped the part and was rejected; the accepted
+recipe fits the part after each orbit and leaves a margin. These views reveal
+terminal displacement and gross connection discontinuities, not atom-level
+clashes or physical validity. Numeric continuity and history checks supplement
+visual review; neither a nonempty feature log nor replay equality proves geometry
+correctness. See the explicit review procedure in MAINTENANCE.md.
+
+
+| ID | Workflow | Finding | Guide handling | Status |
+|---|---|---|---|---|
+| GUIDE-UX-018 | Move feature position | The native dropdown inherited light text over a white background and overflowed the small modal. | Use NADOC's shared select primitive, constrain it to the modal width, and check rendered contrast and bounds during capture. Remove advanced repair-proposal authoring from the designer lesson. | Fixed; step 37 visually reviewed after recapture. Measured contrast 16.02:1, control within modal bounds. |

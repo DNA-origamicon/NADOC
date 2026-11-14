@@ -16,11 +16,17 @@ KINDS = SCAFFOLD_KINDS | {
 }
 
 
-def scaffold(kind, design, *, history_seed=None):
+def scaffold(kind, design, *, history_seed=None, inherit_scaffold_end_deformations=0):
     from backend.core.routing_identity import identity_scope
 
     with identity_scope(history_seed):
-        return _scaffold(kind, design)
+        updated, result = _scaffold(kind, design)
+        if inherit_scaffold_end_deformations == 1:
+            from backend.core.routing_deformation_scope import inherit_scaffold_ends
+            updated = inherit_scaffold_ends(design, updated)
+        elif inherit_scaffold_end_deformations != 0:
+            raise ValueError("Unsupported scaffold deformation inheritance version")
+        return updated, result
 
 
 def _scaffold(kind, design):
@@ -78,7 +84,8 @@ def _crossovers(design, *, frame_scoped=True):
 
 def build(kind, design, params):
     if kind in SCAFFOLD_KINDS:
-        return scaffold(kind, design, history_seed=params.get("history_seed"))[0]
+        return scaffold(kind, design, history_seed=params.get("history_seed"),
+                        inherit_scaffold_end_deformations=params.get("inherit_scaffold_end_deformations", 0))[0]
     if kind == "auto-crossover":
         return crossovers(design, history_seed=params.get("history_seed"),
                           frame_scoped=params.get("frame_scoped_crossovers", False))[0]

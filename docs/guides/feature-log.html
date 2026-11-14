@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Feature Log: inspect, edit and verify the construction recipe · NADOC guide</title>
+<style>
+:root{color-scheme:dark; font-family:system-ui,sans-serif; line-height:1.65; color:#e6edf3; background:#10151d}
+*{box-sizing:border-box}body{margin:0}a{color:#8ecbff}a:hover{color:#fff}
+a:focus-visible{outline:3px solid #ffd54a;outline-offset:4px}
+.layout{display:grid;grid-template-columns:265px minmax(0,1fr);max-width:1700px;margin:auto}
+nav{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:32px 22px;border-right:1px solid #303b4b}
+nav strong{display:block;letter-spacing:.15em;color:#8ecbff;margin-bottom:20px}
+nav a{display:block;margin:0 0 13px;font-size:.9rem;text-decoration:none}
+main{min-width:0;padding:40px clamp(18px,4vw,64px) 70px}
+h1{font-size:clamp(1.8rem,3vw,2.8rem);line-height:1.2;max-width:900px}h2{line-height:1.3}
+.eyebrow,.meta{color:#aab9ca;font-size:.85rem}.eyebrow{letter-spacing:.12em;text-transform:uppercase}
+header>p,section>p{max-width:85ch}.links{display:flex;gap:12px 24px;flex-wrap:wrap}
+.notice{border-left:3px solid #ffd54a;padding:12px 18px;background:#202532}
+section{margin-top:58px;scroll-margin-top:24px}figure{margin:26px 0 38px;border:1px solid #344153;border-radius:10px;overflow:hidden;background:#17202c}
+figcaption{padding:18px 22px}figcaption p{margin:7px 0 0;max-width:95ch}
+.step{font-weight:700;color:#ffd54a}img{display:block;width:100%;height:auto}
+footer{margin-top:50px;color:#aab9ca}.skip{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;z-index:2;background:#10151d;padding:8px}
+@media(max-width:850px){.layout{display:block}nav{position:static;height:auto;border-right:0;border-bottom:1px solid #303b4b;padding:22px}nav a{display:inline-block;margin:0 18px 10px 0}main{padding-top:24px}}
+@media print{:root{color-scheme:light;color:#111;background:white}nav,.skip{display:none}.layout{display:block}main{padding:0}figure{break-inside:avoid;background:white}a{color:inherit}}
+</style></head><body><a class="skip" href="#guide">Skip to guide</a>
+<div class="layout"><nav aria-label="Guide chapters"><strong>NADOC / GUIDES</strong>
+<a href="#guide">Overview</a><a href="#chapter-1">Prepare the first extrusion</a><a href="#chapter-2">Edit a recorded feature</a><a href="#chapter-3">Undo and redo a history change</a><a href="#chapter-4">Check the published recipe</a><a href="#chapter-5">Add the 2×6 continuation</a><a href="#chapter-6">Bend before routing</a><a href="#chapter-7">Inspect the geometry from several sides</a><a href="#chapter-8">Add scaffold and staple routing</a><a href="#chapter-9">Read the tab</a><a href="#chapter-10">Browse construction stages</a><a href="#chapter-11">Inspect dependencies</a><a href="#chapter-12">Suppress and restore an operation</a><a href="#chapter-13">Move a feature</a><a href="#chapter-14">Delete versus revert</a><a href="#chapter-15">Filter the log and expand Fine Routing</a><a href="#chapter-16">Keep alternatives with loadouts</a><a href="#chapter-17">Assembly targets and configurations</a><a href="#chapter-18">Capture and use assembly configurations</a><a href="#chapter-19">Use the same log in Origami Editor</a><a href="#chapter-20">Make two fine routing edits</a><a href="#chapter-21">Scrub inside the group</a><a href="#chapter-22">Revert one sub-step or the whole group</a><a href="#chapter-23">Save and reopen</a><a href="extrude.html">Extrude guide</a><a href="bend.html">Bend guide</a><a href="twist.html">Twist guide</a><a href="README.md">Guide library (Markdown)</a></nav>
+<main id="guide"><header><p class="eyebrow">Feature-Log · desktop walkthrough · style-review draft</p>
+<h1>Feature Log: inspect, edit and verify the construction recipe</h1><p>Use the Feature Log tab to inspect construction, revise recorded inputs, manage alternatives and verify a recipe. Illustrated standalone-part exercises are followed by references for assembly configurations and the desktop Origami Editor.</p>
+<p class="meta">56 illustrated steps · 23 chapters · Captured 2026-11-14T01:28:58-07:00</p>
+<p class="notice">Follow the illustrated steps below to use the tool.</p>
+<p>Numbered arrows indicate click targets; dashed boxes show drag extents. Click any screenshot to open it at full size.</p>
+<p class="links"><a href="feature-log/example.nadoc" download>Download example</a><a href="feature-log/README.md">Markdown guide</a><a href="feature-log/verification.json">Construction verification</a><a href="UX_LEDGER.md">UX findings</a></p>
+<details><summary>Demonstrated scope</summary><ul><li>Desktop part: 3×6 extrusion, 2×6 continuation, Bend, Autoscaffold and Full Autostaple; timeline navigation, historical editing, undo/redo, dependencies, suppression, deletion/revert, reorder dialog, filters, recipe verification and loadouts</li><li>Origami Editor: two real staple-end resizes grouped as Fine Routing; expand, scrub individual sub-steps, child/group revert and undo</li><li>Control reference: assembly targets/configurations and animation pinning</li></ul></details></header>
+<section id="chapter-1"><h2>Prepare the first extrusion</h2><p>Start with a 3-row × 6-column square-lattice footprint, extruded 64 bp with Both strands. First practice editing and recipe verification on this initial feature, then add the 2×6 continuation, Bend, Autoscaffold and Full Autostaple. The later exercises use that richer construction history.</p><figure id="step-1">
+<figcaption><span class="step">Step 1</span><p>The starting 3×6 extrusion has one recorded operation. Next revise its length before adding dependent operations.</p></figcaption>
+<a href="feature-log/01.png" aria-label="Open step 1 screenshot at full size">
+<img src="feature-log/01.png" alt="Step 1: The starting 3×6 extrusion has one recorded operation. Next revise its length before adding dependent operations." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-2"><h2>Edit a recorded feature</h2><p>Click the pencil on an editable row to reopen its parameter editor. Native tools such as Extrude, Sweep, Bend/Twist and Move/Rotate use their corresponding editors; other feature types use parameter dialogs. Inspect the preview and apply the change to that feature. Later supported operations regenerate against the revised inputs. Cancel leaves the published recipe unchanged. Availability depends on feature type, cursor position, retained recovery data and downstream support; use the disabled control’s tooltip for the reason. Generated features may show a rebuild arrow instead of a pencil. Orange rail dots and connecting segments identify autogenerated steps belonging to the same generated run.</p><figure id="step-2">
+<figcaption><span class="step">Step 2</span><p>Click the extrusion row’s pencil to edit its recorded parameters.</p></figcaption>
+<a href="feature-log/02.png" aria-label="Open step 2 screenshot at full size">
+<img src="feature-log/02.png" alt="Step 2: Click the extrusion row’s pencil to edit its recorded parameters." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-3">
+<figcaption><span class="step">Step 3</span><p>Change Length from 64 to 80 bp. Apply the historical edit using the tool’s confirmation button.</p></figcaption>
+<a href="feature-log/03.png" aria-label="Open step 3 screenshot at full size">
+<img src="feature-log/03.png" alt="Step 3: Change Length from 64 to 80 bp. Apply the historical edit using the tool’s confirmation button." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-4">
+<figcaption><span class="step">Step 4</span><p>The bundle is now 80 bp long. Editing updates the existing feature rather than appending a second extrusion.</p></figcaption>
+<a href="feature-log/04.png" aria-label="Open step 4 screenshot at full size">
+<img src="feature-log/04.png" alt="Step 4: The bundle is now 80 bp long. Editing updates the existing feature rather than appending a second extrusion." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-3"><h2>Undo and redo a history change</h2><p>Use Edit → Undo (Ctrl+Z) to undo the last change, and Edit → Redo (Ctrl+Y) to restore it. These controls belong to the edit stack. The feature rail instead chooses a stage within the construction recipe. Use a named loadout when you want to retain an alternative for later work.</p><figure id="step-5">
+<figcaption><span class="step">Step 5</span><p>Undo restores the original 64 bp input in the same feature row.</p></figcaption>
+<a href="feature-log/05.png" aria-label="Open step 5 screenshot at full size">
+<img src="feature-log/05.png" alt="Step 5: Undo restores the original 64 bp input in the same feature row." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-6">
+<figcaption><span class="step">Step 6</span><p>Choose Edit → Redo to restore the 80 bp edit.</p></figcaption>
+<a href="feature-log/06.png" aria-label="Open step 6 screenshot at full size">
+<img src="feature-log/06.png" alt="Step 6: Choose Edit → Redo to restore the 80 bp edit." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-4"><h2>Check the published recipe</h2><p>Click repair, then Check published recipe. This independently regenerates the published construction and reports its status. If a feature fails, inspect its issue and use Inspect failing input. Error badges identify failed and unevaluated steps; hover their explanations. Missing targets can also produce a warning triangle. Address the first failing input before interpreting later failures.</p><figure id="step-7">
+<figcaption><span class="step">Step 7</span><p>Open repair to check the published recipe. Advanced repair proposals are outside this designer walkthrough.</p></figcaption>
+<a href="feature-log/07.png" aria-label="Open step 7 screenshot at full size">
+<img src="feature-log/07.png" alt="Step 7: Open repair to check the published recipe. Advanced repair proposals are outside this designer walkthrough." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-8">
+<figcaption><span class="step">Step 8</span><p>Published geometry: regenerated successfully confirms that this example’s saved recipe reproduces its authored state.</p></figcaption>
+<a href="feature-log/08.png" aria-label="Open step 8 screenshot at full size">
+<img src="feature-log/08.png" alt="Step 8: Published geometry: regenerated successfully confirms that this example’s saved recipe reproduces its authored state." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-5"><h2>Add the 2×6 continuation</h2><p>Enable BLUNT, right-click a far-end ring and choose Extrude. Select two rows × six columns of the original footprint, then Next. Set 32 bp with Both strands and Ligate adjacent, and apply. This produces a stepped end: twelve helices continue beyond the original 80 bp body. F2 records the selected source ends and continuation inputs separately from F1.</p><figure id="step-9">
+<figcaption><span class="step">Step 9</span><p>Enable BLUNT in the toolbar to show selectable end rings.</p></figcaption>
+<a href="feature-log/09.png" aria-label="Open step 9 screenshot at full size">
+<img src="feature-log/09.png" alt="Step 9: Enable BLUNT in the toolbar to show selectable end rings." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-10">
+<figcaption><span class="step">Step 10</span><p>Right-click the marked far-end ring, then choose Extrude from its menu.</p></figcaption>
+<a href="feature-log/10.png" aria-label="Open step 10 screenshot at full size">
+<img src="feature-log/10.png" alt="Step 10: Right-click the marked far-end ring, then choose Extrude from its menu." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-11">
+<figcaption><span class="step">Step 11</span><p>Choose Extrude to continue from this end.</p></figcaption>
+<a href="feature-log/11.png" aria-label="Open step 11 screenshot at full size">
+<img src="feature-log/11.png" alt="Step 11: Choose Extrude to continue from this end." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-12">
+<figcaption><span class="step">Step 12</span><p>Select the 2×6 subset of amber source-end cells. The continuation selection contains twelve helices.</p></figcaption>
+<a href="feature-log/12.png" aria-label="Open step 12 screenshot at full size">
+<img src="feature-log/12.png" alt="Step 12: Select the 2×6 subset of amber source-end cells. The continuation selection contains twelve helices." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-13">
+<figcaption><span class="step">Step 13</span><p>Apply the extra 32 bp extrusion to these twelve ends.</p></figcaption>
+<a href="feature-log/13.png" aria-label="Open step 13 screenshot at full size">
+<img src="feature-log/13.png" alt="Step 13: Apply the extra 32 bp extrusion to these twelve ends." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-14">
+<figcaption><span class="step">Step 14</span><p>F1 builds the 3×6 body; F2 adds the 2×6 continuation. They remain distinct recorded operations.</p></figcaption>
+<a href="feature-log/14.png" aria-label="Open step 14 screenshot at full size">
+<img src="feature-log/14.png" alt="Step 14: F1 builds the 3×6 body; F2 adds the 2×6 continuation. They remain distinct recorded operations." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-6"><h2>Bend before routing</h2><p>Choose Tools → Bend and click the cluster bead for the bundle. Set Plane 1 to 0 bp, Plane 2 to 79 bp, Angle to 30° and Direction to 0°, then Apply. This bends the original body before either routing operation. Reopen the saved part if the tool leaves its dimmed preview overlay behind (GUIDE-UX-008).</p><figure id="step-15">
+<figcaption><span class="step">Step 15</span><p>Click a backbone bead to select the cluster for Bend. Turn BLUNT off so end rings do not intercept the selection.</p></figcaption>
+<a href="feature-log/15.png" aria-label="Open step 15 screenshot at full size">
+<img src="feature-log/15.png" alt="Step 15: Click a backbone bead to select the cluster for Bend. Turn BLUNT off so end rings do not intercept the selection." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-16">
+<figcaption><span class="step">Step 16</span><p>Apply the 30° bend over planes 0–79 bp. F3 will preserve these parameters.</p></figcaption>
+<a href="feature-log/16.png" aria-label="Open step 16 screenshot at full size">
+<img src="feature-log/16.png" alt="Step 16: Apply the 30° bend over planes 0–79 bp. F3 will preserve these parameters." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-17">
+<figcaption><span class="step">Step 17</span><p>The bent, stepped bundle now has three construction operations, before scaffold and staple routing.</p></figcaption>
+<a href="feature-log/17.png" aria-label="Open step 17 screenshot at full size">
+<img src="feature-log/17.png" alt="Step 17: The bent, stepped bundle now has three construction operations, before scaffold and staple routing." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-7"><h2>Inspect the geometry from several sides</h2><p>Right-drag the 3D canvas to orbit, then press F to fit the part and scroll down slightly for margin. Check the opposite side and look along the end regions as well as using the main oblique view. The view cube shows your orientation. Compare these perspectives before routing, after Autoscaffold, after Full Autostaple and after scrubbing. End bases, back rows and connections can hide behind an otherwise plausible overall silhouette.</p><figure id="step-18">
+<figcaption><span class="step">Step 18</span><p>Before routing, F3 — reverse oblique view. Right-drag to expose the scaffold ends hidden behind the bundle. Check that the terminal runs follow the bent body without a jump back to the straight axis.</p></figcaption>
+<a href="feature-log/18.png" aria-label="Open step 18 screenshot at full size">
+<img src="feature-log/18.png" alt="Step 18: Before routing, F3 — reverse oblique view. Right-drag to expose the scaffold ends hidden behind the bundle. Check that the terminal runs follow the bent body without a jump back to the straight axis." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-19">
+<figcaption><span class="step">Step 19</span><p>Before routing, F3 — end-region view. Orbit vertically as well as horizontally to separate overlapping rows. Inspect both ends and the junction between the 3×6 body and 2×6 continuation; use the view cube to orient yourself.</p></figcaption>
+<a href="feature-log/19.png" aria-label="Open step 19 screenshot at full size">
+<img src="feature-log/19.png" alt="Step 19: Before routing, F3 — end-region view. Orbit vertically as well as horizontally to separate overlapping rows. Inspect both ends and the junction between the 3×6 body and 2×6 continuation; use the view cube to orient yourself." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-8"><h2>Add scaffold and staple routing</h2><p>Choose Tools → Routing → Autoscaffold, keep Seamed and click Run. Then choose Full Autostaple, keep Standard and click OK. Autoscaffold may adjust terminal positions; inspect its result rather than assuming the routed ends retain their extrusion indices. F4 and F5 record these generated routing operations after the two extrusions and Bend.</p><figure id="step-20">
+<figcaption><span class="step">Step 20</span><p>Autoscaffold is F4: new terminal scaffold bases follow the deformation of the ends they extend. Inspect their continuity before applying Autostaple.</p></figcaption>
+<a href="feature-log/20.png" aria-label="Open step 20 screenshot at full size">
+<img src="feature-log/20.png" alt="Step 20: Autoscaffold is F4: new terminal scaffold bases follow the deformation of the ends they extend. Inspect their continuity before applying Autostaple." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-21">
+<figcaption><span class="step">Step 21</span><p>After Autoscaffold, F4 — reverse oblique view. Right-drag to expose the scaffold ends hidden behind the bundle. Check that the terminal runs follow the bent body without a jump back to the straight axis.</p></figcaption>
+<a href="feature-log/21.png" aria-label="Open step 21 screenshot at full size">
+<img src="feature-log/21.png" alt="Step 21: After Autoscaffold, F4 — reverse oblique view. Right-drag to expose the scaffold ends hidden behind the bundle. Check that the terminal runs follow the bent body without a jump back to the straight axis." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-22">
+<figcaption><span class="step">Step 22</span><p>After Autoscaffold, F4 — end-region view. Orbit vertically as well as horizontally to separate overlapping rows. Inspect both ends and the junction between the 3×6 body and 2×6 continuation; use the view cube to orient yourself.</p></figcaption>
+<a href="feature-log/22.png" aria-label="Open step 22 screenshot at full size">
+<img src="feature-log/22.png" alt="Step 22: After Autoscaffold, F4 — end-region view. Orbit vertically as well as horizontally to separate overlapping rows. Inspect both ends and the junction between the 3×6 body and 2×6 continuation; use the view cube to orient yourself." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-23">
+<figcaption><span class="step">Step 23</span><p>Full Autostaple is F5. Use this five-step recipe for the navigation, dependency and history-change exercises below.</p></figcaption>
+<a href="feature-log/23.png" aria-label="Open step 23 screenshot at full size">
+<img src="feature-log/23.png" alt="Step 23: Full Autostaple is F5. Use this five-step recipe for the navigation, dependency and history-change exercises below." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-24">
+<figcaption><span class="step">Step 24</span><p>After Full Autostaple, F5 — reverse oblique view. Right-drag to expose the scaffold ends hidden behind the bundle. Check that the terminal runs follow the bent body without a jump back to the straight axis.</p></figcaption>
+<a href="feature-log/24.png" aria-label="Open step 24 screenshot at full size">
+<img src="feature-log/24.png" alt="Step 24: After Full Autostaple, F5 — reverse oblique view. Right-drag to expose the scaffold ends hidden behind the bundle. Check that the terminal runs follow the bent body without a jump back to the straight axis." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-25">
+<figcaption><span class="step">Step 25</span><p>After Full Autostaple, F5 — end-region view. Orbit vertically as well as horizontally to separate overlapping rows. Inspect both ends and the junction between the 3×6 body and 2×6 continuation; use the view cube to orient yourself.</p></figcaption>
+<a href="feature-log/25.png" aria-label="Open step 25 screenshot at full size">
+<img src="feature-log/25.png" alt="Step 25: After Full Autostaple, F5 — end-region view. Orbit vertically as well as horizontally to separate overlapping rows. Inspect both ends and the junction between the 3×6 body and 2×6 continuation; use the view cube to orient yourself." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-9"><h2>Read the tab</h2><p>Use the open Feature Log sidebar on the left. The vertical Feature Log launcher opens an additional sidebar; close extra copies with their header ×. This example now has five construction steps: a 3×6 extrusion, a 2×6 end continuation, Bend, Autoscaffold and Full Autostaple. F0 is the initial state. F1, F2 and later rows are ordered operations; hover a shortened label to read it. The heading collapses the section. The loadout selector chooses a saved design branch. Row buttons act on one feature; repair and filter act on the log. Selecting a strand, domain, cluster or overhang in the model outlines rows that reference it in green.</p><figure id="step-26">
+<figcaption><span class="step">Step 26</span><p>Read the operation labels and their order before changing history. Hover each small button for its exact action and availability.</p></figcaption>
+<a href="feature-log/26.png" aria-label="Open step 26 screenshot at full size">
+<img src="feature-log/26.png" alt="Step 26: Read the operation labels and their order before changing history. Hover each small button for its exact action and availability." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-10"><h2>Browse construction stages</h2><p>Drag the blue handle along the vertical rail and release at a notch to scrub through construction. Clicking a bare notch does not seek. F0 restores the initial stage; a feature notch shows the state after that operation. Later rows dim while viewing an earlier stage. Browsing retains the recipe. Return to the last notch before changing its order, suppressing features or evaluating repair. A spinning ring means editable detail is loading; wait for Ready to edit. If loading fails, scrub again to retry.</p><figure id="step-27">
+<figcaption><span class="step">Step 27</span><p>At F0 the extrusion is absent, but its feature row remains. The blue cursor marks the inspected construction stage.</p></figcaption>
+<a href="feature-log/27.png" aria-label="Open step 27 screenshot at full size">
+<img src="feature-log/27.png" alt="Step 27: At F0 the extrusion is absent, but its feature row remains. The blue cursor marks the inspected construction stage." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-28">
+<figcaption><span class="step">Step 28</span><p>At F2, the 3×6 body and the extra 2×6 continuation are present, while Bend and the routing operations are still ahead of the cursor.</p></figcaption>
+<a href="feature-log/28.png" aria-label="Open step 28 screenshot at full size">
+<img src="feature-log/28.png" alt="Step 28: At F2, the 3×6 body and the extra 2×6 continuation are present, while Bend and the routing operations are still ahead of the cursor." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-29">
+<figcaption><span class="step">Step 29</span><p>At F3, Bend has shaped the bundle. Autoscaffold and Full Autostaple remain dimmed because they have not yet been applied at this stage.</p></figcaption>
+<a href="feature-log/29.png" aria-label="Open step 29 screenshot at full size">
+<img src="feature-log/29.png" alt="Step 29: At F3, Bend has shaped the bundle. Autoscaffold and Full Autostaple remain dimmed because they have not yet been applied at this stage." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-30">
+<figcaption><span class="step">Step 30</span><p>Returned to F5 after scrubbing — reverse oblique view. Right-drag to expose the scaffold ends hidden behind the bundle. Check that the terminal runs follow the bent body without a jump back to the straight axis.</p></figcaption>
+<a href="feature-log/30.png" aria-label="Open step 30 screenshot at full size">
+<img src="feature-log/30.png" alt="Step 30: Returned to F5 after scrubbing — reverse oblique view. Right-drag to expose the scaffold ends hidden behind the bundle. Check that the terminal runs follow the bent body without a jump back to the straight axis." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-31">
+<figcaption><span class="step">Step 31</span><p>Returned to F5 after scrubbing — end-region view. Orbit vertically as well as horizontally to separate overlapping rows. Inspect both ends and the junction between the 3×6 body and 2×6 continuation; use the view cube to orient yourself.</p></figcaption>
+<a href="feature-log/31.png" aria-label="Open step 31 screenshot at full size">
+<img src="feature-log/31.png" alt="Step 31: Returned to F5 after scrubbing — end-region view. Orbit vertically as well as horizontally to separate overlapping rows. Inspect both ends and the junction between the 3×6 body and 2×6 continuation; use the view cube to orient yourself." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-32">
+<figcaption><span class="step">Step 32</span><p>Return to the final notch to restore the complete editable part. Seeking and reverting have different consequences: reverting removes recipe entries.</p></figcaption>
+<a href="feature-log/32.png" aria-label="Open step 32 screenshot at full size">
+<img src="feature-log/32.png" alt="Step 32: Return to the final notch to restore the complete editable part. Seeking and reverting have different consequences: reverting removes recipe entries." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-11"><h2>Inspect dependencies</h2><p>Right-click a part feature row, or focus it and press Shift+F10, then choose View dependencies. Parents supply inputs to the selected operation; Dependents consume its outputs. Conservative ordering relationships may also appear. The actual regeneration check decides whether a proposed edit is valid. Use this view before moving, suppressing or deleting an earlier step.</p><figure id="step-33">
+<figcaption><span class="step">Step 33</span><p>The row context menu provides Suppress, Move… and View dependencies for this multi-step part.</p></figcaption>
+<a href="feature-log/33.png" aria-label="Open step 33 screenshot at full size">
+<img src="feature-log/33.png" alt="Step 33: The row context menu provides Suppress, Move… and View dependencies for this multi-step part." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-34">
+<figcaption><span class="step">Step 34</span><p>Read the first extrusion’s Parents and Dependents. Its outputs feed later construction; inspect these relationships before changing its order or deleting it.</p></figcaption>
+<a href="feature-log/34.png" aria-label="Open step 34 screenshot at full size">
+<img src="feature-log/34.png" alt="Step 34: Read the first extrusion’s Parents and Dependents. Its outputs feed later construction; inspect these relationships before changing its order or deleting it." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-12"><h2>Suppress and restore an operation</h2><p>Suppress retains the feature definition while regenerating the part without applying it. The row gains a Suppressed badge. Right-click it again and choose Unsuppress to restore its contribution. Dependencies are checked before publication; an unresolved consumer prevents the change. Return to the current end of an editable loadout first.</p><figure id="step-35">
+<figcaption><span class="step">Step 35</span><p>The suppression dialog explains that the saved definition will remain and regeneration will check its dependents.</p></figcaption>
+<a href="feature-log/35.png" aria-label="Open step 35 screenshot at full size">
+<img src="feature-log/35.png" alt="Step 35: The suppression dialog explains that the saved definition will remain and regeneration will check its dependents." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-36">
+<figcaption><span class="step">Step 36</span><p>The Suppressed badge records that the operation is disabled. The recipe still contains its inputs.</p></figcaption>
+<a href="feature-log/36.png" aria-label="Open step 36 screenshot at full size">
+<img src="feature-log/36.png" alt="Step 36: The Suppressed badge records that the operation is disabled. The recipe still contains its inputs." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-13"><h2>Move a feature</h2><p>For a part with at least two feature rows, right-click the operation and choose Move…. Select its final position, then click Move. NADOC regenerates the proposed order and refuses unresolved dependencies. The dialog disables Move until a different position is selected. Cancel closes it without applying the reorder. Here, inspect the available positions for the first extrusion, then cancel to preserve its upstream position.</p><figure id="step-37">
+<figcaption><span class="step">Step 37</span><p>Move selects a new position in the recipe. Moving the first extrusion behind operations that consume it can fail dependency validation. Cancel this inspection.</p></figcaption>
+<a href="feature-log/37.png" aria-label="Open step 37 screenshot at full size">
+<img src="feature-log/37.png" alt="Step 37: Move selects a new position in the recipe. Moving the first extrusion behind operations that consume it can fail dependency validation. Cancel this inspection." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-14"><h2>Delete versus revert</h2><p>The red × deletes a feature. In a standalone part, supported later steps are regenerated; if dependents prevent a simple deletion, review the offered cascade-delete or revert decision. Cascade removes the dependent operations listed by the dialog. The amber ↶ reverts to before the selected feature and removes it together with every later entry. Read the confirmation before accepting. Undo can restore the change. Large Fine Routing groups receive an additional deletion confirmation.</p><figure id="step-38">
+<figcaption><span class="step">Step 38</span><p>Click ↶ to inspect Revert to before this feature.</p></figcaption>
+<a href="feature-log/38.png" aria-label="Open step 38 screenshot at full size">
+<img src="feature-log/38.png" alt="Step 38: Click ↶ to inspect Revert to before this feature." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-39">
+<figcaption><span class="step">Step 39</span><p>Revert discards this operation and the later tail of the recipe. Reverting the final Full Autostaple operation keeps both extrusions, Bend and Autoscaffold.</p></figcaption>
+<a href="feature-log/39.png" aria-label="Open step 39 screenshot at full size">
+<img src="feature-log/39.png" alt="Step 39: Revert discards this operation and the later tail of the recipe. Reverting the final Full Autostaple operation keeps both extrusions, Bend and Autoscaffold." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-40">
+<figcaption><span class="step">Step 40</span><p>Click × to delete the final Full Autostaple operation. A simple part feature deletion can apply immediately.</p></figcaption>
+<a href="feature-log/40.png" aria-label="Open step 40 screenshot at full size">
+<img src="feature-log/40.png" alt="Step 40: Click × to delete the final Full Autostaple operation. A simple part feature deletion can apply immediately." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-15"><h2>Filter the log and expand Fine Routing</h2><p>Click filter to choose visible categories. Fine routing is initially on; Document ops and Annotations and view volumes are initially off. Filters change visibility while preserving the recipe and feature numbering, so gaps can appear. Preferences persist for the document and synchronize across windows. A Fine Routing row groups small routing edits: click its triangle to expand individual sub-steps, inspect their rail positions, and use their available delete/revert controls. Collapse with the upper triangle, lower collapse row or connector spine. Tooltips explain unavailable child operations. Document ops is a separate journal of metadata and loadout changes, without geometry seek positions. Annotation and view-volume checkpoints appear when explicitly recorded; ordinary presentation autosaves do not produce construction rows.</p><figure id="step-41">
+<figcaption><span class="step">Step 41</span><p>Open filter to inspect the three visibility categories.</p></figcaption>
+<a href="feature-log/41.png" aria-label="Open step 41 screenshot at full size">
+<img src="feature-log/41.png" alt="Step 41: Open filter to inspect the three visibility categories." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-42">
+<figcaption><span class="step">Step 42</span><p>Enable Document ops to inspect the document journal; leave Fine routing enabled when diagnosing individual routing steps.</p></figcaption>
+<a href="feature-log/42.png" aria-label="Open step 42 screenshot at full size">
+<img src="feature-log/42.png" alt="Step 42: Enable Document ops to inspect the document journal; leave Fine routing enabled when diagnosing individual routing steps." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-16"><h2>Keep alternatives with loadouts</h2><p>The selector at the top switches loadouts. Click + to create an alternative from the current state, then the adjacent pencil to name it. The × deletes the active loadout after confirmation; the final remaining loadout cannot be deleted. Locked loadouts show a lock symbol and protect their saved state. Loadouts preserve alternative recipes; assembly targets have their own loadout context. Document ops shows the recorded create, rename, select and delete actions.</p><figure id="step-43">
+<figcaption><span class="step">Step 43</span><p>Click + to create a second loadout from the current bent, routed design.</p></figcaption>
+<a href="feature-log/43.png" aria-label="Open step 43 screenshot at full size">
+<img src="feature-log/43.png" alt="Step 43: Click + to create a second loadout from the current bent, routed design." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-44">
+<figcaption><span class="step">Step 44</span><p>Name the new loadout Routed alternative. The document journal records its creation and rename separately from the construction steps.</p></figcaption>
+<a href="feature-log/44.png" aria-label="Open step 44 screenshot at full size">
+<img src="feature-log/44.png" alt="Step 44: Name the new loadout Routed alternative. The document journal records its creation and rename separately from the construction steps." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-45">
+<figcaption><span class="step">Step 45</span><p>Use the selector to return to the original loadout. Each branch retains its construction process.</p></figcaption>
+<a href="feature-log/45.png" aria-label="Open step 45 screenshot at full size">
+<img src="feature-log/45.png" alt="Step 45: Use the selector to return to the original loadout. Each branch retains its construction process." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-17"><h2>Assembly targets and configurations</h2><p>In an assembly, the Target selector offers Assembly, Configurations and individual part instances. Assembly shows assembly operations; choose an instance to inspect its embedded part history and loadouts. Repeated instances and their joins belong to the assembly recipe. In the current assembly UI, pencil editing is offered for the latest supported polymerization or overhang-connection operation. Deleting an earlier assembly entry replays later entries and refuses unsupported replay; ↶ drops the selected entry and all later ones. Part-instance controls currently differ from standalone-part controls: the context-menu dependency/suppression/reorder actions and standalone repair launcher are not offered, and some embedded history deletion paths remove log records without rebuilding geometry. For provenance-preserving changes, edit the source part in its own editor rather than using those embedded deletion controls. These are current implementation limitations.</p></section><section id="chapter-18"><h2>Capture and use assembly configurations</h2><p>Choose Configurations in Target. Click + Capture Configuration to save the current assembly state. Click a configuration row to restore it, ▶ to animate to it, ⟳ to overwrite it with the current state, the pencil to rename it (Enter saves; Escape cancels), and × to delete it. The configuration list is distinct from the ordered assembly construction recipe. Animation also offers Pin to feature: enter that mode from the animation panel, click the desired feature when prompted, or Cancel to leave the picker. This section is a control reference; the captured part example does not contain an assembly or animation.</p></section><section id="chapter-19"><h2>Use the same log in Origami Editor</h2><p>Open Origami Editor from the top bar, then choose its Feature Log tab beside the path view. This is the same document and construction recipe as the 3D editor. The shared panel provides history navigation, filters and supported history actions alongside the 2D topology view. Press F over the path view to fit the strands.</p><figure id="step-46">
+<figcaption><span class="step">Step 46</span><p>Choose Feature Log beside the path view to inspect both extrusions, Bend, Autoscaffold and Full Autostaple in the same document.</p></figcaption>
+<a href="feature-log/46.png" aria-label="Open step 46 screenshot at full size">
+<img src="feature-log/46.png" alt="Step 46: Choose Feature Log beside the path view to inspect both extrusions, Bend, Autoscaffold and Full Autostaple in the same document." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-20"><h2>Make two fine routing edits</h2><p>In Origami Editor, use the Select tool and drag a free staple end inward by two bases. Repeat on a different staple end. These are two separate resize actions, not a multi-selection drag. The Feature Log collects consecutive small routing edits into one Fine Routing group, while retaining each operation and its exact end reference.</p><figure id="step-47">
+<figcaption><span class="step">Step 47</span><p>Resize 1: drag the marked staple 5′ end from bp 24 to 26, shortening it by two bases.</p></figcaption>
+<a href="feature-log/47.png" aria-label="Open step 47 screenshot at full size">
+<img src="feature-log/47.png" alt="Step 47: Resize 1: drag the marked staple 5′ end from bp 24 to 26, shortening it by two bases." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-48">
+<figcaption><span class="step">Step 48</span><p>Resize 2: drag the marked staple 5′ end from bp 88 to 90, shortening it by two bases.</p></figcaption>
+<a href="feature-log/48.png" aria-label="Open step 48 screenshot at full size">
+<img src="feature-log/48.png" alt="Step 48: Resize 2: drag the marked staple 5′ end from bp 88 to 90, shortening it by two bases." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-49">
+<figcaption><span class="step">Step 49</span><p>Two distinct endpoint drags produce one Fine Routing group with two retained sub-steps. The group follows Full Autostaple.</p></figcaption>
+<a href="feature-log/49.png" aria-label="Open step 49 screenshot at full size">
+<img src="feature-log/49.png" alt="Step 49: Two distinct endpoint drags produce one Fine Routing group with two retained sub-steps. The group follows Full Autostaple." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-50">
+<figcaption><span class="step">Step 50</span><p>Expand the triangle to show both Resize strand ends sub-steps, their individual rail notches, pencils, delete buttons and revert arrows.</p></figcaption>
+<a href="feature-log/50.png" aria-label="Open step 50 screenshot at full size">
+<img src="feature-log/50.png" alt="Step 50: Expand the triangle to show both Resize strand ends sub-steps, their individual rail notches, pencils, delete buttons and revert arrows." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-21"><h2>Scrub inside the group</h2><p>Drag the blue rail handle to the first resize sub-step. The first end is resized and the second is still at its original position. The complete group remains in the recipe. Drag to the second sub-step or final group notch to recover both edits. Grouping does not flatten the edit history.</p><figure id="step-51">
+<figcaption><span class="step">Step 51</span><p>At the first sub-step only the first resize is applied. The second sub-step remains in the log ahead of the cursor.</p></figcaption>
+<a href="feature-log/51.png" aria-label="Open step 51 screenshot at full size">
+<img src="feature-log/51.png" alt="Step 51: At the first sub-step only the first resize is applied. The second sub-step remains in the log ahead of the cursor." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-22"><h2>Revert one sub-step or the whole group</h2><p>The second sub-step’s ↶ reverts to before that resize: it removes the second edit and later history, retaining the first resize. Undo restores it. The Fine Routing group’s ↶ instead reverts to before the entire group, removing both resizes while retaining Full Autostaple and the earlier construction. Undo restores both. The individual × deletes its sub-step subject to downstream regeneration; its pencil opens its recorded inputs.</p><figure id="step-52">
+<figcaption><span class="step">Step 52</span><p>Confirm the second sub-step revert to keep the first resize and discard the second.</p></figcaption>
+<a href="feature-log/52.png" aria-label="Open step 52 screenshot at full size">
+<img src="feature-log/52.png" alt="Step 52: Confirm the second sub-step revert to keep the first resize and discard the second." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-53">
+<figcaption><span class="step">Step 53</span><p>After reverting the second sub-step, the first resize remains as the sole child of Fine Routing.</p></figcaption>
+<a href="feature-log/53.png" aria-label="Open step 53 screenshot at full size">
+<img src="feature-log/53.png" alt="Step 53: After reverting the second sub-step, the first resize remains as the sole child of Fine Routing." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-54">
+<figcaption><span class="step">Step 54</span><p>Group revert removes both resizes and restores the routed baseline. Both extrusions, Bend, Autoscaffold and Full Autostaple remain.</p></figcaption>
+<a href="feature-log/54.png" aria-label="Open step 54 screenshot at full size">
+<img src="feature-log/54.png" alt="Step 54: Group revert removes both resizes and restores the routed baseline. Both extrusions, Bend, Autoscaffold and Full Autostaple remain." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-55">
+<figcaption><span class="step">Step 55</span><p>Undo restores the Fine Routing group and both individual resize operations. The saved example retains them for further exploration.</p></figcaption>
+<a href="feature-log/55.png" aria-label="Open step 55 screenshot at full size">
+<img src="feature-log/55.png" alt="Step 55: Undo restores the Fine Routing group and both individual resize operations. The saved example retains them for further exploration." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-23"><h2>Save and reopen</h2><p>Save the part with its feature log and loadouts. Reopen it and inspect the saved operation inputs before continuing. The downloadable example accompanying this guide is reopened and independently replayed by the publication guard. The illustrated actions use a disposable example; apply them to your own design after inspecting its dependencies.</p><figure id="step-56">
+<figcaption><span class="step">Step 56</span><p>Reopened example: both extrusions, Bend, Autoscaffold, Full Autostaple and the two recorded Fine Routing resizes remain available.</p></figcaption>
+<a href="feature-log/56.png" aria-label="Open step 56 screenshot at full size">
+<img src="feature-log/56.png" alt="Step 56: Reopened example: both extrusions, Bend, Autoscaffold, Full Autostaple and the two recorded Fine Routing resizes remain available." width="1920" height="1080" loading="lazy"></a>
+</figure></section>
+<footer>Offline viewing: keep this HTML file beside the feature-log folder. No server or internet connection is required. <a href="#guide">Back to top ↑</a></footer>
+</main></div></body></html>

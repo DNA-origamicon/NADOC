@@ -1,5 +1,71 @@
 # Issues fix log
 
+## ISSUE-194 — Routed scaffold ends inherit an earlier deformation (2026-11-14)
+
+New Autoscaffold commands record terminal deformation inheritance. Added scaffold
+runs inherit their existing root's selected membership, per helix/direction;
+original ranges and Bend parameters remain on the original feature row. Cached
+history restores the later routing-owned scopes; native replay derives the same
+ranges. Legacy commands keep their recorded behavior. No helix-phase constants,
+deformation formulas or routing topology algorithms changed.
+
+The initial corrected guide contained 61 images, including eight complementary views at F3,
+F4, F5 and after returning to F5. Actual image review rejected an initially
+clipped capture; the accepted recipe fits after each orbit. End-region views
+expose both terminal loops. The saved/reopened example passes independent
+publication audit without using recovery snapshots. Desktop checks verify
+Autostaple (allowing its expected scaffold sequence assignment), scrub,
+suppression, Undo, loadouts, two cadnano end resizes and reopen. All 2,057 tested
+consecutive scaffold-base pairs stay within 0.621 nm after routing and scrubbing.
+The maintenance procedure now explicitly evaluates whether the guide's views can
+expose bugs, requires inspection of the images, and records findings/limitations.
+
+Reopening a Save As copy also requires its filename-to-name edit to be recorded.
+Library open now records the native `document-metadata` rename and omits no-op
+renames; its regression verifies independent replay and repeated-open idempotence.
+
+Validation: six focused inheritance/history regressions and 24 guide-tool tests
+passed; the complete
+browser capture passed in 6.7 minutes. HTML matches the capture and Feature
+History reports CURRENT with no problems. `just test-smart` decision FAST:
+20,944 passed, 19 skipped in 574.86 seconds.
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+> This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+> Only request `just test-session` when a broad/full sweep is actually needed.
+
+Timing triage followed `.claude/skills/triage-slow-tests/SKILL.md`: five existing
+mock-binary integration tests ran real subprocess lifecycles over the 5-second
+budget. Registered individually in `_SLOW_TESTS`, all with area `oxdna`:
+
+- Detached worker ownership after launcher exit: 6.41 s, subprocess imports and
+  intentional 0.5-second delays in each mock stage.
+- Deflecting-field validation: 5.51 s, relaxation plus field subprocess stages.
+- Wrong-target inter-helix measurement: 5.31 s, relaxation/production plus
+  trajectory parsing and measurement.
+- Field-ready specimen: 5.23 s, construction, relaxation and field-stage checks.
+- Append production: 5.18 s, initial relaxation followed by a production stage.
+
+Collection confirms all five remain in slow coverage (46 selected in the two
+modules, 298 deselected). The full fast suite was not repeated after this
+classification-only change; no budgets or guards were weakened. Both browser
+scratch roots were verified absent after cleanup, including the rejected capture.
+
+
+November 14 designer-guide revision: removed the advanced repair proposal,
+its input-selection setup and follow-up Undo capture. The guide now has 56
+images. Move uses the shared NADOC select primitive and fits within its modal;
+step 37 was visually reviewed with measured text/background contrast 16.02:1.
+Frontend: 10,491 passed, 1 skipped. The isolated commit-source browser capture
+passed in 6.7 minutes, including saved/reopened independent audit and all scaffold
+preservation checks. HTML and guide freshness checks passed. The six routing
+regressions, 24 guide-tool tests and the library-open provenance test also passed
+against the isolated commit sources. Browser scratch
+`/tmp/__e2e__guide-fa7brspb` was verified absent after cleanup.
+
+
+
 ## ISSUE-192 — Nonblocking sequence-work spinner and scoped geometry (2026-11-12)
 
 Subsecond follow-up: removed the redundant FastAPI response traversal, hash only
