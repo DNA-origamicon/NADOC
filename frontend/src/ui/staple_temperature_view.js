@@ -1,4 +1,3 @@
-import * as THREE from 'three'
 import { estimateStapleTemperatures } from '../scene/staple_temperature.js'
 import { temperatureColor } from '../scene/staple_temperature_colors.js'
 import { initTemperatureLegend, syncTemperatureButton } from './staple_temperature_legend.js'
@@ -10,17 +9,14 @@ export function initStapleTemperatureView({ store, designRenderer, onActivate = 
   const button = document.querySelector('[data-vt="stapleTemperature"]')
   const legend = initTemperatureLegend(document.getElementById('canvas-area'), () => apply())
   let mode = 'off', cachedDesign, estimates
-  const saved = new Map(), scratch = new THREE.Color()
+  const LAYER = 'stapleTemperature'
   const entries = () => [...(designRenderer.getBackboneEntries?.() ?? []),
     ...(designRenderer.getSlabEntries?.() ?? []), ...(designRenderer.getConeEntries?.() ?? [])]
 
-  function restore() {
-    // Entry identity changes at rebuilds; never write to disposed meshes.
-    for (const entry of entries()) {
-      if (saved.has(entry)) designRenderer.setEntryColor(entry, saved.get(entry))
-    }
-    saved.clear()
-  }
+  // Painted on a renderer false-colour layer: selection highlight/restore and
+  // colouring-mode repaints land underneath it, and clearing reveals whatever
+  // the underlying colour is by then.
+  function restore() { designRenderer.clearFalseColors(LAYER) }
   function apply() {
     if (mode === 'off') return
     const state = store.getState(), design = state.currentDesign
@@ -35,15 +31,7 @@ export function initStapleTemperatureView({ store, designRenderer, onActivate = 
       const result = estimates?.get(nuc?.strand_id ?? entry.strandId)
       if (!result) continue
       const value = mode === 'domain' ? result.domains[nuc?.domain_index]?.tm : result.total
-      if (!saved.has(entry)) {
-        let original = entry.defaultColor
-        if (entry.instMesh?.instanceColor) {
-          entry.instMesh.getColorAt(entry.id, scratch)
-          original = scratch.getHex()
-        }
-        saved.set(entry, original)
-      }
-      designRenderer.setEntryColor(entry, temperatureColor(value, bounds))
+      designRenderer.paintFalseColor(LAYER, entry, temperatureColor(value, bounds))
     }
     legend.update(mode, estimates, !supported ? 'Heatmap: open the part in Full or Beads view.'
       : !design ? 'Open a sequenced part.' : null)
@@ -62,7 +50,6 @@ export function initStapleTemperatureView({ store, designRenderer, onActivate = 
   const refresh = () => { restore(); apply() }
   const unsubscribe = store.subscribe((next, prev) => {
     if (mode === 'off') return
-    if (next.coloringMode !== prev.coloringMode || next.strandColors !== prev.strandColors || next.strandGroups !== prev.strandGroups) saved.clear()
     if (['currentDesign', 'currentGeometry', 'currentHelixAxes', 'representation', 'assemblyActive', 'coloringMode', 'strandColors', 'strandGroups', 'loopStrandIds'].some(k => next[k] !== prev[k])) refresh()
   })
   window.addEventListener('nadoc:display-rebuilt', refresh)

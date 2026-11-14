@@ -73,6 +73,8 @@ function makeDeps(initialState = {}) {
       getSlabEntries: vi.fn(() => []),
       getConeEntries: vi.fn(() => []),
       setEntryColor: vi.fn(),
+      paintFalseColor: vi.fn(),
+      clearFalseColors: vi.fn(),
       clearUndefinedHighlight: vi.fn(),
     },
     expandedSpacing: { isActive: vi.fn(() => false), toggle: vi.fn() },
@@ -115,14 +117,14 @@ describe('initViewToolButtons', () => {
 
     buttons.lengthHeatmap.click()
     expect(api.isLengthHeatmapOn()).toBe(true)
-    expect(deps.designRenderer.setEntryColor).toHaveBeenCalledWith(entry, BLUE)
+    expect(deps.designRenderer.paintFalseColor).toHaveBeenCalledWith('lengthHeatmap', entry, BLUE)
+    expect(deps.designRenderer.setEntryColor).not.toHaveBeenCalled()
     expect(document.getElementById('length-heatmap-legend').classList.contains('visible')).toBe(true)
     expect(buttons.lengthHeatmap.classList.contains('active')).toBe(true)
 
-    deps.designRenderer.setEntryColor.mockClear()
     buttons.lengthHeatmap.click()
     expect(api.isLengthHeatmapOn()).toBe(false)
-    expect(deps.designRenderer.setEntryColor).toHaveBeenCalledWith(entry, 0x123456)  // defaultColor
+    expect(deps.designRenderer.clearFalseColors).toHaveBeenCalledWith('lengthHeatmap')
     expect(document.getElementById('length-heatmap-legend').classList.contains('visible')).toBe(false)
   })
 
@@ -262,12 +264,12 @@ describe('initViewToolButtons', () => {
 
     // off → a design change does NOT recolour
     deps.store.setState({ currentDesign: { ...design1 } })
-    expect(deps.designRenderer.setEntryColor).not.toHaveBeenCalled()
+    expect(deps.designRenderer.paintFalseColor).not.toHaveBeenCalled()
 
     // turn on, then a design change recolours
     buttons.lengthHeatmap.click()
-    deps.designRenderer.setEntryColor.mockClear()
+    deps.designRenderer.paintFalseColor.mockClear()
     deps.store.setState({ currentDesign: { ...design1 } })
-    expect(deps.designRenderer.setEntryColor).toHaveBeenCalledWith(entry, BLUE)
+    expect(deps.designRenderer.paintFalseColor).toHaveBeenCalledWith('lengthHeatmap', entry, BLUE)
   })
 })

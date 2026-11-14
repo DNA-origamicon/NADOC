@@ -15,10 +15,25 @@ function fixture() {
   mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial(), 2)
   mesh.setColorAt(0, new THREE.Color(0x123456)); mesh.setColorAt(1, new THREE.Color(0xabcdef))
   let entries = [0, 1].map(i => ({ id: i, instMesh: mesh, defaultColor: 0xffffff, nuc: { strand_id: 's', domain_index: i } }))
-  const renderer = { getBackboneEntries: () => entries, setEntryColor: (e, c) => e.instMesh.setColorAt(e.id, new THREE.Color(c)) }
+  // Minimal false-colour layer: capture the instance colour on first paint,
+  // restore it when the layer clears (mirrors helix_renderer.paintFalseColor).
+  const layers = new Map()
+  const renderer = {
+    getBackboneEntries: () => entries,
+    paintFalseColor(layer, e, c) {
+      const saved = layers.get(layer) ?? new Map(); layers.set(layer, saved)
+      const tok = `${e.instMesh.uuid}:${e.id}`
+      if (!saved.has(tok)) { const prior = new THREE.Color(); e.instMesh.getColorAt(e.id, prior); saved.set(tok, { e, hex: prior.getHex() }) }
+      e.instMesh.setColorAt(e.id, new THREE.Color(c))
+    },
+    clearFalseColors(layer) {
+      for (const { e, hex } of layers.get(layer)?.values() ?? []) e.instMesh.setColorAt(e.id, new THREE.Color(hex))
+      layers.delete(layer)
+    },
+  }
   const button = document.querySelector('[data-vt="stapleTemperature"]')
   const color = i => { const c = new THREE.Color(); mesh.getColorAt(i, c); return c.getHex() }
-  return { store, renderer, button, color, replaceEntries: () => { entries = entries.map(e => ({ ...e })) } }
+  return { store, renderer, button, color, replaceEntries: () => { entries = entries.map(e => ({ ...e })); layers.clear() } }
 }
 afterEach(() => { api?.dispose(); api = null; mesh?.geometry.dispose(); mesh?.material.dispose(); mesh?.dispose(); document.body.innerHTML = '' })
 describe('temperature overlay', () => {

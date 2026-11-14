@@ -47,6 +47,9 @@ export function initViewToolButtons({
   let _lengthHeatmapOn = false
   const _lenLegend = document.getElementById('length-heatmap-legend')
 
+  // Painted on a renderer false-colour layer so selecting a strand while the
+  // heatmap is on neither drops nor (on deselect) reverts its colour.
+  const LENGTH_LAYER = 'lengthHeatmap'
   function _applyLengthHeatmap() {
     const design = store.getState().currentDesign
     if (!design) return
@@ -54,28 +57,20 @@ export function initViewToolButtons({
     // backbone + slab entries expose strand_id via nuc; cone entries expose it directly
     for (const e of designRenderer.getBackboneEntries?.() ?? []) {
       const c = colorMap.get(e.nuc?.strand_id)
-      if (c !== undefined) designRenderer.setEntryColor(e, c)
+      if (c !== undefined) designRenderer.paintFalseColor(LENGTH_LAYER, e, c)
     }
     for (const e of designRenderer.getSlabEntries?.() ?? []) {
       const c = colorMap.get(e.nuc?.strand_id)
-      if (c !== undefined) designRenderer.setEntryColor(e, c)
+      if (c !== undefined) designRenderer.paintFalseColor(LENGTH_LAYER, e, c)
     }
     for (const e of designRenderer.getConeEntries?.() ?? []) {
       const c = colorMap.get(e.strandId)
-      if (c !== undefined) designRenderer.setEntryColor(e, c)
+      if (c !== undefined) designRenderer.paintFalseColor(LENGTH_LAYER, e, c)
     }
     _lenLegend?.classList.add('visible')
   }
   function _clearLengthHeatmap() {
-    for (const e of designRenderer.getBackboneEntries?.() ?? []) {
-      designRenderer.setEntryColor(e, e.defaultColor)
-    }
-    for (const e of designRenderer.getSlabEntries?.() ?? []) {
-      designRenderer.setEntryColor(e, e.defaultColor)
-    }
-    for (const e of designRenderer.getConeEntries?.() ?? []) {
-      designRenderer.setEntryColor(e, e.defaultColor)
-    }
+    designRenderer.clearFalseColors(LENGTH_LAYER)
     _lenLegend?.classList.remove('visible')
   }
 

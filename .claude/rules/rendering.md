@@ -473,6 +473,17 @@ no rebuild. Fans out to `_scalarArcUpdater` → `unfold_view.applyFemArcColors` 
 3-part `"helix:bp:dir"` form only when `copy === 0`. Drivers: oxDNA RMSF **and** CanDo RMSF; oxDNA
 additionally routes to `atomistic_renderer.applyScalarColors` for the atomistic path.
 
+**False-colour layers (2026-11-13).** Scalar maps are one named layer (`'scalar'`) of a per-instance
+overlay in the helix controller (`_falseColors`: `base` + ordered `layers`); the staple-Tm view
+(`'stapleTemperature'`) and length heatmap (`'lengthHeatmap'`) paint through
+`designRenderer.paintFalseColor(layer, entry, hex)` / `clearFalseColors(layer)`. The controller's
+exported `setEntryColor`, plus `setStrandColor`/`applyColoring`/partial patch, display-mode
+resets, and strand isolation, write via
+`_writeEntryColor`, which only updates `base` while an overlay owns the instance — so selection
+highlight/restore (`setEntryColor(e, e.defaultColor)`) never drops or reverts a heat map. Never paint a
+heat map with raw `setEntryColor`; it would be erased by the next deselect. Pinned by
+`helix_renderer.false_colors.test.js`.
+
 ## Deform-tool preview ghost (current solid + result ghost, 2026-05-27)
 
 The one section that survived this audit intact. During a bend/twist preview both the current

@@ -1285,6 +1285,9 @@ export function initDesignRenderer(scene, storeRef) {
 
     // ── Instance update delegates (used by selection_manager) ─────────────
     setEntryColor(entry, hex)  { _helixCtrl?.setEntryColor(entry, hex) },
+    /** Named false-colour layer (heat maps): survives selection highlight/restore. */
+    paintFalseColor(layer, entry, hex) { _helixCtrl?.paintFalseColor?.(layer, entry, hex) },
+    clearFalseColors(layer)            { _helixCtrl?.clearFalseColors?.(layer) },
     setBeadScale(entry, s)     { _helixCtrl?.setBeadScale(entry, s) },
     setConeXZScale(entry, r)   { _helixCtrl?.setConeXZScale(entry, r) },
 
