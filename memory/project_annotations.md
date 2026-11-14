@@ -12,6 +12,18 @@ metadata:
 
 # Annotations (right sidebar → "Annotations")
 
+November 13 exact MD atoms in atomistic zoom insets: an atomistic inset (ball-and-stick/
+VDW/stick) registers its residue base keys with `scene/md_inset_atoms.js`; Display MD
+(`ui/md_panel.js`, Full stream) sends `set_inset_residues` and `/ws/md-run` returns real
+heavy atoms (`backend/core/md_base_frames.py::measured_residue_atoms`: anchor P/O5′ +
+rotated min-image offset, the measured-ring transform). The atomistic main viewport still
+wins when present. Atom names are canonicalized (CHARMM O1P/O2P/C5M → OP1/OP2/C7); before,
+those atoms silently fell back to rigid poses. The rigid fallback (no exact atoms) now maps
+NAMD `measured_base` frames from the same P/ring frame on rest atoms. Live check on
+24hb_2xT Production 1: 243/243 inset atoms exact. Open: View-trajectory playback still
+uses the rigid fallback; the design atomistic model has malformed bonds at the
+crossover-insert junctions (P–O5′ 0.035 nm, O3′–P ≈0.28 nm).
+
 November 12 zoom-volume base membership: `scene/zoom_volume_bases.js` merges live
 backbone entries with missing geometry and native crossover-insert render records.
 Exact base refs retain loop-copy and `__xb__` identities; extension-only selections

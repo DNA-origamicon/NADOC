@@ -96,3 +96,38 @@ def test_live_display_missing_ring_preserves_coarse_fallback():
     apply_measured_display_frames({'full_base_layout': (np.array([0]), [])},
                                   [row], None, None)
     assert row == before
+
+
+def test_inset_residue_atoms_are_exact_trajectory_atoms_in_display_frame():
+    """Requested residues return their real heavy atoms (H excluded), imaged against
+    the residue anchor across a periodic face and placed in the display affine."""
+    import MDAnalysis as mda
+    from backend.core.md_base_frames import display_row_key, measured_residue_atoms
+
+    u = mda.Universe.empty(9, n_residues=3, atom_resindex=[0, 0, 0, 1, 1, 1, 2, 2, 2],
+                           trajectory=True)
+    u.add_TopologyAttr('names', ['P', "O3'", 'H1', 'P', 'C5M', 'O1P', "O5'", "C1'", 'N1'])
+    # Residue 0 straddles x=10: its O3' is stored one box away from its P.
+    raw_ang = np.array([[99., 20, 10], [1., 20, 10], [99., 21, 10],
+                        [30., 30, 30], [31., 30, 30], [30., 31, 30],
+                        [50., 50, 50], [50., 50, 51], [50., 51, 51]])
+    u.atoms.positions = raw_ang
+    rotation = np.array([[0., 0., 1.], [0., 1., 0.], [-1., 0., 0.]])
+    translation = np.array([5., 6., 7.])
+    ctx = {'universe': u, 'full_base_layout': (np.array([0, 3, 6]), [])}
+    positions = [
+        dict(helix_id='h', bp_index=4, direction='FORWARD', copy=0),
+        dict(helix_id='__xb__', bp_index='xo', direction=1, copy=0),
+        dict(helix_id='h', bp_index=9, direction='REVERSE'),
+    ]
+    for row, anchor in zip(positions, raw_ang[[0, 3, 6]] / 10):
+        row.update(zip('xyz', anchor @ rotation.T + translation))
+    assert [display_row_key(r) for r in positions] == ['h:4:FORWARD', '__xb__:xo:1', 'h:9:REVERSE']
+    got = measured_residue_atoms(ctx, positions, rotation, np.array([10., 10., 10.]),
+                                 ['h:4:FORWARD', '__xb__:xo:1'])
+    assert [(k, n) for k, n, *_ in got] == [('h:4:FORWARD', 'P'), ('h:4:FORWARD', "O3'"),
+        ('__xb__:xo:1', 'P'), ('__xb__:xo:1', 'C5M'), ('__xb__:xo:1', 'O1P')]
+    unwrapped = np.array([[9.9, 2, 1], [10.1, 2, 1], [3, 3, 3], [3.1, 3, 3], [3, 3.1, 3]])
+    np.testing.assert_allclose([g[2:] for g in got],
+                               unwrapped @ rotation.T + translation, atol=1e-5)
+    assert measured_residue_atoms(ctx, positions, rotation, None, []) == []

@@ -1,7 +1,8 @@
 import { ANNOTATION_FONT_SIZES, ANNOTATION_FONTS } from './annotation_model.js'
 import { zoomBaseEntries, buildZoomBaseExtras, zoomBackbonePairs } from './zoom_volume_bases.js'
 import { copyZoomBox, zoomBoxBounds, entriesInZoomBox } from './zoom_volume_box.js'
-import { createZoomLayerMotion, zoomMotionFrame, zoomLiveAtoms } from './zoom_volume_motion.js'
+import { createZoomLayerMotion, zoomMotionFrame, zoomLiveAtoms, zoomExactAtoms } from './zoom_volume_motion.js'
+import { mdInsetAtoms } from './md_inset_atoms.js'
 import './zoom_volume.css'
 import * as THREE from 'three'
 import { matchTargetEntries, describeTarget } from './annotation_targets.js'
@@ -215,8 +216,16 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     loading = true
     loadingOverlay.hidden = false; host.setAttribute('aria-busy', 'true')
   }
+  // Atomistic insets ask Display MD for their residues' exact atoms.
+  const insetOwner = Symbol(id)
+  function registerInsetResidues() {
+    const atomistic = ['ballstick', 'vdw', 'stick'].includes($('representation').value)
+    mdInsetAtoms.setResidues(insetOwner, atomistic && !mode
+      ? motionLayers.flatMap(layer => layer.geometry.map(n => baseKey(n, n.copy_k ?? 0))).filter(Boolean) : null)
+  }
   function clear() {
     motionLayers = []; motionConnections = []; motionExtraEntries = []
+    mdInsetAtoms.setResidues(insetOwner, null)
     loading = false; hasFrozenImage = false; frozen.hidden = true; loadingOverlay.hidden = true
     host.setAttribute('aria-busy', 'false'); displayedBounds.makeEmpty()
     abort.abort(); revision++; ready = false; targets = []; volume = null; bounds.makeEmpty()
@@ -390,6 +399,7 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
       else bounds.expandByScalar(1.5)
       renderer ??= getInsetRenderer()
       ready = true
+      registerInsetResidues()
       $('status').textContent = `${volume ? 'Submodel box' : targets[0]?.instanceId ? 'Assembly selection' : describeTarget(targets[0].refs, state.currentDesign)} · ${count} bases${externalCount ? ` · ${externalCount} attached objects` : ''}`
     } catch (error) { if (current === revision && !disposed) { $('status').textContent = `Zoom Volume failed: ${error.message}`; ready = false } }
     finally {
@@ -422,12 +432,12 @@ export function initZoomVolumeEntry({ getInsetRenderer, parent, id, name, positi
     zoomButtons[0].disabled = zoomStep === 8
     zoomButtons[1].disabled = zoomStep === -8
     if (loading || !ready) { svg.style.display = 'none'; return }
-    const currentAtomVersion = getAtomisticRenderer?.()?.positionVersion?.()
+    const currentAtomVersion = `${getAtomisticRenderer?.()?.positionVersion?.()}|${mdInsetAtoms.version()}`
     if ((motionLayers.length || motionExtraEntries.length) && (appliedMotionRevision !== motionRevision || currentAtomVersion !== atomVersion)) {
       const updates = designRenderer.getFemPositions?.()
       const live = [...designRenderer.getBackboneEntries(), ...motionExtraEntries.map(e => ({ ...e,
         pos: designRenderer.xoverResidueInfo?.(e.zoomExtra.target)?.centroid ?? e.pos }))]
-      const atoms = updates?.length ? zoomLiveAtoms(getAtomisticRenderer?.()) : null
+      const atoms = updates?.length ? zoomExactAtoms(getAtomisticRenderer?.(), mdInsetAtoms.atoms()) : null
       if (!volume) bounds.copy(externalBounds)
       for (const layer of motionLayers) {
         const positions = zoomMotionFrame(layer.geometry, updates, live)

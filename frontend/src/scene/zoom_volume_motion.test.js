@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { expect, it, vi } from 'vitest'
 import * as THREE from 'three'
-import { createZoomLayerMotion, zoomMotionFrame, zoomLiveAtoms } from './zoom_volume_motion.js'
+import { createZoomLayerMotion, zoomMotionFrame, zoomLiveAtoms, zoomExactAtoms, measuredResidueFrame } from './zoom_volume_motion.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { buildHelixObjects } from './helix_renderer.js'
 const n = {placement_source:'native-full-o5-v1',slab_position:[.67,0,0],slab_quaternion:[0,Math.SQRT1_2,Math.SQRT1_2,0],helix_id:'h',bp_index:0,direction:'FORWARD',strand_id:'s',strand_type:'staple',domain_index:0,backbone_position:[1,0,0],base_position:[.5,0,0],base_normal:[-1,0,0],axis_tangent:[0,0,1]}
@@ -51,4 +51,40 @@ it('moves an independent surface with the shared playback skinning path',()=>{
   motion.apply(zoomMotionFrame([n],[{...n,backbone_position:[4,0,0]}]))
   expect(Array.from(renderer.applyDeformedFrame.mock.calls[0][1])).toEqual([4,0,0,4,1,0,4,0,1])
   expect(mesh.vertices[0]).toBe(1)
+})
+it('maps NAMD measured-base frames from the same atom-defined frame on rest atoms',()=>{
+  // Design bead/base_normal deliberately disagree with the P/ring frame (as in real
+  // geometry: ~0.16 nm and ~35°), which previously rotated every residue about the wrong point.
+  const nuc={...n,backbone_position:[1.1,0.2,0],base_normal:[-0.8,0.6,0]}
+  const ring=[['N1',[0.2,0,0]],['C2',[0.13,0.12,0.01]],['N3',[-0.01,0.12,0]],['C4',[-0.08,0,-0.01]],['C5',[-0.01,-0.12,0]],['C6',[0.13,-0.12,0.01]]]
+  const rest=[['P',[1,0,0]],["O3'",[0.9,0.3,0.25]],["C1'",[0.45,0.05,0.05]],...ring]
+  const R=new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.4,-0.7,1.1)).setPosition(3,-2,5)
+  const moved=new Map(rest.map(([name,p])=>[name,new THREE.Vector3(...p).applyMatrix4(R).toArray()]))
+  const target=initAtomisticRenderer(new THREE.Scene()); target.setMode('ballstick')
+  target.update({atoms:rest.map(([name,p],i)=>({...nuc,serial:i,name,element:name[0],x:p[0],y:p[1],z:p[2]})),bonds:[]})
+  const motion=createZoomLayerMotion({entries:new Map([['z',{ready:true,kind:'atom',renderer:target}]])},[nuc])
+  const live=new THREE.Matrix4().copy(R).multiply(measuredResidueFrame(new Map(rest)))
+  const x=new THREE.Vector3(),y=new THREE.Vector3(),z=new THREE.Vector3(); live.extractBasis(x,y,z)
+  const update={...nuc,backbone_position:moved.get('P'),measured_base:true,nx:x.x,ny:x.y,nz:x.z,tx:z.x,ty:z.y,tz:z.z}
+  motion.apply(zoomMotionFrame([nuc],[update],[{nuc,pos:new THREE.Vector3(...moved.get('P'))}]))
+  target.visitAtoms((a,p)=>p.toArray().forEach((v,i)=>expect(v).toBeCloseTo(moved.get(a.name)[i],5)))
+  // Non-measured sources keep the design-frame mapping.
+  motion.apply(zoomMotionFrame([nuc],null))
+  target.visitAtoms((a,p)=>p.toArray().forEach((v,i)=>expect(v).toBeCloseTo(new Map(rest).get(a.name)[i],5)))
+  target.dispose()
+})
+it('places inset atoms exactly from Display-MD inset atoms, matching CHARMM names to design names',()=>{
+  const target=initAtomisticRenderer(new THREE.Scene()); target.setMode('ballstick')
+  target.update({atoms:[{...n,serial:1,name:'OP1',element:'O',x:1,y:0,z:0},{...n,serial:2,name:'C7',element:'C',x:2,y:0,z:0}],bonds:[]})
+  const motion=createZoomLayerMotion({entries:new Map([['z',{ready:true,kind:'atom',renderer:target}]])},[n])
+  const inset=new Map([['h:0:FORWARD:OP1',[5,6,7]],['h:0:FORWARD:C7',[8,9,10]]])
+  motion.apply(zoomMotionFrame([n],[{...n,backbone_position:[4,0,0]}]),zoomExactAtoms(null,inset))
+  const got=new Map(); target.visitAtoms((a,p)=>got.set(a.name,p.toArray()))
+  expect(got).toEqual(new Map([['OP1',[5,6,7]],['C7',[8,9,10]]]))
+  // An atomistic main viewport (CHARMM names) takes precedence over the inset stream.
+  const main=initAtomisticRenderer(new THREE.Scene()); main.setMode('ballstick')
+  main.update({atoms:[{...n,serial:9,name:'O1P',element:'O',x:3,y:3,z:3}],bonds:[]})
+  expect(zoomExactAtoms(main,inset).get('h:0:FORWARD:OP1')).toEqual([3,3,3])
+  expect(zoomExactAtoms(main,null).get('h:0:FORWARD:OP1')).toEqual([3,3,3])
+  target.dispose();main.dispose()
 })
