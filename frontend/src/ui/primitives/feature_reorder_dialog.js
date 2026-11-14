@@ -1,6 +1,7 @@
 import { featureLabels } from '../../features/feature_labels.js'
 import { createModal } from './modal.js'
 import { createButton } from './button.js'
+import { createSelect } from './input.js'
 import { el } from './dom.js'
 import { getDocId } from '../../shared/doc_id.js'
 
@@ -20,12 +21,14 @@ function showHistoryChange({ store, api, source, rowIndex, suppression = false, 
   const loadout = source.loadouts?.find(item => item.id === context.loadoutId)
   if (!current() || loadout?.protected || (source.feature_log_cursor ?? -1) !== -1
       || source.feature_log_sub_cursor != null) throw new Error('Return to editable current history before changing a feature.')
-  const select = el('select', { attrs: { 'aria-label': 'New feature position' } })
   const labels = featureLabels(source.feature_log)
-  source.feature_log.forEach((entry, index) => select.append(el('option', {
-    text: labels[index], attrs: { value: String(index) },
-  })))
-  select.value = String(rowIndex)
+  const select = createSelect({
+    options: labels.map((label, index) => ({ label, value: String(index) })),
+    value: String(rowIndex),
+  })
+  select.setAttribute('aria-label', 'New feature position')
+  select.style.width = '100%'
+  select.style.minWidth = '0'
   const status = el('p', { attrs: { role: 'status' } })
   const body = el('div', { children: [el('p', { text: suppression
     ? 'The saved feature definition is retained. The model will regenerate; unresolved dependencies refuse the change.'

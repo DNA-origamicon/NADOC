@@ -75,6 +75,21 @@ Tests: `tests/test_deformation_selection.py`, `deformation_targets.test.js`,
 `deformation_preview_session.test.js`, `deformation_tool_launcher.test.js`, and
 `frontend/e2e/deformation_selection.spec.js`.
 
+## Autoscaffold terminal growth (2026-11-14)
+
+New Autoscaffold commands record `inherit_scaffold_end_deformations: 1`.
+Routing-created terminal scaffold runs inherit the deformation membership of
+their pre-routing scaffold root, per helix and direction. Original selected
+ranges, Bend/Twist parameters and existing nucleotide positions stay unchanged;
+interior gaps and unrelated selections do not expand. The routing result adds
+explicit ranges to the current deformation state; the earlier Bend row retains
+its original input scope. Snapshot seeking restores routing-owned scope additions,
+and independent native replay derives them again from the command inputs.
+Unversioned routing recipes retain frozen-range behavior for reproducibility.
+This does not change deformation mathematics or periodic-strand materialization.
+Regression: `tests/test_routing_deformation_scope.py`; the Feature Log browser
+recipe checks consecutive scaffold positions plus Autostaple/scrub/reopen parity.
+
 ## Legacy cluster operations
 
 **There are two independent scoping mechanisms, and the geometry math reads neither `cluster_ids`

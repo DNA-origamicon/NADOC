@@ -52,12 +52,15 @@ def _run_auto_scaffold_with_feature_log(
     """
     from uuid import uuid4
     params = {**params, "history_seed": str(uuid4())}
+    if op_kind.startswith("auto-scaffold"):
+        params["inherit_scaffold_end_deformations"] = 1
     holder: dict = {}
 
     def _fn(d):
         try:
             from backend.api.part_auto_commands import scaffold
-            updated, result = scaffold(op_kind, d, history_seed=params["history_seed"])
+            updated, result = scaffold(op_kind, d, history_seed=params["history_seed"],
+                                       inherit_scaffold_end_deformations=params.get("inherit_scaffold_end_deformations", 0))
         except HTTPException:
             raise
         except Exception as exc:

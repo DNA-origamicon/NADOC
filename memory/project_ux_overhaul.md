@@ -42,6 +42,15 @@ and a closed-session placeholder until the same editor opens another session.
 The editor retains all controllers and API authority; the popup has no broadcast
 subscription or independent application state. See `docs/expandable_panels_implementation_plan.md`.
 
+**Library-name provenance (2026-11-13):** Opening a native part with a supplied
+library name now records a `document-metadata` rename when the name differs.
+This fixes independent replay after Save As/reopen; identical-name opens add no
+operation. The molecular recipe and source document remain unchanged.
+
+**Feature reorder selector (2026-11-14):** The Move dialog uses the shared
+`createSelect` control for standard canvas/text colors and fits it to the modal
+width. The Feature Log designer guide excludes advanced repair proposals.
+
 ## Corrections from the 2026-07-31 audit (the archive is wrong about these)
 
 **Shared design folder (2026-11-04):** `scripts/setup_shared_design_workspace.py`

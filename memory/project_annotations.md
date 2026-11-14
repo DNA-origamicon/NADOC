@@ -295,7 +295,7 @@ intensity/size at low zoom, every callout type's look, placement on a dense mult
   are 12 px/system-ui. Title height expands with font size in live layout and
   photo/video compositing, including loading/frozen overlays and bottom placement.
 
-- **Auto-size precision (2026-11-14, ISSUE-194):** preserve fractional border-box
+- **Auto-size precision (2026-11-14, ISSUE-195):** preserve fractional border-box
   measurements and pin the inner dimensions before absolute positioning. Rounded
   `offsetWidth` could force the final glyph of “Anchors” at 13 px onto a second
   line. Browser coverage checks one-line labels, intentional wrapping and the

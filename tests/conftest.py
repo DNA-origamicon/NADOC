@@ -581,6 +581,15 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # November 14 FAST: real subprocess lifecycle with mock oxDNA binaries.
+    # Detached launch/ownership plus intentional stage delays: 6.41s; multistage
+    # relaxation/field/production and geometry recovery: 5.18–5.51s. Keep their
+    # integration coverage in slow+oxdna; no physical simulation is involved.
+    "test_detached_worker_advances_after_launcher_exit",
+    "test_field_validation_oracle_passes_with_deflecting_mock",
+    "test_relaxed_measurement_inter_helix_spacing_fires_on_wrong_target",
+    "test_build_field_specimen_is_field_ready",
+    "test_append_production_after_completion",
     # November 13 FAST: the shared receiver fixture compiles a real C++ binary
     # (6.30 s charged to its first test). Keep every receiver user together so
     # compilation does not simply move to another fast test; pure Python stays fast.

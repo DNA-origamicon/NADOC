@@ -154,7 +154,8 @@ editorial captures and verification during these iterations.
    Select these with `--feature <feature-id> --guide <guide-id>`; the checker and
    ledger track every lesson independently.
 4. Capture to `docs/guides/<stable-id>/`, preserve/replay the complete construction,
-   review images, record UX findings and add a reader link to this library.
+   review images using the multi-perspective geometry check below, record UX findings
+   and add a reader link to this library.
 5. Run the checker and the focused documentation-tool tests. Review the diff,
    especially screenshots, scope, dates and dependency additions/removals.
 
@@ -163,6 +164,27 @@ It does not assert that this inventory exhausts every menu item or context-menu
 variant. Reconcile it during UX review. Experimental CPD work remains blocked
 pending a specifically authorized session. Simulation guides must not launch
 production calculations without explicit authorization.
+
+## Geometry review from multiple perspectives
+
+Before approving or regenerating a guide, explicitly review whether its views can
+expose potential application bugs. A successful scripted workflow and a replaying
+feature log do not establish that the displayed geometry is correct.
+
+1. Identify regions obscured in the main view: scaffold/staple ends, back rows,
+   connections, continuations and newly created geometry.
+2. Capture complementary side/reverse-oblique and end-region views at the same
+   meaningful stages, especially immediately before and after routing or deformation,
+   and after scrubbing or reopening. Explain the orbit gesture and what to inspect.
+   Keep Full representation; choose views that actually expose those regions.
+3. Compare those views for discontinuities, displaced ends, unexpected overlaps,
+   missing connections and changes in geometry that should have stayed fixed.
+   Inspect the images themselves. If a chosen angle still hides a critical region,
+   replace it or add a closer view before accepting the guide.
+4. Record the reviewed stages, image numbers, findings and limitations in the guide
+   review ledger. Reproduce suspicious changes at the first operation that introduces
+   them, fix the bug, then recapture. Add a numerical regression check where possible;
+   do not normalize a visible defect with a caption or rely on replay alone.
 
 ## UX review
 
@@ -222,3 +244,19 @@ and `python3 -m scripts.render_feature_guide_html --guide bend`. Add `--check` t
 verify each export. Bend is registered under the existing Bend and Twist feature;
 Bend and Twist have separate lessons, dates and freshness checks under that entry.
 Use `--guide twist` to render or check the Twist browser version.
+
+## Feature Log lesson
+
+Generate with `--feature feature-history`; render/check with `--guide feature-log`.
+History editing, Undo/Redo and loadouts are the subject of this lesson, so the
+ordinary tool-lesson exclusions above do not apply. Its 3×6 square-lattice part
+is authored through the ordinary Extrude UI, with a 2×6 end continuation,
+Bend, Autoscaffold and Full Autostaple before the multi-step history exercises. The recipe exercises navigation,
+historical editing, dependency inspection, suppression, revert/delete and undo,
+filters, published-recipe checking, loadouts, the desktop Origami Editor and reopen.
+The Origami Editor exercise uses two real staple-end drags, expands their Fine
+Routing group, scrubs to the first child, and verifies child/group revert and Undo
+against the corresponding strand states. A read-only path-view observation adapter
+locates visible endpoints; only pointer input performs edits. Advanced repair proposals are intentionally excluded from this designer lesson.
+Assembly/configuration controls retain reference-only coverage.
+Keep inventory coverage partial until those contexts receive their own exercises.

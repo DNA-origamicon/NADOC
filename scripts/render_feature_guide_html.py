@@ -74,7 +74,7 @@ footer{{margin-top:50px;color:#aab9ca}}.skip{{position:absolute;left:-9999px}}.s
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Verify the HTML matches the current captured guide')
-    parser.add_argument('--guide', choices=['extrude', 'bend', 'twist'], default='extrude')
+    parser.add_argument('--guide', choices=['extrude', 'bend', 'twist', 'feature-log'], default='extrude')
     args = parser.parse_args()
     output = REPO / GUIDES / f'{args.guide}.html'
     html = render(args.guide)

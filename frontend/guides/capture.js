@@ -63,6 +63,12 @@ export async function createGuide(page, directory, title, { feature = '' } = {})
     }, { number, point })
     const file = `${String(number).padStart(2, '0')}.png`
     try {
+      // Let finite UI transitions finish so a newly opened dialog is visible.
+      await target.evaluate(async () => {
+        await Promise.all(document.getAnimations().filter(animation =>
+          animation.playState === 'running' && Number.isFinite(animation.effect?.getComputedTiming().endTime)
+        ).map(animation => animation.finished.catch(() => {})))
+      })
       await target.screenshot({ path: path.join(directory, file) })
       steps.push({ number, caption, file, point, section, annotation: point ? 'numbered-arrow' : null, representation: editorView ? null : display.representation, view: editorView ? 'cadnano-path' : '3d' })
     } finally {

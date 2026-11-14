@@ -1,12 +1,30 @@
 # Issues & bugs ledger — "fix next issue" loop
 
-## ISSUE-194 — Auto-sized annotation wraps its final glyph (2026-11-14)
+## ISSUE-195 — Auto-sized annotation wraps its final glyph (2026-11-14)
 
 - [x] Reproduced “Anchors” at 13 px as two rendered browser lines (Anchor + s).
 - [x] Preserve fractional border-box dimensions and pin them before switching
   to absolute positioning; integer offsetWidth rounded away needed text space.
 - [x] Browser regression verifies one line through font/viewport changes, while
   explicit newlines, narrow custom boxes, resizing and rotation still work.
+
+## ISSUE-194 — Autoscaffold ends fall outside an earlier Bend (2026-11-14)
+
+The Feature Log guide exposed 268 new scaffold bases outside the earlier Bend's
+recorded ranges. The defect first appeared after Autoscaffold, before Autostaple
+or history scrubbing. Cached and native history both reproduced the bad state.
+
+- [x] New Autoscaffold commands inherit each extended scaffold end's deformation
+  membership without changing original nucleotide coordinates, unselected
+  directions, deformation parameters or earlier feature inputs.
+- [x] Record the behavior version; preserve legacy replay. Restore later routing
+  scopes during cached seek as well as independent command replay.
+- [x] Focused tests cover end membership, unchanged original positions,
+  save/reopen, seek with/without recovery, Undo/Redo and legacy behavior.
+- [x] Recapture and inspect complementary views in the Feature Log guide, including
+  before/after routing and the return from history scrubbing.
+- [x] Add a mandatory multi-perspective geometry review to guide maintenance.
+
 
 ## ISSUE-193 — Atomistic inset depends on main representation during MD flex/playback (2026-11-14)
 
