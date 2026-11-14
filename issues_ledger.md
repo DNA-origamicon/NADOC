@@ -1,5 +1,13 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-194 — Auto-sized annotation wraps its final glyph (2026-11-14)
+
+- [x] Reproduced “Anchors” at 13 px as two rendered browser lines (Anchor + s).
+- [x] Preserve fractional border-box dimensions and pin them before switching
+  to absolute positioning; integer offsetWidth rounded away needed text space.
+- [x] Browser regression verifies one line through font/viewport changes, while
+  explicit newlines, narrow custom boxes, resizing and rotation still work.
+
 ## ISSUE-193 — Atomistic inset depends on main representation during MD flex/playback (2026-11-14)
 
 - [x] Full flex/playback did not request atom coordinates, so the inset transformed
@@ -296,6 +304,11 @@ files carry all the state a cold session needs.
 
 
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
+
+- November 14 annotation-branch validation reproduced both recorded failures:
+  Honeycomb request timeout and Square `lattice_type` undefined. Smoke: 22 passed,
+  two skipped, two failed. No New Part code changed. Evidence:
+  `.development-artifacts/annotation-branches/validation.json`.
 
 - November 13 flex-settings validation reproduced the Square request assertion
   at `smoke.spec.js:200`; Honeycomb also timed out waiting for its creation

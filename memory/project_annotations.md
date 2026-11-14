@@ -12,6 +12,44 @@ metadata:
 
 # Annotations (right sidebar → "Annotations")
 
+November 14 follow-up: multi-anchor detection/routing is **opt-in per annotation**
+through the **Multiple anchors** checkbox beneath Callout. `multi_anchor` persists
+in part/assembly metadata and checkpoints; `multiAnchor` travels in prepared
+sharing. New and legacy annotations default off. Off uses the original world
+centroid/member anchor and direct leader path, bypassing target grouping, per-base
+projection, island detection and route optimization; turning it off removes extra
+branches immediately. This supersedes automatic activation below after the user
+reported substantial Voltron UI slowdown.
+Toggle validation: 10,528 frontend tests, 8 annotation API tests, 134 archive
+regressions and both browser workflows passed (Voltron 1 → 13 → 1, source unchanged).
+Backend FAST: 20,883 passed/90 skipped; aggregate 205s > 90s guard, no per-test
+violators. FULL deferred without a test session. Smoke retains the two ISSUE-180
+failures (22 passed/two skipped). Lint passed. Compact results and cleanup:
+`.development-artifacts/annotation-toggle/validation.json`; `main.js` LOC delta: 0.
+
+November 14 branch implementation: `annotation_branches.js` groups exact selected
+bases/domains into runs using the existing renderer strand ordering on the full
+source, so omitted bases and individually selected strands stay separate. Explicit
+cluster/group/assembly-instance selections stay aggregate targets rather than
+expanding into a label per internal strand. Visible gaps
+larger than 48 CSS pixels (or three times typical bead spacing at high zoom)
+split a run further. Each branch ends on a selected
+member near its island centroid. Elbow leaders score bounded candidate traces
+for length, model coverage, label overlap and crossings (heuristic, not a global
+optimum). Straight styles retain direct branches. Overlay, photo/video canvas
+export, part/assembly hosts and prepared sharing preserve multiple branches;
+shared `branchGroups` contains numeric membership only, never editor refs.
+Unchanged projected targets, boxes and occupancy reuse the previous traces.
+Existing annotation metadata needs no migration. Routing remains display-only.
+Browser regression: `e2e/annotation_branches.spec.js` loads existing files with
+saving disabled; the local Voltron check identifies X3–X15 by displayed labels.
+Validation: 10,525 frontend tests passed (one skipped), 53 focused checks passed,
+and both browser workflows passed; Voltron produced exactly 13 branches with its
+source checksum unchanged. Lint passed. Smoke: 22 passed/two skipped/two known
+ISSUE-180 failures. Test artifacts were removed; compact results live in
+`.development-artifacts/annotation-branches/validation.json`. `main.js` LOC delta: 0.
+Dense-view orbit/zoom tuning remains tracked in MV-68.
+
 November 13 MD inset follow-up: `zoom_volume_entry.js` consumes visible main-view
 atoms even when atomistic MD clears coarse positions. Its version includes the
 renderer mode, and camera bounds follow displayed atom coordinates.
@@ -256,3 +294,9 @@ intensity/size at low zoom, every callout type's look, placement on a dense mult
   saved per inset in `settings.title-size`/`settings.title-font`; legacy defaults
   are 12 px/system-ui. Title height expands with font size in live layout and
   photo/video compositing, including loading/frozen overlays and bottom placement.
+
+- **Auto-size precision (2026-11-14, ISSUE-194):** preserve fractional border-box
+  measurements and pin the inner dimensions before absolute positioning. Rounded
+  `offsetWidth` could force the final glyph of “Anchors” at 13 px onto a second
+  line. Browser coverage checks one-line labels, intentional wrapping and the
+  existing resize/rotation workflow. Saved font sizes and box settings are unchanged.

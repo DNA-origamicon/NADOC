@@ -11,7 +11,7 @@ export function validateSharedAnnotations(entries, root) {
   const nodes = new Map(), ids = new Set()
   const visit = node => { nodes.set(node.uuid, node); node.children.forEach(visit) }
   visit(root)
-  const fields = new Set(['id', 'text', 'icon', 'calloutType', 'color', 'size', 'fontFamily', 'boxSize', 'rotationDeg', 'transparency', 'manual', 'screenPos', 'targets'])
+  const fields = new Set(['id', 'text', 'icon', 'calloutType', 'color', 'size', 'fontFamily', 'boxSize', 'rotationDeg', 'transparency', 'manual', 'screenPos', 'targets', 'branchGroups', 'multiAnchor'])
   for (const e of entries) {
     if (!e || typeof e !== 'object' || Object.keys(e).some(k => !fields.has(k)) ||
         typeof e.id !== 'string' || !e.id.length || e.id.length > 256 || ids.has(e.id) ||
@@ -24,6 +24,8 @@ export function validateSharedAnnotations(entries, root) {
         (e.fontFamily != null && !ANNOTATION_FONTS.includes(e.fontFamily)) ||
         !Number.isFinite(e.transparency) || e.transparency < TRANSPARENCY_RANGE.min || e.transparency > TRANSPARENCY_RANGE.max ||
         typeof e.manual !== 'boolean' || (e.screenPos !== null && (!e.screenPos || !['x', 'y'].every(k => Number.isFinite(e.screenPos[k]) && e.screenPos[k] >= 0 && e.screenPos[k] <= 1))) ||
+        (e.multiAnchor != null && typeof e.multiAnchor !== 'boolean') ||
+        (e.branchGroups != null && (!Array.isArray(e.branchGroups) || e.branchGroups.length > 1000000 || e.branchGroups.some(n => !Number.isSafeInteger(n) || n < 0 || n > 1000000))) ||
         !Array.isArray(e.targets) || e.targets.length > 4096 || e.targets.some(id => !['Points', 'Sprite', 'InstancedMesh'].includes(nodes.get(id)?.type))) fail()
     ids.add(e.id)
   }

@@ -81,3 +81,13 @@ it('preserves box dimensions and rotation through the saved wire format', () => 
   expect(entry.rotationDeg).toBe(90)
   expect(normalizeAnnotation().boxSize).toBeNull()
 })
+
+it('defaults to a single anchor and round-trips the explicit multi-anchor toggle', () => {
+  expect(normalizeAnnotation({}).multiAnchor).toBe(false)
+  expect(annotationFromWire({}).multiAnchor).toBe(false)
+  for (const multiAnchor of [true, false]) {
+    const wire = annotationToWire(normalizeAnnotation({ multiAnchor }))
+    expect(wire.multi_anchor).toBe(multiAnchor)
+    expect(annotationFromWire(wire).multiAnchor).toBe(multiAnchor)
+  }
+})

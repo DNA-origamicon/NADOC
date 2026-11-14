@@ -212,6 +212,13 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
     const typeRow = h(document, 'div', 'anno-row')
     typeRow.append(h(document, 'label', '', { text: 'Callout' }), type)
 
+    const multiAnchor = h(document, 'input', '', { type: 'checkbox', checked: entry.multiAnchor })
+    multiAnchor.dataset.field = 'multiAnchor'
+    const multiAnchorRow = h(document, 'label', 'anno-row', { text: 'Multiple anchors',
+      title: 'Split the callout into branches for separated targets. Uses additional processing.' })
+    multiAnchorRow.prepend(multiAnchor)
+    multiAnchor.addEventListener('change', () => controller.update(id, { multiAnchor: multiAnchor.checked }))
+
     const color = h(document, 'input', '', { type: 'color', value: entry.color })
     color.dataset.field = 'color'
     color.addEventListener('input', () => { card.style.setProperty('--anno-color', color.value); controller.update(id, { color: color.value }) })
@@ -310,7 +317,7 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
     const warn = h(document, 'p', 'anno-warn', { text: 'Add text or pick an icon — the callout won’t appear until you do.' })
 
     const boxControls = createAnnotationBoxControls({ document, controller, id })
-    card.append(topRow, text, size, font, boxControls.root, iconRow, typeRow, colorRow, highlightRow, highlightTypeRow, glowColorRow, glowIntensity, transparency, manualRow, manualHint, targetRow, target, warn)
+    card.append(topRow, text, size, font, boxControls.root, iconRow, typeRow, multiAnchorRow, colorRow, highlightRow, highlightTypeRow, glowColorRow, glowIntensity, transparency, manualRow, manualHint, targetRow, target, warn)
     cards.set(id, { card, iconBtn, warn, target, clear, use, text, boxControls })
     refreshIconButton(id)
     refreshTarget(id)
@@ -349,6 +356,10 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
     if (event.type === 'add') renderList({ focusId: event.id })
     else if (event.type === 'enabled') syncEnabled()
     else if (event.structural) renderList()
+    else if (event.patch && 'multiAnchor' in event.patch) {
+      const checkbox = cards.get(event.id)?.card.querySelector('[data-field="multiAnchor"]')
+      if (checkbox) checkbox.checked = controller.get(event.id).multiAnchor
+    }
   })
 
   const refreshAll = () => { for (const id of cards.keys()) refreshTarget(id) }

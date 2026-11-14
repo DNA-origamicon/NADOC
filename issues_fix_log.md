@@ -1,5 +1,15 @@
 # Issues fix log
 
+## ISSUE-194 — Preserve annotation text box precision (2026-11-14)
+
+- `annotation_font_fit.js` retains fractional measured width/height and explicitly
+  fixes the inner box dimensions before absolute positioning. This prevents a
+  second shrink-to-fit pass from wrapping “Anchors” at the unchanged 13 px font.
+- Reproduced two text line rectangles before the fix; one afterward. Regression
+  covers fractional fonts, viewport resize, explicit newlines and narrow boxes;
+  existing browser resize/rotation workflow also passes. No molecular data edits.
+- Validation summary: `.development-artifacts/annotation-text-fit/validation.json`.
+
 ## ISSUE-193 — Exact atom sources for MD zoom insets (2026-11-14)
 
 - [x] `md_inset_source.js` owns a representation-independent MD source. Only

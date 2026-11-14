@@ -240,3 +240,24 @@ it('accepts fractional custom font sizes and rejects zero without changing the s
   expect(input.validationMessage).toContain('positive')
   expect(controller.list()[0].size).toBe(20.5 / 13)
 })
+
+it('captures separated bases and domains together without broadening the selection', async () => {
+  const refs = [{ kind: 'base', key: 'h0:1:FORWARD' }, { kind: 'base', key: 'h0:100:FORWARD' },
+    { kind: 'domain', strandId: 's1', domainIndex: 5 }]
+  store.setState({ selection: { context: 'design', items: refs, primary: refs[2] } })
+  const a = controller.add({ text: 'Sparse targets' })
+  field(cards()[0], 'useSelection').click()
+  expect(controller.get(a.id).refs).toEqual(refs)
+  await controller.flush()
+  expect(controller.getCommitted().annotations[0].refs).toEqual(refs)
+})
+
+it('offers a default-off Multiple anchors checkbox and follows controller changes', () => {
+  const a = controller.add({ text: 'Targets' })
+  const toggle = field(cards()[0], 'multiAnchor')
+  expect(toggle.checked).toBe(false)
+  toggle.click()
+  expect(controller.get(a.id).multiAnchor).toBe(true)
+  controller.update(a.id, { multiAnchor: false })
+  expect(toggle.checked).toBe(false)
+})

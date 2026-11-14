@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
+import * as branches from './annotation_branches.js'
 import { createAnnotationController } from './annotation_controller.js'
 import { initAnnotationOverlay } from './annotation_overlay.js'
 
@@ -31,6 +32,7 @@ beforeEach(() => {
   })
 })
 afterEach(() => {
+  vi.restoreAllMocks()
   overlay.dispose(); container.remove()
   for (const [prop, d] of Object.entries(sizeDescriptors)) { if (d) Object.defineProperty(HTMLElement.prototype, prop, d); else delete HTMLElement.prototype[prop] }
 })
@@ -314,4 +316,38 @@ it('numeric rotation keeps a manually positioned box centered', () => {
   const after = overlay.getRecord(a.id).rect
   expect(after.x + after.w / 2).toBeCloseTo(before.x + before.w / 2, 0)
   expect(after.y + after.h / 2).toBeCloseTo(before.y + before.h / 2, 0)
+})
+
+it('adds and removes branches for disjoint selections and follows live positions', () => {
+  const a = controller.add({ text: 'Separated bases', multiAnchor: true, refs: [{ kind: 'base', key: 'h0:0:FORWARD' }, { kind: 'base', key: 'h0:2:FORWARD' }] })
+  overlay.update()
+  const rec = overlay.getRecord(a.id)
+  expect(rec.g.querySelectorAll('polyline')).toHaveLength(2)
+  expect(rec.g.querySelectorAll('circle')).toHaveLength(2)
+  const before = rec.branches.map(b => b.dot.getAttribute('cx'))
+  entries[2].pos.x = 4; overlay.update()
+  expect(rec.branches.map(b => b.dot.getAttribute('cx'))).not.toEqual(before)
+  controller.update(a.id, { refs: [{ kind: 'base', key: 'h0:0:FORWARD' }] }); overlay.update()
+  expect(rec.g.querySelectorAll('polyline')).toHaveLength(1)
+  controller.update(a.id, { refs: [] }); overlay.update()
+  expect(rec.g.style.display).toBe('none')
+})
+
+it('skips every multi-anchor helper by default and releases branches when switched off', () => {
+  const group = vi.spyOn(branches, 'annotationTargetGroups')
+  const detect = vi.spyOn(branches, 'annotationBranchAnchors')
+  const route = vi.spyOn(branches, 'routeAnnotationBranches')
+  const a = controller.add({ text: 'Sparse targets', refs: [{ kind: 'base', key: 'h0:0:FORWARD' }, { kind: 'base', key: 'h0:2:FORWARD' }] })
+  overlay.update(); overlay.update()
+  const rec = overlay.getRecord(a.id)
+  expect(rec.branches).toHaveLength(1)
+  expect(group).not.toHaveBeenCalled(); expect(detect).not.toHaveBeenCalled(); expect(route).not.toHaveBeenCalled()
+  controller.update(a.id, { multiAnchor: true }); overlay.update()
+  expect(rec.branches).toHaveLength(2)
+  expect(group).toHaveBeenCalled(); expect(detect).toHaveBeenCalled(); expect(route).toHaveBeenCalled()
+  group.mockClear(); detect.mockClear(); route.mockClear()
+  controller.update(a.id, { multiAnchor: false }); overlay.update(); overlay.update()
+  expect(rec.branches).toHaveLength(1)
+  expect(rec.targetGroups).toEqual([])
+  expect(group).not.toHaveBeenCalled(); expect(detect).not.toHaveBeenCalled(); expect(route).not.toHaveBeenCalled()
 })
