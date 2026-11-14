@@ -5,7 +5,7 @@ import { canonicalAtomName } from './md_inset_atoms.js'
 
 const key = n => baseKey(n, n.copy ?? n.copy_k ?? 0)
 // Canonical names: NAMD (CHARMM) O1P/O2P/C5M are the design model's OP1/OP2/C7.
-const atomKey = a => `${atomBaseKey(a)}:${a.name ? canonicalAtomName(a.name) : a.serial}`
+const atomKey = a => `${a.base_key || atomBaseKey(a)}:${a.name ? canonicalAtomName(a.name) : a.serial}`
 
 /** Physical display poses only; never writes the document or simulation inputs. */
 export function zoomMotionFrame(geometry, updates, liveEntries = []) {
@@ -89,6 +89,7 @@ export function createZoomLayerMotion(display, geometry) {
   const surfaces = new WeakMap(), measuredRest = new WeakMap()
   return {
     apply(frame, liveAtoms = null, active = true) {
+      const atomBounds = new THREE.Box3()
       const transforms = new Map(frame.map(n => [key(n),pose(n).multiply(inverse.get(key(n)) ?? new THREE.Matrix4())]))
       // NAMD measured frames are atom-defined (P/O5' origin, base-ring axes), not the
       // design bead/base_normal convention; map them from the same frame on rest atoms.
@@ -113,13 +114,14 @@ export function createZoomLayerMotion(display, geometry) {
           entry.renderer.visitAtoms(a => {
             atoms.push(a.serial)
             const exact = liveAtoms?.get(atomKey(a))
-            if (exact) positions.push(...exact)
+            if (exact) p.fromArray(exact)
             else {
               p.set(a.x,a.y,a.z)
               const transform = transformFor(atomBaseKey(a))
               if (transform) p.applyMatrix4(transform)
-              positions.push(p.x,p.y,p.z)
             }
+            positions.push(p.x,p.y,p.z)
+            atomBounds.expandByPoint(p)
           })
           entry.renderer.applyCompactFrame({serialMap:atoms,dense:Float32Array.from(positions)})
         } else if (entry.motionMesh) {
@@ -128,6 +130,7 @@ export function createZoomLayerMotion(display, geometry) {
           if (motion) entry.renderer.applyDeformedFrame(entry.motionMesh,motion.deform(packed(frame)))
         }
       }
+      return atomBounds
     },
   }
 }

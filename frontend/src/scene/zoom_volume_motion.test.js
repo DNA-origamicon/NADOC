@@ -6,6 +6,30 @@ import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { buildHelixObjects } from './helix_renderer.js'
 const n = {placement_source:'native-full-o5-v1',slab_position:[.67,0,0],slab_quaternion:[0,Math.SQRT1_2,Math.SQRT1_2,0],helix_id:'h',bp_index:0,direction:'FORWARD',strand_id:'s',strand_type:'staple',domain_index:0,backbone_position:[1,0,0],base_position:[.5,0,0],base_normal:[-1,0,0],axis_tangent:[0,0,1]}
 
+it('copies distinct MD insert residues without coarse motion, updates bonds and bounds, and restores native atoms',()=>{
+  const source=initAtomisticRenderer(new THREE.Scene()), scene=new THREE.Scene(), target=initAtomisticRenderer(scene)
+  source.setMode('ballstick'); target.setMode('ballstick')
+  const native=[0,1].map(k=>({...n,serial:k,name:k ? 'P' : "O3'",element:k ? 'P' : 'O',crossover_id:'xo',extra_base_k:k,x:k*.2,y:0,z:0}))
+  target.update({atoms:native,bonds:[[0,1]]})
+  source.update({atoms:native.map((a,k)=>({serial:k+100,name:a.name,element:a.element,helix_id:'__xb__',bp_index:-1,direction:'',base_key:`__xb__:xo:${k}`,x:10+k*.16,y:2,z:3})),bonds:[[100,101]]})
+  const motion=createZoomLayerMotion({entries:new Map([['z',{ready:true,kind:'atom',renderer:target}]])},[])
+  const audit=()=>{const result=[];target.visitAtoms((a,p)=>result.push(p.toArray()));return result}
+  const bounds=motion.apply([],zoomExactAtoms(source),false)
+  expect(audit()[0]).toEqual([10,2,3]); expect(audit()[1][0]).toBeCloseTo(10.16,5)
+  expect(bounds.min.toArray()).toEqual([10,2,3]);expect(bounds.max.x).toBeCloseTo(10.16)
+  const bond=scene.children.find(o=>o.name==='atomBonds'), matrix=new THREE.Matrix4(), scale=new THREE.Vector3()
+  bond.getMatrixAt(0,matrix);scale.setFromMatrixScale(matrix)
+  expect(scale.y).toBeCloseTo(.16,5)
+  source.applyCompactFrame({serialMap:[100,101],dense:Float32Array.from([11,4,5,11.15,4,5])})
+  motion.apply([],zoomExactAtoms(source),false)
+  expect(audit()[0]).toEqual([11,4,5]);expect(audit()[1][0]).toBeCloseTo(11.15,5)
+  source.setMode('off')
+  expect(zoomExactAtoms(source).size).toBe(0)
+  motion.apply([],zoomExactAtoms(source),false)
+  expect(audit()[0]).toEqual([0,0,0]);expect(audit()[1][0]).toBeCloseTo(.2)
+  source.dispose();target.dispose()
+})
+
 it('uses displayed amplified positions, preserves measured orientation, and distinguishes loop copies',()=>{
   const copy={...n,copy_k:1}
   const frame=zoomMotionFrame([n,copy],[{...n,nx:0,ny:1,nz:0,backbone_position:[3,0,0],measured_base:true,base_position:[3,1,0]}],[{nuc:n,pos:new THREE.Vector3(5,0,0)},{nuc:copy,pos:new THREE.Vector3(8,0,0)}])

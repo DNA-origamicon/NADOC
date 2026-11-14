@@ -1,9 +1,21 @@
 import { expect, it } from 'vitest'
 import * as THREE from 'three'
-import { zoomBaseEntries, buildZoomBaseExtras, zoomBackbonePairs } from './zoom_volume_bases.js'
+import { zoomBaseEntries, buildZoomBaseExtras, zoomBackbonePairs, completeZoomJunctions } from './zoom_volume_bases.js'
 import { matchTargetEntries } from './annotation_targets.js'
 import { baseKey } from './base_ref.js'
 import { zoomSelectionSource } from './zoom_volume_entry.js'
+
+it('completes only whole selected insert junctions, using existing endpoint records without changing selections', () => {
+  const a={nuc:{helix_id:'h',bp_index:34,direction:'FORWARD'}}, b={nuc:{helix_id:'j',bp_index:35,direction:'REVERSE'}}
+  const complementary={nuc:{...b.nuc,direction:'FORWARD'}}
+  const extras=[0,1].map(k=>({nuc:{crossover_id:'xo',extra_base_k:k},zoomExtra:{endpointKeys:[baseKey(a.nuc),baseKey(b.nuc)]}}))
+  const entries=[a,b,complementary,...extras], selected=[a,...extras]
+  expect(completeZoomJunctions(selected,entries)).toEqual([...selected,b])
+  expect(selected).toEqual([a,...extras])
+  expect(completeZoomJunctions([a,extras[0]],entries)).toEqual([a,extras[0]])
+  expect(completeZoomJunctions(extras,entries)).toEqual(extras)
+  expect(completeZoomJunctions(entries,entries)).toEqual(entries)
+})
 
 it('retains missing extension bases and loop copies alongside live backbone positions', () => {
   const geometry = [

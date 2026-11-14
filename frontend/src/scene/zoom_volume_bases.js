@@ -5,6 +5,28 @@ import { computeAtomStrandColors } from './color_util.js'
 import { buildStapleColorMap, orderStrandNucleotides } from './helix_renderer.js'
 import { BASE_COLORS } from './helix_renderer/palette.js'
 
+/** Complete a selected insert junction's attachment residues for display only.
+ * Require the whole insert and at least one selected endpoint. An isolated base
+ * selection or a partial insert remains exact; never infer a new covalent edge.
+ */
+export function completeZoomJunctions(selected, entries) {
+  const key = e => baseKey(e.nuc, e.nuc.copy_k ?? 0)
+  const wanted = new Set(selected.map(key)), added = new Set(), inserts = new Map()
+  for (const entry of entries) {
+    if (!entry.zoomExtra?.endpointKeys) continue
+    const id = entry.nuc.crossover_id
+    if (!inserts.has(id)) inserts.set(id, [])
+    inserts.get(id).push(entry)
+  }
+  for (const group of inserts.values()) {
+    const endpoints = group[0].zoomExtra.endpointKeys
+    if (group.every(e => wanted.has(key(e))) && endpoints.some(k => wanted.has(k))) {
+      for (const k of endpoints) if (!wanted.has(k)) added.add(k)
+    }
+  }
+  return [...selected, ...entries.filter(e => added.has(key(e)))]
+}
+
 /** Complete display membership, including residues owned by the crossover renderer.
  * These are transient render records, never authored nucleotides or topology.
  */
