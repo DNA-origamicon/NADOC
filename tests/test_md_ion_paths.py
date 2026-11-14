@@ -72,7 +72,11 @@ def test_rmsf_context_keeps_existing_mean_and_connects_only_actual_strands(monke
     ctx = dict(p_order=[('h', 1, 'FORWARD'), ('h', 2, 'FORWARD'), ('h', 1, 'REVERSE')],
                n_frames=2, dna_p_idx=[0, 1, 2], universe=SimpleNamespace(atoms=atoms),
                term_specs=[(('h', 0, 'FORWARD'), 3, 3, 0)])
-    monkeypatch.setattr(mt, '_build_md_nadoc_ctx', lambda *a, **k: ctx)
+    from tests.md_flex_context import complete_context, atom_stub
+    ctx['backbone_residues'] = [(a.segid, a.resid) for a in atoms]
+    complete_context(ctx)
+    monkeypatch.setattr(mt, '_extract_md_atoms_frame', atom_stub)
+    monkeypatch.setattr(mt, '_build_playback_ctx', lambda *a, **k: ctx)
     def extract(_ctx, frame, **kwargs):
         if kwargs.get('frame_out') is not None:
             kwargs['frame_out'].update(box_nm=np.array([10, 10, 10]))

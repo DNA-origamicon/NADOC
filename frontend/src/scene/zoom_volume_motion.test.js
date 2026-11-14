@@ -112,3 +112,20 @@ it('places inset atoms exactly from Display-MD inset atoms, matching CHARMM name
   expect(zoomExactAtoms(main,null).get('h:0:FORWARD:OP1')).toEqual([3,3,3])
   target.dispose();main.dispose()
 })
+it('uses exact simulation topology without a slab fallback, hides pending data and restores native',()=>{
+ const root=new THREE.Group(), renderer=initAtomisticRenderer(root);renderer.setMode('ballstick')
+ const nativeAtoms={atoms:[{...n,serial:0,name:'P',element:'P',x:1,y:0,z:0}],bonds:[]}
+ renderer.update(nativeAtoms)
+ const entry={root,renderer,nativeAtoms,kind:'atom',ready:true}
+ const motion=createZoomLayerMotion({entries:new Map([['a',entry]])},[n])
+ motion.apply(zoomMotionFrame([n],null),null,true,{required:true})
+ expect(root.visible).toBe(false)
+ const model={atoms:[{...n,serial:7,name:'P',element:'P',x:10,y:2,z:3},{...n,serial:8,name:'O1P',element:'O',x:10.16,y:2,z:3}],bonds:[[7,8]]}
+ const exact=new Map([['h:0:FORWARD:P',[10,2,3]],['h:0:FORWARD:OP1',[10.16,2,3]]])
+ motion.apply(zoomMotionFrame([n],[{...n,backbone_position:[999,999,999]}]),exact,true,{required:true,model})
+ expect(root.visible).toBe(true);expect(zoomLiveAtoms(renderer).size).toBe(2)
+ expect(zoomLiveAtoms(renderer).get('h:0:FORWARD:P')).toEqual([10,2,3])
+ motion.apply(zoomMotionFrame([n],null),null,false)
+ expect(zoomLiveAtoms(renderer).size).toBe(1);expect(zoomLiveAtoms(renderer).get('h:0:FORWARD:P')).toEqual([1,0,0])
+ renderer.dispose()
+})

@@ -46,6 +46,7 @@ import {
 } from './md_display_state.js'
 import { webSocketUrl } from '../shared/websocket_url.js'
 import { mdInsetAtoms } from '../scene/md_inset_atoms.js'
+import { insetAtomSubset } from '../scene/md_inset_source.js'
 
 const _WS_URL  = webSocketUrl('/ws/md-run')
 const _BASE_FPS = 10   // target fps at 1× speed
@@ -830,6 +831,10 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         // are not. `msg.bonds` first only so a future frame-level list would win.
         atoms: zipAtomIdentity(msg.atoms, _atomIdent),
         bonds: msg.bonds ?? _atomBonds ?? [],
+      }
+      if (mdInsetAtoms.residueKeys().length) {
+        const subset = insetAtomSubset(frameData, null, mdInsetAtoms.residueKeys())
+        mdInsetAtoms.publish(subset.atoms.map(a => [a.base_key, a.name, a.x, a.y, a.z]), { exact: true, model: subset })
       }
       _lastAtomisticGeometryPath = atomisticRenderer?.updateFrame
         ? atomisticRenderer.updateFrame(frameData)

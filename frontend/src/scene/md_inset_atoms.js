@@ -1,8 +1,7 @@
 // Exact MD heavy atoms for zoom-volume insets.
 //
-// Display MD streams per-nucleotide frames when the main viewport is coarse-grained.
-// An atomistic inset registers the residues it shows; the MD display controller asks
-// its trajectory socket for those residues' real atoms and publishes them here, keyed
+// An atomistic inset registers its residues. Display MD's socket and the flex /
+// trajectory controller independently publish those residues' real atoms here, keyed
 // exactly like the inset's design atoms. Physical display state only: nothing here is
 // written to the design or to simulation inputs.
 
@@ -18,6 +17,7 @@ export function createMdInsetAtomHub() {
   const owners = new Map()
   const requestListeners = new Set()
   let atoms = null
+  let exact = false, model = null
   let version = 0
   let requestSignature = ''
 
@@ -38,16 +38,20 @@ export function createMdInsetAtomHub() {
     residueKeys,
     onRequest(listener) { requestListeners.add(listener); return () => requestListeners.delete(listener) },
     /** Replace the published atoms with one frame's `[baseKey, name, x, y, z]` rows. */
-    publish(rows) {
+    publish(rows, options = {}) {
+      exact = options.exact ?? true
+      model = options.model ?? null
       atoms = rows?.length ? new Map(rows.map(([key, name, x, y, z]) => [`${key}:${canonicalAtomName(name)}`, [x, y, z]])) : null
       version++
     },
-    clear() { if (atoms) { atoms = null; version++ } },
+    clear() { if (atoms || exact) { atoms = null; exact = false; model = null; version++ } },
+    exact: () => exact,
+    model: () => model,
     /** Map `${baseKey}:${canonicalName}` → [x, y, z] for the displayed frame, or null. */
     atoms: () => atoms,
     version: () => version,
   }
 }
 
-/** The single Display-MD controller and every zoom volume share this hub. */
+/** Active MD displays and every zoom volume share this physical-display hub. */
 export const mdInsetAtoms = createMdInsetAtomHub()

@@ -1,3 +1,4 @@
+import { initMdFlexSettings, showMappedFlexScale } from './md_flex_settings.js'
 import { mergeCreatingJobs } from '../api/sim_job_creation.js'
 import { showConfirm } from './primitives/confirm.js'
 import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
@@ -3004,6 +3005,11 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   }
   window.addEventListener('nadoc:md-flex-progress', ({ detail }) => {
     if (!flexToggle?.checked || detail?.jobId !== _selectedId) return
+    if (detail.mapped) {
+      _setFlexLegend(detail.min, detail.max)
+      showMappedFlexScale(detail, getFlexScale?.(), getMdViz?.())
+      return
+    }
     if (detail.failed) {
       _setFlexBar('off')
       _setFlexStatus(detail.message || 'Could not load flexibility representation', _C.warn)
@@ -3066,6 +3072,9 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     await _occupancy?.refresh()
   })
 
+  const flexSettings = initMdFlexSettings({ button: document.getElementById('md-jobs-flex-settings'),
+    getJobId: () => _selectedId, getCounts: _loadTrajRawCounts,
+    onApply: () => { _setFlexOff(); flexToggle.checked = true; flexToggle.dispatchEvent(new Event('change')) } })
   let _flexLoading = false
   let _flexLoadEpoch = 0
   function _setFlexOff() {
@@ -3086,11 +3095,12 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     const jobId = _selectedId
     const epoch = ++_flexLoadEpoch
     _flexLoading = true
+    getFlexScale?.()?.hide?.()
     _setFlexStatus('Computing average structure + RMSF…', _C.accent)
     _setFlexBar('computing')
     let r
     try {
-      r = await v.displayRmsf(jobId, { awaitHeavy: true })
+      r = await v.displayRmsf(jobId, { awaitHeavy: true, frameRange: flexSettings.range(jobId), refetch: true })
     } catch (error) {
       r = { ok: false, reason: error.message }
     } finally {
@@ -3100,17 +3110,14 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     if (r.ok) {
       _setFlexBar('done')
       _setFlexLegend(r.min, r.max)
-      getFlexScale?.()?.show?.({ title: 'RMSF (nm)', min: r.min, max: r.max, mapType: 'flex',
-        onRecolor: (lo, hi, cmap) => getMdViz?.()?.recolorRmsf?.(lo, hi, cmap) })
+      showMappedFlexScale(r, getFlexScale?.(), getMdViz?.())
       const conf = r.confidence || {}
       const note = conf.preliminary ? ' · preliminary (short run)' : ''
       _setFlexStatus(`Avg structure · ${r.n} bases · ${r.nFrames ?? '?'} frames${note}`,
                      conf.preliminary ? _C.warn : _C.ok)
     } else {
-      _setFlexBar('off')
-      _setFlexLegend(null, null)
+      _setFlexOff()
       _setFlexStatus(r.reason || 'no data', _C.warn)
-      if (flexToggle) flexToggle.checked = false
     }
   }
   flexToggle?.addEventListener('change', async () => {
@@ -5920,6 +5927,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     getMdViz?.()?.stopAndRestore?.()
     getMdViz?.()?.retainPreparedTrajectories?.([])
     getMdViz?.()?.retainTrajectoryDownloads?.([])
+    flexSettings.reset(jobId)
     _trajRawCounts.clear()
     _trajCountRequests.clear()
     if (broadcast) nadocBroadcast.emit('md-trajectory-thinned', { jobId })

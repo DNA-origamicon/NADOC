@@ -32,6 +32,7 @@ def test_rmsf_atomistic_reorders_shared_inputs_for_analysis(monkeypatch):
         [("prod", "production", "prod.dcd")],
         "job.pdb",
         "design",
+        0, {"start": None, "end": None, "interval": 1},
     )
 
 
@@ -66,6 +67,7 @@ def test_rmsf_surface_reorders_inputs_and_appends_surface_params(monkeypatch):
         0.21,
         1.4,
         7,
+        0, {"start": None, "end": None, "interval": 1},
     )
 
 
@@ -150,3 +152,44 @@ def test_flex_progress_files_are_removed_on_failure(monkeypatch):
         asyncio.run(routes_md._run_md_flex(None, 'J', 'rmsf', 'md_rmsf', ('missing.psf', [], 'missing.pdb', None)))
     assert not paths[0].exists()
     assert ('J', 'rmsf') not in routes_md._FLEX_PROGRESS_PATHS
+
+
+def test_progress_transfers_each_partial_revision_only_once(monkeypatch, tmp_path):
+    import json
+    path = tmp_path / 'progress.json'
+    path.write_text(json.dumps(dict(phase='backfill', done=64, total=100, revision=2)))
+    path.with_suffix('.partial.json').write_text(json.dumps(dict(revision=2, partial=dict(preliminary=True, n_frames=64))))
+    monkeypatch.setitem(routes_md._FLEX_PROGRESS_PATHS, ('J', 'rmsf'), path)
+    first = client.get('/api/md/jobs/J/flex-progress?since=1').json()
+    assert first['partial']['n_frames'] == 64
+    assert 'partial' not in client.get('/api/md/jobs/J/flex-progress?since=2').json()
+
+
+def test_flex_route_automatically_resumes_worker_slices(monkeypatch):
+    import asyncio
+    calls = []
+    async def run(_request, _job, _kind, _fn, args, **kwargs):
+        calls.append(args[-1])
+        return ({'ready': False, 'continue_calculation': True} if len(calls) == 1 else
+                {'ready': True, 'n_frames': 70})
+    monkeypatch.setattr(routes_md, '_run_md_analysis', run)
+    result = asyncio.run(routes_md._run_md_flex(None, 'J', 'rmsf', 'md_rmsf',
+                                              ('missing.psf', [], 'missing.pdb', None)))
+    assert result == {'ready': True, 'n_frames': 70}
+    assert len(calls) == 2 and calls[0] == calls[1]
+
+
+def test_all_flex_routes_forward_same_selected_frames(monkeypatch):
+    seen = []
+    async def run(_request, _job, _kind, _fn, args, **kwargs):
+        seen.append(args[1][-1])
+        return {'ready': True, 'n_frames': 4}
+    monkeypatch.setattr(routes_md, '_md_traj_inputs', lambda _: _inputs())
+    monkeypatch.setattr(routes_md, '_run_md_analysis', run)
+    query = '?start=4&end=13&interval=3'
+    assert client.get('/api/md/jobs/J/rmsf' + query).status_code == 200
+    assert client.post('/api/md/jobs/J/rmsf-atomistic' + query).status_code == 200
+    assert client.post('/api/md/jobs/J/rmsf-surface' + query, json={}).status_code == 200
+    assert seen == [dict(start=4, end=13, interval=3)] * 3
+    assert client.get('/api/md/jobs/J/rmsf?start=10&end=5').status_code == 422
+    assert client.post('/api/md/jobs/J/rmsf-atomistic?interval=0').status_code == 422

@@ -88,7 +88,7 @@ export function createZoomLayerMotion(display, geometry) {
   const inverse = new Map(rest.map(n => [key(n),pose(n).invert()]))
   const surfaces = new WeakMap(), measuredRest = new WeakMap()
   return {
-    apply(frame, liveAtoms = null, active = true) {
+    apply(frame, liveAtoms = null, active = true, exactSource = null) {
       const atomBounds = new THREE.Box3()
       const transforms = new Map(frame.map(n => [key(n),pose(n).multiply(inverse.get(key(n)) ?? new THREE.Matrix4())]))
       // NAMD measured frames are atom-defined (P/O5' origin, base-ring axes), not the
@@ -100,6 +100,27 @@ export function createZoomLayerMotion(display, geometry) {
           entry.cg.applyFemPositions(active ? frame : null)
           entry.cg.applyRepOverrides(entry.columns)
         } else if (entry.kind === 'atom') {
+          if (entry.root && !exactSource?.required) entry.root.visible = true
+          if (exactSource?.required) {
+            if (entry.root) entry.root.visible = !!liveAtoms?.size
+            if (!liveAtoms?.size) continue
+            const source = exactSource.model || entry.nativeAtoms
+            if (source) {
+              const keys = new Set(geometry.map(key))
+              const selected = source.atoms.filter(a => keys.has(a.base_key || atomBaseKey(a)) && liveAtoms.has(atomKey(a)))
+              const serials = new Set(selected.map(a => a.serial))
+              const bonds = (source.bonds || []).filter(([a,b]) => serials.has(a) && serials.has(b))
+              const signature = JSON.stringify([selected.map(a => [a.serial,a.name]), bonds])
+              if (entry.exactSignature !== signature) {
+                entry.renderer.update({ ...source, atoms: selected, bonds })
+                entry.exactSignature = signature
+              }
+            }
+          } else if (entry.exactSignature) {
+            entry.renderer.update(entry.nativeAtoms)
+            entry.exactSignature = null
+            if (entry.root) entry.root.visible = true
+          }
           const atoms = [], positions = [], p = new THREE.Vector3()
           if (measured.size && !measuredRest.has(entry)) measuredRest.set(entry, measuredRestInverses(entry.renderer))
           const restFrames = measured.size ? measuredRest.get(entry) : null
@@ -116,6 +137,7 @@ export function createZoomLayerMotion(display, geometry) {
             const exact = liveAtoms?.get(atomKey(a))
             if (exact) p.fromArray(exact)
             else {
+              if (exactSource?.required) return
               p.set(a.x,a.y,a.z)
               const transform = transformFor(atomBaseKey(a))
               if (transform) p.applyMatrix4(transform)

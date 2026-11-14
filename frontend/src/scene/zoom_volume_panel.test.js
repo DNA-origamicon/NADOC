@@ -181,3 +181,14 @@ it('persists independent inset titles and annotation font presets, including leg
   expect(restored[1].style.fontSize).toBe('12px')
   expect(restored[1].style.fontFamily).toBe('system-ui')
 })
+it('restores legacy square sizes and persists independent rectangular sizes and highlights',()=>{
+ const update=setup(false,[{id:'saved',name:'Saved',targets:[{refs:[{kind:'strand',id:'s1'}]}],settings:{size:350,highlight:true}}])
+ const row=document.querySelector('.zoom-volume-row')
+ expect(row.querySelector('[data-control=size]')).toBeNull()
+ expect(document.querySelectorAll('[data-resize-edge]')).toHaveLength(8)
+ expect(row.querySelector('[data-control=highlight]').checked).toBe(true)
+ row.querySelector('[data-control=highlight]').click()
+ const saved=update.state().currentDesign.zoom_volumes[0]
+ expect(saved.settings).toMatchObject({width:350,height:350,highlight:false})
+ expect(update.state().selection.items).toEqual([{kind:'strand',id:'s1'}])
+})

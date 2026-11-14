@@ -65,6 +65,42 @@ against the isolated commit sources. Browser scratch
 `/tmp/__e2e__guide-fa7brspb` was verified absent after cleanup.
 
 
+The first push encountered concurrent master updates. Merged in an isolated
+worktree, retaining both issue-log entries and both slow-test lists. Recapture
+against the merged code passed in 6.8 minutes with independent saved/reopened
+replay, scaffold preservation and 16.02:1 dropdown contrast. Browser scratch
+`/tmp/__e2e__guide-kyfz3guz` was verified absent. The full frontend count above is
+from before this merge; the merged code receives the full guide workflow and
+focused Feature Log checks rather than an unrelated full-suite repeat.
+
+## ISSUE-193 — Exact atom sources for MD zoom insets (2026-11-14)
+
+- [x] `md_inset_source.js` owns a representation-independent MD source. Only
+  requested residue snapshots are retained (at most five frames); the existing
+  lightweight model/frame endpoints supply original atom identities and bonds.
+  Flex previews reuse their supplied atom means/topology. Playback interpolation
+  operates on atom coordinates. Changed frames/ranges invalidate pending paints.
+- [x] Inset atom layers use the exact source's topology and positions, wait visibly
+  while data is pending, and restore native topology on exit. Display MD publishes
+  selected atoms from its atomistic stream as well as its Full inset stream.
+- Real P1 frames 21547–21549 (zero-based): raw versus aligned within-residue
+  distance error < 9.75e-8 nm; the float32 flex mean matches the independent mean
+  exactly. In-browser Full/ballstick agreement: 265/265 atoms, zero flex error,
+  < 9.89e-7 nm relative-coordinate error for frames/interpolation. Real renderers,
+  read-only existing source, replayed coordinate transport. Inset image inspected.
+  `main.js` LOC Δ: 0. Validation logs use `.development-artifacts/inset-*`.
+- Final validation: frontend 10,491 passed / 1 skipped; 235 focused checks and
+  5 source/cancellation checks passed; both P1 browser checks passed. Display MD
+  has zero rendered-coordinate error for all 265 atoms and 293 bonds. General
+  smoke: 21 passed, 2 skipped, 3 failures in the recorded New Part / assembly
+  fixture areas (ISSUE-179/180). No newly persisted browser/test artifacts.
+
+## ISSUE-180 — Smoke follow-up during flex settings (2026-11-13)
+
+- [ ] Square creation request assertion remains unresolved; Honeycomb creation
+  request capture also timed out in this run. No New Part implementation changes.
+  Dedicated flex preview/settings app checks: 2 passed. Evidence:
+  `.development-artifacts/flex-settings-smoke.log` and `flex-settings-app-final.log`.
 
 ## ISSUE-192 — Nonblocking sequence-work spinner and scoped geometry (2026-11-12)
 

@@ -91,3 +91,8 @@ correctness. See the explicit review procedure in MAINTENANCE.md.
 | ID | Workflow | Finding | Guide handling | Status |
 |---|---|---|---|---|
 | GUIDE-UX-018 | Move feature position | The native dropdown inherited light text over a white background and overflowed the small modal. | Use NADOC's shared select primitive, constrain it to the modal width, and check rendered contrast and bounds during capture. Remove advanced repair-proposal authoring from the designer lesson. | Fixed; step 37 visually reviewed after recapture. Measured contrast 16.02:1, control within modal bounds. |
+
+Merge follow-up: recaptured against incoming master changes. Reviewed end-region
+images 19, 22, 25 and 31 and the Move dialog at 37 again; the scaffold ends remain
+in place and the standard dropdown retains 16.02:1 contrast. Independent saved
+and reopened process audits and all browser history checks passed.

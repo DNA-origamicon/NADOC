@@ -36,7 +36,7 @@ def playback_context(topology, paths, coordinate, design):
     if root.stat().st_uid != os.getuid() or root.stat().st_mode & 0o077:
         raise ValueError('playback cache directory must be private')
     key = hashlib.sha256(repr((
-        6, _identity(topology), _identity(coordinate),
+        7, _identity(topology), _identity(coordinate),
         tuple(_identity(p) if p.exists() else (str(p.resolve()), None)
               for p in (Path(topology).parent / 'charge_audit.json',
                         Path(topology).parent / 'manifest.json')),
@@ -82,12 +82,10 @@ def _build_tables(topology, coordinate, design):
     from backend.core.atomistic_to_nadoc import (
         _GRO_DNA_RESNAMES, atom_design_ident, build_active_design_reference,
         build_namd_coarse_reference, load_segid_chain_map,
-        md_rigid_reference_from_map, md_snap_mask,
+        md_rigid_reference_from_map, md_snap_mask, is_synthetic_pkey,
     )
     from backend.core.md_base_frames import ordered_ring_indices
 
-    if design.extensions or any(getattr(x, 'extra_bases', None) for x in design.crossovers):
-        raise ValueError('synthetic residues require the full mapping')
     segmap = load_segid_chain_map(Path(topology).parent)
     if not segmap:
         raise ValueError('no package residue mapping')
@@ -129,10 +127,10 @@ def _build_tables(topology, coordinate, design):
             if rk not in residues:
                 chain = segmap.get(segid)
                 key = cm.get((chain, resid))
-                if key is None or tuple(key) not in reference:
+                if key is None or (tuple(key) not in reference and not is_synthetic_pkey(key)):
                     raise ValueError('incomplete lightweight residue mapping')
                 residues[rk] = dict(row=len(residues), key=key, atoms={},
-                                    ident=atom_design_ident(key, strand_by_chain[chain]))
+                                    ident=atom_design_ident(key, strand_by_chain[chain]), segid=segid, resid=resid)
             res = residues[rk]
             res['atoms'][name] = expected
             element = name.lstrip('0123456789')[0].upper()
@@ -140,25 +138,33 @@ def _build_tables(topology, coordinate, design):
                 heavy.append(expected)
                 heavy_res.append(res['row'])
                 meta.append(dict(serial=expected, element=element, name=name, **res['ident']))
-        bonds = np.empty((0, 2), dtype=np.int32)
+        # Keep only DNA-heavy bonds while scanning; solvent bond storage is never allocated.
+        heavy_set = set(heavy)
+        pairs = []
         for line in fh:
             if '!NBOND' in line:
-                count = int(line.split()[0]) * 2
-                numbers = []
-                while count > 0:
-                    line = next(fh)
-                    numbers.append(line)
-                    count -= len(line.split())
-                bonds = np.fromstring(' '.join(numbers), sep=' ', dtype=np.int32).reshape(-1, 2) - 1
+                remaining = int(line.split()[0]) * 2
+                pending = None
+                while remaining:
+                    fields = next(fh).split()
+                    if len(fields) > remaining:
+                        raise ValueError('invalid PSF bond count')
+                    for field in fields:
+                        value = int(field) - 1
+                        if value < 0 or value >= natoms:
+                            raise ValueError('invalid PSF bond atom')
+                        if pending is None:
+                            pending = value
+                        else:
+                            if pending in heavy_set and value in heavy_set:
+                                pairs.append((min(pending, value), max(pending, value)))
+                            pending = None
+                    remaining -= len(fields)
                 break
     if not heavy or len(residues) != len(cm):
         raise ValueError('DNA topology does not exactly cover the design residue map')
     heavy = np.asarray(heavy, dtype=np.int64)
-    mask = np.zeros(natoms, dtype=bool)
-    mask[heavy] = True
-    bonds = bonds[mask[bonds].all(axis=1)]
-    # MDAnalysis normalizes pair direction but preserves PSF record order.
-    bonds = np.sort(bonds, axis=1)
+    bonds = np.asarray(pairs, dtype=np.int32).reshape(-1, 2)
     rows = list(residues.values())
     prows = [r for r in rows if 'P' in r['atoms']]
     order = [r['key'] for r in prows]
@@ -207,7 +213,8 @@ def _build_tables(topology, coordinate, design):
                    n_waters_total=n_waters, graphene_rows=np.asarray(graphene_indices, dtype=np.int64),
                    water_o=np.zeros(0, dtype=np.int64), water_h1=np.zeros(0, dtype=np.int64),
                    water_h2=np.zeros(0, dtype=np.int64))
-    return dict(solvent_ctx=solvent, p_order=order, dna_p_idx=pidx, c1p_idx=c1,
+    adjacency = [(r['segid'], r['resid']) for r in prows + trows]
+    return dict(backbone_residues=adjacency, solvent_ctx=solvent, p_order=order, dna_p_idx=pidx, c1p_idx=c1,
                 p_strand_ids=p_segment.copy(),
                 centroid_T=np.zeros(3), eq_positions=eq, eq_valid=valid,
                 rigid_mask=rigid, snap_mask=md_snap_mask(order, valid, rigid),

@@ -2115,3 +2115,53 @@ it('prepares a bounded saved-frame playback window across the loop boundary', as
   expect(requested).toEqual([98,99,0,1])
   d.stopAndRestore()
 })
+
+it('renders preliminary flex responses without caching them and rejects late partials after stop', async () => {
+  let partial, finish
+  const response = { ready: true, min_rmsf: 0, max_rmsf: 1, mean_rmsf: .5, n_frames: 32,
+    preliminary: true, positions: [{ helix_id: 'h', bp_index: 1, direction: 'FORWARD',
+      backbone_position: [1, 2, 3], nx: 1, ny: 0, nz: 0, rmsf: .5 }] }
+  const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+  const api = { getOxdnaRmsf: vi.fn((_job, options) => {
+    partial = options.onPartial
+    return new Promise(resolve => { finish = resolve })
+  }) }
+  const ctrl = initOxdnaDisplay({ api, designRenderer })
+  const pending = ctrl.displayRmsf('J')
+  await partial(response)
+  expect(ctrl.mode()).toBe('rmsf')
+  expect(designRenderer.applyFemPositions).toHaveBeenCalled()
+  ctrl.stopAndRestore()
+  designRenderer.applyFemPositions.mockClear()
+  await partial(response)
+  expect(designRenderer.applyFemPositions).not.toHaveBeenCalled()
+  finish({ ...response, preliminary: false })
+  expect(await pending).toMatchObject({ ok: false, reason: 'superseded' })
+  const second = ctrl.displayRmsf('J')
+  expect(api.getOxdnaRmsf).toHaveBeenCalledTimes(2)
+  finish({ ...response, preliminary: false })
+  expect(await second).toMatchObject({ ok: true })
+})
+
+it('reports a mapped preliminary response and retains edited scale bounds through completion', async () => {
+  let partial, finish
+  const response = { ready: true, min_rmsf: 0, max_rmsf: 1, mean_rmsf: .5, n_frames: 32,
+    preliminary: true, positions: [{ helix_id: 'h', bp_index: 1, direction: 'FORWARD',
+      backbone_position: [1, 2, 3], nx: 1, ny: 0, nz: 0, rmsf: .5 }] }
+  const progress = vi.fn()
+  const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+  const api = { getOxdnaRmsf: vi.fn((_job, options) => {
+    partial = options.onPartial
+    return new Promise(resolve => { finish = resolve })
+  }) }
+  const ctrl = initOxdnaDisplay({ api, designRenderer, onRmsfProgress: progress })
+  const pending = ctrl.displayRmsf('J', { frameRange: { start: 1, end: 200, interval: 1 } })
+  await partial(response)
+  expect(progress).toHaveBeenCalledWith(expect.objectContaining({ mapped: true, preliminary: true, min: 0, max: 1 }))
+  ctrl.recolorRmsf(.2, .8, 'turbo')
+  await partial({ ...response, max_rmsf: 2 })
+  expect(ctrl.coloringInfo()).toMatchObject({ lo: .2, hi: .8 })
+  finish({ ...response, preliminary: false, max_rmsf: 2 })
+  await pending
+  expect(ctrl.coloringInfo()).toMatchObject({ lo: .2, hi: .8 })
+})

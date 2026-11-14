@@ -219,9 +219,9 @@ def build_namd_coarse_reference(design: "Design", pdb_path, seg2chain: dict[str,
     can take minutes and several GB for a solvated origami. This streams only the P
     records and reconstructs residue identities from the design's strand traversal.
 
-    Returns ``(chain_map, p_reference)``. Raises when synthetic/extension residues
-    make the lightweight traversal incomplete, allowing callers to fall back to the
-    full model rather than silently mis-map a trajectory.
+    Returns ``(chain_map, p_reference)``. Synthetic residues use the same threading
+    as export, without building molecular coordinates. Incomplete mappings fail
+    explicitly instead of silently rebuilding the full molecular model.
     """
     from pathlib import Path
 
@@ -257,6 +257,9 @@ def build_namd_coarse_reference(design: "Design", pdb_path, seg2chain: dict[str,
                     if copy_k:
                         key = (*key, int(copy_k))
                     chain_map[(chain, seq)] = key
+
+    from backend.core.md_residue_map import thread_synthetic_residues
+    chain_map = thread_synthetic_residues(design, chain_map)
 
     # Playback validates every DNA residue against the PSF itself and uses the
     # active display reference, so it does not need to scan the solvent PDB.

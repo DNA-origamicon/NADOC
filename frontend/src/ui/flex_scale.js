@@ -274,6 +274,12 @@ export function initFlexScale() {
       _setBounds(b.lo, b.hi, { emit: true })   // reconcile colours to the active colormap
       if (root) root.style.display = ''
     },
+    updateRange(min, max) {
+      const automatic = _lo === _dataMin && _hi === _dataMax
+      const bounds = clampBounds(min, max)
+      _dataMin = bounds.lo; _dataMax = bounds.hi
+      _setBounds(automatic ? _dataMin : _lo, automatic ? _dataMax : _hi)
+    },
     hide() { _closePopup(); if (root) root.style.display = 'none' },
     isVisible: () => !!root && root.style.display !== 'none',
     snapshot: () => root && root.style.display !== 'none' ? { title: titleEl?.textContent || '', minimum: _dataMin, maximum: _dataMax, low: _lo, high: _hi,

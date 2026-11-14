@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from tests.md_flex_context import complete_context, coarse_stub, atom_stub
 
 
 @pytest.mark.parametrize('max_frames, expected', [(None, 173), (7, 7)])
@@ -11,15 +12,16 @@ def test_flex_reads_every_frame_by_default(monkeypatch, max_frames, expected):
     from backend.core import md_trajectory as mt
 
     seen = []
-    monkeypatch.setattr(mt, '_build_playback_ctx', lambda *a, **k: {
+    monkeypatch.setattr(mt, '_build_playback_ctx', lambda *a, **k: complete_context({
         'p_order': [('h', 0, 'FORWARD')], 'n_frames': 173,
-    })
+    }))
 
     def frame(ctx, index, **kwargs):
         seen.append(index)
         return np.array([[float(index), 0, 0]]), None, None, None, None
 
     monkeypatch.setattr(mt, '_extract_md_nadoc_frame', frame)
+    monkeypatch.setattr(mt, '_extract_md_atoms_frame', atom_stub)
     options = {} if max_frames is None else {'max_frames': max_frames}
     result = mt.md_rmsf('top', [], 'ref', None, **options)
     assert result['n_frames'] == expected == len(seen)
@@ -34,15 +36,16 @@ def test_atomistic_mean_reads_every_frame_by_default(monkeypatch, max_frames, ex
     from backend.core import md_trajectory as mt
 
     seen = []
-    monkeypatch.setattr(mt, '_build_playback_ctx', lambda *a, **k: {
+    monkeypatch.setattr(mt, '_build_playback_ctx', lambda *a, **k: complete_context({
         'n_frames': 173, 'atom_meta': [{'serial': 0}],
-    })
+    }))
 
     def frame(ctx, index, **kwargs):
         seen.append(index)
         return np.array([[float(index), 0, 0]])
 
     monkeypatch.setattr(mt, '_extract_md_atoms_frame', frame)
+    monkeypatch.setattr(mt, '_extract_md_nadoc_frame', coarse_stub)
     options = {} if max_frames is None else {'max_frames': max_frames}
     result = mt.md_rmsf_atomistic('top', [], 'ref', None, **options)
     assert result['n_frames'] == expected == len(seen)
