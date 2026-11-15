@@ -71,3 +71,22 @@ it('resolves assembly clusters and overhangs against their own source and live p
   expect(overhang.label).toBe('Selected overhang')
   expect(entries[0].pos.toArray()).toEqual([1,0,0])
 })
+
+
+it('draws the soft halo only on the bases owned by a partial-strand cluster', () => {
+  const entries = [entry(0), entry(1), entry(2)]
+  const currentDesign = { ...design, cluster_transforms: [{ id: 'small', helix_ids: ['h'], base_ids: [entries[1].nuc] }] }
+  const state = { currentDesign, selection: { items: [{ kind: 'cluster', id: 'small' }] } }
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera()
+  const container = document.createElement('div')
+  const source = initPresentationSelection({ scene, store: { getState: () => state }, container, getCamera: () => camera,
+    addFrameCallback: vi.fn(), removeFrameCallback: vi.fn(), getEntries: () => entries, resolveBasePosition: () => null,
+    getProteinRenderer: () => null, getNanoparticleSubsystem: () => null })
+  try {
+    source.update()
+    const halo = scene.getObjectByName('Presenter selection')
+    expect(halo.geometry.drawRange.count).toBe(1)
+    expect(halo.geometry.attributes.position.getX(0)).toBe(1)
+    state.selection = { items: [] }; source.update(); expect(halo.visible).toBe(false)
+  } finally { source.dispose() }
+})

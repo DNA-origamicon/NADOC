@@ -1,3 +1,4 @@
+import { clusterTransformSelection } from './cluster_entries.js'
 /**
  * Cluster Gizmo — wraps Three.js TransformControls for cluster rigid transforms.
  *
@@ -543,7 +544,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     if (captureBase) {
       const { currentDesign } = store.getState()
       const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
-      if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
+      if (cl) captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
     }
 
     _ringCanvas.addEventListener('pointermove', _onLinePointerMove)
@@ -568,7 +569,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
     if (cl) {
       _incrQuat.set(0, 0, 0, 1)  // pure translation
-      if (onLiveTransform) onLiveTransform(cl.helix_ids, _startDummyPos, _dummy.position, _incrQuat, cl.domain_ids?.length ? cl.domain_ids : null)
+      if (onLiveTransform) onLiveTransform(cl.helix_ids, _startDummyPos, _dummy.position, _incrQuat, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
       if (onTransformUpdate) {
         const p = _dummy.position
         onTransformUpdate([p.x - px, p.y - py, p.z - pz], _dummy.quaternion)
@@ -627,7 +628,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     const { currentDesign } = store.getState()
     const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
     _ringStartQuat = cluster ? new THREE.Quaternion(...cluster.rotation) : new THREE.Quaternion()
-    if (captureBase && cluster) captureBase(cluster.helix_ids, cluster.domain_ids?.length ? cluster.domain_ids : null)
+    if (captureBase && cluster) captureBase(cluster.helix_ids, clusterTransformSelection(cluster, store.getState().currentDesign, store.getState().currentGeometry))
 
     _startDummyPos = _dummy?.position.clone() ?? new THREE.Vector3()
     _startQuat     = _ringStartQuat.clone()
@@ -679,7 +680,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     if (cluster) {
       // For joint-constrained rotation the pivot is the axis origin, not the cluster centre.
       const center = _axisOrigin ?? _startDummyPos
-      if (onLiveTransform) onLiveTransform(cluster.helix_ids, center, center, _incrQuat, cluster.domain_ids?.length ? cluster.domain_ids : null)
+      if (onLiveTransform) onLiveTransform(cluster.helix_ids, center, center, _incrQuat, clusterTransformSelection(cluster, store.getState().currentDesign, store.getState().currentGeometry))
       if (onTransformUpdate) {
         const [px, py, pz] = _pivot
         const p = _dummy?.position ?? { x: px, y: py, z: pz }
@@ -774,7 +775,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
         // Snapshot every member's current rendered beads. append=true for all but the
         // first so each capture ADDs to the base snapshot instead of clearing it.
         _groupClusterList().forEach((cl, i) =>
-          captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null, i > 0))
+          captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry), i > 0))
       }
     } else {
       _isDragging = false
@@ -790,7 +791,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       // to the current dummy pos) applied to every member — that IS "move as one cluster".
       for (const cl of _groupClusterList()) {
         onLiveTransform(cl.helix_ids, _startDummyPos, _dummy.position, _incrQuat,
-                        cl.domain_ids?.length ? cl.domain_ids : null)
+                        clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
       }
     }
     if (onTransformUpdate) {
@@ -907,7 +908,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
         if (captureBase) {
           const { currentDesign } = store.getState()
           const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
-          if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
+          if (cl) captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
         }
         // Arm ssDNA constraints: snapshot each tether's moving-anchor start world
         // position (pM0) + fixed-anchor world position (pF, constant during drag).
@@ -972,7 +973,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       const { currentDesign } = store.getState()
       const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
       if (!cluster) return
-      if (onLiveTransform) onLiveTransform(cluster.helix_ids, _startDummyPos, _dummy.position, _incrQuat, cluster.domain_ids?.length ? cluster.domain_ids : null)
+      if (onLiveTransform) onLiveTransform(cluster.helix_ids, _startDummyPos, _dummy.position, _incrQuat, clusterTransformSelection(cluster, store.getState().currentDesign, store.getState().currentGeometry))
       _paintLinks()                // paint each swung link body + queue its pending transform
       if (onTransformUpdate) {
         const [px, py, pz] = _pivot
@@ -1228,7 +1229,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     if (captureBase) {
       const { currentDesign } = store.getState()
       const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
-      if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
+      if (cl) captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
     }
     _startDummyPos = _dummy.position.clone()
     _startQuat     = _dummy.quaternion.clone()
@@ -1258,7 +1259,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
     if (cl && onLiveTransform) {
       onLiveTransform(cl.helix_ids, _startDummyPos, _dummy.position, _incrQuat,
-        cl.domain_ids?.length ? cl.domain_ids : null)
+        clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
     }
     if (onTransformUpdate) {
       const [px, py, pz] = _pivot
@@ -1433,7 +1434,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     if (captureBase) {
       const { currentDesign } = store.getState()
       const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
-      if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
+      if (cl) captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
     }
 
     const prevPos  = _dummy.position.clone()
@@ -1447,7 +1448,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       _incrQuat.copy(_dummy.quaternion).multiply(prevQuat.clone().invert())
       const { currentDesign } = store.getState()
       const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
-      if (cl) onLiveTransform(cl.helix_ids, prevPos, _dummy.position, _incrQuat, cl.domain_ids?.length ? cl.domain_ids : null)
+      if (cl) onLiveTransform(cl.helix_ids, prevPos, _dummy.position, _incrQuat, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
     }
 
     // Reset drag-start state so the next drag begins from the new position.
@@ -1475,7 +1476,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
 
     if (captureBase) {
       _groupClusterList().forEach((cl, i) =>
-        captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null, i > 0))
+        captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry), i > 0))
     }
 
     _dummy.position.set(px + translation[0], py + translation[1], pz + translation[2])
@@ -1485,7 +1486,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       _incrQuat.copy(_dummy.quaternion).multiply(prevQuat.clone().invert())
       for (const cl of _groupClusterList()) {
         onLiveTransform(cl.helix_ids, prevPos, _dummy.position, _incrQuat,
-                        cl.domain_ids?.length ? cl.domain_ids : null)
+                        clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
       }
     }
 
@@ -1545,7 +1546,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     const T_new_c = P0mJ.clone().applyQuaternion(R_new).sub(P0mJ).add(T_new)
 
     // Capture base positions for live transform
-    if (captureBase) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
+    if (captureBase) captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
 
     // Update dummy
     _dummy.position.set(px + T_new_c.x, py + T_new_c.y, pz + T_new_c.z)
@@ -1556,7 +1557,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     // Live preview: pure rotation around J (translation correction applied by backend)
     if (onLiveTransform) {
       _incrQuat.copy(R_delta)
-      onLiveTransform(cl.helix_ids, J, J, _incrQuat, cl.domain_ids?.length ? cl.domain_ids : null)
+      onLiveTransform(cl.helix_ids, J, J, _incrQuat, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
     }
 
     // Notify transform panel

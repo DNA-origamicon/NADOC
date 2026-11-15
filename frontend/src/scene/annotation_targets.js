@@ -9,6 +9,7 @@
 import { partGroupById, partGroupNucKeys } from './part_group_display.js'
 import { baseKey, xbKey } from './base_ref.js'
 import { ovhgDomainIds } from './design_queries.js'
+import { clusterMemberFilter } from './cluster_entries.js'
 
 const KIND_LABELS = {
   'assembly-part': 'Part', 'assembly-overhang': 'Overhang',
@@ -22,7 +23,7 @@ const nucKey = (helixId, bp, direction) => `${helixId}:${bp}:${direction}`
 
 /** Sets of identities the refs select; one pass over entries then tests membership. */
 export function buildTargetMatcher(refs, design) {
-  const m = { strands: new Set(), domains: new Set(), helices: new Set(), bases: new Set(), extHelices: new Set() }
+  const m = { strands: new Set(), domains: new Set(), helices: new Set(), bases: new Set(), extHelices: new Set(), clusters: [] }
   for (const ref of refs ?? []) {
     switch (ref.kind) {
       case 'strand': m.strands.add(ref.id); break
@@ -40,8 +41,10 @@ export function buildTargetMatcher(refs, design) {
       case 'cluster': {
         const cluster = design?.cluster_transforms?.find(c => c.id === ref.id)
         if (!cluster) break
-        if (cluster.domain_ids?.length) for (const d of cluster.domain_ids) m.domains.add(domainKey(d.strand_id, d.domain_index))
-        else for (const h of cluster.helix_ids ?? []) m.helices.add(h)
+        // Supporting helices are not ownership: a cluster can own individual
+        // bases, mixed domains, or a helix minus bases claimed by another cluster.
+        const matches = clusterMemberFilter(cluster, design)
+        if (matches) m.clusters.push({ helices: cluster.helix_ids, matches })
         break
       }
       case 'overhang':
@@ -73,7 +76,7 @@ export function buildTargetMatcher(refs, design) {
 /** Backbone entries belonging to the refs. */
 export function matchTargetEntries(refs, design, entries) {
   const m = buildTargetMatcher(refs, design)
-  const empty = !m.strands.size && !m.domains.size && !m.helices.size && !m.bases.size && !m.extHelices.size
+  const empty = !m.strands.size && !m.domains.size && !m.helices.size && !m.bases.size && !m.extHelices.size && !m.clusters.length
   if (empty || !entries?.length) return []
   const out = []
   for (const entry of entries) {
@@ -83,7 +86,8 @@ export function matchTargetEntries(refs, design, entries) {
       || (m.helices.size && m.helices.has(nuc.helix_id))
       || (m.extHelices.size && m.extHelices.has(nuc.helix_id))
       || (m.domains.size && nuc.domain_index != null && m.domains.has(domainKey(nuc.strand_id, nuc.domain_index)))
-      || (m.bases.size && m.bases.has(baseKey(nuc, nuc.copy_k ?? 0)))) out.push(entry)
+      || (m.bases.size && m.bases.has(baseKey(nuc, nuc.copy_k ?? 0)))
+      || m.clusters.some(cluster => cluster.matches(nuc))) out.push(entry)
   }
   return out
 }
@@ -111,6 +115,10 @@ export function createTargetEntryMatcher() {
     for (const [keys, index] of [[m.strands, cached.strands], [m.domains, cached.domains],
       [m.helices, cached.helices], [m.extHelices, cached.helices], [m.bases, cached.bases]])
       for (const key of keys) for (const id of index.get(key) ?? []) ids.add(id)
+    for (const cluster of m.clusters)
+      for (const helix of cluster.helices)
+        for (const id of cached.helices.get(helix) ?? [])
+          if (cluster.matches(entries[id].nuc)) ids.add(id)
     // Preserve source order and duplicate source entries while removing overlap
     // between refs, just as the reference linear scan does.
     return [...ids].sort((a, b) => a - b).map(i => entries[i])

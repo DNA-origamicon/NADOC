@@ -404,45 +404,25 @@ def test_api_mark_requires_unpaired():
     assert any(n.get("is_flexible_segment") for n in nucs)
 
 
-def test_unconnected_mark_leaves_bead_rigid():
-    """Safety net: a marked run that forms NO connection (both ends on the same
-    cluster) must NOT exclude its beads from rigid rendering — is_flexible_segment
-    stays False so marking can never silently delete geometry."""
+def test_unconnected_mark_is_rejected_without_history_change():
     design_state.set_design(_hinge_design())
-    # A single mid-run bead: its rigid neighbours are both on cl_a → no bridge.
-    r = client.post(
-        "/api/design/flexible-segment",
-        json={
-            "strand_id": "scaf",
-            "domain_index": 1,
-            "bp_index": 9,
-            "direction": "FORWARD",
-        },
-    )
-    assert r.status_code == 200, r.text  # accepted (unpaired) …
-    assert r.json()["partial_geometry"] is True
-    assert r.json()["changed_helix_ids"] == ["h_a"]
-    assert "flex_mutate;dur=" in r.headers["server-timing"]
-    assert "flex_geometry;dur=" in r.headers["server-timing"]
-    assert design_state.get_or_404().flexible_segment_marks  # … and the mark persists
-    assert design_state.get_or_404().flexible_connections == []  # but no connection
-    nucs = r.json().get("nucleotides") or []
-    assert nucs and not any(
-        n.get("is_flexible_segment") for n in nucs
-    )  # bead stays rigid
+    before = design_state.get_or_404().model_dump_json()
+    revision, depth = design_state.revision(), design_state.undo_depth()
+    r = client.post('/api/design/flexible-segment', json={
+        'strand_id': 'scaf', 'domain_index': 1, 'bp_index': 9, 'direction': 'FORWARD',
+    })
+    assert r.status_code == 422
+    assert r.json()['detail']['message'] == 'flexible connections must be between two different cluster'
+    assert design_state.get_or_404().model_dump_json() == before
+    assert (design_state.revision(), design_state.undo_depth()) == (revision, depth)
 
 
 def test_api_mark_adds_feature_log_entry_and_reverts():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)
     r = client.post(
-        "/api/design/flexible-segment",
-        json={
-            "strand_id": "scaf",
-            "domain_index": 1,
-            "bp_index": 9,
-            "direction": "FORWARD",
-        },
+        "/api/design/flexible-segment/batch",
+        json={"marks": _run_mark_bodies()},
     )
     assert r.status_code == 200, r.text
     log = design_state.get_or_404().feature_log
@@ -493,13 +473,8 @@ def test_api_mark_feature_log_deletable():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)
     client.post(
-        "/api/design/flexible-segment",
-        json={
-            "strand_id": "scaf",
-            "domain_index": 1,
-            "bp_index": 9,
-            "direction": "FORWARD",
-        },
+        "/api/design/flexible-segment/batch",
+        json={"marks": _run_mark_bodies()},
     )
     assert design_state.get_or_404().flexible_segment_marks
     rd = client.delete(f"/api/design/features/{n0}")

@@ -20,9 +20,20 @@ export function projectBox(box, matrix, camera, { width, height }) {
 export function instanceBounds(entry, camera, size) {
   const mesh = entry.instMesh
   if (!mesh?.geometry) return null
-  if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox()
   const matrix = new THREE.Matrix4()
   mesh.getMatrixAt(entry.id, matrix)
+  if (mesh.material?.userData?.isImpostor) {
+    // The shader uses the unit quad only as billboard coordinates. Its visible
+    // extent is radius × the instance's uniform fade scale, in camera space.
+    // Testing the raw quad selects distant bases and misses contained beads.
+    const radius = mesh.material.userData.impostorRadius *
+      new THREE.Vector3().setFromMatrixColumn(matrix, 0).length()
+    const center = new THREE.Vector3().setFromMatrixPosition(matrix).applyMatrix4(mesh.matrixWorld)
+    const billboard = new THREE.Matrix4().copy(camera.matrixWorld).setPosition(center)
+    const bounds = new THREE.Box3(new THREE.Vector3(-radius, -radius, 0), new THREE.Vector3(radius, radius, 0))
+    return projectBox(bounds, billboard, camera, size)
+  }
+  if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox()
   matrix.premultiply(mesh.matrixWorld)
   return projectBox(mesh.geometry.boundingBox, matrix, camera, size)
 }

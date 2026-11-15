@@ -26,6 +26,7 @@ def native_compact_geometry(design: Design) -> dict | None:
     rule; unoccupied complementary slots are never emitted.
     """
     if (design.extensions or design.overhang_connections or design.overhangs
+            or design.flexible_segment_marks
             or design.nucleotide_transforms or design.photoproduct_junctions
             or any(h.native_residues for h in design.helices)):
         return None

@@ -1,5 +1,27 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-196 — Relax all visually re-rigidifies flexible bases (2026-11-14)
+
+- [x] Current JJ_Hinge retains all 22 marked bases / 11 flexible connections
+  after Relax all; its compact partial geometry response drops the display flag.
+- [x] Preserve sparse flexible flags in shared compact encoding/decoding; marked
+  designs use the complete-record fallback on the native array shortcut.
+- [x] Cover two-base relax responses, undo/redo and sparse field alignment.
+- [x] App checks exercise Relax all and check arc bead counts and absence of marked
+  bases from rigid meshes, including a deleted-slot anchor.
+
+## ISSUE-195 — Partial cluster selection paints a whole-helix soft halo (2026-11-14)
+
+- [x] Reproduced both styles in current JJ_Hinge: exact bright mesh tint and
+  weaker halo extending past the cluster's corner markers.
+- [x] Root cause: `presentation_selection` uses `annotation_targets`, which
+  expanded `helix_ids` and ignored exact `base_ids`. The regular mesh tint
+  already used `clusterMemberFilter`; checking only its buffer missed the halo.
+- [x] Use canonical cluster membership in both linear and indexed target matching,
+  including loop copies, mixed domains and bases claimed by another cluster.
+- [x] Regress the actual halo point buffer and both rectangle/Ctrl-click/sidebar
+  workflows; preserve document membership and molecular geometry.
+
 ## ISSUE-194 — Autoscaffold ends fall outside an earlier Bend (2026-11-14)
 
 The Feature Log guide exposed 268 new scaffold bases outside the earlier Bend's

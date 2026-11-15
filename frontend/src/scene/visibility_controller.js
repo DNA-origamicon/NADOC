@@ -16,7 +16,7 @@ export function collectVisibilityBaseKeys(geometry, {
     if (strands.has(nuc.strand_id) || extensionIds.has(nuc.extension_id) ||
         extensionHelixIds.has(nuc.helix_id) ||
         domains.has(`${nuc.strand_id}:${nuc.domain_index}`) ||
-        clusterSelectors.has(`h:${nuc.helix_id}`) ||
+        clusterSelectors.has(`b:${key}`) || clusterSelectors.has(`h:${nuc.helix_id}`) ||
         clusterSelectors.has(`d:${nuc.strand_id}:${nuc.domain_index}`)) out.add(key)
   }
   return out

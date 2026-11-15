@@ -88,6 +88,25 @@ def _flex_mark_from_body(design: Design, b: FlexibleSegmentMarkBody, unpaired=No
     )
 
 
+def _require_connected_marks(design: Design, marks):
+    """Reject new inert marks without changing the document or its history.
+
+    Keep this admission rule out of replay: older saved operations may contain
+    intra-cluster marks and must remain faithfully replayable/removable.
+    """
+    def key(mark):
+        return mark.strand_id, mark.domain_index, mark.bp_index, mark.direction
+
+    connected = {key(bead) for connection in design.flexible_connections
+                 for bead in connection.segment_bead_keys}
+    if any(key(mark) not in connected for mark in marks):
+        raise HTTPException(422, detail={
+            "code": "flexible_connection_requires_distinct_clusters",
+            "message": "flexible connections must be between two different cluster",
+        })
+    return design
+
+
 def _mark_helix_ids(design: Design, marks) -> set[str]:
     """Helices whose per-nucleotide flexible classification can change."""
     strands = {strand.id: strand for strand in design.strands}
@@ -210,9 +229,10 @@ def add_flexible_segment(body: FlexibleSegmentMarkBody, response: Response) -> d
     mark = _flex_mark_from_body(design, body)  # validates unpaired
 
     def fn(d: Design) -> Design:
-        return apply_marks(
+        candidate = apply_marks(
             d.copy_with(flexible_segment_marks=list(d.flexible_segment_marks) + [mark])
         )
+        return _require_connected_marks(candidate, [mark])
 
     return _flex_log_response(
         response, "flexible-segment-mark", "Mark flexible ssDNA",
@@ -269,7 +289,14 @@ def batch_flexible_segment(body: FlexibleSegmentBatchBody, response: Response) -
                 continue
             seen.add(kdup)
             merged.append(m)
-        return apply_marks(d.copy_with(flexible_segment_marks=merged))
+        candidate = apply_marks(d.copy_with(flexible_segment_marks=merged))
+        # Replace is also the UI's unmark operation. Retained historical marks
+        # must remain removable even if they predate this admission rule.
+        previous = {(m.strand_id, m.domain_index, m.bp_index, m.direction)
+                    for m in d.flexible_segment_marks} if body.replace else set()
+        added = [m for m in new_marks if
+                 (m.strand_id, m.domain_index, m.bp_index, m.direction) not in previous]
+        return _require_connected_marks(candidate, added)
 
     is_clear = body.replace and not new_marks
     op_kind = "flexible-segment-unmark" if is_clear else "flexible-segment-mark"

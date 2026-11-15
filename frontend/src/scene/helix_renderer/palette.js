@@ -1,3 +1,4 @@
+import { clusterBaseKey } from '../cluster_base_members.js'
 // ── Palette ───────────────────────────────────────────────────────────────────
 
 import { isAutoCluster } from '../cluster_entries.js'
@@ -139,6 +140,7 @@ export function buildNucLetterMap(design, nucs) {
 export function buildClusterLookup(design) {
   if (hasOrganization(design)) return partGroupColorIndex(design)
   const clusters = design?.cluster_transforms ?? []
+  const baseWin = new Map()
   if (!clusters.length) return () => undefined
 
   const helixToCluster  = new Map()   // helix_id → cluster_index
@@ -160,7 +162,9 @@ export function buildClusterLookup(design) {
 
   for (let i = 0; i < clusters.length; i++) {
     const c = clusters[i]
-    if (c.domain_ids?.length) {
+    if (c.base_ids?.length) {
+      for (const ref of c.base_ids) baseWin.set(clusterBaseKey(ref), i)
+    } else if (c.domain_ids?.length) {
       const keys = new Set()
       for (const dr of c.domain_ids) {
         const k = `${dr.strand_id}:${dr.domain_index}`
@@ -184,6 +188,8 @@ export function buildClusterLookup(design) {
     }
   }
   return (nuc) => {
+    const bi = baseWin.get(clusterBaseKey(nuc))
+    if (bi !== undefined) return bi
     if (nuc?.strand_id != null && nuc?.domain_index != null) {
       const k = `${nuc.strand_id}:${nuc.domain_index}`
       if (domainToCluster.has(k)) return domainToCluster.get(k)
@@ -231,6 +237,7 @@ export function buildClusterColorLookup(design) {
     return nuc => colors[index(nuc)]
   }
   const clusters = design?.cluster_transforms ?? []
+  const baseWin = new Map()
   if (!clusters.length) return () => undefined
 
   // Per-cluster resolved colour + whether the user picked it (the tiebreak rank).
@@ -272,7 +279,9 @@ export function buildClusterColorLookup(design) {
 
   for (let i = 0; i < clusters.length; i++) {
     const c = clusters[i]
-    if (c.domain_ids?.length) {
+    if (c.base_ids?.length) {
+      for (const ref of c.base_ids) baseWin.set(clusterBaseKey(ref), i)
+    } else if (c.domain_ids?.length) {
       const keys = new Set()
       for (const dr of c.domain_ids) {
         const k = `${dr.strand_id}:${dr.domain_index}`
@@ -324,6 +333,8 @@ export function buildClusterColorLookup(design) {
   }
 
   return (nuc) => {
+    const bi = baseWin.get(clusterBaseKey(nuc))
+    if (bi !== undefined) return colorOf[bi]
     if (nuc?.strand_id != null && nuc?.domain_index != null) {
       const k = `${nuc.strand_id}:${nuc.domain_index}`
       if (domainWin.has(k)) return colorOf[domainWin.get(k)]

@@ -392,3 +392,12 @@ def test_extension_frames_only_include_required_terminals(monkeypatch):
     geometry._geometry_for_helices(design)
     geometry._positions_for_design(design)
     assert sizes == [2, 2]
+
+
+def test_compact_flexible_flags_remain_aligned_before_and_after_marked_sites():
+    records = [dict(helix_id='h', direction='FORWARD', bp_index=i,
+                    placement_source='native-full-o5-v1', is_flexible_segment=i in (2, 3))
+               for i in range(6)]
+    compact = _compact_geometry_from_nucleotides(records)
+    assert compact['h']['FORWARD']['flex'] == [False, False, True, True, False, False]
+    assert 'flex' not in _compact_geometry_from_nucleotides(records[:2])['h']['FORWARD']

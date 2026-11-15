@@ -200,7 +200,7 @@ def dependencies(params):
         reads.add(Resource("joint", controls["joint_id"]))
     if controls["pivot_id"].startswith("dup:root:"):
         reads.add(Resource("overhang", controls["pivot_id"][len("dup:root:"):]))
-    membership = "helix_ids" in authored or "domain_ids" in authored
+    membership = "helix_ids" in authored or "domain_ids" in authored or "base_ids" in authored
     if membership:
         reads.add(Resource("part", "topology"))
         reads.update(Resource("helix", identity) for identity in authored.get("helix_ids", ()))

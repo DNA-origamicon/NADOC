@@ -28,7 +28,8 @@ import {
   computeAtomNucAlphas,
   computeAtomNucColors,
 } from './color_util.js'
-import { clusterDisplaySignature } from './cluster_entries.js'
+import { clusterDisplaySignature, clusterNucKeys } from './cluster_entries.js'
+import { claimedBaseKeys } from './cluster_base_members.js'
 import { partGroupById, partGroupNucKeysFor } from './part_group_display.js'
 import { baseKey, parseBaseKey } from './base_ref.js'
 import { canonicalSelection, overhangSelectionTarget } from './selection_model.js'
@@ -93,7 +94,12 @@ export function atomSelectionForState(state) {
   })
   const selectedGroups = (highlight.partGroupIds ?? [])
     .map(id => partGroupById(state?.currentDesign, id)).filter(Boolean)
-  const selectedMembers = [...selectedClusters, ...selectedGroups]
+  const exactClusters = selectedClusters.filter(cluster =>
+    cluster.base_ids?.length || claimedBaseKeys(state.currentDesign, cluster).size)
+  const exactClusterIds = new Set(exactClusters.map(cluster => cluster.id))
+  const clusterBaseKeys = exactClusters.flatMap(cluster =>
+    [...clusterNucKeys(cluster, state.currentDesign)].filter(key => key.startsWith('b:')).map(key => key.slice(2)))
+  const selectedMembers = [...selectedClusters.filter(cluster => !exactClusterIds.has(cluster.id)), ...selectedGroups]
   const clusterDomainRefs = selectedMembers.flatMap(cluster => (cluster.domain_ids ?? []).map(domain => ({
     kind: 'domain', strandId: domain.strand_id, domainIndex: domain.domain_index,
   })))
@@ -111,7 +117,7 @@ export function atomSelectionForState(state) {
       lo: Math.min(domain.start_bp, domain.end_bp), hi: Math.max(domain.start_bp, domain.end_bp),
     }] : []
   })
-  const bases = [...highlight.baseKeys, ...highlight.endKeys]
+  const bases = [...highlight.baseKeys, ...highlight.endKeys, ...clusterBaseKeys]
     .map(parseBaseKey).filter(ref => ref && ref.helix_id !== '__xb__')
   const groupKeys = partGroupNucKeysFor(state?.currentDesign, highlight.partGroupIds)
   const extensionIds = [...new Set([...highlight.extensionIds,

@@ -8,10 +8,14 @@ from backend.core.unpair_reclassification import separated_staple_keys, relocate
 def separated_keys(before, posed, identities):
     from backend.core.deformation import _cluster_moving_segment_keys
     moving = set()
+    targets = []
     for owner in posed.cluster_transforms:
         if owner.id in identities:
-            moving.update(_cluster_moving_segment_keys(owner, posed))
-    targets = [(d.helix_id, bp, d.direction.value, 0)
+            if owner.base_ids:
+                targets.extend((r.helix_id, r.bp_index, r.direction.value, r.copy_k) for r in owner.base_ids)
+            else:
+                moving.update(_cluster_moving_segment_keys(owner, posed))
+    targets += [(d.helix_id, bp, d.direction.value, 0)
                for s in before.strands for i, d in enumerate(s.domains)
                if (s.id, i) in moving for bp in domain_bp_range(d)]
     return separated_staple_keys(before, posed, targets, allow_cluster_poses=True)

@@ -51,12 +51,13 @@ _fields = {
         auto_loop_skips loop_skip_warnings preceding_op_ids direction start_step steps path_length_nm
         bp_positions_nm bp_frames""",
     m.DomainRef: "strand_id domain_index",
+    m.ClusterBaseRef: "helix_id bp_index direction copy_k",
     GroupDomainRef: "strand_id domain_index",
     PartGroup: "id name helix_ids domain_ids color opacity is_default auto_created",
     GroupOrganization: "version groups",
     m.NucleotideTransform: """id kind helix_id bp_index direction copy_k crossover_id extra_base_k
         pivot translation rotation""",
-    m.ClusterRigidTransform: """id name is_default helix_ids domain_ids translation rotation pivot
+    m.ClusterRigidTransform: """id name is_default helix_ids domain_ids base_ids translation rotation pivot
         parent_cluster_id overhang_duplex_driver_id color opacity auto_created folding_order""",
     m.ClusterJoint: """id cluster_id name joint_type local_axis_origin local_axis_direction surface_detail
         min_angle_deg max_angle_deg""",

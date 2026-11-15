@@ -1,3 +1,4 @@
+import { clusterBaseKey } from './cluster_base_members.js'
 import { segmentAxisSamples, segmentAxisEndpoints } from './native_axis_samples.js'
 import { animationNativePosition } from './animation_native_position.js'
 import { revealSweepTube } from './sweep_animation_reveal.js'
@@ -5375,6 +5376,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      */
     captureClusterBase(helixIds, domainIds = null, append = false, { forceAxes = false } = {}) {
       const helixSet = new Set(helixIds)
+      const baseKeys = domainIds?.[0]?.bp_index != null ? new Set(domainIds.map(clusterBaseKey)) : null
+      const inSelection = n => baseKeys ? baseKeys.has(clusterBaseKey(n)) : (!domainKeySet || domainKeySet.has(`${n.strand_id}:${n.domain_index}`))
       const domainKeySet = domainIds?.length
         ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
         : null
@@ -5389,13 +5392,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       for (const entry of backboneEntries) {
         if (!helixSet.has(entry.nuc.helix_id)) continue
-        if (domainKeySet && !domainKeySet.has(`${entry.nuc.strand_id}:${entry.nuc.domain_index}`)) continue
+        if (!inSelection(entry.nuc)) continue
         const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
         _cbEntries.set(entry.nuc, entry.pos.clone())
       }
       for (const slab of slabEntries) {
         if (!helixSet.has(slab.nuc.helix_id)) continue
-        if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
+        if (!inSelection(slab.nuc)) continue
         // Snapshot the ACTUAL rendered center. Re-solving it later from
         // nuc.base_position is invalid during a Plan-B preview because those
         // authoritative arrays intentionally remain unchanged until Apply.
@@ -5465,7 +5468,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const arrow of axisArrows) {
         if (!helixSet.has(arrow.helixId)) continue
         for (const seg of arrow.segments) {
-          if (domainKeySet) {
+          if (baseKeys) {
+            let covered = true
+            for (let bp = seg.bp_lo; bp <= seg.bp_hi; bp++) for (const direction of ['FORWARD', 'REVERSE']) {
+              if (!baseKeys.has(`${arrow.helixId}:${bp}:${direction}`)) covered = false
+            }
+            if (!covered) continue
+          } else if (domainKeySet) {
             const inScope = seg.domainIds.some(
               d => domainKeySet.has(`${d.strand_id}:${d.domain_index}`))
             if (!inScope) continue
@@ -5501,6 +5510,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // DELETE PENDING REVIEW (non-authoritative geometry): live drag mutates
       // renderer-local poses before the backend emits authoritative coordinates.
       const helixSet = new Set(helixIds)
+      const baseKeys = domainIds?.[0]?.bp_index != null ? new Set(domainIds.map(clusterBaseKey)) : null
+      const inSelection = n => baseKeys ? baseKeys.has(clusterBaseKey(n)) : (!domainKeySet || domainKeySet.has(`${n.strand_id}:${n.domain_index}`))
       const domainKeySet = domainIds?.length
         ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
         : null
@@ -5508,7 +5519,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // 1. Backbone beads — incremental transform from snapshot base
       for (const entry of backboneEntries) {
         if (!helixSet.has(entry.nuc.helix_id)) continue
-        if (domainKeySet && !domainKeySet.has(`${entry.nuc.strand_id}:${entry.nuc.domain_index}`)) continue
+        if (!inSelection(entry.nuc)) continue
         const key  = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
         const base = _cbEntries.get(entry.nuc)
         if (!base) continue
@@ -5578,7 +5589,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       //    currentGeometry is deliberately not mutated during preview.
       for (const slab of slabEntries) {
         if (!helixSet.has(slab.nuc.helix_id)) continue
-        if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
+        if (!inSelection(slab.nuc)) continue
         const entry    = _nucToEntry.get(slab.nuc)
         const baseData = _cbSlabs.get(slab.nuc)
         if (!entry || !baseData) continue

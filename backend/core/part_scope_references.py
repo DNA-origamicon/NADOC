@@ -65,9 +65,10 @@ _schema("ConnectionVersion", "connection_version", refs={"overhang_a_id": "overh
 _schema("Duplex", "duplex", refs={"target_joint_id": "joint"}, children="left right",
         plain="name created_at driver bound binding_mode allow_n_wildcard locked_angle_deg connection_type", special="prior_driven_topology")
 _schema("DuplexEnd", refs={"overhang_id": "overhang"}, plain="start_bp end_bp")
-_schema("ClusterRigidTransform", "cluster", children="domain_ids",
+_schema("ClusterRigidTransform", "cluster", children="domain_ids base_ids",
         refs={"helix_ids": "helix", "parent_cluster_id": "cluster", "overhang_duplex_driver_id": "overhang"},
         plain="name is_default translation rotation pivot color opacity auto_created folding_order")
+_schema("ClusterBaseRef", refs={"helix_id": "helix"}, plain="bp_index direction copy_k")
 _schema("DomainRef", refs={"strand_id": "strand"}, plain="domain_index")
 _schema(GroupDomainRef, refs={"strand_id": "strand"}, plain="domain_index")
 _schema(PartGroup, "part_group", children="domain_ids", refs={"helix_ids": "helix"},

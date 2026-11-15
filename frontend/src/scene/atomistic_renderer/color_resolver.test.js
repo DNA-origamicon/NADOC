@@ -159,3 +159,12 @@ it('matches Full letters across helices and loop copies, including selected view
     expect(resolveAtomColor(ctx, n, { strandIds: ['other'] }, true)).toBe(BASE_HEX[letter])
   }
 })
+
+it('exact base highlighting distinguishes insertion copies and adjacent bases', () => {
+  const ctx = { colorMode:'cpk', strandColors:new Map(), baseColors:new Map() }
+  const selected = { bases:[{helix_id:'h',bp_index:4,direction:'FORWARD',copy:1}] }
+  const a = {element:'C',helix_id:'h',bp_index:4,direction:'FORWARD',copy_k:1}
+  expect(resolveAtomColor(ctx,a,selected,true)).toBe(C_HIGHLIGHT)
+  expect(resolveAtomColor(ctx,{...a,copy_k:0},selected,true)).toBe(ELEMENTS.C.color)
+  expect(resolveAtomColor(ctx,{...a,bp_index:5},selected,true)).toBe(ELEMENTS.C.color)
+})

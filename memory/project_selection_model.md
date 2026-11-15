@@ -194,7 +194,23 @@ Geometry and topology are unchanged until the existing resize commit.
 Regression coverage: `end_resize_axis.test.js`, `end_extrude_arrows.test.js`,
 and the real-pointer Bend/Twist browser test `e2e/end_resize_axis.spec.js`.
 
+## Cluster tint and soft halo membership (2026-11-14)
+
+Cluster selection has two visual layers: `selection_manager` / `selection_tint`
+paints base meshes, while `presentation_selection` draws soft green halo points.
+The latter resolves through `annotation_targets`; both its linear and indexed
+matchers now use `clusterMemberFilter` for exact bases, loop copies, mixed domains,
+and exclusions claimed by other clusters. Never expand a base cluster's supporting
+`helix_ids` into ownership. Regression coverage checks the actual halo point buffer
+as well as tint masks after sidebar selection.
+
 ## Future-session protocol
+
+Rectangle selection of sphere impostors uses the shader's camera-facing radius
+and per-instance fade scale, not the underlying unit quad's geometry bounds.
+The latter over-selected distant bases in crossing rectangles and rejected
+visible beads in window rectangles. Coverage lives in `rectangle_selection.test.js`
+and the real rectangle/Ctrl-click cluster workflow in `base_cluster_assignment.spec.js`.
 
 1. Read this head and inspect the current matrix; avoid the archive unless historical
    rationale is needed.

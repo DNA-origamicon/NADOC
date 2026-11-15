@@ -8,8 +8,8 @@ const entries = [
   entry(nuc('s2', 'h1', 5, 'FORWARD', 0), 3), entry(nuc('s2', '__ext_e1', 0), 4),
 ]
 const design = {
-  strands: [{ id: 's1', name: 'Scaffold' }, { id: 's2' }],
-  cluster_transforms: [{ id: 'c1', name: 'Arm', helix_ids: ['h1'], domain_ids: [] }, { id: 'c2', name: 'Dom', domain_ids: [{ strand_id: 's1', domain_index: 1 }] }],
+  strands: [{ id: 's1', name: 'Scaffold', domains: [{ helix_id: 'h0' }, { helix_id: 'h1' }] }, { id: 's2' }],
+  cluster_transforms: [{ id: 'c1', name: 'Arm', helix_ids: ['h1'], domain_ids: [] }, { id: 'c2', name: 'Dom', helix_ids: ['h1'], domain_ids: [{ strand_id: 's1', domain_index: 1 }] }],
   crossovers: [{ id: 'x1', half_a: { helix_id: 'h0', index: 1, strand: 'FORWARD' }, half_b: { helix_id: 'h1', index: 1, strand: 'REVERSE' } }],
   forced_ligations: [{ id: 'f1', three_prime_helix_id: 'h0', three_prime_bp: 0, three_prime_direction: 'FORWARD', five_prime_helix_id: 'h1', five_prime_bp: 5, five_prime_direction: 'FORWARD' }],
   overhangs: [{ id: 'o1', strand_id: 's2' }],
@@ -80,4 +80,28 @@ it('indexed matching preserves reference order, overlaps, duplicate identities a
   source[0] = entry(nuc('s2', 'h0', 0))
   const revision = { ...design }
   expect(match(refs, revision, source)).toEqual(matchTargetEntries(refs, revision, source))
+})
+
+
+it('keeps linear and indexed cluster targets exact, including claimed bases and loop copies', async () => {
+  const { createTargetEntryMatcher } = await import('./annotation_targets.js')
+  const source = [entry(nuc('s', 'h', 0)), entry(nuc('s', 'h', 1)),
+    entry({ ...nuc('s', 'h', 1), copy_k: 1 }), entry(nuc('other', 'h', 2))]
+  const exact = { id: 'exact', helix_ids: ['h'], base_ids: [{ helix_id: 'h', bp_index: 1, direction: 'FORWARD', copy_k: 1 }] }
+  const d = { cluster_transforms: [{ id: 'parent', helix_ids: ['h'] }, exact] }
+  for (const match of [matchTargetEntries, createTargetEntryMatcher()]) {
+    expect(match([{ kind: 'cluster', id: 'exact' }], d, source)).toEqual([source[2]])
+    expect(match([{ kind: 'cluster', id: 'parent' }], d, source)).toEqual([source[0], source[1], source[3]])
+    expect(match([{ kind: 'cluster', id: 'exact' }, { kind: 'base', key: 'h:0:FORWARD' }], d, source)).toEqual([source[0], source[2]])
+  }
+})
+
+
+it('shares mixed-domain and exclusive-helix ownership between target matchers', async () => {
+  const { createTargetEntryMatcher } = await import('./annotation_targets.js')
+  const source = [entry(nuc('s', 'bridge', 0)), entry(nuc('other', 'bridge', 1)), entry(nuc('other', 'owned', 2))]
+  const d = { strands: [{id:'s',domains:[{helix_id:'bridge'}]}], cluster_transforms: [
+    { id:'mixed', helix_ids:['bridge','owned'], domain_ids:[{strand_id:'s',domain_index:0}] }] }
+  for (const match of [matchTargetEntries, createTargetEntryMatcher()])
+    expect(match([{kind:'cluster',id:'mixed'}], d, source)).toEqual([source[0],source[2]])
 })

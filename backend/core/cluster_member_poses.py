@@ -21,11 +21,20 @@ def affine(pose):
 def frame(design, pose):
     """Mirror native child, whole-helix, then domain-cluster application order."""
     clusters = [c for c in design.cluster_transforms if pose.helix_id in c.helix_ids]
-    clusters.sort(key=lambda c: 0 if c.parent_cluster_id else 2 if c.domain_ids else 1)
+    clusters.sort(key=lambda c: 0 if c.parent_cluster_id else 2 if (c.domain_ids or c.base_ids) else 1)
     strands = {s.id: s for s in design.strands}
     result = np.eye(4)
+    from backend.core.cluster_bases import claimed_elsewhere
     for cluster in clusters:
-        if cluster.domain_ids:
+        key = (pose.helix_id, pose.bp_index, pose.direction, getattr(pose, 'copy_k', 0))
+        if key in claimed_elsewhere(design, cluster):
+            continue
+        if cluster.base_ids:
+            if not any(r.helix_id == pose.helix_id and r.bp_index == pose.bp_index
+                       and r.direction == pose.direction and r.copy_k == getattr(pose, 'copy_k', 0)
+                       for r in cluster.base_ids):
+                continue
+        elif cluster.domain_ids:
             domains = [strands[r.strand_id].domains[r.domain_index] for r in cluster.domain_ids
                        if r.strand_id in strands and r.domain_index < len(strands[r.strand_id].domains)]
             domains = [d for d in domains if d.helix_id == pose.helix_id]

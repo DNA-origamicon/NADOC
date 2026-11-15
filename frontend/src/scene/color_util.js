@@ -1,3 +1,4 @@
+import { clusterBaseKey } from './cluster_base_members.js'
 /**
  * Color helpers extracted from main.js. Pure (Math only). Unit-tested in
  * color_util.test.js.
@@ -257,6 +258,7 @@ export function buildNucClusterIndex(design) {
   const beats = (cand, held) => held === undefined ||
     (auto[cand] !== auto[held] ? !auto[cand] : true)
   clusters.forEach((c, i) => {
+    if (c.base_ids?.length) return
     if (c.domain_ids?.length) {
       const bridges = new Set()
       for (const dr of c.domain_ids) {
@@ -309,6 +311,7 @@ export function buildNucClusterIndex(design) {
       (termDom ? helixCluster.get(termDom.helix_id) : undefined)
     if (ci != null) out.set(`__ext_${ext.id}`, ci)
   }
+  clusters.forEach((c, i) => { for (const ref of c.base_ids ?? []) out.set(clusterBaseKey(ref), i) })
   return out
 }
 

@@ -1,3 +1,6 @@
+import { canonicalSelection } from './selection_model.js'
+import { assignClusterSelection } from '../ui/cluster_base_selection.js'
+import { connIdForBead } from './design_queries.js'
 import { extraBasePickEntries, extraBaseAtomEntry, pickEntryKey } from './extra_base_pick.js'
 import { createSelectionDragGuard } from './selection_drag_guard.js'
 import { vrDeformationSelection, resolveVRDeformationSelection, vrDeformationRefForOwner } from './vr_deformation_selection.js'
@@ -1062,24 +1065,14 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
     e.stopPropagation()
     const design = store.getState().currentDesign
     if (!design) return
-    const helixIds = _helixIdsFromStrandIds(strandIds, design)
-    if (!helixIds.length) { clusterSel.value = ''; return }
-
-    if (clusterSel.value === '__new__') {
-      const n = (design.cluster_transforms?.length ?? 0) + 1
-      const result = await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
-      if (!result) showToast(`Could not create cluster: ${store.getState().lastError?.message ?? 'The operation was refused.'}`, { severity: 'error' })
-      _dismissMenu()
-    } else if (clusterSel.value) {
-      const clusterId = clusterSel.value
-      const existing = design.cluster_transforms?.find(c => c.id === clusterId)
-      if (existing) {
-        const merged = [...new Set([...existing.helix_ids, ...helixIds])]
-        const result = await api.patchCluster(clusterId, { helix_ids: merged })
-        if (!result) showToast(`Could not change cluster membership: ${store.getState().lastError?.message ?? 'The operation was refused.'}`, { severity: 'error' })
-      }
-      _dismissMenu()
-    }
+    const refs = canonicalSelection(store.getState()).items
+    const selected = refs.some(r => r.kind === 'strand' && strandIds.includes(r.id))
+      ? refs : strandIds.map(id => ({ kind: 'strand', id }))
+    try {
+      if (clusterSel.value) await assignClusterSelection({ store, api, refs: selected,
+        clusterId: clusterSel.value === '__new__' ? null : clusterSel.value })
+    } catch (error) { showToast(`Could not assign cluster: ${error.message}`, { severity: 'error' }) }
+    _dismissMenu()
   })
 
   clusterRow.appendChild(clusterSel)
@@ -1221,8 +1214,13 @@ function _showFlexibleSegmentMenu(x, y, nuc, onFlexibleSegmentRightClick) {
   }
   if (marked) {
     menu.appendChild(_menuSep())
-    menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one')))
-    menu.appendChild(_menuItem('Relax all flexible segments', () => onFlexibleSegmentRightClick?.(nuc, 'relax_all')))
+    menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one'), {
+      disabled: !connIdForBead(nuc, design),
+      title: 'Requires a flexible tether between two different clusters',
+    }))
+    menu.appendChild(_menuItem('Relax all flexible segments', () => onFlexibleSegmentRightClick?.(nuc, 'relax_all'), {
+      disabled: !design?.flexible_connections?.length,
+    }))
   }
   if (marks.length > 0) {
     menu.appendChild(_menuSep())
@@ -1320,8 +1318,13 @@ function _showScaffoldMenu(x, y, ctx, cbs) {
     rm.style.color = '#ff6b6b'
     menu.appendChild(rm)
     // Relax sub-items — only meaningful once the run is marked.
-    menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one')))
-    menu.appendChild(_menuItem('Relax all flexible segments', () => onFlexibleSegmentRightClick?.(nuc, 'relax_all')))
+    menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one'), {
+      disabled: !connIdForBead(nuc, design),
+      title: 'Requires a flexible tether between two different clusters',
+    }))
+    menu.appendChild(_menuItem('Relax all flexible segments', () => onFlexibleSegmentRightClick?.(nuc, 'relax_all'), {
+      disabled: !design?.flexible_connections?.length,
+    }))
   } else {
     menu.appendChild(_menuItem('Mark flexible segment', () => onFlexibleSegmentRightClick?.(nuc, 'mark'), {
       disabled: !nuc.is_unpaired,
@@ -4559,6 +4562,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           void showCpdConversion({ api, baseKeys: keys })
         }))
       }
+      const clusterRefs = canonicalSelection(store.getState()).items
+      menu.appendChild(_menuItem('New cluster from selected bases', () => {
+        _dismissMenu()
+        void assignClusterSelection({ store, api, refs: clusterRefs }).catch(error =>
+          showToast(`Could not create cluster: ${error.message}`, { severity: 'error' }))
+      }))
       menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.({ baseKeys: [..._baseKeys] })))
       document.body.appendChild(menu)
       _menuEl = menu

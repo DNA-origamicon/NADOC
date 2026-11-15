@@ -1,5 +1,53 @@
 # Issues fix log
 
+## ISSUE-196 — Flexible flags survive Relax all geometry refresh (2026-11-14)
+
+The live JJ_Hinge design retained 22 marks and 11 two-base connections after
+Relax all. The compact partial-helix response omitted `is_flexible_segment`,
+causing rigid meshes to recreate those bases. Shared compaction now emits sparse
+`flex` booleans; the shared frontend codec restores them. Marked designs bypass
+the native compact shortcut so its binary feed also retains complete metadata.
+No molecular geometry or solver change; no user document mutation.
+
+Validation: both Full-mode browser relax-all cases pass (ordinary two-base and
+deleted-slot anchor), asserting two arc beads, two geometry flags and zero marked
+bases in rigid meshes. The initial browser attempt failed on missing dev facade
+access before relaxation; exposing the existing gizmo and using getDesignRenderer
+corrected the harness. All 37 focused backend tests pass; frontend suite passes
+10,507 tests, one skipped, across 950 files. Build and lint pass. Smoke has
+23 passes, two skips and the existing assembly fixture-load timeout at
+scene_harness.js:88, before assembly exit. Test workspace artifacts, bridge
+credentials and managed reports were verified absent after teardown.
+
+`just test-smart`: FAST; 20,950 passed / 19 skipped. Aggregate timing warning
+(538 seconds, zero individual violations); mandatory triage found broad suite
+volume and existing mocked-job work, not a new per-test offender. No timing
+limits or slow classifications changed. Its deferred report is:
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+Evidence: `.development-artifacts/flex-relax-{smart,frontend,app-final,focused-final,smoke,build,lint}.log`.
+`main.js` LOC delta for this fix: 0.
+
+## ISSUE-195 — Exact cluster membership for both highlight layers (2026-11-14)
+
+The solid green tint was correct; the separate Presenter selection halo resolved
+base clusters as whole helices. `annotation_targets` now shares the canonical
+cluster membership predicate used by mesh tint. Linear and indexed resolution
+retain loop-copy identity, mixed-domain ownership and claimed-base exclusions.
+Before-fix regressions fail on excess halo points; corrected regressions check
+actual point positions and tint after sidebar selection. No user design edits. All nine saved
+JJ_Hinge clusters pass exact tint and halo membership, including all six 24-base
+clusters and deselection; before/after PNGs were inspected. Both rectangle/Ctrl-click
+browser workflows pass. Full frontend run: 10,503 passed, one skipped, three failures
+from an incomplete submodel fixture; adding its required helix/strand records fixes
+those cases, and the final 84-test focused run passes. Production code was unchanged
+between that full run and the fixture recheck. Build and lint pass. Smoke:
+22 passed, two skipped; existing assembly fixture-load timeout and Square New Part
+request-capture failure recur. Test workspace files, revision stores, bridge
+credentials and managed reports were cleaned. `main.js` LOC delta: 0.
+
 ## ISSUE-194 — Routed scaffold ends inherit an earlier deformation (2026-11-14)
 
 New Autoscaffold commands record terminal deformation inheritance. Added scaffold
