@@ -1615,3 +1615,16 @@ Repeat with separated bases/domains, a rotated manual box, and multiple nearby
 labels. Automated checks cover branch membership, exact selections, live positions,
 shared-view preservation and export; subjective readability and motion stability
 across these views still need a hand-check. No molecular edits are involved.
+
+### MV-69 — Atomistic contact readability and base picking (PENDING, 2026-11-14)
+
+Open an existing sequenced duplex in Ball & Stick, then Stick. In Representation
+Options toggle **Hydrogen bonds & base stacking**; inspect cyan donor–acceptor
+segments and amber centroid segments from several angles. With the checkbox off,
+use the Base selection filter and click one base, Shift-click a second, then clear
+selection. Confirm only the single-base selection automatically shows contacts,
+and orbit through dense and edge-on views to judge dash legibility. The browser
+regression exercises the real checkbox and representation buttons, supplies base
+selection through the canonical controller, and checks rendered contacts. The
+pointer-to-base gesture and subjective readability across dense designs remain
+manual checks. No molecular edits are involved.

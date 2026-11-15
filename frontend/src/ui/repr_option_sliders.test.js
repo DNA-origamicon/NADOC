@@ -223,3 +223,18 @@ describe('initReprOptionSliders', () => {
     expect(deps.setAtomisticSlidersVisible).toHaveBeenCalledWith(false)
   })
 })
+
+it('shows the interaction checkbox only for atomistic representations and applies its preference', async () => {
+  const { baseInteractionsEnabled, setBaseInteractionsEnabled } = await import('../scene/atomistic_renderer/interaction_overlay.js')
+  setBaseInteractionsEnabled(false)
+  mountIds({ 'show-base-interactions': 'input', 'repr-base-interactions-row': 'div' })
+  const controller = initReprOptionSliders(makeDeps())
+  const input = document.getElementById('show-base-interactions')
+  controller.updateForRepr('stick')
+  expect(document.getElementById('repr-base-interactions-row').style.display).toBe('')
+  input.checked = true; input.dispatchEvent(new Event('change'))
+  expect(baseInteractionsEnabled()).toBe(true)
+  controller.updateForRepr('full')
+  expect(document.getElementById('repr-base-interactions-row').style.display).toBe('none')
+  setBaseInteractionsEnabled(false); clearDom()
+})

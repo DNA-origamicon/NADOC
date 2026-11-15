@@ -1,3 +1,4 @@
+import { createInteractionOverlay } from './atomistic_renderer/interaction_overlay.js'
 import { atomisticSelectionEntries } from './atomistic_renderer/selection_highlight.js'
 import { registerSilhouetteHighlights, SilhouetteHighlight } from './silhouette_highlight.js'
 /**
@@ -120,6 +121,8 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     geom:           createGeometryState(),
   }
 
+  const interactions = createInteractionOverlay(_state)
+
   // ── Anchor-halo entries ───────────────────────────────────────────────────
 
   // One shared scratch pair: glow_layer._writeEntries copies entries[i].pos immediately,
@@ -153,6 +156,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
    *  changed. The live MD path calls update() every frame with an identical signature,
    *  so this is what keeps an O(N-atoms) re-match off the frame loop. */
   function _notifyAtoms() {
+    interactions.refresh()
     // Group bounds hold instance references. Rebind them even when an MD/native
     // mesh replacement has the same atom count; coordinate-only updates retain
     // their meshes and do not enter this path.
@@ -256,6 +260,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       }
       mesh.instanceMatrix.needsUpdate = true
     }
+    interactions.refresh()
     const mesh = _state.bondMesh
     if (!mesh) return
     const offsets = offsetsByMesh.bonds, out = mesh.instanceMatrix.array
@@ -445,6 +450,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       _state.bondMesh.instanceMatrix.needsUpdate = true
     }
     _updateWeldFromAtoms()
+    interactions.refresh()
     return true
   }
 
@@ -545,6 +551,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         if (alphaDirty) _state.bondMesh._instanceAlpha.needsUpdate = true
       }
     }
+    interactions.refresh()
     _lastColorPaint = { mode: colors.mode, strands: colors.strands, bases: colors.bases, scalar: colors.scalar }
   }
 
@@ -615,6 +622,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         _ensureAtomAlpha(_state.bondMesh)
         for (let i = 0; i < (_state.bondAtomIdx?.length ?? 0) / 2; i++) setInstanceAlpha(_state.bondMesh, i, alpha)
       }
+      interactions.refresh()
     },
     /** Attach (or detach, with null) the CPD weld overlay. */
     setWeldOverlay(overlay) { _weldOverlay = overlay || null },
@@ -837,6 +845,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         }
         _state.bondMesh.instanceMatrix.needsUpdate = true
       }
+      interactions.refresh()
       return true
     },
 
@@ -949,6 +958,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         touched.add(mesh)
       }
       for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true
+      interactions.refresh()
     },
 
     /** End the live-transform preview (next update() rebuilds authoritatively). */
@@ -1018,10 +1028,12 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     highlight(selection) {
       _state.lastSel = selection
       selectionEntries = null
+      interactions.refresh()
     },
 
     /** Remove all scene objects and free GPU memory. */
     dispose() {
+      interactions.dispose()
       unsubscribeSubmodel()
       unregisterOutline()
       selectionOutline.dispose()
@@ -1182,6 +1194,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         }
         _state.bondMesh.instanceMatrix.needsUpdate = true
       }
+      interactions.refresh()
     },
 
     /**
@@ -1291,6 +1304,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
               fromXyz[s + 2] + (toXyz[s + 2] - fromXyz[s + 2]) * t]
           })
       }
+      interactions.refresh()
     },
   }
 }
