@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from backend.api import doc_context, state
 from backend.api.part_replacement_transaction import publish_replacement
-from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry, ClusterRigidTransform, DomainRef, SnapshotLogEntry
+from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry, ClusterRigidTransform, ClusterBaseRef, DomainRef, SnapshotLogEntry
 from backend.core.part_command_errors import ReferenceResolutionError
 from backend.core.part_operation_input import validate_operation_input
 from backend.core.part_overlay_commands import GROUP_CREATE_VERSION, build
@@ -22,7 +22,7 @@ from backend.core.part_structure import MAX_ID_CHARS, MAX_ITEMS
 from backend.core.part_structure_gate import PartStructureError, require_valid_structure
 
 
-AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "color", "opacity", "folding_order"})
+AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "base_ids", "color", "opacity", "folding_order"})
 MAX_COMPONENT_GRAPH_WORK = 200_000
 MAX_COMPONENT_GROUPS = 128
 
@@ -120,6 +120,7 @@ def create_group(body):
             name=body.name,
             helix_ids=list(body.helix_ids),
             domain_ids=[DomainRef.model_validate(item) for item in body.domain_ids],
+            base_ids=[ClusterBaseRef.model_validate(item) for item in body.base_ids],
         )
         _check_input_bounds(source, group, {})
         _check_members(source, group)
@@ -182,6 +183,11 @@ def _check_members(source, group, *, indexes=None):
             strands.setdefault(key, []).append(strand)
     else:
         helices, strands = indexes
+    from backend.core.cluster_bases import validate_base_members
+    try:
+        validate_base_members(source, group)
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
     seen = set()
     for index, identity in enumerate(group.helix_ids):
         _identity(identity)
@@ -206,7 +212,7 @@ def _check_input_bounds(source, group, fields):
     # Check collection lengths before serializing or constructing the group.
     helices = fields.get("helix_ids", group.helix_ids)
     domains = fields.get("domain_ids", group.domain_ids)
-    if len(source.helices) + len(source.strands) + len(helices) + len(domains) > MAX_ITEMS:
+    if len(source.helices) + len(source.strands) + len(helices) + len(domains) + len(fields.get("base_ids", group.base_ids)) > MAX_ITEMS:
         _limit()
     for collection in (source.helices, source.strands):
         for item in collection:
@@ -264,7 +270,8 @@ def prepare_group_update(source, cluster_id, fields, *, entry_source=None):
     _check_members(source, group)
     entry = ClusterOpLogEntry(
         proof_version=1, cluster_id=cluster_id, source=entry_source,
-        authored_fields=group.model_dump(mode="json", include=AUTHORED_FIELDS),
+        authored_fields=group.model_dump(mode="json", include=AUTHORED_FIELDS,
+            exclude={"base_ids"} if not group.base_ids and "base_ids" not in fields else set()),
         translation=list(group.translation), rotation=list(group.rotation), pivot=list(group.pivot),
     )
     from backend.core.part_overlay_commands import command_input

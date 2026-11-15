@@ -121,6 +121,14 @@ def reconcile_cluster_membership(
 
     updated_clusters: list[ClusterRigidTransform] = []
     for cluster in design_after.cluster_transforms:
+        if cluster.base_ids:
+            from backend.core.cluster_bases import base_key, occupied_keys
+            live = set(occupied_keys(design_after))
+            bases = [r for r in cluster.base_ids if base_key(r) in live]
+            # Keep an exhausted precise cluster empty, never expand it to helices.
+            updated_clusters.append(cluster.model_copy(update={"base_ids": bases,
+                "helix_ids": list(dict.fromkeys(r.helix_id for r in bases))}))
+            continue
         if cluster.id not in coverage:
             updated_clusters.append(cluster)
             continue

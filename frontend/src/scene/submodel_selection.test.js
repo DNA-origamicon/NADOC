@@ -8,7 +8,10 @@ const geometry = [
   { helix_id: 'h1', bp_index: 1, direction: 'REVERSE', strand_id: 's1', domain_index: 1, backbone_position: [8, 0, 0] },
   { helix_id: 'h2', bp_index: 2, direction: 'FORWARD', strand_id: 's2', domain_index: 0, backbone_position: [40, 40, 40] },
 ]
-const design = { cluster_transforms: [{ id: 'c', domain_ids: [{ strand_id: 's1', domain_index: 1 }] }] }
+const design = {
+  strands: [{ id: 's1', domains: [{ helix_id: 'h0' }, { helix_id: 'h1' }] }],
+  cluster_transforms: [{ id: 'c', helix_ids: ['h1'], domain_ids: [{ strand_id: 's1', domain_index: 1 }] }],
+}
 const state = items => ({ currentDesign: design, currentGeometry: geometry, selection: { items } })
 
 describe('selection-derived submodel bounds', () => {

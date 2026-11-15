@@ -15,7 +15,7 @@ This replaces the earlier auto-cut "ball joint" approach.
 from __future__ import annotations
 
 import hashlib
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from backend.core.constants import SSDNA_RISE_PER_BASE_NM
 from backend.core.models import (
@@ -32,6 +32,17 @@ def _domain_bead_bps(domain) -> range:
     return range(domain.start_bp, domain.end_bp + step, step)
 
 
+def _deleted_slots(design: Design) -> set[tuple[str, int]]:
+    """Deleted lattice slots have no nucleotide and cannot anchor a tether."""
+    deleted = set()
+    for helix in design.helices:
+        deltas = Counter()
+        for edit in helix.loop_skips:
+            deltas[edit.bp_index] += edit.delta
+        deleted.update((helix.id, bp) for bp, delta in deltas.items() if delta < 0)
+    return deleted
+
+
 def unpaired_bead_keys(design: Design) -> set[tuple[str, int, Direction]]:
     """Set of (helix_id, bp, direction) beads with NO Watson-Crick partner.
 
@@ -39,11 +50,13 @@ def unpaired_bead_keys(design: Design) -> set[tuple[str, int, Direction]]:
     (helix_id, bp) is unoccupied. Broader than ``overhang_id`` — catches unpaired
     scaffold runs at a hinge (the mini_hinge tethers).
     """
+    deleted = _deleted_slots(design)
     occupied: set[tuple[str, int, Direction]] = set()
     for s in design.strands:
         for d in s.domains:
             for bp in _domain_bead_bps(d):
-                occupied.add((d.helix_id, bp, d.direction))
+                if (d.helix_id, bp) not in deleted:
+                    occupied.add((d.helix_id, bp, d.direction))
     unpaired = set()
     for h, bp, dr in occupied:
         other = Direction.REVERSE if dr == Direction.FORWARD else Direction.FORWARD
@@ -61,11 +74,14 @@ def _build_bead_graph(design: Design):
     """
     adj: dict[tuple, set] = defaultdict(set)
     bead_domain: dict[tuple, tuple[str, int]] = {}
+    deleted = _deleted_slots(design)
 
     for s in design.strands:
         seq: list[tuple] = []
         for di, d in enumerate(s.domains):
             for bp in _domain_bead_bps(d):
+                if (d.helix_id, bp) in deleted:
+                    continue
                 key = (d.helix_id, bp, d.direction)
                 bead_domain[key] = (s.id, di)
                 seq.append(key)
@@ -109,7 +125,10 @@ def _owning_cluster_id(design: Design, bead_key, sd) -> str | None:
     best_key: tuple[int, int] | None = None  # (score, -helix_count); higher wins
     for c in design.cluster_transforms:
         score = -1
-        if c.domain_ids:
+        if c.base_ids:
+            if any(r.copy_k == 0 and (r.helix_id, r.bp_index, r.direction) == bead_key[:3] for r in c.base_ids):
+                score = 3
+        elif c.domain_ids:
             if sd is not None and any(
                 dr.strand_id == sd[0] and dr.domain_index == sd[1]
                 for dr in c.domain_ids
@@ -124,7 +143,7 @@ def _owning_cluster_id(design: Design, bead_key, sd) -> str | None:
         # Among equal-score matches, prefer the cluster with the fewest helices
         # (the most specific rigid body) over a broad spanning cluster.
         key = (score, -len(c.helix_ids))
-        if best_key is None or key > best_key:
+        if best_key is None or key > best_key or (c.base_ids and key == best_key):
             best_key, best = key, c.id
     return best
 

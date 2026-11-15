@@ -190,3 +190,16 @@ it.each([1, 2])('renders the joined seam as a selectable backbone bond only for 
   expect(matrix.determinant() > 0).toBe(count === 1)
   expect(ctrl.getCrossHelixConnections()).toHaveLength(count === 1 ? 0 : 1)
 })
+
+it('retains the computed preview after shared assembly instancing takes ownership of source buffers', () => {
+  const f = fixture(), preview = createPolymerizationPreview(f.root, f.design, f.entries, f.plates)
+  const before = preview.group.children.map(mesh => mesh.instanceMatrix.array.slice())
+  // Shared assembly rendering moves per-base matrices/colors into GPU textures.
+  for (const mesh of [f.beads, f.slabs]) {
+    mesh.userData.sharedBase = mesh.count
+    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(new Float32Array(new THREE.Matrix4().elements), 16)
+    mesh.instanceColor = null
+  }
+  expect(() => f.root.updateMatrixWorld(true)).not.toThrow()
+  preview.group.children.forEach((mesh, i) => expect(mesh.instanceMatrix.array).toEqual(before[i]))
+})

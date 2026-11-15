@@ -1,0 +1,359 @@
+{
+  "title": "Sweep: a 3×6 square-lattice path",
+  "representationPolicy": "full",
+  "sections": [
+    {
+      "title": "Create a square-lattice part",
+      "body": "Sweep carries a lattice cross-section along a spline. This example uses the same three rows × six columns (18 helices) as the Extrude guide, with a path defined in nanometers."
+    },
+    {
+      "title": "Choose the source and plane",
+      "body": "Open Tools → Sweep. From selects a new bundle or an existing helix end. For this example choose New bundle and XY. Plane sets the initial cross-section; choose it before selecting cells, because changing planes clears the footprint."
+    },
+    {
+      "title": "Select the 3×6 cross-section",
+      "body": "The picker faces the selected plane and shares the Extrude selection gestures. Select rows 0–2 and columns 1–6: 18 helices. Drag the tool window by its title bar if it covers your intended cells."
+    },
+    {
+      "title": "Choose strands and ligation",
+      "body": "Include chooses Both, Scaffold or Staples. Ligate adjacent requests joining compatible strand ends when continuing a source. Use Both with Ligate adjacent checked for this example."
+    },
+    {
+      "title": "Define the path in nanometers",
+      "body": "Click Next to leave the cross-section picker and define the path in 3D. XYZ values are offsets in nm from the cross-section center. Select a point in the list to edit it. The initial XY path runs from Origin (0, 0, 0) to Point 1 (0, 0, 10). Previous returns to cross-section selection while retaining the path."
+    },
+    {
+      "title": "Control direction and twist",
+      "body": "Select a point, then enable Control direction and twist to set Tilt X, Tilt Y and Twist in degrees. Green arrows indicate direction and amber arrows indicate the right axis. Disabling the checkbox restores automatic orientation. Selected points also have position handles in the canvas; Tab on the canvas or point entry switches to free-angle rotation handles."
+    },
+    {
+      "title": "Review and confirm",
+      "body": "The status reports path length in nm and bp per helix. New BP reports the total new base-pair sites across the selected cross-section. Review any curvature warning before confirming; adjust the path if needed. Confirm creates the swept bundle."
+    }
+  ],
+  "steps": [
+    {
+      "number": 1,
+      "caption": "Choose File → New.",
+      "file": "01.png",
+      "point": {
+        "x": 79.8125,
+        "y": 58.296875
+      },
+      "section": "Create a square-lattice part",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 2,
+      "caption": "Choose Square for the lattice type. The guide uses a temporary example name; use a meaningful name for your own part.",
+      "file": "02.png",
+      "point": {
+        "x": 794,
+        "y": 605.390625
+      },
+      "section": "Create a square-lattice part",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 3,
+      "caption": "Click Create to open the empty square-lattice part.",
+      "file": "03.png",
+      "point": {
+        "x": 1045,
+        "y": 707.5625
+      },
+      "section": "Create a square-lattice part",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 4,
+      "caption": "Use Full representation throughout this guide. Full shows the nucleotide beads and base slabs; it is the standard display for guides.",
+      "file": "04.png",
+      "point": null,
+      "section": "Create a square-lattice part",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 5,
+      "caption": "Open Tools → Sweep.",
+      "file": "05.png",
+      "point": {
+        "x": 374.8125,
+        "y": 174.078125
+      },
+      "section": "Choose the source and plane",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 6,
+      "caption": "Keep From set to New bundle.",
+      "file": "06.png",
+      "point": {
+        "x": 548,
+        "y": 300.28125
+      },
+      "section": "Choose the source and plane",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 7,
+      "caption": "Choose XY for a cross-section initially normal to Z. XZ and YZ are also available.",
+      "file": "07.png",
+      "point": {
+        "x": 607,
+        "y": 344.28125
+      },
+      "section": "Choose the source and plane",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 8,
+      "caption": "Click a cell to select it. Click the same cell again to deselect it.",
+      "file": "08.png",
+      "point": {
+        "row": 0,
+        "col": 1,
+        "state": "free",
+        "x": 1007.5555432667221,
+        "y": 721.4444567332779
+      },
+      "section": "Select the 3×6 cross-section",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 9,
+      "caption": "With the canvas focused, press Tab for box selection. Left-drag from upper left to lower right, enclosing the entire circles of the 3-row × 6-column footprint. Left-to-right requires full enclosure; right-to-left selects touching cells.",
+      "file": "09.png",
+      "point": {
+        "x": 989.9822084587287,
+        "y": 630.6488935586456,
+        "end": {
+          "x": 1208.1844489913128,
+          "y": 739.0177915412713
+        }
+      },
+      "section": "Select the 3×6 cross-section",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 10,
+      "caption": "The count must read 18 helices. Tab returns to ordinary cell picking; a left-drag can also paint cells along its path.",
+      "file": "10.png",
+      "point": null,
+      "section": "Select the 3×6 cross-section",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 11,
+      "caption": "Choose Scaffold to create only scaffold strands.",
+      "file": "11.png",
+      "point": {
+        "x": 573,
+        "y": 458.96875
+      },
+      "section": "Choose strands and ligation",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 12,
+      "caption": "Choose Staples to create only staple strands.",
+      "file": "12.png",
+      "point": {
+        "x": 573,
+        "y": 458.96875
+      },
+      "section": "Choose strands and ligation",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 13,
+      "caption": "Choose Both for this example.",
+      "file": "13.png",
+      "point": {
+        "x": 573,
+        "y": 458.96875
+      },
+      "section": "Choose strands and ligation",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 14,
+      "caption": "Keep Ligate adjacent checked. The new-bundle example has no upstream ends to join.",
+      "file": "14.png",
+      "point": {
+        "x": 361,
+        "y": 495.96875
+      },
+      "section": "Choose strands and ligation",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 15,
+      "caption": "Click Next to open Step 2: Define sweep path.",
+      "file": "15.png",
+      "point": {
+        "x": 618,
+        "y": 597.5625
+      },
+      "section": "Define the path in nanometers",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 16,
+      "caption": "With Point 1 selected, set Z to 30 nm. Keep X = 0 and Y = 0.",
+      "file": "16.png",
+      "point": {
+        "x": 569,
+        "y": 453.375
+      },
+      "section": "Define the path in nanometers",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 17,
+      "caption": "Click + Add point. The new point extrapolates the last segment and becomes selected.",
+      "file": "17.png",
+      "point": {
+        "x": 361,
+        "y": 389.78125
+      },
+      "section": "Define the path in nanometers",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 18,
+      "caption": "For Point 2 enter X = 12, Y = 0, Z = 60 nm. The spline bends toward positive X. Scroll down over the canvas to zoom out as the path grows.",
+      "file": "18.png",
+      "point": {
+        "x": 361,
+        "y": 453.375
+      },
+      "section": "Define the path in nanometers",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 19,
+      "caption": "Review the ordered path: Origin (0, 0, 0), Point 1 (0, 0, 30), Point 2 (12, 0, 60). The × beside a non-origin point deletes it; a path needs at least two points.",
+      "file": "19.png",
+      "point": {
+        "x": 361,
+        "y": 290.78125
+      },
+      "section": "Define the path in nanometers",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 20,
+      "caption": "Enable Control direction and twist for Point 2.",
+      "file": "20.png",
+      "point": {
+        "x": 361,
+        "y": 478.375
+      },
+      "section": "Control direction and twist",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 21,
+      "caption": "Enter 15° in Twist to inspect the end cross-section orientation.",
+      "file": "21.png",
+      "point": {
+        "x": 569,
+        "y": 535.5625
+      },
+      "section": "Control direction and twist",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 22,
+      "caption": "Disable Control direction and twist to use automatic orientation for the final example.",
+      "file": "22.png",
+      "point": {
+        "x": 361,
+        "y": 478.375
+      },
+      "section": "Control direction and twist",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 23,
+      "caption": "Read New BP and the path-length status for the 18 selected helices.",
+      "file": "23.png",
+      "point": {
+        "x": 350,
+        "y": 605.859375
+      },
+      "section": "Review and confirm",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 24,
+      "caption": "Click Confirm to build the sweep.",
+      "file": "24.png",
+      "point": {
+        "x": 598,
+        "y": 702.15625
+      },
+      "section": "Review and confirm",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 25,
+      "caption": "The completed 3×6 bundle follows the curved path. Right-drag to orbit and press F to fit the result; Full representation shows the nucleotide geometry.",
+      "file": "25.png",
+      "point": null,
+      "section": "Review and confirm",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    }
+  ]
+}

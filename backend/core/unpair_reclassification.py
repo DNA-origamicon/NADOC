@@ -52,6 +52,14 @@ def separated_staple_keys(design, posed, targets, *, allow_cluster_poses=False):
         matrix[:3, 3] = pivot - rotation @ pivot + np.asarray(pose.translation)
         poses[pose.helix_id, pose.bp_index, pose.direction.value, pose.copy_k] = matrix
     separated = set()
+    exact = any(c.base_ids for c in posed.cluster_transforms)
+    def owner_pose(key):
+        if not exact:
+            return domain_poses.get(owners[key], np.eye(4))
+        from types import SimpleNamespace
+        from backend.core.cluster_member_poses import frame
+        return frame(posed, SimpleNamespace(helix_id=key[0], bp_index=key[1],
+            direction=key[2], copy_k=key[3]))
     equal_pairs = {}
     for key in map(tuple, targets):
         if key not in occupancy:
@@ -61,14 +69,16 @@ def separated_staple_keys(design, posed, targets, *, allow_cluster_poses=False):
         if other not in occupancy:
             continue
         pair = (owners[key], owners[other], key if key in poses else None, other if other in poses else None)
+        if exact:
+            pair = (key, other)
         equal = equal_pairs.get(pair)
         if equal is None:
             if not allow_cluster_poses and not np.allclose(
-                    domain_poses.get(owners[key], np.eye(4)), domain_poses.get(owners[other], np.eye(4)),
+                    owner_pose(key), owner_pose(other),
                     rtol=0, atol=1e-10):
                 raise ValueError("Unpairing independently posed domain owners is not yet supported")
-            own_pose = poses.get(key, np.eye(4)) @ domain_poses.get(owners[key], np.eye(4))
-            other_pose = poses.get(other, np.eye(4)) @ domain_poses.get(owners[other], np.eye(4))
+            own_pose = poses.get(key, np.eye(4)) @ owner_pose(key)
+            other_pose = poses.get(other, np.eye(4)) @ owner_pose(other)
             equal = equal_pairs[pair] = np.allclose(own_pose, other_pose, rtol=0, atol=1e-10)
         if equal:
             continue
@@ -183,7 +193,13 @@ def relocate_segments(design, selected_keys, *, identity_seed):
     clusters = []
     new_strands = {s.id: s for s in strands}
     for cluster in design.cluster_transforms:
-        if cluster.domain_ids:
+        if cluster.base_ids:
+            refs = [ref.model_copy(update={"helix_id": remap[key][0]}) if
+                    (key := (ref.helix_id, ref.bp_index, ref.direction.value, ref.copy_k)) in remap
+                    else ref for ref in cluster.base_ids]
+            clusters.append(cluster.model_copy(update={"base_ids": refs,
+                "helix_ids": sorted({ref.helix_id for ref in refs})}))
+        elif cluster.domain_ids:
             refs = [DomainRef(strand_id=ref.strand_id, domain_index=i)
                     for ref in cluster.domain_ids for i in domain_map[ref.strand_id, ref.domain_index]]
             ids = {new_strands[ref.strand_id].domains[i].helix_id

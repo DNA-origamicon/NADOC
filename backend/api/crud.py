@@ -1076,10 +1076,10 @@ def _design_replace_response(
     if diff_field in {"flexible_segment_marks", "nucleotide_transforms", "atomistic_reference"} or design.flexible_connections:
         # Residue-pose changes need complete site-frame and inserted-base data;
         # compact coordinates alone would retain stale metadata after undo/seek.
-        # The compact deformed arrays omit per-nuc metadata (see
-        # _compact_geometry_from_nucleotides — no `is_flexible_segment` key), but
-        # that per-bead flag MUST ride along so beads re-classify (rigid vs. bowed
-        # arc) on undo/redo/seek. Ship the per-nuc form whenever the diff changed
+        # Keep the complete-record fallback for flexible topology edits so
+        # beads re-classify (rigid vs. bowed arc) on undo/redo/seek. Compact
+        # responses also preserve that flag for pose-only commits such as
+        # flexible-relax. Ship the per-nuc form whenever the diff changed
         # the marks OR the target design currently has flexible connections — the
         # latter covers ANY other topology-changing replace (e.g. adding/removing
         # an OH-binder strand, whose undo would otherwise drop the flag and

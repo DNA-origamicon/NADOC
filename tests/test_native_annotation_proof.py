@@ -60,13 +60,12 @@ def test_nucleotide_pose_complete_inputs_and_identity(batch):
 
 
 @pytest.mark.parametrize("batch", [False, True])
-def test_flexible_mark_complete_inputs(batch):
+def test_intra_cluster_flexible_mark_is_rejected_atomically(batch):
     from backend.api.routes_flexible_segments import (
         FlexibleSegmentMarkBody,
         FlexibleSegmentBatchBody,
         add_flexible_segment,
         batch_flexible_segment,
-        delete_flexible_segment,
     )
 
     d = state.get_or_404()
@@ -78,18 +77,17 @@ def test_flexible_mark_complete_inputs(batch):
         bp_index=5,
         direction=strand.domains[0].direction.value,
     )
-    if batch:
-        batch_flexible_segment(FlexibleSegmentBatchBody(marks=[body]), Response())
-    else:
-        add_flexible_segment(body, Response())
-    identity = state.get_or_404().flexible_segment_marks[0].id
-    verified()
-    crud.edit_feature(0, crud.EditFeatureBody(params={"length_bp": 48}))
-    assert state.get_or_404().flexible_segment_marks[0].id == identity
-    verified()
-    delete_flexible_segment(identity, Response())
-    verified()
-    batch_flexible_segment(FlexibleSegmentBatchBody(replace=True), Response())
+    from fastapi import HTTPException
+    before = state.get_or_404().model_dump_json()
+    revision, depth = state.revision(), state.undo_depth()
+    with pytest.raises(HTTPException) as error:
+        if batch:
+            batch_flexible_segment(FlexibleSegmentBatchBody(marks=[body]), Response())
+        else:
+            add_flexible_segment(body, Response())
+    assert error.value.detail['code'] == 'flexible_connection_requires_distinct_clusters'
+    assert state.get_or_404().model_dump_json() == before
+    assert (state.revision(), state.undo_depth()) == (revision, depth)
     verified()
 
 

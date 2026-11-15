@@ -121,3 +121,49 @@ Slice-plane extrude • overhang extrude • overhang connection create/patch/de
 - Fresh bundle creation uses one default cluster/frame. Compound hinge/corner builders explicitly request the legacy per-leaf grouping they require. Import autodetection, explicit orphan repair, ordinary resizing, and overhang extrusion (which extends a parent) retain their existing rules.
 - Multiple legacy plane clusters with identical, disjoint placements remain a valid extrusion source; the common placement is applied once. Once their poses differ, the existing ambiguous-source rejection still applies.
 - Coverage: `tests/test_extrusion_clusters.py`, `test_cluster_reconcile_e2e.py`, `test_frame_extrusion.py`, and `frontend/e2e/extrusion_clusters.spec.js`; native extrude tour also checks independent footprint membership.
+
+## Exact nucleotide clusters (2026-11-14)
+
+`ClusterRigidTransform.base_ids` records occupied `(helix_id, bp_index, direction,
+copy_k)` addresses. It is an exact alternative to helix/domain membership, not a
+request to split molecular domains. New base clusters partition existing ordinary
+cluster ownership; later exact assignments win. `cluster_bases` validates
+occupancy and carries a common pre-existing authored rigid frame on creation so
+regrouping does not move the bases. A selection spanning unequal existing frames
+is rejected with an explanation rather than silently changing placement.
+
+Sidebar base/strand selections and the strand/base context menus submit exact
+members. Mixed strand + base selection preserves both subsets. The sidebar shows
+`Nb` for exact clusters and confirms the accepted count. The renderer's selection,
+color, opacity, visibility and live movement use the same precise membership;
+flexible ssDNA anchor ownership prefers exact members. Ordinary domain-only
+selection retains the existing domain grouping path. Synthetic extension and
+crossover-insert base selections currently produce an explicit unsupported-selection
+message; lattice loop copies are individually addressable.
+
+The JJ_Hinge S72 report is a 12-base staple (`stap_19_92`, helix `h_XY_5_2`,
+92–103 FORWARD), paired inside scaffold domain 52 of `scaf_0_244` (119–90 REVERSE).
+Its requested group is 24 nucleotides, not the entire scaffold domain or helix.
+The saved JJ_Hinge file was inspected read-only. Tests use genuine recorded
+scadnano imports and verify exact movement, independent original-cluster motion,
+undo, reopened native process replay and a 2-nt intra-helix scaffold hinge.
+
+The committed Move/Rotate pairing check also resolves exact per-base frames.
+Comparing whole-domain frames wrongly detached a short staple when its selected
+complement covered only part of a long scaffold domain. Batch movement must keep
+those paired bases on their original helix; intentional single-strand separation
+still remaps exact base references through the existing recorded unpair operation.
+`test_batch_move_compares_exact_complementary_base_frames` covers both cases.
+
+Cluster selection highlighting must compile exact base membership for atomistic
+representations too. `atomSelectionForState` uses the same base keys as the bead
+selection, including exclusions from the original owner; supporting `helix_ids`
+are not an atom-highlight scope for these clusters. Atom color selection also
+retains insertion-copy identity. The S72 browser regression clicks the sidebar
+cluster and compares actual atom colors at every base: only the 24 members change.
+
+Legacy document-source hashes from before `base_ids` are checked against the
+independently replayed state with only empty `base_ids` omitted. The old SHA-256
+must match exactly; nonempty members and any other state difference remain errors.
+This handles metadata-source receipts without a retained pre-edit snapshot, as
+seen in the circular-polymer guide. Saved guide structures are unchanged.

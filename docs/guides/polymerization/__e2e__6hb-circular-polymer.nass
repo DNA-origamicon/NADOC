@@ -1,0 +1,784 @@
+{
+  "dimensions": [],
+  "id": "719ec171-9298-4db4-856e-d41686c650bc",
+  "metadata": {
+    "name": "__e2e__6hb-circular-polymer",
+    "description": "",
+    "author": "",
+    "created_at": "",
+    "modified_at": "",
+    "tags": [],
+    "identity_last_known_path": null,
+    "identity_confirmed_at": "",
+    "primitive_kind": null,
+    "hardware_defaults": {},
+    "peg_surface": null,
+    "namd_peg_review": null,
+    "namd_box_solvent": null,
+    "namd_peg_coating": null,
+    "namd_peg_visible": true
+  },
+  "joints": [
+    {
+      "id": "4494f433-8a46-4b7d-87c8-526a43115734",
+      "name": "Seam +1",
+      "joint_type": "rigid",
+      "instance_a_id": "a8fb929d-83b9-4fdd-91b5-9889bc5ed1b3",
+      "cluster_id_a": null,
+      "instance_b_id": "799077f1-496b-46a9-9121-81b117e28eb6",
+      "cluster_id_b": null,
+      "axis_origin": [
+        205.8028921881312,
+        4.5,
+        344.4384523224809
+      ],
+      "axis_direction": [
+        0.8671776842435126,
+        0.0,
+        0.49799885938630295
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        0.9999999775488381,
+        -0.00010228795458339183,
+        -0.00018557881779018975,
+        0.00025151240166110256,
+        0.00010228243081224502,
+        0.9999999943258961,
+        -2.9774342787733152e-05,
+        1.8427700672063452e-05,
+        0.00018558186229361714,
+        2.9755360666537474e-05,
+        0.9999999823369952,
+        -6.766072289110525e-05,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "49156a95-7f9a-4673-8347-cefb17627490",
+      "name": "Seam +2",
+      "joint_type": "rigid",
+      "instance_a_id": "799077f1-496b-46a9-9121-81b117e28eb6",
+      "cluster_id_a": null,
+      "instance_b_id": "c39f3766-b477-45a1-90b2-5dd0faf2f156",
+      "cluster_id_b": null,
+      "axis_origin": [
+        607.6506941803593,
+        4.530904028954911,
+        343.30645609753515
+      ],
+      "axis_direction": [
+        0.8648685537529436,
+        0.00010346164485937166,
+        -0.5019983805003554
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        0.9999999775488381,
+        -0.00010228795458339183,
+        -0.00018557881779018975,
+        0.00025151240166110256,
+        0.00010228243081224502,
+        0.9999999943258961,
+        -2.9774342787733152e-05,
+        1.8427700672063452e-05,
+        0.00018558186229361714,
+        2.9755360666537474e-05,
+        0.9999999823369952,
+        -6.766072289110525e-05,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "49608866-8fd7-4ab2-8ee4-dce51b4697b1",
+      "name": "Seam +3",
+      "joint_type": "rigid",
+      "instance_a_id": "c39f3766-b477-45a1-90b2-5dd0faf2f156",
+      "cluster_id_a": null,
+      "instance_b_id": "26fb0a36-a39f-4584-9bd0-28444ccd3675",
+      "cluster_id_b": null,
+      "axis_origin": [
+        807.594290067733,
+        4.6029063347679395,
+        -5.269922356013922
+      ],
+      "axis_direction": [
+        -0.0023089798465555076,
+        0.0001771679468473187,
+        -0.9999973186081983
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        0.9999999775488381,
+        -0.00010228795458339183,
+        -0.00018557881779018975,
+        0.00025151240166110256,
+        0.00010228243081224502,
+        0.9999999943258961,
+        -2.9774342787733152e-05,
+        1.8427700672063452e-05,
+        0.00018558186229361714,
+        2.9755360666537474e-05,
+        0.9999999823369952,
+        -6.766072289110525e-05,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "fbdc5baa-40a4-4fbc-be10-d937631dd508",
+      "name": "Seam +4",
+      "joint_type": "rigid",
+      "instance_a_id": "26fb0a36-a39f-4584-9bd0-28444ccd3675",
+      "cluster_id_a": null,
+      "instance_b_id": "1eca8b4b-12ca-4e9d-bc7a-16977340ca50",
+      "cluster_id_b": null,
+      "axis_origin": [
+        605.6901194050968,
+        4.685084495592408,
+        -352.71436029146315
+      ],
+      "axis_direction": [
+        -0.8671775321087324,
+        0.00014741261665326844,
+        -0.4979991024844603
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        0.9999999775488381,
+        -0.00010228795458339183,
+        -0.00018557881779018975,
+        0.00025151240166110256,
+        0.00010228243081224502,
+        0.9999999943258961,
+        -2.9774342787733152e-05,
+        1.8427700672063452e-05,
+        0.00018558186229361714,
+        2.9755360666537474e-05,
+        0.9999999823369952,
+        -6.766072289110525e-05,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "382b703e-bc97-4c5e-8c21-ea04ab71e909",
+      "name": "Seam +5",
+      "joint_type": "rigid",
+      "instance_a_id": "1eca8b4b-12ca-4e9d-bc7a-16977340ca50",
+      "cluster_id_a": null,
+      "instance_b_id": "fad0c944-a354-4cb2-862c-d63b8956fbee",
+      "cluster_id_b": null,
+      "axis_origin": [
+        203.8423191800868,
+        4.73634023632043,
+        -351.58247528551703
+      ],
+      "axis_direction": [
+        -0.8648686995275157,
+        4.3950979353398614e-05,
+        0.5019981380900674
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        0.9999999775488381,
+        -0.00010228795458339183,
+        -0.00018557881779018975,
+        0.00025151240166110256,
+        0.00010228243081224502,
+        0.9999999943258961,
+        -2.9774342787733152e-05,
+        1.8427700672063452e-05,
+        0.00018558186229361714,
+        2.9755360666537474e-05,
+        0.9999999823369952,
+        -6.766072289110525e-05,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    }
+  ],
+  "gear_relations": [],
+  "belt_paths": [],
+  "belt_riders": [],
+  "groups": [],
+  "assembly_helices": [],
+  "assembly_strands": [],
+  "view_volumes": [],
+  "zoom_volumes": [],
+  "annotations": [],
+  "annotations_enabled": true,
+  "camera_poses": [],
+  "animations": [],
+  "configurations": [],
+  "configuration_cursor": null,
+  "feature_log": [
+    {
+      "suppressed": false,
+      "autogenerated_group_id": null,
+      "feature_type": "snapshot",
+      "id": "f67865bb-3670-4637-965e-89a61618fde0",
+      "op_kind": "assembly-add-instance",
+      "label": "Add part: __e2e__6hb-circle-unit",
+      "timestamp": "2026-11-13T16:58:39.830817+00:00",
+      "params": {
+        "instance_id": "a8fb929d-83b9-4fdd-91b5-9889bc5ed1b3",
+        "name": "__e2e__6hb-circle-unit",
+        "source": {
+          "type": "file",
+          "path": "__e2e__6hb-circle-unit.nadoc"
+        },
+        "transform": {
+          "values": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "source_label": "__e2e__6hb-circle-unit.nadoc"
+      },
+      "design_snapshot_gz_b64": "H4sIAL9B92oA/31T7W7bMAx8lcK/Z2AJ0jTdqwyFQEu0rVUWDYpykgV991FpE9ttsX/WHY/HL18q5weMyVNM1a+H3y8/Hirv9Kt62jyj3Txt6uft86HeuWZXHx73WLvdZn/Y2/3jz8ZWGj2ggAMB1VyqCAMWsTG4RWP2fVNbzzYH4HqkcB6Qi8ZhsuxHUdcSXSDI0hPfXpYRBJ0BuSEDOd/6FSTQLWrGKF7OJkAS8xrpGM0I0isfcwjLCEux9TysUo3sBy9+QvPqo5tFPbA7AqNx2EIOUvwub0WAnUmZW7A4R2v3zhSGcfJ4/EQ0dDKJwqRlfCOxBOJj9w0z+eSbUGyEMxbzP+Sj3FvvEFgdA8hyiQ0GuU5gjbCOgWcpUx7vL0gJhyacTY/BW/yKJ2GI7o6XHs1EIQ9z7F+i4TMGMZKsq1tABiNoe+6jv7J8PSIGM1Ja5vDDOsV1jV3m/6DGZk7Xo/qYaatXlXWbgbqbYAHN4fVGGZqQe4idafQkdDV3jzuhZhHtyt/lMeBprntkEvTRlBnKV1QEbK//30zhaSTWPeHImJSA20/SagvlVFtinYTRGtI7s1UwUeb3jV2v08ckEBUw0/aa+O0fZEhZUOgDAAA=",
+      "snapshot_size_bytes": 1000,
+      "post_state_gz_b64": "H4sIAL9B92oA/4VU226jMBD9lYrnUpU0SaG/UlXWYA/grbHReEybjfLva5MLIY22LwifM8dz9z5TukfrtbM+e3t4/3h8yLSKf9lrUaEsXou8WlVlvlb1Oi83W8zVutiWW7ndPNcyi9Y9MihgiJp9ZqHHJBYCVyjEtqtzqUkGA5QPzux6pKRR6CXpgaPXZJ0gCNw5Op8kITAqAXxGeqd0oxcQQ3sVM1rWvBMGPItP676sGIC7yNtgzLWFdLbR1C+uGkj3mvWI4lNbNYs6IPUFhEJhA8Fw8rc/JAG2wgdqQOJsHbNXIjGEo8avG6J238I7M8Yw7kikA9a2vcOM2uvaJDdMAZPzP05bvqTeIlD0aICvm1ij4akCS4RiGWiWkgvD5QTeY1+bnejQaIk/cc8EVl3wlKMYnQn9bPvXuf4WA2sdL6O7ggRaiOmpU36p+XGICMTg/PUdul9eMbWxDfQfVMhAfhqqU02bOFUhdtO49iy4gmbzvIiMG5E6sK2o40jE1lx8XIjozKJc+FdhMPg9xz2QY9RWpBryT5QZZBf3b6bwe3AU+4QDoY8EnJekiSmkUW0cxUqIGIM/MqsIehfo2LF91rzdbJ/BPFjNTxaUk2+TDe+GaU8bHQcrBXRcldu9XSiTne9gtdmeCnpIs6itZ7DRtxhXKYf96fmAsqnjy6Hy8qWu8nWjVF4V9SavyrKq5QZVUb9MS1xMsuLp+fHh+c7nVyIVzZMUn7ibMvol++Nm3XukTobZ4ePwDzXq184WBQAA",
+      "post_state_size_bytes": 1302,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": false
+    },
+    {
+      "suppressed": false,
+      "autogenerated_group_id": null,
+      "feature_type": "snapshot",
+      "id": "2f0d4158-8e80-4949-a3f2-3e48fa7d1ad8",
+      "op_kind": "assembly-polymerize-periodic",
+      "label": "Polymerize (periodic) __e2e__6hb-circle-unit: chain length 6 (forward)",
+      "timestamp": "2026-11-13T16:58:50.960388+00:00",
+      "params": {
+        "instance_id": "a8fb929d-83b9-4fdd-91b5-9889bc5ed1b3",
+        "count": 6,
+        "direction": "forward",
+        "new_instance_ids": [
+          "799077f1-496b-46a9-9121-81b117e28eb6",
+          "c39f3766-b477-45a1-90b2-5dd0faf2f156",
+          "26fb0a36-a39f-4584-9bd0-28444ccd3675",
+          "1eca8b4b-12ca-4e9d-bc7a-16977340ca50",
+          "fad0c944-a354-4cb2-862c-d63b8956fbee"
+        ],
+        "new_joint_ids": [
+          "4494f433-8a46-4b7d-87c8-526a43115734",
+          "49156a95-7f9a-4673-8347-cefb17627490",
+          "49608866-8fd7-4ab2-8ee4-dce51b4697b1",
+          "fbdc5baa-40a4-4fbc-be10-d937631dd508",
+          "382b703e-bc97-4c5e-8c21-ea04ab71e909"
+        ]
+      },
+      "design_snapshot_gz_b64": "",
+      "snapshot_size_bytes": 0,
+      "post_state_gz_b64": "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",
+      "post_state_size_bytes": 12549,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": true
+    }
+  ],
+  "feature_log_cursor": -1,
+  "overhang_bindings": [],
+  "overhang_connections": [],
+  "duplexes": [],
+  "protein_assets": [],
+  "protein_attachments": [],
+  "export_representation": "full",
+  "format_version": 2,
+  "sources": {
+    "f:__e2e__6hb-circle-unit.nadoc:": {
+      "type": "file",
+      "path": "__e2e__6hb-circle-unit.nadoc",
+      "sha256": null
+    }
+  },
+  "instances_v2": [
+    {
+      "id": "a8fb929d-83b9-4fdd-91b5-9889bc5ed1b3",
+      "t12": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      "src_key": "f:__e2e__6hb-circle-unit.nadoc:",
+      "name": "__e2e__6hb-circle-unit",
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 3.89836424397146,
+            "y": 4.5,
+            "z": -3.006001039466729
+          },
+          "normal": {
+            "x": 0.0024948628605464132,
+            "y": 0.0,
+            "z": 0.9999968878248108
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 205.8028921881312,
+            "y": 4.5,
+            "z": 344.4384523224809
+          },
+          "normal": {
+            "x": 0.8671776842435126,
+            "y": 0.0,
+            "z": 0.49799885938630295
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "799077f1-496b-46a9-9121-81b117e28eb6",
+      "t12": [
+        0.5000000863272934,
+        -7.674246946812557e-05,
+        0.8660253505430959,
+        206.45714424790174,
+        0.00010235639539341982,
+        0.9999999943258961,
+        2.951906948684237e-05,
+        -0.00032869032558702216,
+        -0.8660253478945448,
+        7.388369590906759e-05,
+        0.5000000913453235,
+        349.31738730175107
+      ],
+      "src_key": "f:__e2e__6hb-circle-unit.nadoc:",
+      "name": "__e2e__6hb-circle-unit +1",
+      "base_transform": {
+        "values": [
+          0.5000000863272934,
+          -7.674246946812557e-05,
+          0.8660253505430959,
+          206.45714424790174,
+          0.00010235639539341982,
+          0.9999999943258961,
+          2.951906948684237e-05,
+          -0.00032869032558702216,
+          -0.8660253478945448,
+          7.388369590906759e-05,
+          0.5000000913453235,
+          349.31738730175107,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 3.89836424397146,
+            "y": 4.5,
+            "z": -3.006001039466729
+          },
+          "normal": {
+            "x": 0.0024948628605464132,
+            "y": 0.0,
+            "z": 0.9999968878248108
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 205.8028921881312,
+            "y": 4.5,
+            "z": 344.4384523224809
+          },
+          "normal": {
+            "x": 0.8671776842435126,
+            "y": 0.0,
+            "z": 0.49799885938630295
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "c39f3766-b477-45a1-90b2-5dd0faf2f156",
+      "t12": [
+        -0.4999998270173614,
+        -5.1128556742643526e-05,
+        0.86602550214672,
+        612.203447008761,
+        0.0001279703389236336,
+        0.9999999829776878,
+        0.00013292183996011238,
+        0.030786352667848137,
+        -0.8660254942010659,
+        0.00017728647401272767,
+        -0.4999998119632699,
+        345.1789926642482
+      ],
+      "src_key": "f:__e2e__6hb-circle-unit.nadoc:",
+      "name": "__e2e__6hb-circle-unit +2",
+      "base_transform": {
+        "values": [
+          -0.4999998270173614,
+          -5.1128556742643526e-05,
+          0.86602550214672,
+          612.203447008761,
+          0.0001279703389236336,
+          0.9999999829776878,
+          0.00013292183996011238,
+          0.030786352667848137,
+          -0.8660254942010659,
+          0.00017728647401272767,
+          -0.4999998119632699,
+          345.1789926642482,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 3.89836424397146,
+            "y": 4.5,
+            "z": -3.006001039466729
+          },
+          "normal": {
+            "x": 0.0024948628605464132,
+            "y": 0.0,
+            "z": 0.9999968878248108
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 205.8028921881312,
+            "y": 4.5,
+            "z": 344.4384523224809
+          },
+          "normal": {
+            "x": 0.8671776842435126,
+            "y": 0.0,
+            "z": 0.49799885938630295
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "26fb0a36-a39f-4584-9bd0-28444ccd3675",
+      "t12": [
+        -0.9999999986878083,
+        5.122782985651897e-05,
+        3.032072745419957e-07,
+        811.4926763616965,
+        5.122789146598778e-05,
+        0.999999977303581,
+        0.0002068055587316628,
+        0.10330996292067364,
+        -2.926130676350449e-07,
+        0.00020680557399244424,
+        -0.9999999786156839,
+        -8.276785739030345
+      ],
+      "src_key": "f:__e2e__6hb-circle-unit.nadoc:",
+      "name": "__e2e__6hb-circle-unit +3",
+      "base_transform": {
+        "values": [
+          -0.9999999986878083,
+          5.122782985651897e-05,
+          3.032072745419957e-07,
+          811.4926763616965,
+          5.122789146598778e-05,
+          0.999999977303581,
+          0.0002068055587316628,
+          0.10330996292067364,
+          -2.926130676350449e-07,
+          0.00020680557399244424,
+          -0.9999999786156839,
+          -8.276785739030345,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 3.89836424397146,
+            "y": 4.5,
+            "z": -3.006001039466729
+          },
+          "normal": {
+            "x": 0.0024948628605464132,
+            "y": 0.0,
+            "z": 0.9999968878248108
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 205.8028921881312,
+            "y": 4.5,
+            "z": 344.4384523224809
+          },
+          "normal": {
+            "x": 0.8671776842435126,
+            "y": 0.0,
+            "z": 0.49799885938630295
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "1eca8b4b-12ca-4e9d-bc7a-16977340ca50",
+      "t12": [
+        -0.5000003430128869,
+        0.00012797032133534574,
+        -0.866025196290842,
+        605.0356382834409,
+        -5.1128512721458676e-05,
+        0.9999999829776813,
+        0.000177286519737833,
+        0.1857984142360793,
+        0.8660252042364989,
+        0.00013292190094574207,
+        -0.5000003279587899,
+        -357.5942260509013
+      ],
+      "src_key": "f:__e2e__6hb-circle-unit.nadoc:",
+      "name": "__e2e__6hb-circle-unit +4",
+      "base_transform": {
+        "values": [
+          -0.5000003430128869,
+          0.00012797032133534574,
+          -0.866025196290842,
+          605.0356382834409,
+          -5.1128512721458676e-05,
+          0.9999999829776813,
+          0.000177286519737833,
+          0.1857984142360793,
+          0.8660252042364989,
+          0.00013292190094574207,
+          -0.5000003279587899,
+          -357.5942260509013,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 3.89836424397146,
+            "y": 4.5,
+            "z": -3.006001039466729
+          },
+          "normal": {
+            "x": 0.0024948628605464132,
+            "y": 0.0,
+            "z": 0.9999968878248108
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 205.8028921881312,
+            "y": 4.5,
+            "z": 344.4384523224809
+          },
+          "normal": {
+            "x": 0.8671776842435126,
+            "y": 0.0,
+            "z": 0.49799885938630295
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "fad0c944-a354-4cb2-862c-d63b8956fbee",
+      "t12": [
+        0.4999995703316788,
+        0.0001023564394146045,
+        -0.8660256458046115,
+        199.28933639416326,
+        -7.67424870564087e-05,
+        0.9999999943258892,
+        7.388375689522195e-05,
+        0.23684314106861262,
+        0.8660256484531655,
+        2.951911521144138e-05,
+        0.4999995753497145,
+        -353.4559437938012
+      ],
+      "src_key": "f:__e2e__6hb-circle-unit.nadoc:",
+      "name": "__e2e__6hb-circle-unit +5",
+      "base_transform": {
+        "values": [
+          0.4999995703316788,
+          0.0001023564394146045,
+          -0.8660256458046115,
+          199.28933639416326,
+          -7.67424870564087e-05,
+          0.9999999943258892,
+          7.388375689522195e-05,
+          0.23684314106861262,
+          0.8660256484531655,
+          2.951911521144138e-05,
+          0.4999995753497145,
+          -353.4559437938012,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 3.89836424397146,
+            "y": 4.5,
+            "z": -3.006001039466729
+          },
+          "normal": {
+            "x": 0.0024948628605464132,
+            "y": 0.0,
+            "z": 0.9999968878248108
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 205.8028921881312,
+            "y": 4.5,
+            "z": 344.4384523224809
+          },
+          "normal": {
+            "x": 0.8671776842435126,
+            "y": 0.0,
+            "z": 0.49799885938630295
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    }
+  ]
+}

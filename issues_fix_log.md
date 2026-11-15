@@ -1,6 +1,12 @@
 # Issues fix log
 
-## ISSUE-198 follow-up — Preserve colors and follow displayed atoms (2026-11-14)
+## ISSUE-201 follow-up — Preserve colors and follow displayed atoms (2026-11-14)
+
+Push integration: merged incoming exact-base cluster selection fixes without
+dropping atomistic connection/copy handling or either presentation regression.
+Renumbered these atomistic records to ISSUE-200/201 because incoming history
+already uses ISSUE-197–199. Merged frontend validation: 965 files, 10,622 passed,
+1 skipped; atomistic browser regression passed (32.5 s).
 
 The first fix was incomplete: native selection explicitly painted atoms white,
 and a separate `Presenter selection` point cloud still drew green discs at coarse
@@ -59,7 +65,7 @@ is claimed from that last capture. Earlier Display MD and explicit trajectory
 frame-stepping checks establish coordinate tracking. No refresh was forced past
 the disabled remote-job control.
 
-## ISSUE-198 — Highlight the active representation (2026-11-14)
+## ISSUE-201 — Highlight the active representation (2026-11-14)
 
 Initial attempt (superseded by the follow-up below): the coarse-glow compositor resolves every pool against current source visibility
 and representation on every composition. It no longer restores raw Full entries
@@ -87,7 +93,7 @@ bridge credentials were removed. Logs: `.development-artifacts/atomistic-highlig
 `main.js` LOC delta: 0.
 
 
-## ISSUE-197 — Pick displayed atomistic balls and sticks (2026-11-14)
+## ISSUE-200 — Pick displayed atomistic balls and sticks (2026-11-14)
 
 Extracted `atomistic_renderer/picking.js`: VDW tests spheres, Ball & Stick tests
 spheres and cylinders, Stick tests cylinders only. Bond hits retain nucleotide
@@ -105,6 +111,54 @@ fixture clears canonical selection between modes. Inspected ball/stick screensho
 confirmed the rendered target. Temporary screenshots and workspace test artifacts
 were removed; no recent picking-test project snapshots remain. `main.js` LOC delta: 0.
 
+
+## ISSUE-198 — Flexible flags survive Relax all geometry refresh (2026-11-14)
+
+The live JJ_Hinge design retained 22 marks and 11 two-base connections after
+Relax all. The compact partial-helix response omitted `is_flexible_segment`,
+causing rigid meshes to recreate those bases. Shared compaction now emits sparse
+`flex` booleans; the shared frontend codec restores them. Marked designs bypass
+the native compact shortcut so its binary feed also retains complete metadata.
+No molecular geometry or solver change; no user document mutation.
+
+Validation: both Full-mode browser relax-all cases pass (ordinary two-base and
+deleted-slot anchor), asserting two arc beads, two geometry flags and zero marked
+bases in rigid meshes. The initial browser attempt failed on missing dev facade
+access before relaxation; exposing the existing gizmo and using getDesignRenderer
+corrected the harness. All 37 focused backend tests pass; frontend suite passes
+10,507 tests, one skipped, across 950 files. Build and lint pass. Smoke has
+23 passes, two skips and the existing assembly fixture-load timeout at
+scene_harness.js:88, before assembly exit. Test workspace artifacts, bridge
+credentials and managed reports were verified absent after teardown.
+
+`just test-smart`: FAST; 20,950 passed / 19 skipped. Aggregate timing warning
+(538 seconds, zero individual violations); mandatory triage found broad suite
+volume and existing mocked-job work, not a new per-test offender. No timing
+limits or slow classifications changed. Its deferred report is:
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+Evidence: `.development-artifacts/flex-relax-{smart,frontend,app-final,focused-final,smoke,build,lint}.log`.
+`main.js` LOC delta for this fix: 0.
+
+## ISSUE-197 — Exact cluster membership for both highlight layers (2026-11-14)
+
+The solid green tint was correct; the separate Presenter selection halo resolved
+base clusters as whole helices. `annotation_targets` now shares the canonical
+cluster membership predicate used by mesh tint. Linear and indexed resolution
+retain loop-copy identity, mixed-domain ownership and claimed-base exclusions.
+Before-fix regressions fail on excess halo points; corrected regressions check
+actual point positions and tint after sidebar selection. No user design edits. All nine saved
+JJ_Hinge clusters pass exact tint and halo membership, including all six 24-base
+clusters and deselection; before/after PNGs were inspected. Both rectangle/Ctrl-click
+browser workflows pass. Full frontend run: 10,503 passed, one skipped, three failures
+from an incomplete submodel fixture; adding its required helix/strand records fixes
+those cases, and the final 84-test focused run passes. Production code was unchanged
+between that full run and the fixture recheck. Build and lint pass. Smoke:
+22 passed, two skipped; existing assembly fixture-load timeout and Square New Part
+request-capture failure recur. Test workspace files, revision stores, bridge
+credentials and managed reports were cleaned. `main.js` LOC delta: 0.
 
 ## ISSUE-195 — Preserve annotation text box precision (2026-11-14)
 
@@ -217,6 +271,30 @@ focused Feature Log checks rather than an unrelated full-suite repeat.
   request capture also timed out in this run. No New Part implementation changes.
   Dedicated flex preview/settings app checks: 2 passed. Evidence:
   `.development-artifacts/flex-settings-smoke.log` and `flex-settings-app-final.log`.
+
+## ISSUE-199 — Periodic preview buffer ownership and Bend command admission (2026-11-13)
+
+Shared assembly rendering intentionally migrates source matrices/colors into GPU
+textures. The periodic continuation preview still reread those retired buffers
+on traversal. Preserve its already computed transforms for shared sources;
+geometry changes rebuild the shared source. The regression reproduces the null
+color failure and checks retained transforms. Frontend suite: 10,457 passed,
+1 skipped. No molecular placement changes; `main.js` LOC delta 0.
+
+Bend prefix admission omitted the supported native `route-for-polymerization`
+command. Added it to ordinary unestimated routing commands without changing
+resource bounds. Focused tests cover both a small and guide-sized 6HB through
+prepare/evaluate/native append and independent history replay (2 passed).
+Guide-sized coverage also checks the explicit manual bend's six-repeat closure.
+The asynchronous closure readout and automatic angle accuracy remain open.
+
+
+The publication guard then caught an unrecorded filename-to-name stamp on library
+open after Save As. Record that existing user-facing metadata edit through
+`document-metadata`; preserve the original input and omit no-op renames. The
+regression failed before the fix and passed afterward (1 passed). No audit
+exemptions were added.
+
 
 ## ISSUE-192 — Nonblocking sequence-work spinner and scoped geometry (2026-11-12)
 

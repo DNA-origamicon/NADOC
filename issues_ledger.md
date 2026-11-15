@@ -1,6 +1,6 @@
 # Issues & bugs ledger — "fix next issue" loop
 
-## ISSUE-198 — Atomistic selection resurrects coarse glow geometry (2026-11-14)
+## ISSUE-201 — Atomistic selection resurrects coarse glow geometry (2026-11-14)
 
 - [x] Resolve all coarse highlight pools against the current representation every
   time they are composed; cached strand entries can no longer bypass filtering
@@ -15,7 +15,7 @@
 - Validation is recorded in the fix log; molecular coordinates are unchanged.
 
 
-## ISSUE-197 — Atomistic clicks omit visible bonds (2026-11-14)
+## ISSUE-200 — Atomistic clicks omit visible bonds (2026-11-14)
 
 - [x] Existing design/global and region-override picking already routes through
   the atomistic renderer, but its sphere-only raycast omitted visible cylinders
@@ -25,6 +25,28 @@
 - Validation is recorded in the fix log. Shared-assembly instance bounding-box
   selection is a separate existing path, outside this design-picker correction.
 
+
+## ISSUE-198 — Relax all visually re-rigidifies flexible bases (2026-11-14)
+
+- [x] Current JJ_Hinge retains all 22 marked bases / 11 flexible connections
+  after Relax all; its compact partial geometry response drops the display flag.
+- [x] Preserve sparse flexible flags in shared compact encoding/decoding; marked
+  designs use the complete-record fallback on the native array shortcut.
+- [x] Cover two-base relax responses, undo/redo and sparse field alignment.
+- [x] App checks exercise Relax all and check arc bead counts and absence of marked
+  bases from rigid meshes, including a deleted-slot anchor.
+
+## ISSUE-197 — Partial cluster selection paints a whole-helix soft halo (2026-11-14)
+
+- [x] Reproduced both styles in current JJ_Hinge: exact bright mesh tint and
+  weaker halo extending past the cluster's corner markers.
+- [x] Root cause: `presentation_selection` uses `annotation_targets`, which
+  expanded `helix_ids` and ignored exact `base_ids`. The regular mesh tint
+  already used `clusterMemberFilter`; checking only its buffer missed the halo.
+- [x] Use canonical cluster membership in both linear and indexed target matching,
+  including loop copies, mixed domains and bases claimed by another cluster.
+- [x] Regress the actual halo point buffer and both rectangle/Ctrl-click/sidebar
+  workflows; preserve document membership and molecular geometry.
 
 ## ISSUE-196 — Connection geometry escapes the active display frame (2026-11-14)
 
@@ -75,6 +97,25 @@ or history scrubbing. Cached and native history both reproduced the bad state.
 - Read-only P1 check: all 265 saved-inset atoms, including inserts/attachments,
   match in Full and ballstick for flex means, saved frames and interpolated frames.
   Evidence: `.development-artifacts/inset-exact-app.log`.
+
+## ISSUE-199 — Periodic-part guide exposes assembly rendering and Bend admission failures (2026-11-13)
+
+- [x] Shared assembly rendering replaces the source instance buffers; periodic
+  continuation preview subsequently read a null color buffer and broke rendering.
+  Retain the computed preview while shared rendering owns the buffers. Regression
+  reproduces the former exception and checks unchanged preview transforms.
+- [x] Owned Bend preparation rejected `route-for-polymerization` despite native
+  replay supporting it. Admit it as an ordinary routing command with existing
+  deadline and post-command bounds. Tests cover native append and process replay.
+- [x] Reopening a Save As copy stamped its filename as the design name without
+  recording that metadata change. Library open now records the real rename;
+  independent replay and repeated-open idempotence are regression tested.
+- [ ] Closure requests can display a stale response after a rapid count change.
+- [ ] Automatic six-unit curvature for the guide's 6HB leaves approximately
+  0.515 nm residual, just beyond the 0.5 nm threshold. The guide records an explicit
+  60.3229° manual setting; automatic refinement remains follow-up work.
+- Evidence and workflow handling: `docs/guides/UX_LEDGER.md`, GUIDE-UX-011–013.
+
 
 ## ISSUE-192 — Sequence work has no continuous nonblocking feedback (2026-11-12)
 

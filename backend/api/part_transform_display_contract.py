@@ -215,7 +215,7 @@ def inventory(design, check, *, previous=None):
         return strand.domains[ordinal]
 
     for owner in design.cluster_transforms:
-        limit(len(owner.helix_ids) + len(owner.domain_ids), MAX_SELECTORS, "placement selectors")
+        limit(len(owner.helix_ids) + len(owner.domain_ids) + len(owner.base_ids), MAX_SELECTORS, "placement selectors")
         for ref in owner.domain_ids:
             domain_ref(ref.strand_id, ref.domain_index)
         visited, current = set(), owner

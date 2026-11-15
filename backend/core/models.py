@@ -1570,6 +1570,16 @@ class NucleotideTransform(BaseModel):
         return ("base", self.helix_id, self.bp_index, self.direction.value, self.copy_k)
 
 
+class ClusterBaseRef(BaseModel):
+    """One occupied lattice nucleotide; copy_k distinguishes inserted loop bases."""
+
+    model_config = {"extra": "forbid"}
+    helix_id: str
+    bp_index: int
+    direction: Direction
+    copy_k: int = Field(default=0, ge=0, strict=True)
+
+
 class ClusterRigidTransform(BaseModel):
     """
     A named cluster of helices (or sub-helix domains) with a persistent
@@ -1610,6 +1620,7 @@ class ClusterRigidTransform(BaseModel):
     is_default: bool = False  # True when auto-created to contain all helices
     helix_ids: List[str] = Field(default_factory=list)
     domain_ids: List[DomainRef] = Field(default_factory=list)
+    base_ids: List[ClusterBaseRef] = Field(default_factory=list)
     translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])

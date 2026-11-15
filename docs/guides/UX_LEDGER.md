@@ -53,6 +53,20 @@ corrected handedness on a 3×6×256 bp bundle; requested-angle calibration remai
 open (RH +180° predicts +43.0°, LH −180° predicts −11.1°). The native model uses
 per-helix net strain and cannot validate the local cancellation pattern itself.
 
+Sweep guide review:
+
+| ID | Workflow | Finding | Guide handling | Status |
+|---|---|---|---|---|
+| GUIDE-UX-010 | Sweep: growing path preview | Increasing the path from the initial 10 nm segment to 60 nm leaves the preview outside the initial camera framing. | Scroll down over the canvas after increasing the point coordinates; keep the full path in view beside its controls. | Open. Review automatic preview fitting as path bounds change. |
+
+Complete 6HB polymer guide review:
+
+| ID | Workflow | Finding | Guide handling | Status |
+|---|---|---|---|---|
+| GUIDE-UX-011 | Add periodic part to an assembly | Shared rendering replaced source instance color/matrix buffers, then the periodic continuation preview reread them during scene traversal. Rendering failed and Polymerize showed no eligible periodic part. | Preserve the already computed preview when shared rendering takes ownership of those buffers; source changes rebuild the shared geometry. | Regression test reproduces the original null-color crash and checks that preview transforms remain unchanged. The full guide exercises the repaired path. |
+| GUIDE-UX-012 | Bend a routed periodic part | The owned Bend preview rejected the existing `route-for-polymerization` command in its prefix, leaving all parameter fields disabled. | Admit this deterministic command through the existing native executor, with the same deadline and post-command bounds as other ordinary routing commands. | Regression covers preparation, evaluation, native append, unchanged seams/source and independent full-history audit. |
+| GUIDE-UX-013 | Circular polymer closure | Rapid count changes can leave the older closure response visible. Separately, this 6HB's automatic six-unit bend estimate leaves about 0.515 nm positional residual, just beyond the panel's 0.5 nm threshold. | Wait for each readout to settle. For this exact unit, disable the circle calculator and refine Angle to 60.3229° over −12–1254 bp at Direction 0°; verify closure again in the assembly. | Open: stale-response protection and more accurate automatic curvature remain follow-up work. The guide's explicit manual setting is covered by native recorded construction and a six-repeat closure test. |
+
 Feature Log guide review:
 
 | ID | Workflow | Finding | Guide handling | Status |

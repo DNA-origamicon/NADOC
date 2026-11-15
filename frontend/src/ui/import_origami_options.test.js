@@ -19,7 +19,8 @@ it('cancels without choosing import options', async () => {
   expect(await result).toBeNull()
 })
 it('reports partial fits accurately', () => {
-  expect(importRelaxationMessage({ status: 'skipped' })).toBeNull()
+  expect(importRelaxationMessage({ status: 'skipped', message: 'Requires a planar layout.' }))
+    .toBe('Imported without relaxation. Requires a planar layout.')
   expect(importRelaxationMessage({ status: 'applied', rigid_bundle_sizes: [22, 22, 22, 22],
     before: { max_excess_nm: 10 }, after: { max_excess_nm: 12 }, optimizer_converged: false }))
     .toContain('10.00 → 12.00 nm. Partial fit')

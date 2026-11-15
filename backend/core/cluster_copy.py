@@ -530,6 +530,7 @@ def graft_cluster_subdesign(
                 update={
                     "id": cmap[c.id],
                     "helix_ids": [hmap[h] for h in c.helix_ids],
+                    "base_ids": [r.model_copy(update={"helix_id": hmap[r.helix_id]}) for r in c.base_ids],
                     "domain_ids": [
                         ref.model_copy(update={"strand_id": smap[ref.strand_id]})
                         for ref in c.domain_ids

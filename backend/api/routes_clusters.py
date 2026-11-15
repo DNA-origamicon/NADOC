@@ -47,6 +47,7 @@ from backend.api.pattern_features import (
     pattern_inputs,
     pattern_label,
 )
+from backend.core.models import ClusterBaseRef
 from backend.core.cluster_copy import paste_clusters
 from backend.core.cluster_reconcile import MutationReport
 
@@ -57,6 +58,7 @@ class AddClusterBody(BaseModel):
     name: str = "Cluster"
     helix_ids: List[str]
     domain_ids: List[dict] = Field(default_factory=list)  # [{strand_id, domain_index}]
+    base_ids: List[ClusterBaseRef] = Field(default_factory=list)
     log: bool = False  # deprecated compatibility field; every creation is logged
 
 
@@ -73,6 +75,7 @@ class PatchClusterBody(BaseModel):
     null clears it back to Undefined and is recorded like an assignment.
     """
 
+    base_ids: Optional[List[ClusterBaseRef]] = None
     name: Optional[str] = None
     helix_ids: Optional[List[str]] = None
     domain_ids: Optional[List[dict]] = None  # [{strand_id, domain_index}]
@@ -145,6 +148,8 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
         fields["name"] = body.name
     if body.helix_ids is not None:
         fields["helix_ids"] = body.helix_ids
+    if body.base_ids is not None:
+        fields["base_ids"] = [r.model_dump(mode="json") for r in body.base_ids]
     if body.domain_ids is not None:
         fields["domain_ids"] = body.domain_ids
     if body.translation is not None:
@@ -171,7 +176,7 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     # change leaves their authored axes invariant.
     if body.commit or AUTHORED_FIELDS.intersection(fields):
         updated, report = update_group(cluster_id, fields)
-        membership = {"helix_ids", "domain_ids"}.intersection(fields)
+        membership = {"helix_ids", "domain_ids", "base_ids"}.intersection(fields)
         mixed_pose = AUTHORED_FIELDS.intersection(fields) and {"translation", "rotation", "pivot"}.intersection(fields)
         if membership or mixed_pose or (updated.feature_log and
                 getattr(updated.feature_log[-1], "op_kind", None) == 'placement-poses'):

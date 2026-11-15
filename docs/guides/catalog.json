@@ -138,8 +138,32 @@
         "New base-pair site count",
         "Editable feature history"
       ],
-      "status": "planned",
-      "guide": null
+      "status": "partial",
+      "guide": "sweep",
+      "recipe": "frontend/guides/sweep.spec.js",
+      "covered_workflows": [
+        "Desktop: new 3\u00d76 square-lattice cross-section on XY with strand and ligation controls",
+        "Three-point spline using XYZ offsets in nm; per-point direction and twist controls",
+        "Review path length and new base-pair count, confirm and inspect in Full representation"
+      ],
+      "introduction": "Create an 18-helix square-lattice bundle along a three-point spline. Choose the cross-section, enter path coordinates, inspect direction and twist controls, and confirm the sweep.",
+      "watch": [
+        "frontend/guides/sweep.spec.js",
+        "frontend/src/ui/sweep*",
+        "frontend/src/ui/cross_section_workflow.js",
+        "frontend/src/ui/extrude_source_plane.js",
+        "frontend/src/scene/sweep*",
+        "frontend/src/scene/slice_plane.js",
+        "frontend/src/scene/slice_plane/*.js",
+        "frontend/src/app/sweep_history_editor.js",
+        "backend/api/routes_sweep.py",
+        "backend/api/sweep_history.py",
+        "backend/api/headless_sweep_build.py",
+        "backend/core/sweep*.py",
+        "backend/core/generated_sweep.py",
+        "backend/core/lattice*.py",
+        "backend/core/constants.py"
+      ]
     },
     "primitive-library": {
       "name": "Primitive Library",
@@ -592,8 +616,40 @@
         "Periodic seam connections",
         "Polymerization-aware routing"
       ],
-      "status": "planned",
-      "guide": null
+      "status": "partial",
+      "guide": "polymerization",
+      "recipe": "frontend/guides/polymerization.spec.js",
+      "example_family": "polymer",
+      "introduction": "Build a standard honeycomb 6HB with a fully assigned p7560 scaffold, route periodic staple bridges, inspect the seam in the cadnano editor, and create linear and circular polymer assemblies.",
+      "covered_workflows": [
+        "Honeycomb 6HB construction, seamed scaffold routing, standard autostaple and p7560 sequence assignment",
+        "Cadnano inspection, periodic-boundary mirror, sequence and 3D visualization options",
+        "Three-unit linear assembly and a six-unit circular arrangement using Curve to make polymer circle"
+      ],
+      "watch": [
+        "frontend/guides/polymerization.spec.js",
+        "scripts/guide_assembly_audit.py",
+        "backend/api/crud.py",
+        "backend/api/part_deformation_preview.py",
+        "frontend/src/scene/polymerization_preview.js",
+        "frontend/src/scene/assembly_renderer_shared.js",
+        "frontend/src/ui/autoscaffold_picker.js",
+        "frontend/src/ui/region_autostaple.js",
+        "frontend/src/ui/scaffold_modal.js",
+        "frontend/src/ui/polymerize_panel.js",
+        "frontend/src/ui/assembly_panel*.js",
+        "frontend/src/ui/bend_twist_popup.js",
+        "frontend/src/cadnano-editor/*.js",
+        "frontend/cadnano-editor.html",
+        "backend/api/routes_scaffold_routing.py",
+        "backend/api/routes_assembly_polymerize.py",
+        "backend/api/assembly.py",
+        "backend/core/polymer_router.py",
+        "backend/core/periodic_polymer.py",
+        "backend/core/assembly_polymer.py",
+        "backend/core/seamed_router.py",
+        "backend/core/sequences.py"
+      ]
     },
     "gears": {
       "name": "Gears",

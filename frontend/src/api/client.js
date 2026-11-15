@@ -2682,8 +2682,8 @@ export async function unmarkFlexibleSegment(markId) {
 
 /** Mark an explicit list of beads flexible (selective). opts: {marks?:[{...}],
  *  replace?:bool}. replace:true with no marks clears all flexible segments. */
-export async function batchFlexibleSegment(opts = {}) {
-  const json = await _request('POST', '/design/flexible-segment/batch', opts)
+export async function batchFlexibleSegment(opts = {}, { onError } = {}) {
+  const json = await _request('POST', '/design/flexible-segment/batch', opts, { onError })
   return _syncFromDesignResponse(json)
 }
 
@@ -3912,8 +3912,8 @@ export async function patchCluster(clusterId, body) {
   // Ordinary sidebar/selection edits are authored operations even when an old
   // caller supplies commit:false. Explicit null clears a folding-order assignment;
   // other null fields retain PATCH's omitted semantics.
-  const authored = Object.hasOwn(body, 'folding_order') || ['name', 'helix_ids', 'domain_ids', 'color', 'opacity'].some(key => body[key] != null)
-  const membership = body.helix_ids != null || body.domain_ids != null
+  const authored = Object.hasOwn(body, 'folding_order') || ['name', 'helix_ids', 'domain_ids', 'base_ids', 'color', 'opacity'].some(key => body[key] != null)
+  const membership = body.helix_ids != null || body.domain_ids != null || body.base_ids != null
   const explicitPose = ['translation', 'rotation', 'pivot'].some(key => body[key] != null)
   const refreshGeometry = membership || (authored && explicitPose)
   const request = authored ? { ...body, commit: true } : body

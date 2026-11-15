@@ -141,6 +141,9 @@ def render_guide(steps, feature):
              '[Download the example](example.nadoc) · [Construction verification](verification.json) ·',
              '[Capture and source metadata](manifest.json) · [UX findings](../UX_LEDGER.md)', '',
              '## Scope', '', *[f'- {s}' for s in feature['covered_workflows']], '']
+    if feature.get('example_family') == 'polymer':
+        lines.extend(['## Example files', '', 'Keep each assembly beside its source part:', '',
+            *[f'- [{name}]({name})' for name in ('__e2e__6hb-straight.nadoc', '__e2e__6hb-circle-unit.nadoc', '__e2e__6hb-linear-polymer.nass', '__e2e__6hb-circular-polymer.nass')], ''])
     sections = steps.get('sections') or [{'title': None, 'body': ''}]
     if steps.get('sections'):
         lines.extend(['## Contents', '', *[f'- [{s["title"]}](#{re.sub(r"[^a-z0-9 -]", "", s["title"].lower()).replace(" ", "-")})' for s in sections], ''])

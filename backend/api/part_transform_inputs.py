@@ -19,7 +19,7 @@ from backend.core.part_overlay_commands import command_input
 KINDS = frozenset({"cluster_op", "placement-poses", "nucleotide-transform", "nucleotide-transform-batch",
                    "nucleotide-transform-delete"})
 POSE_FIELDS = frozenset({"translation", "rotation", "pivot"})
-AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "color", "opacity", "folding_order"})
+AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "base_ids", "color", "opacity", "folding_order"})
 _BODY_FIELDS = frozenset({"kind", "helix_id", "bp_index", "direction", "copy_k",
     "crossover_id", "extra_base_k", "compose"}) | POSE_FIELDS
 _PROTECTED = frozenset({"_proof_version", "history_seed", "expected_design_id",
@@ -118,6 +118,12 @@ def _placement(values):
             _reject("helix_ids requires an identity list")
         for identity in values["helix_ids"]:
             _identity(identity, "helix_ids")
+    if "base_ids" in values:
+        from backend.core.models import ClusterBaseRef
+        if type(values["base_ids"]) is not list:
+            _reject("base_ids requires a nucleotide-reference list")
+        for item in values["base_ids"]:
+            ClusterBaseRef.model_validate(item)
     if "domain_ids" in values:
         if type(values["domain_ids"]) is not list:
             _reject("domain_ids requires a domain-reference list")

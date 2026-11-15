@@ -581,6 +581,9 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # November 14 FAST: two cold recipe replay workers plus edit/undo/redo
+    # take 5.89s. Keep independent-process provenance coverage in slow+headless.
+    "test_generated_branch_cold_replay_edit_and_undo",
     # November 14 FAST: real subprocess lifecycle with mock oxDNA binaries.
     # Detached launch/ownership plus intentional stage delays: 6.41s; multistage
     # relaxation/field/production and geometry recovery: 5.18–5.51s. Keep their
@@ -1142,7 +1145,7 @@ def _slow_area_for(module: str) -> str:
         return "md"
     if "headless" in module or "spec_build" in module or module in {
         "test_generated_commands", "test_generated_fork_proof", "test_generated_joined_steps", "test_generated_joined_proof",
-        "test_native_join_proof", "test_native_connectivity_proof", "test_part_repair_evaluation", "test_part_immutable_creation",
+        "test_native_branch_proof", "test_native_join_proof", "test_native_connectivity_proof", "test_part_repair_evaluation", "test_part_immutable_creation",
         "test_connection_recipe_recording",
         "test_native_schema_compatibility", "test_part_immutable_geometry_append",
         "test_part_strict_deformation_preview_http", "test_part_immutable_preview_apply",

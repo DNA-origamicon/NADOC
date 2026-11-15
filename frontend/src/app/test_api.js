@@ -64,6 +64,7 @@ export function installTestApi({
       setEndpoint: (index, position) => dimensionsTool?.setAssemblyEndpoint?.(index, position) ?? false,
     },
     markFlexibleRun,
+    clusterGizmo,
     getProteinGizmoMode: () => proteinGizmo?.getMode?.() ?? null,
     isProteinGizmoAttached: () => proteinGizmo?.isAttached?.() ?? false,
     selectProteinForTest(id) {

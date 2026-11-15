@@ -1,0 +1,687 @@
+{
+  "title": "A complete 6HB origami: periodic ends, linear polymers and circles",
+  "representationPolicy": "lesson",
+  "sections": [
+    {
+      "title": "Create a standard honeycomb 6HB",
+      "body": "Build the six-helix ring on a honeycomb lattice. Use your own descriptive filenames; the __e2e__ names shown here identify the isolated guide capture. This lesson uses a 1,236 bp initial extrusion; Seamed Autoscaffold adjusts the terminal turns to produce a single 7,560-nt scaffold matching p7560. Full representation is used for construction; later images explicitly demonstrate visualization choices."
+    },
+    {
+      "title": "Route scaffold and staples",
+      "body": "Run Seamed Autoscaffold to obtain matched end faces, then Standard Full Autostaple to route the interior staples. Autoscaffold can extend individual helix ends; inspect the routed scaffold length rather than assuming it equals six times the initial extrusion length."
+    },
+    {
+      "title": "Make the ends periodic",
+      "body": "Route for Polymerization fills the bare terminal scaffold regions with connector staples and joins their terminal tips across the periodic seam. Each copy retains its own scaffold. The bridging staples join adjacent repeats; in the part they are recorded as periodic seam strands."
+    },
+    {
+      "title": "Assign the scaffold and staple sequences",
+      "body": "Assign p7560 after routing so the entire 7,560-nt scaffold receives the intended sequence. Full Autostaple initially uses M13mp18; this explicit assignment replaces it. Then assign complementary staple sequences, including the periodic bridges. The saved example is checked for undefined bases."
+    },
+    {
+      "title": "Inspect topology and sequences in the cadnano editor",
+      "body": "Open Origami Editor to inspect the same saved part as a flat strand diagram. Check scaffold continuity, staple crossovers, terminal connector staples and sequence assignment. The path view preserves base-pair indices even when the 3D part is bent."
+    },
+    {
+      "title": "Use the periodic boundary view",
+      "body": "Enable PBC to display translucent copies of the terminal regions beside the opposite ends. The two red boundary sliders define the display period P = far − near. Dashed seam connections pass through that boundary. Dragging a boundary changes this inspection view; editing a mirrored strand changes the real part. The view resets when disabled or reloaded."
+    },
+    {
+      "title": "Choose useful 3D visualizations",
+      "body": "Full shows nucleotide geometry; Cylinders simplify the bundle shape. Length coloring helps inspect the staple length distribution. The temperature overlay cycles through domain melting temperature and total staple folding temperature; these estimates support inspection rather than proving assembly yield. Periodic Seam Connections reveals the normally hidden long seam arcs in the single-part view."
+    },
+    {
+      "title": "Create an actual linear polymer assembly",
+      "body": "Create a separate assembly and add the saved periodic part. The “via periodic boundary” option derives repeat placement from its seam strands. Chain length is the total number of units including the seed. Forward, Backward and Both choose where new repeats are placed relative to it."
+    },
+    {
+      "title": "Bend a repeat for a circular polymer",
+      "body": "Open the straight part and use Save As to create a separate circular unit. Tools → Bend offers Curve to make polymer circle after periodic strands exist. Set six units; the tool derives the curvature from the periodic seam span. Direction rotates the bending plane. This chapter demonstrates CAD curvature and geometric ring placement; it does not apply loop/skip compensation or validate the relaxed physical shape. The repeat is still a part; copies are created later in its assembly."
+    },
+    {
+      "title": "Build and inspect the circular assembly",
+      "body": "Create a new assembly using the bent unit and choose six total repeats. Verify both the rotational and translational residuals before polymerizing. A circular arrangement requires the accumulated repeat transform to return to the starting frame; the closure check measures that alignment. Consecutive seam mates remain explicit assembly operations."
+    }
+  ],
+  "steps": [
+    {
+      "number": 1,
+      "caption": "Choose File → New.",
+      "file": "01.png",
+      "point": {
+        "x": 79.8125,
+        "y": 58.296875
+      },
+      "section": "Create a standard honeycomb 6HB",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 2,
+      "caption": "Name the part and choose Honeycomb, then Create.",
+      "file": "02.png",
+      "point": {
+        "x": 1045,
+        "y": 707.5625
+      },
+      "section": "Create a standard honeycomb 6HB",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 3,
+      "caption": "Open Tools → Extrude. Choose the XY source plane.",
+      "file": "03.png",
+      "point": {
+        "x": 374.8125,
+        "y": 138.484375
+      },
+      "section": "Create a standard honeycomb 6HB",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 4,
+      "caption": "Select the six cells of the hexagonal ring: rows 0 and 1, columns 1–3. The count must read 6 helices.",
+      "file": "04.png",
+      "point": null,
+      "section": "Create a standard honeycomb 6HB",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 5,
+      "caption": "Click Next to set the bundle length.",
+      "file": "05.png",
+      "point": {
+        "x": 618,
+        "y": 500.15625
+      },
+      "section": "Create a standard honeycomb 6HB",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 6,
+      "caption": "Set 1236 bp, + direction and Both strands; click Extrude.",
+      "file": "06.png",
+      "point": {
+        "x": 599,
+        "y": 608.625
+      },
+      "section": "Create a standard honeycomb 6HB",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 7,
+      "caption": "Choose Tools → Routing → Autoscaffold.",
+      "file": "07.png",
+      "point": {
+        "x": 533.8125,
+        "y": 58.296875
+      },
+      "section": "Route scaffold and staples",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 8,
+      "caption": "Choose Seamed and click Run to route the scaffold with matched ends.",
+      "file": "08.png",
+      "point": {
+        "x": 1048,
+        "y": 655.453125
+      },
+      "section": "Route scaffold and staples",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 9,
+      "caption": "Choose Tools → Routing → Full Autostaple.",
+      "file": "09.png",
+      "point": {
+        "x": 533.8125,
+        "y": 93.890625
+      },
+      "section": "Route scaffold and staples",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 10,
+      "caption": "Keep Standard and click OK to route the interior staples.",
+      "file": "10.png",
+      "point": {
+        "x": 1128.5,
+        "y": 621.5
+      },
+      "section": "Route scaffold and staples",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 11,
+      "caption": "Choose Tools → Routing → Route for Polymerization.",
+      "file": "11.png",
+      "point": {
+        "x": 533.8125,
+        "y": 138.484375
+      },
+      "section": "Make the ends periodic",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 12,
+      "caption": "The 6HB now has six periodic staple bridges, one for each face helix. Inspect their seam routing in the cadnano editor next.",
+      "file": "12.png",
+      "point": null,
+      "section": "Make the ends periodic",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 13,
+      "caption": "Choose Tools → Sequencing → Assign Scaffold Sequence.",
+      "file": "13.png",
+      "point": {
+        "x": 533.8125,
+        "y": 93.890625
+      },
+      "section": "Assign the scaffold and staple sequences",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 14,
+      "caption": "Select p7560 (7,560 nt), verify the matching scaffold length, and click Apply.",
+      "file": "14.png",
+      "point": {
+        "x": 1052,
+        "y": 722.609375
+      },
+      "section": "Assign the scaffold and staple sequences",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 15,
+      "caption": "Choose Assign Staple Sequences to complement all staples against the assigned scaffold.",
+      "file": "15.png",
+      "point": {
+        "x": 533.8125,
+        "y": 129.484375
+      },
+      "section": "Assign the scaffold and staple sequences",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 16,
+      "caption": "Click Origami Editor in the top bar.",
+      "file": "16.png",
+      "point": {
+        "x": 583.8125,
+        "y": 19.5
+      },
+      "section": "Inspect topology and sequences in the cadnano editor",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 17,
+      "caption": "Press F to fit all six helices. Follow the scaffold route and the staple crossovers between helices.",
+      "file": "17.png",
+      "point": null,
+      "section": "Inspect topology and sequences in the cadnano editor",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    },
+    {
+      "number": 18,
+      "caption": "Enable sequence letters and undefined-base highlighting. Zoom into domains to read individual bases; the verified example contains no undefined sequence bases.",
+      "file": "18.png",
+      "point": null,
+      "section": "Inspect topology and sequences in the cadnano editor",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    },
+    {
+      "number": 19,
+      "caption": "Click PBC to show the periodic boundary sliders, repeated end regions and dashed seam connections. Red ruler labels report the original base indices in the mirrored regions.",
+      "file": "19.png",
+      "point": null,
+      "section": "Use the periodic boundary view",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    },
+    {
+      "number": 20,
+      "caption": "Drag the far red ruler handle outward to change the display period. Read the seam-gap indicator and compare the displaced mirror with the real end; this moves the boundary, not the DNA.",
+      "file": "20.png",
+      "point": null,
+      "section": "Use the periodic boundary view",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    },
+    {
+      "number": 21,
+      "caption": "Toggle PBC off and on to restore the boundaries to the active strand extents before inspecting the seam.",
+      "file": "21.png",
+      "point": null,
+      "section": "Use the periodic boundary view",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    },
+    {
+      "number": 22,
+      "caption": "Right-drag to center the far boundary, then scroll up to inspect the seam and individual sequence bases. Compare the terminal scaffold and bridging staple on the real unit with the translucent neighboring unit; the mirror is an inspection view, not an assembly instance.",
+      "file": "22.png",
+      "point": null,
+      "section": "Use the periodic boundary view",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    },
+    {
+      "number": 23,
+      "caption": "For this staggered 6HB, the physical repeat is 1260 bp while the default bounding span is 1267 bp. Move the far boundary 7 bp inward: the “overlap 7 bp” display lets the staggered ends interlock. This changes only the inspection period; assembly placement comes from the recorded seams.",
+      "file": "23.png",
+      "point": null,
+      "section": "Use the periodic boundary view",
+      "annotation": null,
+      "representation": null,
+      "view": "cadnano-path"
+    },
+    {
+      "number": 24,
+      "caption": "Press F2 for Cylinders to inspect the long 6HB shape.",
+      "file": "24.png",
+      "point": null,
+      "section": "Choose useful 3D visualizations",
+      "annotation": null,
+      "representation": "cylinders",
+      "view": "3d"
+    },
+    {
+      "number": 25,
+      "caption": "Press F4 for Full, then enable LENGTH to color staples by length.",
+      "file": "25.png",
+      "point": null,
+      "section": "Choose useful 3D visualizations",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 26,
+      "caption": "Click TM to inspect domain melting temperatures with the displayed color scale.",
+      "file": "26.png",
+      "point": null,
+      "section": "Choose useful 3D visualizations",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 27,
+      "caption": "Click TM again for total staple folding temperatures. Check the legend to distinguish this from the domain view.",
+      "file": "27.png",
+      "point": null,
+      "section": "Choose useful 3D visualizations",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 28,
+      "caption": "View → Periodic Seam Connections shows the long seam arcs on the unit; these are periodic connections, not strands passing through the bundle interior.",
+      "file": "28.png",
+      "point": {
+        "x": 424.8125,
+        "y": 1025.125
+      },
+      "section": "Choose useful 3D visualizations",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 29,
+      "caption": "Inspect the periodic connectors, then turn Periodic Seam Connections off for the polymer overview.",
+      "file": "29.png",
+      "point": null,
+      "section": "Choose useful 3D visualizations",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 30,
+      "caption": "Choose File → New Assembly and give the assembly a name.",
+      "file": "30.png",
+      "point": {
+        "x": 79.8125,
+        "y": 93.890625
+      },
+      "section": "Create an actual linear polymer assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 31,
+      "caption": "Choose Assembly → Add Part to insert the saved periodic unit.",
+      "file": "31.png",
+      "point": {
+        "x": 422.8125,
+        "y": 58.296875
+      },
+      "section": "Create an actual linear polymer assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 32,
+      "caption": "Choose __e2e__6hb-straight.nadoc from the library.",
+      "file": "32.png",
+      "point": {
+        "x": 738,
+        "y": 589.5859375
+      },
+      "section": "Create an actual linear polymer assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 33,
+      "caption": "Choose Assembly → Polymerize Origami.",
+      "file": "33.png",
+      "point": {
+        "x": 422.8125,
+        "y": 356.84375
+      },
+      "section": "Create an actual linear polymer assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 34,
+      "caption": "Choose the part’s “via periodic boundary” entry, set Chain length to 3 total, and keep Forward. The seed is included in this count.",
+      "file": "34.png",
+      "point": {
+        "x": 1484,
+        "y": 661.65625
+      },
+      "section": "Create an actual linear polymer assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 35,
+      "caption": "A straight chain reports “Chain does NOT close”; that is expected for a linear polymer.",
+      "file": "35.png",
+      "point": {
+        "x": 1380,
+        "y": 797.953125
+      },
+      "section": "Create an actual linear polymer assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 36,
+      "caption": "Click Polymerize to create the repeated part instances and seam mates in this assembly.",
+      "file": "36.png",
+      "point": {
+        "x": 1380,
+        "y": 848.59375
+      },
+      "section": "Create an actual linear polymer assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 37,
+      "caption": "The three units now form a real assembly polymer. Press F2 for Cylinders to inspect the overall arrangement; each repeat remains a separate part instance.",
+      "file": "37.png",
+      "point": null,
+      "section": "Create an actual linear polymer assembly",
+      "annotation": null,
+      "representation": "cylinders",
+      "view": "3d"
+    },
+    {
+      "number": 38,
+      "caption": "Choose Save As to preserve the straight unit and create a separate bent unit.",
+      "file": "38.png",
+      "point": {
+        "x": 79.8125,
+        "y": 346.640625
+      },
+      "section": "Bend a repeat for a circular polymer",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 39,
+      "caption": "Save the new part as the circular-unit example.",
+      "file": "39.png",
+      "point": {
+        "x": 1145,
+        "y": 686.09375
+      },
+      "section": "Bend a repeat for a circular polymer",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 40,
+      "caption": "Set Selectable to Cluster before choosing the complete 6HB.",
+      "file": "40.png",
+      "point": {
+        "x": 332,
+        "y": 119.59375
+      },
+      "section": "Bend a repeat for a circular polymer",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 41,
+      "caption": "Click the 6HB to select the complete unit.",
+      "file": "41.png",
+      "point": {
+        "id": "1ab5cec0-f34b-5ca8-aa0b-fd09baf3b0e6",
+        "x": 1254.8092543110683,
+        "y": 713.7353380430997
+      },
+      "section": "Bend a repeat for a circular polymer",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 42,
+      "caption": "Choose Tools → Bend with the complete unit selected; the planes span that selection.",
+      "file": "42.png",
+      "point": {
+        "x": 374.8125,
+        "y": 396.640625
+      },
+      "section": "Bend a repeat for a circular polymer",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 43,
+      "caption": "Enable Curve to make polymer circle and enter 6 units. Review the calculated bend; refine this example’s angle in the next step before Apply.",
+      "file": "43.png",
+      "point": {
+        "x": 555,
+        "y": 566.34375
+      },
+      "section": "Bend a repeat for a circular polymer",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 44,
+      "caption": "For this exact 6HB, the automatic estimate leaves a 0.515 nm six-unit closure residual. Uncheck Curve to make polymer circle and refine Angle to 60.3229°, keeping Direction 0° and planes −12–1254 bp. The recorded manual setting meets the 0.5 nm closure tolerance; this value is specific to this example.",
+      "file": "44.png",
+      "point": {
+        "x": 355,
+        "y": 496.75
+      },
+      "section": "Bend a repeat for a circular polymer",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 45,
+      "caption": "The bent periodic unit is ready for repetition. Its source construction, routing and sequence assignment remain in its feature history.",
+      "file": "45.png",
+      "point": null,
+      "section": "Bend a repeat for a circular polymer",
+      "annotation": null,
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 46,
+      "caption": "Choose File → New Assembly and give the assembly a name.",
+      "file": "46.png",
+      "point": {
+        "x": 79.8125,
+        "y": 93.890625
+      },
+      "section": "Build and inspect the circular assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 47,
+      "caption": "Choose Assembly → Add Part to insert the saved periodic unit.",
+      "file": "47.png",
+      "point": {
+        "x": 422.8125,
+        "y": 58.296875
+      },
+      "section": "Build and inspect the circular assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 48,
+      "caption": "Choose __e2e__6hb-circle-unit.nadoc from the library.",
+      "file": "48.png",
+      "point": {
+        "x": 738,
+        "y": 589.5859375
+      },
+      "section": "Build and inspect the circular assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 49,
+      "caption": "Choose Assembly → Polymerize Origami.",
+      "file": "49.png",
+      "point": {
+        "x": 422.8125,
+        "y": 356.84375
+      },
+      "section": "Build and inspect the circular assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 50,
+      "caption": "Choose the part’s “via periodic boundary” entry, set Chain length to 6 total, and keep Forward. The seed is included in this count.",
+      "file": "50.png",
+      "point": {
+        "x": 1484,
+        "y": 661.65625
+      },
+      "section": "Build and inspect the circular assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 51,
+      "caption": "Wait for the closure calculation to finish after changing the count. Check “Chain closes” and both residuals before creating the ring. This tests the accumulated repeat transform.",
+      "file": "51.png",
+      "point": {
+        "x": 1380,
+        "y": 794.5
+      },
+      "section": "Build and inspect the circular assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 52,
+      "caption": "Click Polymerize to create the repeated part instances and seam mates in this assembly.",
+      "file": "52.png",
+      "point": {
+        "x": 1380,
+        "y": 834.78125
+      },
+      "section": "Build and inspect the circular assembly",
+      "annotation": "numbered-arrow",
+      "representation": "full",
+      "view": "3d"
+    },
+    {
+      "number": 53,
+      "caption": "Six bent units form a circular arrangement. Cylinders make the overall shape readable. The closure readout verifies geometric alignment; the feature creates five consecutive seam mates, not a sixth closing mate.",
+      "file": "53.png",
+      "point": null,
+      "section": "Build and inspect the circular assembly",
+      "annotation": null,
+      "representation": "cylinders",
+      "view": "3d"
+    }
+  ]
+}

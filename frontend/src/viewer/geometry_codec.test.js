@@ -17,7 +17,7 @@ it('preserves scientific coordinates, ownership, ends and modification metadata 
     backbone_position: [1, 2, 3], base_position: [2, 3, 4], base_normal: [1, 0, 0], axis_tangent: [0, 0, 1],
     slab_position: [2, 3, 4], slab_quaternion: [0, 0, 0, 1], placement_source: 'native-full-o5-v1',
     strand_id: 's1', strand_type: 'SCAFFOLD', is_five_prime: true, is_three_prime: false,
-    domain_index: 2, overhang_id: 'oh1', is_unpaired: true, extension_id: 'ext1', is_modification: true,
+    domain_index: 2, overhang_id: 'oh1', is_unpaired: true, is_flexible_segment: false, extension_id: 'ext1', is_modification: true,
     modification: 'biotin', nucleobase: 'A' })
   expect(result[1].is_three_prime).toBe(true)
   expect(result[0].backbone_position).toBe(source.h1.FORWARD.bb[0])
@@ -43,4 +43,12 @@ it('preserves legacy arrays and defaults sparse optional metadata', () => {
   const source = compact(); delete source.h1.FORWARD.sid; delete source.h1.FORWARD.did
   expect(expandCompactNucleotides(source)[0]).toMatchObject({ strand_id: null, domain_index: 0 })
   expect(expandCompactNucleotides(null)).toEqual([])
+})
+
+it('retains flexible flags when compact geometry replaces relaxed helices', () => {
+  const source = compact()
+  source.h1.FORWARD.flex = [true, false]
+  expect(expandCompactNucleotides(source).map(n => n.is_flexible_segment)).toEqual([true, false])
+  delete source.h1.FORWARD.flex
+  expect(expandCompactNucleotides(source).map(n => n.is_flexible_segment)).toEqual([false, false])
 })

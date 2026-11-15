@@ -65,6 +65,7 @@ ORDINARY_UNESTIMATED = frozenset({
     "assign-scaffold-sequence", "assign-staple-sequences", "auto-break", "auto-merge",
     "auto-scaffold-bounded-section", "auto-scaffold-connectivity-section", "auto-scaffold-matched",
     "auto-scaffold-seamed", "auto-scaffold-seamless", "auto-scaffold-sections", "full-autostaple",
+    "route-for-polymerization",
     "strand-sequence", "crossover-constraint-create", "crossover-constraint-delete",
     "branch-seed", "connectivity-path", "fork-path", "independent-section-seed", "joined-crossbar-path",
     "linear-pattern", "circular-pattern", "cluster-dissolve",

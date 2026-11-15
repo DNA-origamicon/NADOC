@@ -1,12 +1,13 @@
 """Validate old serialized receipts without discarding independent replay.
 
-Schema-added defaults change byte hashes. An old receipt is usable only when its
-exact old bytes hash correctly AND validation equals the independently replayed
-current model. Snapshots never supply missing construction commands.
+Schema-added defaults change byte hashes. Verify either the documented default-only
+schema projection of independent replay, or exact old receipt bytes whose validation
+equals that replay. Snapshots never supply missing construction commands.
 """
 import base64
 import gzip
 import json
+from copy import deepcopy
 
 from backend.core.document_operations import branch_value, content_digest
 from backend.core.models import Design
@@ -17,6 +18,18 @@ def raw_snapshot(payload):
 
 
 def matches_source_receipt(design, expected, digest):
+    # Exact-base clustering added an empty membership field to every legacy
+    # cluster. Document metadata edits may have no retained pre-edit snapshot.
+    # Verify the independently replayed value against that precise older schema;
+    # never discard nonempty membership or accept a merely similar state.
+    legacy = deepcopy(expected)
+    changed = False
+    for cluster in legacy.get('cluster_transforms', []):
+        if cluster.get('base_ids') == []:
+            del cluster['base_ids']
+            changed = True
+    if changed and content_digest(legacy) == digest:
+        return True
     payloads = []
     for row in design.feature_log:
         for field in ('design_snapshot_gz_b64', 'post_state_gz_b64', 'pre_state_gz_b64'):
