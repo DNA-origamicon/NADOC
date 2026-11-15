@@ -18,6 +18,7 @@ export function chooseOrigamiImportOptions() {
 }
 
 export function importRelaxationMessage(report) {
+  if (report?.status === 'skipped') return `Imported without relaxation. ${report.message || 'Relaxation is unavailable for this design.'}`
   if (!report || report.status !== 'applied') return null
   return `Relaxation applied to ${report.rigid_bundle_sizes.length} rigid bodies. Maximum bond excess: ${report.before.max_excess_nm.toFixed(2)} → ${report.after.max_excess_nm.toFixed(2)} nm. ${report.optimizer_converged ? 'Local fit converged.' : 'Partial fit; optimizer did not converge.'}`
 }

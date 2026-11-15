@@ -17,6 +17,7 @@
  * @param {function} [opts.onStylePreview] — called with (clusterId, {color?, opacity?}) while
  *   the style popover's controls are dragged; renderer-only, no persistence.
  */
+import { clusterSelectionInput } from './cluster_base_selection.js'
 import { showToast } from './toast.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { initClusterStylePopover } from './cluster_style_popover.js'
@@ -105,7 +106,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   function _syncNewBtn(state) {
     const refs = canonicalSelection(state).items
     newBtn.disabled = _assemblyMode || hasOrganization(state.currentDesign) ||
-      !refs.some(ref => ref.kind === 'strand' || ref.kind === 'domain')
+      !refs.some(ref => ref.kind === 'strand' || ref.kind === 'domain' || ref.kind === 'base')
   }
 
   subscriptions.push(store.subscribe((n, p) => {
@@ -125,17 +126,13 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     const n = (currentDesign.cluster_transforms?.length ?? 0) + 1
 
     try {
-      if (domainRefs.length) {
-        // Extension geometry uses synthetic domain indices; clusters own the
-        // terminal domain that anchors the tail, never that synthetic index.
-        const domainIds = clusterDomainIdsFromSelection(refs, currentDesign)
-        const helixIds = _helixIdsFromDomainIds(domainIds, currentDesign)
-        if (!helixIds.length) return
-        await createFromSelection({ name: `Cluster ${n}`, helix_ids: helixIds, domain_ids: domainIds })
-      } else if (strandIds.length) {
-        const helixIds = _helixIdsFromStrandIds(strandIds, currentDesign)
-        if (!helixIds.length) return
-        await createFromSelection({ name: `Cluster ${n}`, helix_ids: helixIds })
+      if (refs.some(r => r.kind === 'base' || r.kind === 'strand')) {
+        const input = clusterSelectionInput(refs, currentDesign, state.currentGeometry)
+        await createFromSelection({ name: `Cluster ${n}`, ...input })
+      } else {
+        const domain_ids = clusterDomainIdsFromSelection(refs, currentDesign)
+        await createFromSelection({ name: `Cluster ${n}`, domain_ids,
+          helix_ids: _helixIdsFromDomainIds(domain_ids, currentDesign) })
       }
     } catch (error) {
       showToast(`Could not create cluster: ${error.message}`, { severity: 'error' })
@@ -145,6 +142,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   async function createFromSelection(params) {
     try {
       if (!await api.createCluster(params)) throw new Error(store.getState().lastError?.message ?? 'The operation was refused.')
+      if (params.base_ids?.length) showToast(`Created cluster with ${params.base_ids.length} bases.`)
     } catch (error) { showToast(`Could not create cluster: ${error.message}`, { severity: 'error' }) }
   }
 
@@ -305,7 +303,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       // Count badge — domains if domain cluster, helices otherwise; ◆ if default
       const badge = document.createElement('span')
       badge.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
-      const countStr = cluster.domain_ids?.length
+      const countStr = cluster.base_ids?.length ? `${cluster.base_ids.length}b` : cluster.domain_ids?.length
         ? `${cluster.domain_ids.length}d`
         : `${cluster.helix_ids.length}h`
       badge.textContent = cluster.is_default ? `◆ ${countStr}` : countStr
@@ -517,7 +515,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
           const rowBadge = document.createElement('span')
           rowBadge.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
-          rowBadge.textContent = cluster.domain_ids?.length
+          rowBadge.textContent = cluster.base_ids?.length ? `${cluster.base_ids.length}b` : cluster.domain_ids?.length
             ? `${cluster.domain_ids.length}d`
             : `${cluster.helix_ids.length}h`
 

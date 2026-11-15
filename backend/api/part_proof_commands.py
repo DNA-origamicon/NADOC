@@ -83,7 +83,7 @@ def _cluster_op_dependencies(params):
             return Dependencies(known=False)
         # Reuse native field coercion, including legacy DomainRef integer input.
         # No source model, model dump, UUID allocation or native builder is used.
-        fields = ("translation", "rotation", "pivot", "name", "helix_ids", "domain_ids", "color", "opacity", "folding_order")
+        fields = ("translation", "rotation", "pivot", "name", "helix_ids", "domain_ids", "base_ids", "color", "opacity", "folding_order")
         selected = ClusterRigidTransform.model_validate({
             "id": identity, **{field: params[field] for field in fields if field in params}})
         for field, length in (("translation", 3), ("rotation", 4), ("pivot", 3)):
@@ -97,7 +97,7 @@ def _cluster_op_dependencies(params):
         return Dependencies(known=False)
     cluster = Resource("cluster", identity)
     reads = {cluster}
-    membership = "helix_ids" in params or "domain_ids" in params
+    membership = "helix_ids" in params or "domain_ids" in params or "base_ids" in params
     if membership:
         reads.add(PART_TOPOLOGY)
         reads.update(Resource("helix", hid) for hid in selected.helix_ids)

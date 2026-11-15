@@ -10,6 +10,7 @@
  * membership fix lands once. Pure — entries and design are arguments.
  * Unit-tested in cluster_entries.test.js.
  */
+import { clusterBaseFilter, clusterBaseKey, claimedBaseKeys } from './cluster_base_members.js'
 import { hasOrganization, partGroupAlphaKeys, partGroupDisplaySignature } from './part_group_display.js'
 
 /**
@@ -26,7 +27,15 @@ import { hasOrganization, partGroupAlphaKeys, partGroupDisplaySignature } from '
  * @returns {((nuc:{helix_id, strand_id, domain_index}) => boolean) | null}
  */
 export function clusterMemberFilter(cluster, design) {
+  const native = nativeClusterMemberFilter(cluster, design)
+  if (!native) return null
+  const excluded = claimedBaseKeys(design, cluster)
+  return excluded.size ? n => !excluded.has(clusterBaseKey(n)) && native(n) : native
+}
+
+function nativeClusterMemberFilter(cluster, design) {
   if (!cluster?.helix_ids?.length) return null
+  if (cluster.base_ids?.length) return clusterBaseFilter(cluster)
   if (cluster.domain_ids?.length) {
     const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
     const strandMap = _strandMapForDesign(design)
@@ -88,7 +97,7 @@ export function clusterIdForNucleotide(nucleotide, design) {
   for (const { cluster, isMember } of memberships) {
     if (cluster.is_default) continue
     if (isMember?.(nucleotide)) {
-      const size = cluster.helix_ids?.length ?? Infinity
+      const size = cluster.base_ids?.length ? -1 / cluster.base_ids.length : (cluster.helix_ids?.length ?? Infinity)
       if (size < bestSize) {
         best = cluster
         bestSize = size
@@ -139,7 +148,23 @@ export function clusterBackboneEntries(cluster, design, backboneEntries) {
 export function clusterNucKeys(cluster, design) {
   const keys = new Set()
   if (!cluster?.helix_ids?.length) return keys
-
+  const excluded = claimedBaseKeys(design, cluster)
+  if (cluster.base_ids?.length) return new Set(cluster.base_ids.map(clusterBaseKey)
+    .filter(key => !excluded.has(key)).map(key => `b:${key}`))
+  if (excluded.size) {
+    const member = clusterMemberFilter(cluster, design)
+    const helices = new Map((design.helices ?? []).map(h => [h.id, h]))
+    for (const s of design.strands ?? []) for (const [i, d] of (s.domains ?? []).entries()) {
+      for (let bp = Math.min(d.start_bp, d.end_bp); bp <= Math.max(d.start_bp, d.end_bp); bp++) {
+        const delta = (helices.get(d.helix_id)?.loop_skips ?? []).filter(x => x.bp_index === bp).reduce((a, x) => a + x.delta, 0)
+        for (let copy_k = 0; copy_k < 1 + delta; copy_k++) {
+          const n = { helix_id: d.helix_id, bp_index: bp, direction: d.direction, copy_k, strand_id: s.id, domain_index: i }
+          if (member?.(n)) keys.add(`b:${clusterBaseKey(n)}`)
+        }
+      }
+    }
+    return keys
+  }
   const strandIds = new Set()   // strands this cluster covers by domain key
   const helixIds  = new Set()   // helices this cluster covers whole
   // Extensions need their host strand's terminal domain. Resolve those hosts
@@ -259,6 +284,8 @@ export function isAutoCluster(c) {
  */
 export function clusterAlphaForNuc(map, nuc) {
   if (!map?.size || !nuc) return 1
+  const base = map.get(`b:${clusterBaseKey(nuc)}`)
+  if (base !== undefined) return base
   if (nuc.domain_index != null) {
     const d = map.get(`d:${nuc.strand_id}:${nuc.domain_index}`)
     if (d !== undefined) return d
@@ -280,7 +307,7 @@ export function clusterAlphaForNuc(map, nuc) {
 export function clusterDisplaySignature(design) {
   if (hasOrganization(design)) return partGroupDisplaySignature(design)
   return (design?.cluster_transforms ?? [])
-    .map(c => `${c.id}:${c.color ?? ''}:${c.opacity ?? 1}`)
+    .map(c => `${c.id}:${c.color ?? ''}:${c.opacity ?? 1}:${JSON.stringify([c.helix_ids ?? [], c.domain_ids ?? [], c.base_ids ?? []])}`)
     .join('|')
 }
 
@@ -307,4 +334,18 @@ export function withClusterDisplay(design, clusterId, patch) {
       return next
     }),
   }
+}
+
+const transformScopes = new WeakMap()
+export function clusterTransformSelection(cluster, design, geometry) {
+  if (!(design?.cluster_transforms ?? []).some(c => c.base_ids?.length)) return cluster.domain_ids?.length ? cluster.domain_ids : null
+  let cached = transformScopes.get(design)
+  if (!cached) { cached = new Map(); transformScopes.set(design, cached) }
+  if (!cached.has(cluster.id)) {
+    const member = clusterMemberFilter(cluster, design)
+    cached.set(cluster.id, (geometry ?? []).filter(n => member?.(n)).map(n => ({
+      helix_id: n.helix_id, bp_index: n.bp_index, direction: n.direction, copy_k: n.copy_k ?? 0,
+    })))
+  }
+  return cached.get(cluster.id)
 }

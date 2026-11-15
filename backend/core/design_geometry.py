@@ -940,6 +940,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
                 "ohid": [],
                 "unpaired": [],
                 # Sparse fields: appended lazily, so empty arrays don't ship.
+                "flex": None,
                 "extid": None,
                 "ismod": None,
                 "mod": None,
@@ -962,6 +963,13 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
         b["ohid"].append(n.get("overhang_id"))
         b["unpaired"].append(bool(n.get("is_unpaired")))
         # Sparse fields — only allocate the array when first non-default appears.
+        is_flexible = bool(n.get("is_flexible_segment"))
+        if is_flexible:
+            if b["flex"] is None:
+                b["flex"] = [False] * (len(b["bp"]) - 1)
+            b["flex"].append(True)
+        elif b["flex"] is not None:
+            b["flex"].append(False)
         ext_id = n.get("extension_id")
         if ext_id is not None:
             if b["extid"] is None:
@@ -994,7 +1002,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
     # tight when none of those fields apply.
     for helix_bucket in out.values():
         for b in helix_bucket.values():
-            for k in ("extid", "ismod", "mod", "base"):
+            for k in ("flex", "extid", "ismod", "mod", "base"):
                 if b.get(k) is None:
                     b.pop(k, None)
     return out

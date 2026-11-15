@@ -45,7 +45,13 @@ def resolve_deformation_targets(design, targets):
             c = clusters.get(ref.get('id'))
             if c is None:
                 raise ValueError('Selected cluster no longer exists')
-            if c.domain_ids:
+            if c.base_ids:
+                for b in c.base_ids:
+                    if b.copy_k:
+                        raise ValueError('Bend and Twist cannot independently scope an inserted loop copy.')
+                    ranges[(b.helix_id, b.direction, b.bp_index)] = DeformationRange(
+                        helix_id=b.helix_id, start_bp=b.bp_index, end_bp=b.bp_index, direction=b.direction)
+            elif c.domain_ids:
                 for d in c.domain_ids:
                     domain(d.strand_id, d.domain_index)
             else:

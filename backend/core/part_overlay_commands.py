@@ -123,6 +123,8 @@ def build(kind, design, params):
         if cluster.id in {c.id for c in clusters}:
             raise ValueError("Duplicate cluster identity")
         check_members(cluster.helix_ids, cluster.domain_ids)
+        from backend.core.cluster_bases import validate_base_members
+        validate_base_members(design, cluster)
         try:
             default_identity = identity_factory(cluster.id)
         except ValueError:
@@ -162,6 +164,7 @@ def build(kind, design, params):
         "name",
         "helix_ids",
         "domain_ids",
+        "base_ids",
         "color",
         "opacity",
         "folding_order",
@@ -173,6 +176,8 @@ def build(kind, design, params):
         }
     )
     check_members(cluster.helix_ids, cluster.domain_ids)
+    from backend.core.cluster_bases import validate_base_members
+    validate_base_members(design, cluster)
     clusters[index] = cluster
     from backend.core.cluster_member_poses import carry_member_poses
     return carry_member_poses(design, design.copy_with(cluster_transforms=clusters))

@@ -757,3 +757,26 @@ it('switching atomistic off aborts its unneeded load and ignores a late model', 
   expect(deps.atomisticRenderer.getMode()).toBe('off')
   expect(deps.atomisticRenderer.update).not.toHaveBeenCalledWith(model)
 })
+
+it('highlights only exact cluster bases, including the remaining original owner', () => {
+  const currentDesign = {
+    helices: [{ id: 'h', loop_skips: [] }],
+    strands: ['FORWARD', 'REVERSE'].map(direction => ({ id: direction, domains: [
+      { helix_id: 'h', start_bp: 90, end_bp: 119, direction },
+    ] })),
+    cluster_transforms: [{ id: 'old', helix_ids: ['h'] }, { id: 'S72', helix_ids: ['h'],
+      base_ids: ['FORWARD', 'REVERSE'].flatMap(direction => Array.from({length:12}, (_,i) =>
+        ({ helix_id:'h', bp_index:92+i, direction, copy_k:0 }))),
+    }],
+  }
+  const selected = id => atomSelectionForState({ currentDesign, selection:{items:[{kind:'cluster',id}]} })
+  const exact = selected('S72')
+  expect(exact.helixIds).toEqual([])
+  expect(exact.domains).toEqual([])
+  expect(exact.bases).toHaveLength(24)
+  expect(exact.bases.every(b => b.bp_index >= 92 && b.bp_index <= 103)).toBe(true)
+  const original = selected('old')
+  expect(original.helixIds).toEqual([])
+  expect(original.bases).toHaveLength(36)
+  expect(original.bases.some(b => b.bp_index >= 92 && b.bp_index <= 103)).toBe(false)
+})

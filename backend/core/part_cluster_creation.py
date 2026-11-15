@@ -8,7 +8,7 @@ No coordinates or replacement placement records are created here.
 
 
 def transfers_members(design, owner, cluster):
-    if not owner.is_default or cluster.domain_ids or owner.domain_ids:
+    if not owner.is_default or cluster.domain_ids or cluster.base_ids or owner.domain_ids or owner.base_ids:
         return False
     if (owner.parent_cluster_id or owner.overhang_duplex_driver_id
             or owner.translation != [0, 0, 0] or owner.rotation != [0, 0, 0, 1]
@@ -25,6 +25,9 @@ def creation_clusters(design, clusters, cluster):
             or cluster.pivot != [0, 0, 0] or cluster.parent_cluster_id
             or cluster.overhang_duplex_driver_id or cluster.is_default):
         raise ValueError("Make Cluster starts at identity. Use Move/Rotate to move its members.")
+    if cluster.base_ids:
+        from backend.core.cluster_bases import inherit_base_placement
+        cluster = inherit_base_placement(design, cluster)
     selected = set(cluster.helix_ids)
     result = [owner.model_copy(update={
         "helix_ids": [hid for hid in owner.helix_ids if hid not in selected]})

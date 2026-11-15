@@ -19,6 +19,40 @@ Mark a contiguous run of UNPAIRED beads as a flexible tether. Each marked run br
 
 **REPLACED the earlier auto-cut "ball joint" approach** (mark beads → derive new arms → Powell solve). The user found that paradigm wrong. Rigid arms are now the user's OWN clusters; no auto-cut, no solver, no new clusters. (Old `ball_joint_arms.py`/`ball_joint_solve.py` deleted; `ClusterRigidTransform.kind` removed.)
 
+## November 14, 2026 — reject marks without an inter-cluster tether
+
+New mark requests must produce a connection between different existing clusters.
+The single and batch endpoints reject unsupported runs atomically (HTTP 422,
+`flexible_connection_requires_distinct_clusters`), preserving marks, history,
+revision, and undo. The context-menu action displays a modal with the user-requested
+text: “flexible connections must be between two different cluster”. Success is
+reported only after the server accepts the marks. Old intra-cluster marks remain
+replayable and removable; their Relax actions are disabled without a connection.
+
+The saved `Assembly Tests/JJ_Hinge_AuNP_stacked_poly_FINAL_with_fluors.nadoc`
+contains two marks at h_XY_5_2, reverse, bp 104–105; their flanking bases belong to
+the same geometry cluster. This is an unsupported intra-cluster mark, not a
+minimum-length restriction. A recorded two-nt inter-cluster example is covered by
+`tests/test_short_flexible_import.py` and `frontend/e2e/short_flexible_import.spec.js`.
+A read-only comparison against the original JSON in
+`C:\Users\joshu\Google Drive\DNA Origami\NP_HInge` found exact agreement:
+18,146 occupied slots, 17,875 directed backbone edges, and 139 loop/skip records;
+74 occupied helices (one of the source's 75 vstrands is empty).
+The saved JJ_Hinge layout is nonplanar, so the existing clash-aware Relax Origami
+solver skips it. Import feedback now explicitly says “Imported without relaxation”
+and includes the reason. This change does not add a 3D clearance solver.
+
+## November 14, 2026 — relaxation must retain compact flexible flags
+
+JJ_Hinge retained all 22 marks / 11 two-base connections after Relax all, but
+the partial compact geometry response omitted `is_flexible_segment`. Replacing
+those helices recreated rigid beads alongside the flexible arcs. The shared
+compact serializer now carries sparse `flex` booleans and the shared frontend
+codec restores the flag (false for older payloads). The native array shortcut
+falls back to complete records for marked designs. No solver or geometry change.
+Regression coverage checks partial relax responses, undo/redo, sparse alignment,
+and the app's relax-all controller with ordinary and deleted-slot two-base runs.
+
 ## Key definition (got it wrong once)
 "Unpaired" = **no Watson-Crick partner** at the same `(helix,bp)`, NOT `overhang_id`. mini_hinge's tethers are unpaired *scaffold* runs. `flexible_segments.unpaired_bead_keys(design)`.
 
@@ -84,3 +118,14 @@ Mark a contiguous run of UNPAIRED beads as a flexible tether. Each marked run br
 
 ## Deferred / refine
 Kabsch (SVD) rigid fit instead of linearised torque; bow direction from exit-tangents; refresh gate dropdown when marks change while tool already open; per-frame arc rebuild allocates geometry (fine for few tethers, optimize if many).
+
+## Deleted-slot anchors (2026-11-14)
+
+caDNAno short ssDNA domains can span three lattice slots with a deletion at one
+end (JJ_Hinge helices 34/36/38). Flexible connectivity must walk actual beads:
+`flexible_segments._deleted_slots` aggregates loop/skip deltas; unpaired lookup
+and the backbone graph omit deleted slots. Previously a deleted endpoint became
+a rigid anchor, so Full rendering hid the two marked beads but could not draw
+their replacement arc. Existing legacy documents rederive connections on load.
+Regression coverage includes recorded scadnano import/mark/replay with deletions
+at either end, plus actual arc bead counts in the browser.

@@ -103,7 +103,7 @@ def test_reused_segment_frames_match_uncached_arithmetic_exactly(kind, monkeypat
     actual = deformation.deformed_helix_axes(source)
     original = deformation._apply_clusters_to_seg_point
     monkeypatch.setattr(deformation, '_apply_clusters_to_seg_point',
-        lambda point, seg, hid, owners, frames=None: original(point, seg, hid, owners))
+        lambda point, seg, hid, owners, frames=None, design=None: original(point, seg, hid, owners, design=design))
     assert json.dumps(actual) == json.dumps(deformation.deformed_helix_axes(source))
 
 

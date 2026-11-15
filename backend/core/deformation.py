@@ -627,7 +627,7 @@ def _bend_endpoint_pose(design, helices, relevant_ops):
     targets = np.array([*op.params.endpoints, *([op.params.midpoint] if op.params.midpoint is not None else [])], dtype=float)
     clusters = [c for c in design.cluster_transforms
                 if all(h.id in c.helix_ids for h in helices)
-                and (not c.domain_ids or c.id in op.cluster_ids)]
+                and not c.base_ids and (not c.domain_ids or c.id in op.cluster_ids)]
     for cluster in reversed(sorted(clusters, key=lambda c: 0 if c.parent_cluster_id else 1)):
         rotation = _rot_from_quaternion(*cluster.rotation)
         pivot = np.array(cluster.pivot)
@@ -682,7 +682,7 @@ def validate_bend_endpoint_fit(design, op):
         points.append(((op.plane_a_bp + op.plane_b_bp) / 2, op.params.midpoint))
     clusters = [c for c in design.cluster_transforms
                 if all(h.id in c.helix_ids for h in helices)
-                and (not c.domain_ids or c.id in op.cluster_ids)]
+                and not c.base_ids and (not c.domain_ids or c.id in op.cluster_ids)]
     for bp, target in points:
         point = _frame_at_bp(design, bp - start, helices)[0]
         for cluster in sorted(clusters, key=lambda c: 0 if c.parent_cluster_id else 1):
@@ -805,6 +805,7 @@ def _arm_filter_cluster(
     other sub-clusters. Prefer the first non-default cluster; fall back to
     the first cluster only when no specific cluster exists.
     """
+    clusters = [c for c in clusters if not c.base_ids]
     non_default = [c for c in clusters if not c.is_default]
     if non_default:
         return non_default[0]
@@ -858,13 +859,14 @@ def _apply_cluster_transforms_domain_aware(
     # exactly the same path as before.
     child_clusters = [c for c in clusters if c.parent_cluster_id]
     helix_level_clusters = [
-        c for c in clusters if not c.domain_ids and not c.parent_cluster_id
+        c for c in clusters if not c.domain_ids and not c.base_ids and not c.parent_cluster_id
     ]
     domain_level_clusters = [
-        c for c in clusters if c.domain_ids and not c.parent_cluster_id
+        c for c in clusters if (c.domain_ids or c.base_ids) and not c.parent_cluster_id
     ]
 
-    if not domain_level_clusters and not child_clusters:
+    has_base_clusters = any(c.base_ids for c in design.cluster_transforms)
+    if not domain_level_clusters and not child_clusters and not has_base_clusters:
         # Fast path: all helix-level clusters apply to all nucleotides.  Imported
         # designs can have overlapping scaffold/geometry clusters; taking only
         # the first one lets an identity umbrella cluster mask the moved cluster.
@@ -881,6 +883,9 @@ def _apply_cluster_transforms_domain_aware(
     strand_by_id = {s.id: s for s in design.strands}
 
     def _domain_mask(cluster) -> np.ndarray:
+        if cluster.base_ids:
+            from backend.core.cluster_bases import array_mask
+            return array_mask(cluster, helix.id, arrs)
         M = len(arrs["bp_indices"])
         mask = np.zeros(M, dtype=bool)
         for dr in cluster.domain_ids:
@@ -900,22 +905,35 @@ def _apply_cluster_transforms_domain_aware(
             )
         return mask
 
+    def apply_selected(result, cluster, mask=None):
+        from backend.core.cluster_bases import exclusion_mask
+        if mask is None:
+            mask = np.ones(len(arrs['bp_indices']), dtype=bool)
+        if has_base_clusters:
+            mask = mask & ~exclusion_mask(design, cluster, helix.id, arrs)
+        transformed = _apply_cluster_rigid_transform_arrays(result, cluster)
+        for key in _xf_keys_present(result):
+            result[key][mask] = transformed[key][mask]
+        return result
+
     # Step 1: CHILD clusters (inner, rest frame). Applied to their domain subset
     # before any parent transform; the parent below then poses everything on top.
     for cluster in child_clusters:
         mask = _domain_mask(cluster)
         if not mask.any():
             continue
-        transformed = _apply_cluster_rigid_transform_arrays(result, cluster)
-        for key in _xf_keys_present(result):
-            result[key][mask] = transformed[key][mask]
+        result = apply_selected(result, cluster, mask)
 
     # Step 2: helix-level (parent) transforms — applied to ALL nucleotides, so a
     # child's already-locally-posed domains ride along rigidly with the parent.
     for cluster in helix_level_clusters:
-        result = _apply_cluster_rigid_transform_arrays(result, cluster)
+        result = apply_selected(result, cluster)
 
     for cluster in domain_level_clusters:
+        if cluster.base_ids:
+            mask = _domain_mask(cluster)
+            result = apply_selected(result, cluster, mask)
+            continue
         # Build boolean mask: True for nucleotides that belong to this cluster
         # on this specific helix.
         M = len(arrs["bp_indices"])
@@ -942,15 +960,11 @@ def _apply_cluster_transforms_domain_aware(
             # The helix is still in cluster.helix_ids (for pivot computation) as
             # an exclusive helix of a mixed helix-level+domain-level cluster.
             # Apply the full helix transform so it moves with its cluster.
-            transformed = _apply_cluster_rigid_transform_arrays(result, cluster)
-            for key in _xf_keys_present(result):
-                result[key] = transformed[key]
+            result = apply_selected(result, cluster)
             continue
 
         # Transform all positions then copy only the masked rows into result.
-        transformed = _apply_cluster_rigid_transform_arrays(result, cluster)
-        for key in _xf_keys_present(result):
-            result[key][mask] = transformed[key][mask]
+        result = apply_selected(result, cluster, mask)
 
     return result
 
@@ -1022,6 +1036,8 @@ def _apply_cluster_transforms_to_point(
     ordered = sorted(clusters, key=lambda c: 0 if c.parent_cluster_id else 1)
     p = np.array(point, dtype=float)
     for cluster in ordered:
+        if cluster.base_ids:
+            continue  # exact nucleotide clusters are projected through axis segments
         if (
             cluster.overhang_duplex_driver_id is not None
             and helix is not None
@@ -2148,7 +2164,7 @@ def deformed_nucleotide_positions(
     Falls back to ``nucleotide_positions(helix)`` unchanged when
     ``design.deformations`` is empty and the helix has no cluster transform.
     """
-    if _scope.scoped(design):
+    if _scope.scoped(design) or any(c.base_ids for c in design.cluster_transforms):
         arrs = deformed_nucleotide_arrays(helix, design)
         return [NucleotidePosition(
             helix_id=helix.id, bp_index=int(bp),
@@ -2676,7 +2692,12 @@ def _segments_for_helix(design: "Design", h: "Helix", candidates=None) -> list[d
     for index, (_, _, domain) in enumerate(cands):
         starts.setdefault(min(domain.start_bp, domain.end_bp), []).append(index)
         ends.setdefault(max(domain.start_bp, domain.end_bp) + 1, []).append(index)
-    boundaries = sorted(starts.keys() | ends.keys())
+    boundaries = set(starts.keys() | ends.keys())
+    for cluster in design.cluster_transforms:
+        for ref in cluster.base_ids:
+            if ref.helix_id == h.id:
+                boundaries.update((ref.bp_index, ref.bp_index + 1))
+    boundaries = sorted(boundaries)
     owner_order = sorted(range(len(cands)), key=lambda i: (
         cands[i][0].strand_type != _StrandType.SCAFFOLD, cands[i][0].id, cands[i][1], i))
     rank = {index: order for order, index in enumerate(owner_order)}
@@ -2729,6 +2750,12 @@ def _cluster_moving_segment_keys(
     corrected `buildClusterLookup` rule so backend rebuild and live-drag
     preview agree.
     """
+    if cluster.base_ids:
+        from backend.core.cluster_bases import base_key
+        selected = {base_key(ref) for ref in cluster.base_ids}
+        return {(s.id, i) for s in design.strands for i, d in enumerate(s.domains)
+                if all((d.helix_id, bp, d.direction, 0) in selected
+                       for bp in range(min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp) + 1))}
     if not cluster.domain_ids:
         cluster_helix_ids = set(cluster.helix_ids or [])
         keys = set()
@@ -2767,6 +2794,7 @@ def _apply_clusters_to_seg_point(
     helix_id: str,
     clusters_with_keys: list[tuple],
     frames: dict | None = None,
+    design=None,
 ) -> list[float]:
     """Apply each cluster's rigid transform to *point* if seg's domain key is in
     that cluster's moving set. Skips clusters whose helix_ids don't include
@@ -2779,7 +2807,20 @@ def _apply_clusters_to_seg_point(
     for cluster, moving_keys in clusters_with_keys:
         if helix_id not in (cluster.helix_ids or []):
             continue
-        if seg_keys.isdisjoint(moving_keys):
+        if design is not None:
+            from backend.core.cluster_bases import claimed_elsewhere
+            excluded = claimed_elsewhere(design, cluster)
+            if all((helix_id, bp, direction, 0) in excluded
+                   for bp in range(seg['bp_lo'], seg['bp_hi'] + 1)
+                   for direction in (Direction.FORWARD, Direction.REVERSE)):
+                continue
+        if cluster.base_ids:
+            selected = {(r.bp_index, r.direction) for r in cluster.base_ids
+                        if r.helix_id == helix_id and r.copy_k == 0}
+            if not all((bp, direction) in selected for bp in range(seg['bp_lo'], seg['bp_hi'] + 1)
+                       for direction in (Direction.FORWARD, Direction.REVERSE)):
+                continue
+        elif seg_keys.isdisjoint(moving_keys):
             continue
         frame = frames.get(id(cluster)) if frames is not None else None
         if frame is None:
@@ -3012,8 +3053,8 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
             seg_geoms = []
             for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
                 ss, ee = _seg_endpoints_straight(h, seg, straight_axis)
-                ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys, segment_frames)
-                ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys, segment_frames)
+                ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys, segment_frames, design)
+                ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys, segment_frames, design)
                 seg_geoms.append({**seg, "start": ss, "end": ee})
             axes.append(
                 {
@@ -3050,8 +3091,8 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
             seg_geoms = []
             for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
                 ss, ee = _seg_endpoints_straight(h, seg, straight_axis)
-                ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys, segment_frames)
-                ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys, segment_frames)
+                ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys, segment_frames, design)
+                ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys, segment_frames, design)
                 seg_geoms.append({**seg, "start": ss, "end": ee})
             result.append(
                 {
@@ -3126,8 +3167,8 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
         seg_geoms = []
         for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
             ss, ee = _seg_endpoints_curve(sample_local, samples_pre, seg, h)
-            ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys, segment_frames)
-            ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys, segment_frames)
+            ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys, segment_frames, design)
+            ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys, segment_frames, design)
             seg_geoms.append({**seg, "start": ss, "end": ee})
         samples = (
             [

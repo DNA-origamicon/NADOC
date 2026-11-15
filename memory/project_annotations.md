@@ -50,6 +50,13 @@ ISSUE-180 failures. Test artifacts were removed; compact results live in
 `.development-artifacts/annotation-branches/validation.json`. `main.js` LOC delta: 0.
 Dense-view orbit/zoom tuning remains tracked in MV-68.
 
+November 14 cluster targets: linear and indexed `annotation_targets` matching now
+uses `clusterMemberFilter`, preserving exact base membership, loop copies, mixed
+bridge/exclusive ownership and claimed-base exclusions. This also fixes the separate
+Presenter selection soft halo, which previously expanded base clusters to their
+supporting helices despite correct solid mesh tint. Nine JJ_Hinge sidebar selections
+verify exact tint/halo membership; before/after screenshots were inspected.
+
 November 13 MD inset follow-up: `zoom_volume_entry.js` consumes visible main-view
 atoms even when atomistic MD clears coarse positions. Its version includes the
 renderer mode, and camera bounds follow displayed atom coordinates.

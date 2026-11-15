@@ -43,7 +43,7 @@ function _selectionIndex(selection) {
     strandIds: new Set(selection.strandIds ?? []),
     domains,
     bases: new Set((selection.bases ?? []).map(base =>
-      `${base.helix_id}\0${base.bp_index}\0${base.direction}`)),
+      `${base.helix_id}\0${base.bp_index}\0${base.direction}\0${base.copy_k ?? base.copy ?? 0}`)),
   }
   _selectionIndexes.set(selection, index)
   return index
@@ -70,7 +70,7 @@ export function colorForAtom(ctx, atom, selection) {
   if (selected?.strandIds.has(atom.strand_id)) return C_HIGHLIGHT
   const intervals = selected?.domains.get(`${atom.strand_id}\0${atom.helix_id}\0${atom.direction}`)
   if (intervals?.some(([lo, hi]) => atom.bp_index >= lo && atom.bp_index <= hi)) return C_HIGHLIGHT
-  if (selected?.bases.has(`${atom.helix_id}\0${atom.bp_index}\0${atom.direction}`)) return C_HIGHLIGHT
+  if (selected?.bases.has(`${atom.helix_id}\0${atom.bp_index}\0${atom.direction}\0${atom.copy_k ?? atom.copy ?? 0}`)) return C_HIGHLIGHT
   return normal
 }
 
@@ -85,7 +85,7 @@ function colorForMappedAtom(ctx, atom, selection) {
   const intervals = selected?.domains.size
     ? selected.domains.get(`${atom.strand_id}\0${atom.helix_id}\0${atom.direction}`) : null
   if (intervals?.some(([lo, hi]) => atom.bp_index >= lo && atom.bp_index <= hi)) return C_HIGHLIGHT
-  if (selected?.bases.size && selected.bases.has(`${atom.helix_id}\0${atom.bp_index}\0${atom.direction}`)) return C_HIGHLIGHT
+  if (selected?.bases.size && selected.bases.has(`${atom.helix_id}\0${atom.bp_index}\0${atom.direction}\0${atom.copy_k ?? atom.copy ?? 0}`)) return C_HIGHLIGHT
   // Selection overrides normal colour. Resolve scalar/cluster maps only when
   // that result will be used, and avoid keys for empty selection collections.
   return _normalColor(ctx, atom, cpk)

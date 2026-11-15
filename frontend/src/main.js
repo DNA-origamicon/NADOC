@@ -1,3 +1,4 @@
+import { createFlexibleSegmentActions } from './ui/flexible_segment_actions.js'
 import { createAuthoringDisplay } from './scene/authoring_display.js'
 import { initDetachedSidebars } from './ui/detached_sidebars.js'
 import { initRecordLauncher } from './ui/record_launcher.js'
@@ -740,20 +741,7 @@ async function main() {
   // The exact post-context-menu mark path is named so Playwright can time it
   // deterministically without making a software-WebGL raycast part of the
   // latency measurement.
-  const _markFlexibleRun = async (run) => {
-    const trace = beginOperationTiming('Mark flexible segment', {
-      requestPath: '/design/flexible-segment/batch', nMarks: run.length,
-    })
-    markOperationTiming('run-resolved', undefined, trace)
-    // Acknowledge synchronously: persistence and the structural scene patch can
-    // finish in the background while the user opens the next context menu.
-    showToast(`Marked ${run.length}-base flexible segment`)
-    markOperationTiming('optimistic-confirmation-visible', undefined, trace)
-    // Add only this run. The backend merges/deduplicates against its latest
-    // design, so rapid marks cannot overwrite an earlier in-flight mark whose
-    // response has not reached this tab yet.
-    await api.batchFlexibleSegment({ marks: run })
-  }
+  const _markFlexibleRun = createFlexibleSegmentActions({ api, showToast, beginOperationTiming, markOperationTiming })
   selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     selectionController,
     onHideSelection: refs => {

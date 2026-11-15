@@ -1,3 +1,4 @@
+import { clusterBaseKey } from './cluster_base_members.js'
 /**
  * Domain end indicators — rings at bp-index positions where a strand has no
  * neighbor on one side (hasPlus XOR hasMinus on the (helix, direction) coverage map).
@@ -605,9 +606,10 @@ export function initDomainEnds(scene, camera, canvas, {
   // split-domain clusters) would skip every blunt end on a partially-moved
   // helix.
 
-  function _matches(entry, keySet, domainKeySet = null) {
+  function _matches(entry, keySet, domainKeySet = null, baseKeys = null) {
     const helixMatch = keySet.has(entry.transformKey) || keySet.has(entry.helixId)
     if (!helixMatch) return false
+    if (baseKeys) return baseKeys.has(`${entry.helixId}:${entry.bp}:${entry.direction}`)
     if (!domainKeySet) return true
     if (entry.strandId == null || entry.domainIndex == null) return false
     return domainKeySet.has(`${entry.strandId}:${entry.domainIndex}`)
@@ -757,12 +759,13 @@ export function initDomainEnds(scene, camera, canvas, {
      */
     captureClusterBase(transformKeys, append = false, domainIds = null) {
       const keySet = transformKeys instanceof Set ? transformKeys : new Set(transformKeys)
+      const baseKeys = domainIds?.[0]?.bp_index != null ? new Set(domainIds.map(clusterBaseKey)) : null
       const domainKeySet = domainIds?.length
         ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
         : null
       if (!append) _cbEnds.clear()
       for (const end of _ends) {
-        if (!_matches(end, keySet, domainKeySet)) continue
+        if (!_matches(end, keySet, domainKeySet, baseKeys)) continue
         _cbEnds.set(end, {
           pos:      end.ringMesh.position.clone(),
           endPos:   end.endPos.clone(),
@@ -779,11 +782,12 @@ export function initDomainEnds(scene, camera, canvas, {
      */
     applyClusterTransform(transformKeys, centerVec, dummyPosVec, incrRotQuat, domainIds = null) {
       const keySet = transformKeys instanceof Set ? transformKeys : new Set(transformKeys)
+      const baseKeys = domainIds?.[0]?.bp_index != null ? new Set(domainIds.map(clusterBaseKey)) : null
       const domainKeySet = domainIds?.length
         ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
         : null
       for (const end of _ends) {
-        if (!_matches(end, keySet, domainKeySet)) continue
+        if (!_matches(end, keySet, domainKeySet, baseKeys)) continue
         const snap = _cbEnds.get(end)
         if (!snap) continue
         _clusterV.copy(snap.pos).sub(centerVec).applyQuaternion(incrRotQuat)

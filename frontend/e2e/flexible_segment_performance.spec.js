@@ -53,7 +53,7 @@ async function unmarkedRuns(page, wanted) {
   }, wanted)
 }
 
-test('mark flexible segment confirms within 200 ms and records the final frame', async ({ page }) => {
+test('mark flexible segment acknowledges within 200 ms and records the final frame', async ({ page }) => {
   test.setTimeout(120_000)
   await loadHinge(page, '__e2e__flexible-latency')
   const [run] = await unmarkedRuns(page, 1)
@@ -62,7 +62,7 @@ test('mark flexible segment confirms within 200 ms and records the final frame',
     window.__flexMarkProbe = { clickAt: null, confirmationAt: null, timing: null }
     const observer = new MutationObserver(() => {
       const visible = [...document.querySelectorAll('.toast--visible .toast-message')]
-        .some(el => /^Marked \d+-base flexible segment$/.test(el.textContent ?? ''))
+        .some(el => /^Marking \d+-base flexible segment…$/.test(el.textContent ?? ''))
       if (visible && window.__flexMarkProbe.confirmationAt == null) {
         window.__flexMarkProbe.confirmationAt = performance.now()
         observer.disconnect()
