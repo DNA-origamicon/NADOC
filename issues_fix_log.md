@@ -113,6 +113,29 @@ against the isolated commit sources. Browser scratch
 `/tmp/__e2e__guide-fa7brspb` was verified absent after cleanup.
 
 
+## ISSUE-193 — Periodic preview buffer ownership and Bend command admission (2026-11-13)
+
+Shared assembly rendering intentionally migrates source matrices/colors into GPU
+textures. The periodic continuation preview still reread those retired buffers
+on traversal. Preserve its already computed transforms for shared sources;
+geometry changes rebuild the shared source. The regression reproduces the null
+color failure and checks retained transforms. Frontend suite: 10,457 passed,
+1 skipped. No molecular placement changes; `main.js` LOC delta 0.
+
+Bend prefix admission omitted the supported native `route-for-polymerization`
+command. Added it to ordinary unestimated routing commands without changing
+resource bounds. Focused tests cover both a small and guide-sized 6HB through
+prepare/evaluate/native append and independent history replay (2 passed).
+Guide-sized coverage also checks the explicit manual bend's six-repeat closure.
+The asynchronous closure readout and automatic angle accuracy remain open.
+
+
+The publication guard then caught an unrecorded filename-to-name stamp on library
+open after Save As. Record that existing user-facing metadata edit through
+`document-metadata`; preserve the original input and omit no-op renames. The
+regression failed before the fix and passed afterward (1 passed). No audit
+exemptions were added.
+
 
 ## ISSUE-192 — Nonblocking sequence-work spinner and scoped geometry (2026-11-12)
 

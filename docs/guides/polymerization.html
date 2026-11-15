@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A complete 6HB origami: periodic ends, linear polymers and circles · NADOC guide</title>
+<style>
+:root{color-scheme:dark; font-family:system-ui,sans-serif; line-height:1.65; color:#e6edf3; background:#10151d}
+*{box-sizing:border-box}body{margin:0}a{color:#8ecbff}a:hover{color:#fff}
+a:focus-visible{outline:3px solid #ffd54a;outline-offset:4px}
+.layout{display:grid;grid-template-columns:265px minmax(0,1fr);max-width:1700px;margin:auto}
+nav{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:32px 22px;border-right:1px solid #303b4b}
+nav strong{display:block;letter-spacing:.15em;color:#8ecbff;margin-bottom:20px}
+nav a{display:block;margin:0 0 13px;font-size:.9rem;text-decoration:none}
+main{min-width:0;padding:40px clamp(18px,4vw,64px) 70px}
+h1{font-size:clamp(1.8rem,3vw,2.8rem);line-height:1.2;max-width:900px}h2{line-height:1.3}
+.eyebrow,.meta{color:#aab9ca;font-size:.85rem}.eyebrow{letter-spacing:.12em;text-transform:uppercase}
+header>p,section>p{max-width:85ch}.links{display:flex;gap:12px 24px;flex-wrap:wrap}
+.notice{border-left:3px solid #ffd54a;padding:12px 18px;background:#202532}
+section{margin-top:58px;scroll-margin-top:24px}figure{margin:26px 0 38px;border:1px solid #344153;border-radius:10px;overflow:hidden;background:#17202c}
+figcaption{padding:18px 22px}figcaption p{margin:7px 0 0;max-width:95ch}
+.step{font-weight:700;color:#ffd54a}img{display:block;width:100%;height:auto}
+footer{margin-top:50px;color:#aab9ca}.skip{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;z-index:2;background:#10151d;padding:8px}
+@media(max-width:850px){.layout{display:block}nav{position:static;height:auto;border-right:0;border-bottom:1px solid #303b4b;padding:22px}nav a{display:inline-block;margin:0 18px 10px 0}main{padding-top:24px}}
+@media print{:root{color-scheme:light;color:#111;background:white}nav,.skip{display:none}.layout{display:block}main{padding:0}figure{break-inside:avoid;background:white}a{color:inherit}}
+</style></head><body><a class="skip" href="#guide">Skip to guide</a>
+<div class="layout"><nav aria-label="Guide chapters"><strong>NADOC / GUIDES</strong>
+<a href="#guide">Overview</a><a href="#chapter-1">Create a standard honeycomb 6HB</a><a href="#chapter-2">Route scaffold and staples</a><a href="#chapter-3">Make the ends periodic</a><a href="#chapter-4">Assign the scaffold and staple sequences</a><a href="#chapter-5">Inspect topology and sequences in the cadnano editor</a><a href="#chapter-6">Use the periodic boundary view</a><a href="#chapter-7">Choose useful 3D visualizations</a><a href="#chapter-8">Create an actual linear polymer assembly</a><a href="#chapter-9">Bend a repeat for a circular polymer</a><a href="#chapter-10">Build and inspect the circular assembly</a><a href="extrude.html">Extrude guide</a><a href="bend.html">Bend guide</a><a href="twist.html">Twist guide</a><a href="README.md">Guide library (Markdown)</a></nav>
+<main id="guide"><header><p class="eyebrow">Polymerization · desktop walkthrough · style-review draft</p>
+<h1>A complete 6HB origami: periodic ends, linear polymers and circles</h1><p>Build a standard honeycomb 6HB with a fully assigned p7560 scaffold, route periodic staple bridges, inspect the seam in the cadnano editor, and create linear and circular polymer assemblies.</p>
+<p class="meta">53 illustrated steps · 10 chapters · Captured 2026-11-13T09:59:51-07:00</p>
+<p class="notice">Follow the illustrated steps below to use the tool.</p>
+<p>Numbered arrows indicate click targets; dashed boxes show drag extents. Click any screenshot to open it at full size.</p>
+<p class="links"><a href="polymerization/example.nadoc" download>Download example</a><a href="polymerization/README.md">Markdown guide</a><a href="polymerization/verification.json">Construction verification</a><a href="UX_LEDGER.md">UX findings</a></p>
+<p class="links"><a href="polymerization/__e2e__6hb-straight.nadoc" download>__e2e__6hb-straight.nadoc</a><a href="polymerization/__e2e__6hb-circle-unit.nadoc" download>__e2e__6hb-circle-unit.nadoc</a><a href="polymerization/__e2e__6hb-circular-polymer.nass" download>__e2e__6hb-circular-polymer.nass</a><a href="polymerization/__e2e__6hb-linear-polymer.nass" download>__e2e__6hb-linear-polymer.nass</a></p>
+<details><summary>Demonstrated scope</summary><ul><li>Honeycomb 6HB construction, seamed scaffold routing, standard autostaple and p7560 sequence assignment</li><li>Cadnano inspection, periodic-boundary mirror, sequence and 3D visualization options</li><li>Three-unit linear assembly and a six-unit circular arrangement using Curve to make polymer circle</li></ul></details></header>
+<section id="chapter-1"><h2>Create a standard honeycomb 6HB</h2><p>Build the six-helix ring on a honeycomb lattice. Use your own descriptive filenames; the __e2e__ names shown here identify the isolated guide capture. This lesson uses a 1,236 bp initial extrusion; Seamed Autoscaffold adjusts the terminal turns to produce a single 7,560-nt scaffold matching p7560. Full representation is used for construction; later images explicitly demonstrate visualization choices.</p><figure id="step-1">
+<figcaption><span class="step">Step 1</span><p>Choose File → New.</p></figcaption>
+<a href="polymerization/01.png" aria-label="Open step 1 screenshot at full size">
+<img src="polymerization/01.png" alt="Step 1: Choose File → New." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-2">
+<figcaption><span class="step">Step 2</span><p>Name the part and choose Honeycomb, then Create.</p></figcaption>
+<a href="polymerization/02.png" aria-label="Open step 2 screenshot at full size">
+<img src="polymerization/02.png" alt="Step 2: Name the part and choose Honeycomb, then Create." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-3">
+<figcaption><span class="step">Step 3</span><p>Open Tools → Extrude. Choose the XY source plane.</p></figcaption>
+<a href="polymerization/03.png" aria-label="Open step 3 screenshot at full size">
+<img src="polymerization/03.png" alt="Step 3: Open Tools → Extrude. Choose the XY source plane." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-4">
+<figcaption><span class="step">Step 4</span><p>Select the six cells of the hexagonal ring: rows 0 and 1, columns 1–3. The count must read 6 helices.</p></figcaption>
+<a href="polymerization/04.png" aria-label="Open step 4 screenshot at full size">
+<img src="polymerization/04.png" alt="Step 4: Select the six cells of the hexagonal ring: rows 0 and 1, columns 1–3. The count must read 6 helices." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-5">
+<figcaption><span class="step">Step 5</span><p>Click Next to set the bundle length.</p></figcaption>
+<a href="polymerization/05.png" aria-label="Open step 5 screenshot at full size">
+<img src="polymerization/05.png" alt="Step 5: Click Next to set the bundle length." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-6">
+<figcaption><span class="step">Step 6</span><p>Set 1236 bp, + direction and Both strands; click Extrude.</p></figcaption>
+<a href="polymerization/06.png" aria-label="Open step 6 screenshot at full size">
+<img src="polymerization/06.png" alt="Step 6: Set 1236 bp, + direction and Both strands; click Extrude." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-2"><h2>Route scaffold and staples</h2><p>Run Seamed Autoscaffold to obtain matched end faces, then Standard Full Autostaple to route the interior staples. Autoscaffold can extend individual helix ends; inspect the routed scaffold length rather than assuming it equals six times the initial extrusion length.</p><figure id="step-7">
+<figcaption><span class="step">Step 7</span><p>Choose Tools → Routing → Autoscaffold.</p></figcaption>
+<a href="polymerization/07.png" aria-label="Open step 7 screenshot at full size">
+<img src="polymerization/07.png" alt="Step 7: Choose Tools → Routing → Autoscaffold." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-8">
+<figcaption><span class="step">Step 8</span><p>Choose Seamed and click Run to route the scaffold with matched ends.</p></figcaption>
+<a href="polymerization/08.png" aria-label="Open step 8 screenshot at full size">
+<img src="polymerization/08.png" alt="Step 8: Choose Seamed and click Run to route the scaffold with matched ends." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-9">
+<figcaption><span class="step">Step 9</span><p>Choose Tools → Routing → Full Autostaple.</p></figcaption>
+<a href="polymerization/09.png" aria-label="Open step 9 screenshot at full size">
+<img src="polymerization/09.png" alt="Step 9: Choose Tools → Routing → Full Autostaple." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-10">
+<figcaption><span class="step">Step 10</span><p>Keep Standard and click OK to route the interior staples.</p></figcaption>
+<a href="polymerization/10.png" aria-label="Open step 10 screenshot at full size">
+<img src="polymerization/10.png" alt="Step 10: Keep Standard and click OK to route the interior staples." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-3"><h2>Make the ends periodic</h2><p>Route for Polymerization fills the bare terminal scaffold regions with connector staples and joins their terminal tips across the periodic seam. Each copy retains its own scaffold. The bridging staples join adjacent repeats; in the part they are recorded as periodic seam strands.</p><figure id="step-11">
+<figcaption><span class="step">Step 11</span><p>Choose Tools → Routing → Route for Polymerization.</p></figcaption>
+<a href="polymerization/11.png" aria-label="Open step 11 screenshot at full size">
+<img src="polymerization/11.png" alt="Step 11: Choose Tools → Routing → Route for Polymerization." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-12">
+<figcaption><span class="step">Step 12</span><p>The 6HB now has six periodic staple bridges, one for each face helix. Inspect their seam routing in the cadnano editor next.</p></figcaption>
+<a href="polymerization/12.png" aria-label="Open step 12 screenshot at full size">
+<img src="polymerization/12.png" alt="Step 12: The 6HB now has six periodic staple bridges, one for each face helix. Inspect their seam routing in the cadnano editor next." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-4"><h2>Assign the scaffold and staple sequences</h2><p>Assign p7560 after routing so the entire 7,560-nt scaffold receives the intended sequence. Full Autostaple initially uses M13mp18; this explicit assignment replaces it. Then assign complementary staple sequences, including the periodic bridges. The saved example is checked for undefined bases.</p><figure id="step-13">
+<figcaption><span class="step">Step 13</span><p>Choose Tools → Sequencing → Assign Scaffold Sequence.</p></figcaption>
+<a href="polymerization/13.png" aria-label="Open step 13 screenshot at full size">
+<img src="polymerization/13.png" alt="Step 13: Choose Tools → Sequencing → Assign Scaffold Sequence." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-14">
+<figcaption><span class="step">Step 14</span><p>Select p7560 (7,560 nt), verify the matching scaffold length, and click Apply.</p></figcaption>
+<a href="polymerization/14.png" aria-label="Open step 14 screenshot at full size">
+<img src="polymerization/14.png" alt="Step 14: Select p7560 (7,560 nt), verify the matching scaffold length, and click Apply." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-15">
+<figcaption><span class="step">Step 15</span><p>Choose Assign Staple Sequences to complement all staples against the assigned scaffold.</p></figcaption>
+<a href="polymerization/15.png" aria-label="Open step 15 screenshot at full size">
+<img src="polymerization/15.png" alt="Step 15: Choose Assign Staple Sequences to complement all staples against the assigned scaffold." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-5"><h2>Inspect topology and sequences in the cadnano editor</h2><p>Open Origami Editor to inspect the same saved part as a flat strand diagram. Check scaffold continuity, staple crossovers, terminal connector staples and sequence assignment. The path view preserves base-pair indices even when the 3D part is bent.</p><figure id="step-16">
+<figcaption><span class="step">Step 16</span><p>Click Origami Editor in the top bar.</p></figcaption>
+<a href="polymerization/16.png" aria-label="Open step 16 screenshot at full size">
+<img src="polymerization/16.png" alt="Step 16: Click Origami Editor in the top bar." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-17">
+<figcaption><span class="step">Step 17</span><p>Press F to fit all six helices. Follow the scaffold route and the staple crossovers between helices.</p></figcaption>
+<a href="polymerization/17.png" aria-label="Open step 17 screenshot at full size">
+<img src="polymerization/17.png" alt="Step 17: Press F to fit all six helices. Follow the scaffold route and the staple crossovers between helices." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-18">
+<figcaption><span class="step">Step 18</span><p>Enable sequence letters and undefined-base highlighting. Zoom into domains to read individual bases; the verified example contains no undefined sequence bases.</p></figcaption>
+<a href="polymerization/18.png" aria-label="Open step 18 screenshot at full size">
+<img src="polymerization/18.png" alt="Step 18: Enable sequence letters and undefined-base highlighting. Zoom into domains to read individual bases; the verified example contains no undefined sequence bases." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-6"><h2>Use the periodic boundary view</h2><p>Enable PBC to display translucent copies of the terminal regions beside the opposite ends. The two red boundary sliders define the display period P = far − near. Dashed seam connections pass through that boundary. Dragging a boundary changes this inspection view; editing a mirrored strand changes the real part. The view resets when disabled or reloaded.</p><figure id="step-19">
+<figcaption><span class="step">Step 19</span><p>Click PBC to show the periodic boundary sliders, repeated end regions and dashed seam connections. Red ruler labels report the original base indices in the mirrored regions.</p></figcaption>
+<a href="polymerization/19.png" aria-label="Open step 19 screenshot at full size">
+<img src="polymerization/19.png" alt="Step 19: Click PBC to show the periodic boundary sliders, repeated end regions and dashed seam connections. Red ruler labels report the original base indices in the mirrored regions." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-20">
+<figcaption><span class="step">Step 20</span><p>Drag the far red ruler handle outward to change the display period. Read the seam-gap indicator and compare the displaced mirror with the real end; this moves the boundary, not the DNA.</p></figcaption>
+<a href="polymerization/20.png" aria-label="Open step 20 screenshot at full size">
+<img src="polymerization/20.png" alt="Step 20: Drag the far red ruler handle outward to change the display period. Read the seam-gap indicator and compare the displaced mirror with the real end; this moves the boundary, not the DNA." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-21">
+<figcaption><span class="step">Step 21</span><p>Toggle PBC off and on to restore the boundaries to the active strand extents before inspecting the seam.</p></figcaption>
+<a href="polymerization/21.png" aria-label="Open step 21 screenshot at full size">
+<img src="polymerization/21.png" alt="Step 21: Toggle PBC off and on to restore the boundaries to the active strand extents before inspecting the seam." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-22">
+<figcaption><span class="step">Step 22</span><p>Right-drag to center the far boundary, then scroll up to inspect the seam and individual sequence bases. Compare the terminal scaffold and bridging staple on the real unit with the translucent neighboring unit; the mirror is an inspection view, not an assembly instance.</p></figcaption>
+<a href="polymerization/22.png" aria-label="Open step 22 screenshot at full size">
+<img src="polymerization/22.png" alt="Step 22: Right-drag to center the far boundary, then scroll up to inspect the seam and individual sequence bases. Compare the terminal scaffold and bridging staple on the real unit with the translucent neighboring unit; the mirror is an inspection view, not an assembly instance." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-23">
+<figcaption><span class="step">Step 23</span><p>For this staggered 6HB, the physical repeat is 1260 bp while the default bounding span is 1267 bp. Move the far boundary 7 bp inward: the “overlap 7 bp” display lets the staggered ends interlock. This changes only the inspection period; assembly placement comes from the recorded seams.</p></figcaption>
+<a href="polymerization/23.png" aria-label="Open step 23 screenshot at full size">
+<img src="polymerization/23.png" alt="Step 23: For this staggered 6HB, the physical repeat is 1260 bp while the default bounding span is 1267 bp. Move the far boundary 7 bp inward: the “overlap 7 bp” display lets the staggered ends interlock. This changes only the inspection period; assembly placement comes from the recorded seams." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-7"><h2>Choose useful 3D visualizations</h2><p>Full shows nucleotide geometry; Cylinders simplify the bundle shape. Length coloring helps inspect the staple length distribution. The temperature overlay cycles through domain melting temperature and total staple folding temperature; these estimates support inspection rather than proving assembly yield. Periodic Seam Connections reveals the normally hidden long seam arcs in the single-part view.</p><figure id="step-24">
+<figcaption><span class="step">Step 24</span><p>Press F2 for Cylinders to inspect the long 6HB shape.</p></figcaption>
+<a href="polymerization/24.png" aria-label="Open step 24 screenshot at full size">
+<img src="polymerization/24.png" alt="Step 24: Press F2 for Cylinders to inspect the long 6HB shape." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-25">
+<figcaption><span class="step">Step 25</span><p>Press F4 for Full, then enable LENGTH to color staples by length.</p></figcaption>
+<a href="polymerization/25.png" aria-label="Open step 25 screenshot at full size">
+<img src="polymerization/25.png" alt="Step 25: Press F4 for Full, then enable LENGTH to color staples by length." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-26">
+<figcaption><span class="step">Step 26</span><p>Click TM to inspect domain melting temperatures with the displayed color scale.</p></figcaption>
+<a href="polymerization/26.png" aria-label="Open step 26 screenshot at full size">
+<img src="polymerization/26.png" alt="Step 26: Click TM to inspect domain melting temperatures with the displayed color scale." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-27">
+<figcaption><span class="step">Step 27</span><p>Click TM again for total staple folding temperatures. Check the legend to distinguish this from the domain view.</p></figcaption>
+<a href="polymerization/27.png" aria-label="Open step 27 screenshot at full size">
+<img src="polymerization/27.png" alt="Step 27: Click TM again for total staple folding temperatures. Check the legend to distinguish this from the domain view." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-28">
+<figcaption><span class="step">Step 28</span><p>View → Periodic Seam Connections shows the long seam arcs on the unit; these are periodic connections, not strands passing through the bundle interior.</p></figcaption>
+<a href="polymerization/28.png" aria-label="Open step 28 screenshot at full size">
+<img src="polymerization/28.png" alt="Step 28: View → Periodic Seam Connections shows the long seam arcs on the unit; these are periodic connections, not strands passing through the bundle interior." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-29">
+<figcaption><span class="step">Step 29</span><p>Inspect the periodic connectors, then turn Periodic Seam Connections off for the polymer overview.</p></figcaption>
+<a href="polymerization/29.png" aria-label="Open step 29 screenshot at full size">
+<img src="polymerization/29.png" alt="Step 29: Inspect the periodic connectors, then turn Periodic Seam Connections off for the polymer overview." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-8"><h2>Create an actual linear polymer assembly</h2><p>Create a separate assembly and add the saved periodic part. The “via periodic boundary” option derives repeat placement from its seam strands. Chain length is the total number of units including the seed. Forward, Backward and Both choose where new repeats are placed relative to it.</p><figure id="step-30">
+<figcaption><span class="step">Step 30</span><p>Choose File → New Assembly and give the assembly a name.</p></figcaption>
+<a href="polymerization/30.png" aria-label="Open step 30 screenshot at full size">
+<img src="polymerization/30.png" alt="Step 30: Choose File → New Assembly and give the assembly a name." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-31">
+<figcaption><span class="step">Step 31</span><p>Choose Assembly → Add Part to insert the saved periodic unit.</p></figcaption>
+<a href="polymerization/31.png" aria-label="Open step 31 screenshot at full size">
+<img src="polymerization/31.png" alt="Step 31: Choose Assembly → Add Part to insert the saved periodic unit." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-32">
+<figcaption><span class="step">Step 32</span><p>Choose __e2e__6hb-straight.nadoc from the library.</p></figcaption>
+<a href="polymerization/32.png" aria-label="Open step 32 screenshot at full size">
+<img src="polymerization/32.png" alt="Step 32: Choose __e2e__6hb-straight.nadoc from the library." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-33">
+<figcaption><span class="step">Step 33</span><p>Choose Assembly → Polymerize Origami.</p></figcaption>
+<a href="polymerization/33.png" aria-label="Open step 33 screenshot at full size">
+<img src="polymerization/33.png" alt="Step 33: Choose Assembly → Polymerize Origami." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-34">
+<figcaption><span class="step">Step 34</span><p>Choose the part’s “via periodic boundary” entry, set Chain length to 3 total, and keep Forward. The seed is included in this count.</p></figcaption>
+<a href="polymerization/34.png" aria-label="Open step 34 screenshot at full size">
+<img src="polymerization/34.png" alt="Step 34: Choose the part’s “via periodic boundary” entry, set Chain length to 3 total, and keep Forward. The seed is included in this count." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-35">
+<figcaption><span class="step">Step 35</span><p>A straight chain reports “Chain does NOT close”; that is expected for a linear polymer.</p></figcaption>
+<a href="polymerization/35.png" aria-label="Open step 35 screenshot at full size">
+<img src="polymerization/35.png" alt="Step 35: A straight chain reports “Chain does NOT close”; that is expected for a linear polymer." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-36">
+<figcaption><span class="step">Step 36</span><p>Click Polymerize to create the repeated part instances and seam mates in this assembly.</p></figcaption>
+<a href="polymerization/36.png" aria-label="Open step 36 screenshot at full size">
+<img src="polymerization/36.png" alt="Step 36: Click Polymerize to create the repeated part instances and seam mates in this assembly." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-37">
+<figcaption><span class="step">Step 37</span><p>The three units now form a real assembly polymer. Press F2 for Cylinders to inspect the overall arrangement; each repeat remains a separate part instance.</p></figcaption>
+<a href="polymerization/37.png" aria-label="Open step 37 screenshot at full size">
+<img src="polymerization/37.png" alt="Step 37: The three units now form a real assembly polymer. Press F2 for Cylinders to inspect the overall arrangement; each repeat remains a separate part instance." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-9"><h2>Bend a repeat for a circular polymer</h2><p>Open the straight part and use Save As to create a separate circular unit. Tools → Bend offers Curve to make polymer circle after periodic strands exist. Set six units; the tool derives the curvature from the periodic seam span. Direction rotates the bending plane. This chapter demonstrates CAD curvature and geometric ring placement; it does not apply loop/skip compensation or validate the relaxed physical shape. The repeat is still a part; copies are created later in its assembly.</p><figure id="step-38">
+<figcaption><span class="step">Step 38</span><p>Choose Save As to preserve the straight unit and create a separate bent unit.</p></figcaption>
+<a href="polymerization/38.png" aria-label="Open step 38 screenshot at full size">
+<img src="polymerization/38.png" alt="Step 38: Choose Save As to preserve the straight unit and create a separate bent unit." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-39">
+<figcaption><span class="step">Step 39</span><p>Save the new part as the circular-unit example.</p></figcaption>
+<a href="polymerization/39.png" aria-label="Open step 39 screenshot at full size">
+<img src="polymerization/39.png" alt="Step 39: Save the new part as the circular-unit example." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-40">
+<figcaption><span class="step">Step 40</span><p>Set Selectable to Cluster before choosing the complete 6HB.</p></figcaption>
+<a href="polymerization/40.png" aria-label="Open step 40 screenshot at full size">
+<img src="polymerization/40.png" alt="Step 40: Set Selectable to Cluster before choosing the complete 6HB." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-41">
+<figcaption><span class="step">Step 41</span><p>Click the 6HB to select the complete unit.</p></figcaption>
+<a href="polymerization/41.png" aria-label="Open step 41 screenshot at full size">
+<img src="polymerization/41.png" alt="Step 41: Click the 6HB to select the complete unit." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-42">
+<figcaption><span class="step">Step 42</span><p>Choose Tools → Bend with the complete unit selected; the planes span that selection.</p></figcaption>
+<a href="polymerization/42.png" aria-label="Open step 42 screenshot at full size">
+<img src="polymerization/42.png" alt="Step 42: Choose Tools → Bend with the complete unit selected; the planes span that selection." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-43">
+<figcaption><span class="step">Step 43</span><p>Enable Curve to make polymer circle and enter 6 units. Review the calculated bend; refine this example’s angle in the next step before Apply.</p></figcaption>
+<a href="polymerization/43.png" aria-label="Open step 43 screenshot at full size">
+<img src="polymerization/43.png" alt="Step 43: Enable Curve to make polymer circle and enter 6 units. Review the calculated bend; refine this example’s angle in the next step before Apply." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-44">
+<figcaption><span class="step">Step 44</span><p>For this exact 6HB, the automatic estimate leaves a 0.515 nm six-unit closure residual. Uncheck Curve to make polymer circle and refine Angle to 60.3229°, keeping Direction 0° and planes −12–1254 bp. The recorded manual setting meets the 0.5 nm closure tolerance; this value is specific to this example.</p></figcaption>
+<a href="polymerization/44.png" aria-label="Open step 44 screenshot at full size">
+<img src="polymerization/44.png" alt="Step 44: For this exact 6HB, the automatic estimate leaves a 0.515 nm six-unit closure residual. Uncheck Curve to make polymer circle and refine Angle to 60.3229°, keeping Direction 0° and planes −12–1254 bp. The recorded manual setting meets the 0.5 nm closure tolerance; this value is specific to this example." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-45">
+<figcaption><span class="step">Step 45</span><p>The bent periodic unit is ready for repetition. Its source construction, routing and sequence assignment remain in its feature history.</p></figcaption>
+<a href="polymerization/45.png" aria-label="Open step 45 screenshot at full size">
+<img src="polymerization/45.png" alt="Step 45: The bent periodic unit is ready for repetition. Its source construction, routing and sequence assignment remain in its feature history." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-10"><h2>Build and inspect the circular assembly</h2><p>Create a new assembly using the bent unit and choose six total repeats. Verify both the rotational and translational residuals before polymerizing. A circular arrangement requires the accumulated repeat transform to return to the starting frame; the closure check measures that alignment. Consecutive seam mates remain explicit assembly operations.</p><figure id="step-46">
+<figcaption><span class="step">Step 46</span><p>Choose File → New Assembly and give the assembly a name.</p></figcaption>
+<a href="polymerization/46.png" aria-label="Open step 46 screenshot at full size">
+<img src="polymerization/46.png" alt="Step 46: Choose File → New Assembly and give the assembly a name." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-47">
+<figcaption><span class="step">Step 47</span><p>Choose Assembly → Add Part to insert the saved periodic unit.</p></figcaption>
+<a href="polymerization/47.png" aria-label="Open step 47 screenshot at full size">
+<img src="polymerization/47.png" alt="Step 47: Choose Assembly → Add Part to insert the saved periodic unit." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-48">
+<figcaption><span class="step">Step 48</span><p>Choose __e2e__6hb-circle-unit.nadoc from the library.</p></figcaption>
+<a href="polymerization/48.png" aria-label="Open step 48 screenshot at full size">
+<img src="polymerization/48.png" alt="Step 48: Choose __e2e__6hb-circle-unit.nadoc from the library." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-49">
+<figcaption><span class="step">Step 49</span><p>Choose Assembly → Polymerize Origami.</p></figcaption>
+<a href="polymerization/49.png" aria-label="Open step 49 screenshot at full size">
+<img src="polymerization/49.png" alt="Step 49: Choose Assembly → Polymerize Origami." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-50">
+<figcaption><span class="step">Step 50</span><p>Choose the part’s “via periodic boundary” entry, set Chain length to 6 total, and keep Forward. The seed is included in this count.</p></figcaption>
+<a href="polymerization/50.png" aria-label="Open step 50 screenshot at full size">
+<img src="polymerization/50.png" alt="Step 50: Choose the part’s “via periodic boundary” entry, set Chain length to 6 total, and keep Forward. The seed is included in this count." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-51">
+<figcaption><span class="step">Step 51</span><p>Wait for the closure calculation to finish after changing the count. Check “Chain closes” and both residuals before creating the ring. This tests the accumulated repeat transform.</p></figcaption>
+<a href="polymerization/51.png" aria-label="Open step 51 screenshot at full size">
+<img src="polymerization/51.png" alt="Step 51: Wait for the closure calculation to finish after changing the count. Check “Chain closes” and both residuals before creating the ring. This tests the accumulated repeat transform." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-52">
+<figcaption><span class="step">Step 52</span><p>Click Polymerize to create the repeated part instances and seam mates in this assembly.</p></figcaption>
+<a href="polymerization/52.png" aria-label="Open step 52 screenshot at full size">
+<img src="polymerization/52.png" alt="Step 52: Click Polymerize to create the repeated part instances and seam mates in this assembly." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-53">
+<figcaption><span class="step">Step 53</span><p>Six bent units form a circular arrangement. Cylinders make the overall shape readable. The closure readout verifies geometric alignment; the feature creates five consecutive seam mates, not a sixth closing mate.</p></figcaption>
+<a href="polymerization/53.png" aria-label="Open step 53 screenshot at full size">
+<img src="polymerization/53.png" alt="Step 53: Six bent units form a circular arrangement. Cylinders make the overall shape readable. The closure readout verifies geometric alignment; the feature creates five consecutive seam mates, not a sixth closing mate." width="1920" height="1080" loading="lazy"></a>
+</figure></section>
+<footer>Offline viewing: keep this HTML file beside the polymerization folder. No server or internet connection is required. <a href="#guide">Back to top ↑</a></footer>
+</main></div></body></html>

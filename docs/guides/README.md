@@ -8,6 +8,8 @@ guide, with no website build, external image host or experiment folder required.
 |---|---|
 | [Feature Log](feature-log/README.md) · [Browser version](feature-log.html) | 3×6 body plus 2×6 continuation, Bend and routing; history controls, recipe verification and loadouts; individual end resizes within a Fine Routing group in Origami Editor |
 | [Extrude](extrude/README.md) · [Browser version](extrude.html) | 3×6 square-lattice walkthrough: length, 2×3 end continuation and a separate cluster |
+| [Complete 6HB and polymers](polymerization/README.md) · [Browser version](polymerization.html) | p7560 routing and sequences, cadnano periodic boundaries, visualization, straight and circular polymer assemblies |
+| [Sweep](sweep/README.md) · [Browser version](sweep.html) | 3×6 square-lattice spline: path coordinates, direction and twist controls, and confirmation |
 | [Bend](bend/README.md) · [Browser version](bend.html) | Two 256 bp clusters, Tools → Bend on one cluster, and loops/skips in 3D and the cadnano-style editor |
 | [Twist](twist/README.md) · [Browser version](twist.html) | Two 256 bp clusters, RH/LH twists on one cluster, and loops/skips in 3D and the cadnano-style editor |
 | [Feature guide ledger](LEDGER.md) | All 60 main features from [the feature inventory](../../FEATURES.md), guide coverage and capture dates |

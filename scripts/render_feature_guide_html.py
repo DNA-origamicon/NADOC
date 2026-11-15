@@ -13,6 +13,9 @@ def render(guide_id='extrude'):
     source = REPO / GUIDES / guide_id
     guide = json.loads((source / 'steps.json').read_text())
     manifest = json.loads((source / 'manifest.json').read_text())
+    verification = json.loads((source / 'verification.json').read_text()) if (source / 'verification.json').exists() else {}
+    downloads = ''.join(f'<a href="{escape(guide_id)}/{escape(name, quote=True)}" download>{escape(name)}</a>' for name in verification.get('additional_examples', {}))
+    download_links = f'<p class="links">{downloads}</p>\n' if downloads else ''
     sections = guide['sections']
     nav = ''.join(f'<a href="#chapter-{i}">{escape(s["title"])}</a>'
                   for i, s in enumerate(sections, 1))
@@ -64,7 +67,7 @@ footer{{margin-top:50px;color:#aab9ca}}.skip{{position:absolute;left:-9999px}}.s
 <p class="notice">Follow the illustrated steps below to use the tool.</p>
 <p>Numbered arrows indicate click targets; dashed boxes show drag extents. Click any screenshot to open it at full size.</p>
 <p class="links"><a href="{escape(guide_id, quote=True)}/example.nadoc" download>Download example</a><a href="{escape(guide_id, quote=True)}/README.md">Markdown guide</a><a href="{escape(guide_id, quote=True)}/verification.json">Construction verification</a><a href="UX_LEDGER.md">UX findings</a></p>
-<details><summary>Demonstrated scope</summary><ul>{scope}</ul></details></header>
+{download_links}<details><summary>Demonstrated scope</summary><ul>{scope}</ul></details></header>
 {''.join(chapters)}
 <footer>Offline viewing: keep this HTML file beside the {escape(guide_id)} folder. No server or internet connection is required. <a href="#guide">Back to top ↑</a></footer>
 </main></div></body></html>
@@ -74,7 +77,7 @@ footer{{margin-top:50px;color:#aab9ca}}.skip{{position:absolute;left:-9999px}}.s
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Verify the HTML matches the current captured guide')
-    parser.add_argument('--guide', choices=['extrude', 'bend', 'twist', 'feature-log'], default='extrude')
+    parser.add_argument('--guide', choices=['extrude', 'bend', 'twist', 'sweep', 'polymerization', 'feature-log'], default='extrude')
     args = parser.parse_args()
     output = REPO / GUIDES / f'{args.guide}.html'
     html = render(args.guide)

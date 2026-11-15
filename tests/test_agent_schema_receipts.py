@@ -59,3 +59,26 @@ def test_old_revision_receipt_binds_exact_serialized_snapshot(tmp_path):
     snapshot.helices[0].phase_offset += .1
     with pytest.raises(ValueError, match='snapshot'):
         verify(design, branch, snapshot)
+
+
+def test_pre_base_membership_source_digest_without_recovery_snapshot():
+    from copy import deepcopy
+    from types import SimpleNamespace
+
+    expected = branch_value(part().design)
+    historical = deepcopy(expected)
+    assert historical['cluster_transforms']
+    for cluster in historical['cluster_transforms']:
+        assert cluster.pop('base_ids') == []
+    digest = content_digest(historical)
+    no_receipts = SimpleNamespace(feature_log=[], loadouts=[])
+    before = deepcopy(expected)
+    assert matches_source_receipt(no_receipts, expected, digest)
+    assert expected == before
+    assert not matches_source_receipt(no_receipts, expected, '0' * 64)
+    expected['cluster_transforms'][0]['base_ids'] = [
+        dict(helix_id='h', bp_index=0, direction='FORWARD', copy_k=0)]
+    assert not matches_source_receipt(no_receipts, expected, digest)
+    expected = deepcopy(before)
+    expected['helices'][0]['length_bp'] += 1
+    assert not matches_source_receipt(no_receipts, expected, digest)

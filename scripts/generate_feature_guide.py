@@ -74,12 +74,15 @@ def main(output=None, replace=False, feature_id="extrude", guide_id=None):
             ['node', 'node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.guides.config.js'],
             cwd=REPO / 'frontend', env=env, start_new_session=(os.name == 'posix'))
         if child.wait() != 0:
+            for context in (root / 'playwright').rglob('error-context.md'):
+                print(context.read_text()[-12000:], flush=True)
             raise RuntimeError('Guide capture failed; no guide published')
         from backend.core.models import Design
         from scripts.agent_structure_guard import audit, publish
         files = list((root / 'workspace').glob('__e2e__*.nadoc'))
-        if len(files) != 1:
+        if not files or (len(files) != 1 and feature.get('example_family') != 'polymer'):
             raise RuntimeError('AGENT_PROCESS_REQUIRED: expected one saved example')
+        files.sort(key=lambda path: ('straight' not in path.name, path.name))
         saved = Design.model_validate_json(files[0].read_text())
         audit(saved)
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -87,12 +90,25 @@ def main(output=None, replace=False, feature_id="extrude", guide_id=None):
         proof = publish(saved, stage / 'example.nadoc')
         proof['path'] = 'example.nadoc'  # portable link, not a machine-local staging path
         reopened = audit(Design.model_validate_json((stage / 'example.nadoc').read_text()))
+        family_proofs = {}
+        if feature.get('example_family') == 'polymer':
+            from backend.core.models import Assembly
+            from scripts.guide_assembly_audit import publish as publish_assembly
+            for part_file in files:
+                item = publish(Design.model_validate_json(part_file.read_text()), stage / part_file.name)
+                item['path'] = part_file.name
+                family_proofs[part_file.name] = item
+            for assembly_file in sorted((root / 'workspace').glob('__e2e__*.nass')):
+                family_proofs[assembly_file.name] = publish_assembly(Assembly.from_json(assembly_file.read_text()), stage / assembly_file.name)
+            if sum(name.endswith('.nass') for name in family_proofs) != 2:
+                raise RuntimeError('AGENT_PROCESS_REQUIRED: expected straight and circular assemblies')
         revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip()
         (stage / 'verification.json').write_text(json.dumps({
             'guide': feature_id, 'source_revision': revision,
             'source_worktree_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=REPO, text=True).strip()),
-            'publication': proof, 'reopened_audit': reopened,
+            'publication': proof, 'reopened_audit': reopened, 'additional_examples': family_proofs,
             'interaction': 'Real browser input; rendered cell positions are read-only observations',
+            'test_library_adapter': feature.get('example_family') == 'polymer',
         }, indent=2))
         for asset in (root / 'guide').iterdir():
             shutil.copy2(asset, stage / asset.name)
@@ -140,7 +156,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', help='Optional preview destination; default docs/guides/extrude')
     parser.add_argument('--replace', action='store_true', help='Regenerate the existing guide after review, preserving first-created date')
-    parser.add_argument('--feature', default='extrude', choices=['extrude', 'bend-and-twist', 'feature-history'])
+    parser.add_argument('--feature', default='extrude', choices=['extrude', 'bend-and-twist', 'sweep', 'polymerization', 'feature-history'])
     parser.add_argument('--guide', help='Choose a lesson within the feature, e.g. twist')
     args = parser.parse_args()
     main(args.output, args.replace, args.feature, args.guide)

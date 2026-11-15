@@ -84,3 +84,14 @@ POLARITY in the cadnano periodic-boundary view were NOT hand-checked** — needs
 bare scaffold ends loaded. The polarity is the one thing to eyeball (per REFERENCE_DNA_TOPOLOGY,
 text-only polarity reasoning is unreliable): the bridging staple should render joining the
 far-ssScaffold complement of one copy to the near-ssScaffold complement of the next.
+
+## Bend creation after periodic routing — November 13, 2026
+
+The owned deformation preview now admits `route-for-polymerization` as an
+ordinary deterministic prefix command. It previously returned
+`unsupported_preview_scope` for an otherwise valid routed part. Replay uses the
+existing native executor, cooperative deadline and post-command admission;
+routing semantics and resource limits are unchanged.
+`tests/test_polymer_deformation_preview.py` verifies prepare/evaluate/append,
+unchanged source and seam topology, retained command inputs, and independent
+history audit after Bend.

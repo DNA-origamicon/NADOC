@@ -40,6 +40,24 @@ or history scrubbing. Cached and native history both reproduced the bad state.
 - [x] Add a mandatory multi-perspective geometry review to guide maintenance.
 
 
+## ISSUE-193 — Periodic-part guide exposes assembly rendering and Bend admission failures (2026-11-13)
+
+- [x] Shared assembly rendering replaces the source instance buffers; periodic
+  continuation preview subsequently read a null color buffer and broke rendering.
+  Retain the computed preview while shared rendering owns the buffers. Regression
+  reproduces the former exception and checks unchanged preview transforms.
+- [x] Owned Bend preparation rejected `route-for-polymerization` despite native
+  replay supporting it. Admit it as an ordinary routing command with existing
+  deadline and post-command bounds. Tests cover native append and process replay.
+- [x] Reopening a Save As copy stamped its filename as the design name without
+  recording that metadata change. Library open now records the real rename;
+  independent replay and repeated-open idempotence are regression tested.
+- [ ] Closure requests can display a stale response after a rapid count change.
+- [ ] Automatic six-unit curvature for the guide's 6HB leaves approximately
+  0.515 nm residual, just beyond the 0.5 nm threshold. The guide records an explicit
+  60.3229° manual setting; automatic refinement remains follow-up work.
+- Evidence and workflow handling: `docs/guides/UX_LEDGER.md`, GUIDE-UX-011–013.
+
 
 ## ISSUE-192 — Sequence work has no continuous nonblocking feedback (2026-11-12)
 

@@ -76,6 +76,9 @@ just validate-safe .venv/bin/python -m scripts.generate_feature_guide
 # Regenerate the existing guide after reviewing the stale report:
 just validate-safe .venv/bin/python -m scripts.generate_feature_guide --replace
 
+# Sweep lesson:
+just validate-safe .venv/bin/python -m scripts.generate_feature_guide --feature sweep
+
 # Separate Bend lesson (use --replace on later captures):
 just validate-safe .venv/bin/python -m scripts.generate_feature_guide --feature bend-and-twist
 
@@ -244,6 +247,26 @@ and `python3 -m scripts.render_feature_guide_html --guide bend`. Add `--check` t
 verify each export. Bend is registered under the existing Bend and Twist feature;
 Bend and Twist have separate lessons, dates and freshness checks under that entry.
 Use `--guide twist` to render or check the Twist browser version.
+
+Use `--guide sweep` to render or check the Sweep browser version. Its desktop
+lesson covers new-bundle authoring; continuation, VR and history editing remain
+separate coverage.
+
+## Complete-origami lesson
+
+Generate with `--feature polymerization`; render/check with `--guide polymerization`.
+This explicitly requested end-to-end lesson uses the standard honeycomb 6HB and
+teaches representation changes. It includes sequence assignment, but no staple
+list export. Its part and assembly files remain separate documents. The generator
+publishes each part through the agent structure guard and independently rebuilds
+the assemblies from add-part and periodic-polymer commands, checking upstream
+part histories as well. Assembly files retain their sibling part filenames; keep
+the downloaded example family together.
+
+The polymer capture exposes its two real `__e2e__` parts to the browser library
+listing through a read-only Playwright response adapter: production deliberately
+hides these cleanup-prefixed files. No authoring request or molecular payload is
+intercepted. The verification records this adapter explicitly.
 
 ## Feature Log lesson
 

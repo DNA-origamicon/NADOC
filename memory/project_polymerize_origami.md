@@ -120,3 +120,13 @@ For a revolute joint at non-zero `current_value`, the *current* relative transfo
 
 <a id="related"></a>
 - [Related](details/project_polymerize_origami/05-polymerize-periodic--no-hand-defined-mate-shipped-2026-05-26.md#related)
+
+## Periodic preview with shared rendering — November 13, 2026
+
+The complete 6HB guide exposed a display-build crash: periodic continuation
+previews refreshed after shared instancing had replaced the source matrix and
+color attributes with GPU textures. The preview now retains its computed
+transforms once those meshes have `sharedBase`; shared source edits rebuild
+geometry. This changes no molecular placement, routing, or saved construction.
+The regression in `polymerization_preview.test.js` reproduces buffer replacement
+and verifies traversal succeeds without changing preview transforms.

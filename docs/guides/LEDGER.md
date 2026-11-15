@@ -13,7 +13,7 @@ this table deliberately does not freeze a potentially stale “current” badge.
 | Design Readiness | planned | — | — | Not created |
 | Lattice Design | planned | — | — | Not created |
 | Extrude | partial | 2026-11-11T21:07:37-07:00 | 2026-11-12T22:27:20-07:00 | [extrude](extrude/README.md): Desktop: select a 3×6 cross-section normal to XY/XZ/YZ source planes, then Next for a fitted 3D length preview; Length in bp/nm, forward/reverse direction, scaffold-size recommendations, strand classes and ligation; Apply a 64 bp extrusion, continue a 2×3 end cross-section by 8 bp, then create a separated 3×6 cluster |
-| Sweep | planned | — | — | Not created |
+| Sweep | partial | 2026-11-12T23:11:37-07:00 | 2026-11-12T23:17:00-07:00 | [sweep](sweep/README.md): Desktop: new 3×6 square-lattice cross-section on XY with strand and ligation controls; Three-point spline using XYZ offsets in nm; per-point direction and twist controls; Review path length and new base-pair count, confirm and inspect in Full representation |
 | Primitive Library | planned | — | — | Not created |
 | Scaffold Routing | planned | — | — | Not created |
 | Staple Design | planned | — | — | Not created |
@@ -41,7 +41,7 @@ this table deliberately does not freeze a potentially stale “current” badge.
 | Assembly Workspace | planned | — | — | Not created |
 | Connectors and Mates | planned | — | — | Not created |
 | Assembly Strand Connections | planned | — | — | Not created |
-| Polymerization | planned | — | — | Not created |
+| Polymerization | partial | 2026-11-13T09:59:51-07:00 | 2026-11-13T09:59:51-07:00 | [polymerization](polymerization/README.md): Honeycomb 6HB construction, seamed scaffold routing, standard autostaple and p7560 sequence assignment; Cadnano inspection, periodic-boundary mirror, sequence and 3D visualization options; Three-unit linear assembly and a six-unit circular arrangement using Curve to make polymer circle |
 | Gears | planned | — | — | Not created |
 | Belts and Pulleys | planned | — | — | Not created |
 | **Visualization and Navigation** | | | | |

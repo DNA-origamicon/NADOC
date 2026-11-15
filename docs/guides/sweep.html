@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sweep: a 3×6 square-lattice path · NADOC guide</title>
+<style>
+:root{color-scheme:dark; font-family:system-ui,sans-serif; line-height:1.65; color:#e6edf3; background:#10151d}
+*{box-sizing:border-box}body{margin:0}a{color:#8ecbff}a:hover{color:#fff}
+a:focus-visible{outline:3px solid #ffd54a;outline-offset:4px}
+.layout{display:grid;grid-template-columns:265px minmax(0,1fr);max-width:1700px;margin:auto}
+nav{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:32px 22px;border-right:1px solid #303b4b}
+nav strong{display:block;letter-spacing:.15em;color:#8ecbff;margin-bottom:20px}
+nav a{display:block;margin:0 0 13px;font-size:.9rem;text-decoration:none}
+main{min-width:0;padding:40px clamp(18px,4vw,64px) 70px}
+h1{font-size:clamp(1.8rem,3vw,2.8rem);line-height:1.2;max-width:900px}h2{line-height:1.3}
+.eyebrow,.meta{color:#aab9ca;font-size:.85rem}.eyebrow{letter-spacing:.12em;text-transform:uppercase}
+header>p,section>p{max-width:85ch}.links{display:flex;gap:12px 24px;flex-wrap:wrap}
+.notice{border-left:3px solid #ffd54a;padding:12px 18px;background:#202532}
+section{margin-top:58px;scroll-margin-top:24px}figure{margin:26px 0 38px;border:1px solid #344153;border-radius:10px;overflow:hidden;background:#17202c}
+figcaption{padding:18px 22px}figcaption p{margin:7px 0 0;max-width:95ch}
+.step{font-weight:700;color:#ffd54a}img{display:block;width:100%;height:auto}
+footer{margin-top:50px;color:#aab9ca}.skip{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;z-index:2;background:#10151d;padding:8px}
+@media(max-width:850px){.layout{display:block}nav{position:static;height:auto;border-right:0;border-bottom:1px solid #303b4b;padding:22px}nav a{display:inline-block;margin:0 18px 10px 0}main{padding-top:24px}}
+@media print{:root{color-scheme:light;color:#111;background:white}nav,.skip{display:none}.layout{display:block}main{padding:0}figure{break-inside:avoid;background:white}a{color:inherit}}
+</style></head><body><a class="skip" href="#guide">Skip to guide</a>
+<div class="layout"><nav aria-label="Guide chapters"><strong>NADOC / GUIDES</strong>
+<a href="#guide">Overview</a><a href="#chapter-1">Create a square-lattice part</a><a href="#chapter-2">Choose the source and plane</a><a href="#chapter-3">Select the 3×6 cross-section</a><a href="#chapter-4">Choose strands and ligation</a><a href="#chapter-5">Define the path in nanometers</a><a href="#chapter-6">Control direction and twist</a><a href="#chapter-7">Review and confirm</a><a href="extrude.html">Extrude guide</a><a href="bend.html">Bend guide</a><a href="twist.html">Twist guide</a><a href="README.md">Guide library (Markdown)</a></nav>
+<main id="guide"><header><p class="eyebrow">Sweep · desktop walkthrough · style-review draft</p>
+<h1>Sweep: a 3×6 square-lattice path</h1><p>Create an 18-helix square-lattice bundle along a three-point spline. Choose the cross-section, enter path coordinates, inspect direction and twist controls, and confirm the sweep.</p>
+<p class="meta">25 illustrated steps · 7 chapters · Captured 2026-11-12T23:17:00-07:00</p>
+<p class="notice">Follow the illustrated steps below to use the tool.</p>
+<p>Numbered arrows indicate click targets; dashed boxes show drag extents. Click any screenshot to open it at full size.</p>
+<p class="links"><a href="sweep/example.nadoc" download>Download example</a><a href="sweep/README.md">Markdown guide</a><a href="sweep/verification.json">Construction verification</a><a href="UX_LEDGER.md">UX findings</a></p>
+<details><summary>Demonstrated scope</summary><ul><li>Desktop: new 3×6 square-lattice cross-section on XY with strand and ligation controls</li><li>Three-point spline using XYZ offsets in nm; per-point direction and twist controls</li><li>Review path length and new base-pair count, confirm and inspect in Full representation</li></ul></details></header>
+<section id="chapter-1"><h2>Create a square-lattice part</h2><p>Sweep carries a lattice cross-section along a spline. This example uses the same three rows × six columns (18 helices) as the Extrude guide, with a path defined in nanometers.</p><figure id="step-1">
+<figcaption><span class="step">Step 1</span><p>Choose File → New.</p></figcaption>
+<a href="sweep/01.png" aria-label="Open step 1 screenshot at full size">
+<img src="sweep/01.png" alt="Step 1: Choose File → New." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-2">
+<figcaption><span class="step">Step 2</span><p>Choose Square for the lattice type. The guide uses a temporary example name; use a meaningful name for your own part.</p></figcaption>
+<a href="sweep/02.png" aria-label="Open step 2 screenshot at full size">
+<img src="sweep/02.png" alt="Step 2: Choose Square for the lattice type. The guide uses a temporary example name; use a meaningful name for your own part." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-3">
+<figcaption><span class="step">Step 3</span><p>Click Create to open the empty square-lattice part.</p></figcaption>
+<a href="sweep/03.png" aria-label="Open step 3 screenshot at full size">
+<img src="sweep/03.png" alt="Step 3: Click Create to open the empty square-lattice part." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-4">
+<figcaption><span class="step">Step 4</span><p>Use Full representation throughout this guide. Full shows the nucleotide beads and base slabs; it is the standard display for guides.</p></figcaption>
+<a href="sweep/04.png" aria-label="Open step 4 screenshot at full size">
+<img src="sweep/04.png" alt="Step 4: Use Full representation throughout this guide. Full shows the nucleotide beads and base slabs; it is the standard display for guides." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-2"><h2>Choose the source and plane</h2><p>Open Tools → Sweep. From selects a new bundle or an existing helix end. For this example choose New bundle and XY. Plane sets the initial cross-section; choose it before selecting cells, because changing planes clears the footprint.</p><figure id="step-5">
+<figcaption><span class="step">Step 5</span><p>Open Tools → Sweep.</p></figcaption>
+<a href="sweep/05.png" aria-label="Open step 5 screenshot at full size">
+<img src="sweep/05.png" alt="Step 5: Open Tools → Sweep." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-6">
+<figcaption><span class="step">Step 6</span><p>Keep From set to New bundle.</p></figcaption>
+<a href="sweep/06.png" aria-label="Open step 6 screenshot at full size">
+<img src="sweep/06.png" alt="Step 6: Keep From set to New bundle." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-7">
+<figcaption><span class="step">Step 7</span><p>Choose XY for a cross-section initially normal to Z. XZ and YZ are also available.</p></figcaption>
+<a href="sweep/07.png" aria-label="Open step 7 screenshot at full size">
+<img src="sweep/07.png" alt="Step 7: Choose XY for a cross-section initially normal to Z. XZ and YZ are also available." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-3"><h2>Select the 3×6 cross-section</h2><p>The picker faces the selected plane and shares the Extrude selection gestures. Select rows 0–2 and columns 1–6: 18 helices. Drag the tool window by its title bar if it covers your intended cells.</p><figure id="step-8">
+<figcaption><span class="step">Step 8</span><p>Click a cell to select it. Click the same cell again to deselect it.</p></figcaption>
+<a href="sweep/08.png" aria-label="Open step 8 screenshot at full size">
+<img src="sweep/08.png" alt="Step 8: Click a cell to select it. Click the same cell again to deselect it." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-9">
+<figcaption><span class="step">Step 9</span><p>With the canvas focused, press Tab for box selection. Left-drag from upper left to lower right, enclosing the entire circles of the 3-row × 6-column footprint. Left-to-right requires full enclosure; right-to-left selects touching cells.</p></figcaption>
+<a href="sweep/09.png" aria-label="Open step 9 screenshot at full size">
+<img src="sweep/09.png" alt="Step 9: With the canvas focused, press Tab for box selection. Left-drag from upper left to lower right, enclosing the entire circles of the 3-row × 6-column footprint. Left-to-right requires full enclosure; right-to-left selects touching cells." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-10">
+<figcaption><span class="step">Step 10</span><p>The count must read 18 helices. Tab returns to ordinary cell picking; a left-drag can also paint cells along its path.</p></figcaption>
+<a href="sweep/10.png" aria-label="Open step 10 screenshot at full size">
+<img src="sweep/10.png" alt="Step 10: The count must read 18 helices. Tab returns to ordinary cell picking; a left-drag can also paint cells along its path." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-4"><h2>Choose strands and ligation</h2><p>Include chooses Both, Scaffold or Staples. Ligate adjacent requests joining compatible strand ends when continuing a source. Use Both with Ligate adjacent checked for this example.</p><figure id="step-11">
+<figcaption><span class="step">Step 11</span><p>Choose Scaffold to create only scaffold strands.</p></figcaption>
+<a href="sweep/11.png" aria-label="Open step 11 screenshot at full size">
+<img src="sweep/11.png" alt="Step 11: Choose Scaffold to create only scaffold strands." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-12">
+<figcaption><span class="step">Step 12</span><p>Choose Staples to create only staple strands.</p></figcaption>
+<a href="sweep/12.png" aria-label="Open step 12 screenshot at full size">
+<img src="sweep/12.png" alt="Step 12: Choose Staples to create only staple strands." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-13">
+<figcaption><span class="step">Step 13</span><p>Choose Both for this example.</p></figcaption>
+<a href="sweep/13.png" aria-label="Open step 13 screenshot at full size">
+<img src="sweep/13.png" alt="Step 13: Choose Both for this example." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-14">
+<figcaption><span class="step">Step 14</span><p>Keep Ligate adjacent checked. The new-bundle example has no upstream ends to join.</p></figcaption>
+<a href="sweep/14.png" aria-label="Open step 14 screenshot at full size">
+<img src="sweep/14.png" alt="Step 14: Keep Ligate adjacent checked. The new-bundle example has no upstream ends to join." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-5"><h2>Define the path in nanometers</h2><p>Click Next to leave the cross-section picker and define the path in 3D. XYZ values are offsets in nm from the cross-section center. Select a point in the list to edit it. The initial XY path runs from Origin (0, 0, 0) to Point 1 (0, 0, 10). Previous returns to cross-section selection while retaining the path.</p><figure id="step-15">
+<figcaption><span class="step">Step 15</span><p>Click Next to open Step 2: Define sweep path.</p></figcaption>
+<a href="sweep/15.png" aria-label="Open step 15 screenshot at full size">
+<img src="sweep/15.png" alt="Step 15: Click Next to open Step 2: Define sweep path." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-16">
+<figcaption><span class="step">Step 16</span><p>With Point 1 selected, set Z to 30 nm. Keep X = 0 and Y = 0.</p></figcaption>
+<a href="sweep/16.png" aria-label="Open step 16 screenshot at full size">
+<img src="sweep/16.png" alt="Step 16: With Point 1 selected, set Z to 30 nm. Keep X = 0 and Y = 0." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-17">
+<figcaption><span class="step">Step 17</span><p>Click + Add point. The new point extrapolates the last segment and becomes selected.</p></figcaption>
+<a href="sweep/17.png" aria-label="Open step 17 screenshot at full size">
+<img src="sweep/17.png" alt="Step 17: Click + Add point. The new point extrapolates the last segment and becomes selected." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-18">
+<figcaption><span class="step">Step 18</span><p>For Point 2 enter X = 12, Y = 0, Z = 60 nm. The spline bends toward positive X. Scroll down over the canvas to zoom out as the path grows.</p></figcaption>
+<a href="sweep/18.png" aria-label="Open step 18 screenshot at full size">
+<img src="sweep/18.png" alt="Step 18: For Point 2 enter X = 12, Y = 0, Z = 60 nm. The spline bends toward positive X. Scroll down over the canvas to zoom out as the path grows." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-19">
+<figcaption><span class="step">Step 19</span><p>Review the ordered path: Origin (0, 0, 0), Point 1 (0, 0, 30), Point 2 (12, 0, 60). The × beside a non-origin point deletes it; a path needs at least two points.</p></figcaption>
+<a href="sweep/19.png" aria-label="Open step 19 screenshot at full size">
+<img src="sweep/19.png" alt="Step 19: Review the ordered path: Origin (0, 0, 0), Point 1 (0, 0, 30), Point 2 (12, 0, 60). The × beside a non-origin point deletes it; a path needs at least two points." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-6"><h2>Control direction and twist</h2><p>Select a point, then enable Control direction and twist to set Tilt X, Tilt Y and Twist in degrees. Green arrows indicate direction and amber arrows indicate the right axis. Disabling the checkbox restores automatic orientation. Selected points also have position handles in the canvas; Tab on the canvas or point entry switches to free-angle rotation handles.</p><figure id="step-20">
+<figcaption><span class="step">Step 20</span><p>Enable Control direction and twist for Point 2.</p></figcaption>
+<a href="sweep/20.png" aria-label="Open step 20 screenshot at full size">
+<img src="sweep/20.png" alt="Step 20: Enable Control direction and twist for Point 2." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-21">
+<figcaption><span class="step">Step 21</span><p>Enter 15° in Twist to inspect the end cross-section orientation.</p></figcaption>
+<a href="sweep/21.png" aria-label="Open step 21 screenshot at full size">
+<img src="sweep/21.png" alt="Step 21: Enter 15° in Twist to inspect the end cross-section orientation." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-22">
+<figcaption><span class="step">Step 22</span><p>Disable Control direction and twist to use automatic orientation for the final example.</p></figcaption>
+<a href="sweep/22.png" aria-label="Open step 22 screenshot at full size">
+<img src="sweep/22.png" alt="Step 22: Disable Control direction and twist to use automatic orientation for the final example." width="1920" height="1080" loading="lazy"></a>
+</figure></section><section id="chapter-7"><h2>Review and confirm</h2><p>The status reports path length in nm and bp per helix. New BP reports the total new base-pair sites across the selected cross-section. Review any curvature warning before confirming; adjust the path if needed. Confirm creates the swept bundle.</p><figure id="step-23">
+<figcaption><span class="step">Step 23</span><p>Read New BP and the path-length status for the 18 selected helices.</p></figcaption>
+<a href="sweep/23.png" aria-label="Open step 23 screenshot at full size">
+<img src="sweep/23.png" alt="Step 23: Read New BP and the path-length status for the 18 selected helices." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-24">
+<figcaption><span class="step">Step 24</span><p>Click Confirm to build the sweep.</p></figcaption>
+<a href="sweep/24.png" aria-label="Open step 24 screenshot at full size">
+<img src="sweep/24.png" alt="Step 24: Click Confirm to build the sweep." width="1920" height="1080" loading="lazy"></a>
+</figure><figure id="step-25">
+<figcaption><span class="step">Step 25</span><p>The completed 3×6 bundle follows the curved path. Right-drag to orbit and press F to fit the result; Full representation shows the nucleotide geometry.</p></figcaption>
+<a href="sweep/25.png" aria-label="Open step 25 screenshot at full size">
+<img src="sweep/25.png" alt="Step 25: The completed 3×6 bundle follows the curved path. Right-drag to orbit and press F to fit the result; Full representation shows the nucleotide geometry." width="1920" height="1080" loading="lazy"></a>
+</figure></section>
+<footer>Offline viewing: keep this HTML file beside the sweep folder. No server or internet connection is required. <a href="#guide">Back to top ↑</a></footer>
+</main></div></body></html>

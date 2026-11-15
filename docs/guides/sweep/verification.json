@@ -1,0 +1,24 @@
+{
+  "guide": "sweep",
+  "source_revision": "f5aea108f0c96d0376db492f037b2e2fcae69f32",
+  "source_worktree_dirty": true,
+  "publication": {
+    "status": "verified",
+    "commands": 1,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1,
+    "path": "example.nadoc",
+    "sha256": "83f4b45ee6aae5f68ee38ff3acb52d6ae22bf30cc61d2acc00dcbbc1b5acb65a"
+  },
+  "reopened_audit": {
+    "status": "verified",
+    "commands": 1,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1
+  },
+  "interaction": "Real browser input; rendered cell positions are read-only observations"
+}

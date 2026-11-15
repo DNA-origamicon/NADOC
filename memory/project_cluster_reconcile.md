@@ -161,3 +161,9 @@ selection, including exclusions from the original owner; supporting `helix_ids`
 are not an atom-highlight scope for these clusters. Atom color selection also
 retains insertion-copy identity. The S72 browser regression clicks the sidebar
 cluster and compares actual atom colors at every base: only the 24 members change.
+
+Legacy document-source hashes from before `base_ids` are checked against the
+independently replayed state with only empty `base_ids` omitted. The old SHA-256
+must match exactly; nonempty members and any other state difference remain errors.
+This handles metadata-source receipts without a retained pre-edit snapshot, as
+seen in the circular-polymer guide. Saved guide structures are unchanged.

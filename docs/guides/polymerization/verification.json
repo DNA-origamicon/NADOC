@@ -1,0 +1,85 @@
+{
+  "guide": "polymerization",
+  "source_revision": "f5aea108f0c96d0376db492f037b2e2fcae69f32",
+  "source_worktree_dirty": true,
+  "publication": {
+    "status": "verified",
+    "commands": 6,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1,
+    "path": "example.nadoc",
+    "sha256": "4a519ae3867f51403ce27fc5e9048a9c046c868679065a9abbf6fef4a706aac3"
+  },
+  "reopened_audit": {
+    "status": "verified",
+    "commands": 6,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1
+  },
+  "additional_examples": {
+    "__e2e__6hb-straight.nadoc": {
+      "status": "verified",
+      "commands": 6,
+      "physical_reference_checked": true,
+      "recovery_snapshots_used": false,
+      "document_operations": 1,
+      "loadouts_checked": 1,
+      "path": "__e2e__6hb-straight.nadoc",
+      "sha256": "4a519ae3867f51403ce27fc5e9048a9c046c868679065a9abbf6fef4a706aac3"
+    },
+    "__e2e__6hb-circle-unit.nadoc": {
+      "status": "verified",
+      "commands": 7,
+      "physical_reference_checked": true,
+      "recovery_snapshots_used": false,
+      "document_operations": 2,
+      "loadouts_checked": 1,
+      "path": "__e2e__6hb-circle-unit.nadoc",
+      "sha256": "3f3b8c3917fbd917e4ed19a8c28c900b0af8b30e17dc6b649ad60dfe8b629898"
+    },
+    "__e2e__6hb-circular-polymer.nass": {
+      "status": "verified",
+      "commands": 2,
+      "instances": 6,
+      "joints": 5,
+      "upstream_parts": {
+        "__e2e__6hb-circle-unit.nadoc": {
+          "status": "verified",
+          "commands": 7,
+          "physical_reference_checked": true,
+          "recovery_snapshots_used": false,
+          "document_operations": 2,
+          "loadouts_checked": 1
+        }
+      },
+      "recovery_snapshots_used": false,
+      "path": "__e2e__6hb-circular-polymer.nass",
+      "sha256": "2aab3499f67ae0a049ed6464f041178d0849f7c9c28a35993978c3727d7efdd6"
+    },
+    "__e2e__6hb-linear-polymer.nass": {
+      "status": "verified",
+      "commands": 2,
+      "instances": 3,
+      "joints": 2,
+      "upstream_parts": {
+        "__e2e__6hb-straight.nadoc": {
+          "status": "verified",
+          "commands": 6,
+          "physical_reference_checked": true,
+          "recovery_snapshots_used": false,
+          "document_operations": 1,
+          "loadouts_checked": 1
+        }
+      },
+      "recovery_snapshots_used": false,
+      "path": "__e2e__6hb-linear-polymer.nass",
+      "sha256": "df5408bb7514000c10a3fa91a293276786598ec7ff79970e4e67ecae4985734e"
+    }
+  },
+  "interaction": "Real browser input; rendered cell positions are read-only observations",
+  "test_library_adapter": true
+}

@@ -73,6 +73,10 @@ export function createPolymerizationPreview(root, design, entries, slabs, beadRa
     output.compose(position, orientation, unit)
   }
   function refresh() {
+    // Shared assemblies have already captured these preview transforms into
+    // their own GPU textures. The source instance buffers are now collapsed;
+    // source edits rebuild the assembly instead of refreshing these buffers.
+    if (sources.some(mesh => mesh.userData.sharedBase != null)) return
     const signature = sources.map(m => [m.instanceMatrix.version, m.instanceColor?.version,
       m.geometry.getAttribute('instanceAlpha')?.version, m.visible, m.material.opacity].join(':')).join('|')
     if (signature === previous) return
