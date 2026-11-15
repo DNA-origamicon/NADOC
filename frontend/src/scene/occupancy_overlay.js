@@ -242,7 +242,7 @@ export function initOccupancyOverlay({
    * `applyFemPositions` drops their updates on the floor. They live in their own
    * instanced meshes built by `buildCrossoverConnections`, and the simulated frame
    * carries their real positions under `__xb__` keys. This is the ghost's copy of what
-   * `design_renderer.applyClusterCrossoverUpdate` does for the live model.
+   * the display-frame insert producer does for the live model.
    *
    * Must run AFTER `applyFemPositions`: the no-sim-data fallback threads a Bezier between
    * the arc's two endpoint nucleotides, and those have to have moved first.

@@ -663,29 +663,6 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     return clusterTransforms
   }
 
-  /**
-   * Re-seat crossover arc lines, extension beads and extra-base beads on the LIVE bead
-   * positions of `helixIds`.
-   *
-   * Every path that moves beads has to call this, and one of them didn't: the cluster
-   * lerp and the trajectory overlay (via designRenderer.applyFemPositions → applyFemArcs)
-   * both kept the arcs attached, but `applyPositionLerp` — the feature-log geometry lerp,
-   * 455 lines of helix_renderer — never touched an arc. So a feature-log animation moved
-   * the beads out from under stationary arcs, and at stop() `_restoreBaseClusters` then
-   * recomputed the arcs FROM those still-displaced beads, welding them to the animation's
-   * last frame. That is the bug this exists to close; see `_restoreBaseGeometry`.
-   *
-   * Despite the `Cluster` in their names, both renderer entry points are generic: they
-   * re-read `getNucLivePos` for any helix in the set. Empty/absent set = no-op (the
-   * renderer's own filter), so callers don't need to guard.
-   */
-  function _syncArcs(helixIds) {
-    if (!helixIds?.length) return
-    getUnfoldView?.()?.applyClusterArcUpdate(helixIds)
-    getUnfoldView?.()?.applyClusterExtArcUpdate(helixIds)
-    getDesignRenderer?.()?.applyClusterCrossoverUpdate(helixIds)
-  }
-
   /** Helix ids the feature-log lerp is responsible for = every helix in the design that
    *  is NOT owned by a cluster (those are rigid-body transformed instead). Computed once
    *  per play — cluster membership cannot change mid-animation — because `_syncArcs` runs
@@ -717,7 +694,6 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       allHelixIds.push(...base.helix_ids)
     }
     // Restore crossover arcs, extension beads, and 3D crossover lines.
-    _syncArcs(allHelixIds)
     _baseClusters = null
   }
 
@@ -744,7 +720,6 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const owned = new Set()
     for (const base of _baseClusters ?? []) base.helix_ids.forEach(id => owned.add(id))
     getHelixCtrl()?.applyPositionLerp(baked, baked, 0, owned.size ? owned : null)
-    _syncArcs(_lerpHelixIds)
   }
 
   // ── Binding bind/unbind φ (hinge drive + unzip overlay) ──────────────────────
@@ -802,9 +777,6 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       { forceAxes: true },
     )
     getBluntEnds?.()?.applyClusterTransform(base.helix_ids, center, dummy, incrRot)
-    getUnfoldView?.()?.applyClusterArcUpdate(base.helix_ids)
-    getUnfoldView?.()?.applyClusterExtArcUpdate(base.helix_ids)
-    getDesignRenderer?.()?.applyClusterCrossoverUpdate(base.helix_ids)
 
     // Hinge info so the unzip overlay can keep moving-arm overhang beads attached
     // to the rotating cluster (rotate them by the SAME incrRot about J).
@@ -853,6 +825,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
   /** Apply the interpolated state for a given elapsed time. */
   function _applyAt(elapsed) {
+    const display = getDesignRenderer?.()?.getDisplayGeometry?.()
+    return display ? display.transaction('animation', () => _applyFrame(elapsed)) : _applyFrame(elapsed)
+  }
+
+  function _applyFrame(elapsed) {
     if (!_schedule.length) return
 
     let seg = _schedule[_schedule.length - 1]
@@ -1014,16 +991,6 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       }
       getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, buildT, clusterHelixIds, { ...fadeOpts, sweepReveal })
       movedByLerp = true
-    }
-
-    // Re-seat the crossover arcs on wherever the beads ended up this frame — ONE pass
-    // over the union, so unfold_view's arc-buffer rewrite runs once per frame however
-    // many things moved. Without the `_lerpHelixIds` half the arcs simply stayed put
-    // while the structure animated under them.
-    if (_lastClusterHelixIds?.length || movedByLerp) {
-      _syncArcs(movedByLerp
-        ? [...(_lastClusterHelixIds ?? []), ...(_lerpHelixIds ?? [])]
-        : _lastClusterHelixIds)
     }
 
     // Overhang link arcs (linker bridge tubes + connector arcs) are rendered

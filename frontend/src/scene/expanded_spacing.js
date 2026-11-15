@@ -121,7 +121,6 @@ export function initExpandedSpacing(
   getLoopSkipHighlight,
   getOverhangLocations,
   getSequenceOverlay,
-  getUnfoldView,
   getAtomisticRenderer,
   onModeChange,     // (isExtraBaseAdjustActive: boolean) => void — menu-pill sync
   getAtomSurface,   // () => atom_surface_display — drives the MD-seed atomistic view
@@ -195,7 +194,6 @@ export function initExpandedSpacing(
     const extArcMap = buildExtensionArcMap(offsets, currentDesign)
     designRenderer.applyUnfoldOffsetsExtensions(extArcMap, t)
     // Crossover arcs (lines between helices)
-    getUnfoldView?.()?.applyHelixOffsets(offsets, t)
     // Overlays
     getBluntEnds?.()?.applyUnfoldOffsets(offsets, t)
     getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t)

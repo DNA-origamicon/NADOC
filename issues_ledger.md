@@ -1,6 +1,6 @@
 # Issues & bugs ledger — "fix next issue" loop
 
-## ISSUE-196 — Relax all visually re-rigidifies flexible bases (2026-11-14)
+## ISSUE-198 — Relax all visually re-rigidifies flexible bases (2026-11-14)
 
 - [x] Current JJ_Hinge retains all 22 marked bases / 11 flexible connections
   after Relax all; its compact partial geometry response drops the display flag.
@@ -10,7 +10,7 @@
 - [x] App checks exercise Relax all and check arc bead counts and absence of marked
   bases from rigid meshes, including a deleted-slot anchor.
 
-## ISSUE-195 — Partial cluster selection paints a whole-helix soft halo (2026-11-14)
+## ISSUE-197 — Partial cluster selection paints a whole-helix soft halo (2026-11-14)
 
 - [x] Reproduced both styles in current JJ_Hinge: exact bright mesh tint and
   weaker halo extending past the cluster's corner markers.
@@ -21,6 +21,26 @@
   including loop copies, mixed domains and bases claimed by another cluster.
 - [x] Regress the actual halo point buffer and both rectangle/Ctrl-click/sidebar
   workflows; preserve document membership and molecular geometry.
+
+## ISSUE-196 — Connection geometry escapes the active display frame (2026-11-14)
+
+- [x] Replace part-editor per-operation arc/insert/link refresh fanout with one
+  document-local display owner, exact nucleotide identities and ordered producers.
+- [x] Crossover visibility refresh reads live endpoints; it cannot reset a
+  simulation or transform to cached native positions.
+- [x] Adopt molecular layers under a stable scene root; extensions, inserted
+  bases and flexible/linker sites participate in the shared pose lookup.
+- [x] Real renderer tests cover amplification, partial frames, copies, extensions,
+  inserted-base previews, rebuilds, layout motion, reset and visibility.
+- Browser validation and final regression results are recorded in the fix log.
+
+## ISSUE-195 — Auto-sized annotation wraps its final glyph (2026-11-14)
+
+- [x] Reproduced “Anchors” at 13 px as two rendered browser lines (Anchor + s).
+- [x] Preserve fractional border-box dimensions and pin them before switching
+  to absolute positioning; integer offsetWidth rounded away needed text space.
+- [x] Browser regression verifies one line through font/viewport changes, while
+  explicit newlines, narrow custom boxes, resizing and rotation still work.
 
 ## ISSUE-194 — Autoscaffold ends fall outside an earlier Bend (2026-11-14)
 
@@ -40,7 +60,19 @@ or history scrubbing. Cached and native history both reproduced the bad state.
 - [x] Add a mandatory multi-perspective geometry review to guide maintenance.
 
 
-## ISSUE-193 — Periodic-part guide exposes assembly rendering and Bend admission failures (2026-11-13)
+## ISSUE-193 — Atomistic inset depends on main representation during MD flex/playback (2026-11-14)
+
+- [x] Full flex/playback did not request atom coordinates, so the inset transformed
+  native atoms from coarse nucleotide poses. Atomistic main views instead supplied
+  real trajectory atoms, producing different inset geometry.
+- [x] Give MD insets an independent exact source with selected-residue snapshots,
+  PSF topology, bounded frame retention, stale-response rejection and direct atom
+  interpolation. Hide pending exact data rather than reconstruct it from slabs.
+- Read-only P1 check: all 265 saved-inset atoms, including inserts/attachments,
+  match in Full and ballstick for flex means, saved frames and interpolated frames.
+  Evidence: `.development-artifacts/inset-exact-app.log`.
+
+## ISSUE-199 — Periodic-part guide exposes assembly rendering and Bend admission failures (2026-11-13)
 
 - [x] Shared assembly rendering replaces the source instance buffers; periodic
   continuation preview subsequently read a null color buffer and broke rendering.
@@ -312,6 +344,9 @@ files carry all the state a cold session needs.
 - Validation evidence: `.development-artifacts/wizard-numbers-20261110/`.
 ## ISSUE-179 — Smoke setup timeouts during local presentation validation (2026-11-10)
 
+- November 14 exact-inset validation reproduced the scaffold-mesh setup timeout
+  in `assembly_exit_cleanup`; the two real-P1 inset app checks passed.
+  Evidence: `.development-artifacts/inset-exact-smoke.log`.
 - [ ] `just smoke`: 21 passed, two skipped, two failed before presentation mode
   was entered. `assembly_exit_cleanup.spec.js` timed out waiting for backbone
   meshes in `loadScaffoldedPart` (20 seconds). `smoke.spec.js` “Create dismisses
@@ -341,6 +376,15 @@ files carry all the state a cold session needs.
 
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
 
+- November 14 annotation-branch validation reproduced both recorded failures:
+  Honeycomb request timeout and Square `lattice_type` undefined. Smoke: 22 passed,
+  two skipped, two failed. No New Part code changed. Evidence:
+  `.development-artifacts/annotation-branches/validation.json`.
+
+- November 13 flex-settings validation reproduced the Square request assertion
+  at `smoke.spec.js:200`; Honeycomb also timed out waiting for its creation
+  request. Both dedicated flex app checks passed. The New Part path was unchanged;
+  evidence: `.development-artifacts/flex-settings-smoke.log`.
 - [ ] During inset zoom-button validation, `just smoke` passed 22 checks and
   skipped two, but `smoke.spec.js:180` expected captured `lattice_type` SQUARE
   and received undefined. The focused rerun reproduces the failure.

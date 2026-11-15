@@ -98,6 +98,18 @@ describe('initFlexScale', () => {
     expect(fs.applyVR('low', 1)).toBe(false)
   })
 
+  it('progress updates automatic bounds, preserves edits, and resets to the latest data range', () => {
+    const cb = vi.fn(), fs = initFlexScale()
+    fs.show({ min: 0, max: 1, mapType: 'flex', onRecolor: cb })
+    fs.updateRange(0.1, 2)
+    expect(fs.getBounds()).toEqual({ lo: 0.1, hi: 2 })
+    fs.applyVR('low', 0.5)
+    fs.updateRange(0.2, 3)
+    expect(cb).toHaveBeenLastCalledWith(0.5, 2, 'viridis')
+    $('flex-scale-reset').click()
+    expect(cb).toHaveBeenLastCalledWith(0.2, 3, 'viridis')
+  })
+
   it('reset restores the data min→max and re-emits', () => {
     const cb = vi.fn()
     const fs = initFlexScale()

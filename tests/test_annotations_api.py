@@ -21,6 +21,7 @@ def _note(**over):
         "icon": "warning",
         "callout_type": "rounded",
         "color": "#ff4d4d",
+        "multi_anchor": True,
         "highlight": True,
         "highlight_type": "silhouette",
         "glow_color": "#58a6ff",
@@ -196,3 +197,17 @@ def test_assembly_annotations_reject_unscoped_or_non_annotation_targets():
         ).status_code
         == 422
     )
+
+
+def test_multi_anchor_is_opt_in_and_survives_metadata_persistence():
+    assert Annotation(id="legacy").multi_anchor is False
+    client = TestClient(app)
+    for enabled in (True, False):
+        response = client.put(
+            "/api/design/annotations",
+            json={"annotations": [_note(multi_anchor=enabled)], "enabled": True},
+        )
+        assert response.status_code == 200
+        assert response.json()["annotations"][0]["multi_anchor"] is enabled
+        saved = design_state.get_or_404().annotations[0]
+        assert Annotation.model_validate_json(saved.model_dump_json()).multi_anchor is enabled

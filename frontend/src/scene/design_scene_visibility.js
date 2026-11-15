@@ -1,36 +1,22 @@
 /** Owns design-scene visibility and its crossover diagnostics. */
 export function initDesignSceneVisibility({
   scene, store, designRenderer, bluntEnds, endExtrudeArrows,
-  jointRenderer, unfoldView, overhangLinkArcs, surfaceStrandsOverlay,
+  jointRenderer, unfoldView, surfaceStrandsOverlay,
 }) {
   /**
    * Show or hide ALL design-level scene geometry.
    * Called when toggling assembly mode so the loaded design doesn't bleed through
    * while assembly instances are shown (or while the scene is empty).
    *
-   * SCENE GEOMETRY RULE — every element that renders design data must be listed here:
-   *   1. designRenderer  — _helixCtrl.root: beads, slabs, axis arrows, extension beads,
-   *                        extra-base crossover beads+slabs (children of root — ONE scene object)
-   *   2. bluntEnds       — helix-end rings + number-sprite axis labels
-   *   3. endExtrudeArrows — drag-to-resize handles on helix ends
-   *   4. jointRenderer   — cluster joint axis indicators
-   *   5. unfoldView      — crossover arc LINE geometry (_arcGroup / 'xoverArcLines')
-   *                        NB: arc lines are a SEPARATE scene object from root.
-   *                        Extra-base beads+slabs are children of root (no separate call needed).
-   *                        Arc lines require an explicit unfoldView.setArcsVisible() call.
-   *
-   * If you add a new scene module that renders design geometry, add its
-   * setVisible() call here so assembly mode automatically suppresses it.
-   * Use window.__nadocDebugXovers() in the browser console to verify.
+   * The display root owns molecular layers, including arcs and linker geometry.
+   * Editor handles/labels and the surface preview retain their own UI visibility.
    */
   function setVisible(visible) {
     designRenderer.setDesignVisible(visible)
     bluntEnds.setVisible(visible)
     endExtrudeArrows.setVisible(visible)
     jointRenderer.setVisible(visible)
-    unfoldView.setArcsVisible(visible)  // arc lines (_arcGroup); LOD/rep gating is per-arc (refreshArcVisibility)
     unfoldView.refreshArcVisibility()
-    overhangLinkArcs?.setVisible?.(visible)
     surfaceStrandsOverlay?.setVisible?.(visible)
   }
 
@@ -73,7 +59,7 @@ export function initDesignSceneVisibility({
           })
         : 'not built (design has no extra-base crossovers)',
 
-      // Layer 5 — unfold_view arc lines (still a separate scene sibling)
+      // Layer 5 — unfold_view arc lines (under the shared display root)
       arcLines: {
         group:    fmt(found['xoverArcLines'], { childCount: found['xoverArcLines']?.children.length ?? 0 }),
         scaffold: found['xoverArcMerged_scaffold']
@@ -90,7 +76,7 @@ export function initDesignSceneVisibility({
     console.log('assemblyActive:', store.getState().assemblyActive)
     console.log('──── Design root (single scene object):', report.designRoot)
     console.log('     extra-base beads (child of root):', report.xoverExtraBeads)
-    console.log('──── Arc lines (_arcGroup, separate scene sibling):', report.arcLines.group)
+    console.log('──── Arc lines (_arcGroup, shared display child):', report.arcLines.group)
     console.log('     scaffold merged:', report.arcLines.scaffold)
     console.log('     staple   merged:', report.arcLines.staple)
     console.log('──── Per-arc summary:',

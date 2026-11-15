@@ -465,3 +465,17 @@ it('does not reindex junctions for row highlights and shares the table index acr
   expect(reads).toBeLessThan(10)
   expect(document.querySelectorAll('.sheet-seq-selected-base')).toHaveLength(3)
 })
+
+it('selects and toggles sorted rows without scrolling away from the clicked range', () => {
+  Element.prototype.scrollIntoView = vi.fn()
+  openSheet()
+  const rows = [...document.querySelectorAll('#spreadsheet-tbody tr[data-strand-id]')]
+  const click = (index, modifiers = {}) => rows[index].querySelector('[data-col="id"]').dispatchEvent(new MouseEvent('click', { bubbles: true, ...modifiers }))
+  click(0); click(1, { shiftKey: true })
+  expect(store.getState().selection.items.map(ref => ref.id)).toEqual(rows.map(row => row.dataset.strandId))
+  expect(document.querySelectorAll('.sheet-selected')).toHaveLength(2)
+  click(0, { ctrlKey: true })
+  expect(store.getState().selection.items.map(ref => ref.id)).toEqual([rows[1].dataset.strandId])
+  expect(document.querySelectorAll('.sheet-selected')).toHaveLength(1)
+  expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+})

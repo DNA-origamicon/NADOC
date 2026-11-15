@@ -1,5 +1,17 @@
 import { expect, it } from 'vitest'
 import { fitAnnotationFont } from './annotation_font_fit.js'
+it('preserves fractional measured bounds when positioning an auto-sized label', () => {
+  const box = document.createElement('div'), icon = document.createElement('span'), el = document.createElement('div')
+  Object.defineProperties(box, { offsetWidth: { value: 84 }, offsetHeight: { value: 33 } })
+  box.getBoundingClientRect = () => ({ width: 84.15625, height: 32.890625 })
+  const rec = { box, icon, el, styleSig: 'Anchors 13px' }
+  fitAnnotationFont(rec, { size: 1, rotationDeg: 30 }, { width: 800, height: 600 })
+  expect(box.style.width).toBe('84.15625px')
+  expect(box.style.height).toBe('32.890625px')
+  expect(rec.boxSize).toEqual({ w: 84.15625, h: 32.890625 })
+  expect(rec.displaySize).toBe(1)
+})
+
 it('fits extreme text sizes safely and recalculates for smaller viewports without changing the saved size', () => {
   const box = document.createElement('div'), icon = document.createElement('span')
   icon.innerHTML = '<svg></svg>'

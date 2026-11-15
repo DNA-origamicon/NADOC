@@ -50,7 +50,7 @@ def test_prefix_coordinates_match_full_reader_and_atom_records(tmp_path, periodi
 
 def test_positions_only_scatter_keeps_sparse_serials_and_composite_indices(monkeypatch):
     ctx = {"n_frames": 10, "atom_meta": [{"serial": 4}, {"serial": 1}]}
-    monkeypatch.setattr(mt, "_build_md_nadoc_ctx", lambda *a, **kw: ctx)
+    monkeypatch.setattr(mt, "_build_playback_ctx", lambda *a, **kw: ctx)
     monkeypatch.setattr(mt, "composite_raw_frame_map", lambda *a: [2, 7])
     seen = []
     def extract(context, frame, *, positions_only):

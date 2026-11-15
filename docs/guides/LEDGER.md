@@ -73,7 +73,7 @@ this table deliberately does not freeze a potentially stale “current” badge.
 | Browser Presentation (Experimental) | planned | — | — | Not created |
 | Import and Export | planned | — | — | Not created |
 | 3D Printing | planned | — | — | Not created |
-| Feature History | partial | 2026-11-13T22:42:02-07:00 | 2026-11-14T01:28:58-07:00 | [feature-log](feature-log/README.md): Desktop part: 3×6 extrusion, 2×6 continuation, Bend, Autoscaffold and Full Autostaple; timeline navigation, historical editing, undo/redo, dependencies, suppression, deletion/revert, reorder dialog, filters, recipe verification and loadouts; Origami Editor: two real staple-end resizes grouped as Fine Routing; expand, scrub individual sub-steps, child/group revert and undo; Control reference: assembly targets/configurations and animation pinning |
+| Feature History | partial | 2026-11-13T22:42:02-07:00 | 2026-11-14T01:38:45-07:00 | [feature-log](feature-log/README.md): Desktop part: 3×6 extrusion, 2×6 continuation, Bend, Autoscaffold and Full Autostaple; timeline navigation, historical editing, undo/redo, dependencies, suppression, deletion/revert, reorder dialog, filters, recipe verification and loadouts; Origami Editor: two real staple-end resizes grouped as Fine Routing; expand, scrub individual sub-steps, child/group revert and undo; Control reference: assembly targets/configurations and animation pinning |
 | Loadouts and Versions | planned | — | — | Not created |
 | Workspace Collaboration | planned | — | — | Not created |
 | **Automation and Diagnostics** | | | | |

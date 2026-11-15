@@ -55,6 +55,7 @@ export function normalizeAnnotation(input = {}, { index = 0 } = {}) {
     icon: isAnnotationIcon(input.icon) ? input.icon : null,
     calloutType: CALLOUT_KEYS.has(input.calloutType) ? input.calloutType : 'elbow',
     color,
+    multiAnchor: input.multiAnchor === true,
     highlight: input.highlight === true,
     highlightType: input.highlightType === 'silhouette' ? 'silhouette' : 'glow',
     glowColor: typeof input.glowColor === 'string' && HEX.test(input.glowColor) ? input.glowColor.toLowerCase() : color,
@@ -88,6 +89,7 @@ export const legacyStorageKeyFor = designId => `nadoc.annotations.v1:${designId}
 export function annotationToWire(entry) {
   return {
     id: entry.id, name: entry.name, text: entry.text, icon: entry.icon, callout_type: entry.calloutType, color: entry.color,
+    multi_anchor: entry.multiAnchor === true,
     highlight: entry.highlight, highlight_type: entry.highlightType, glow_color: entry.glowColor, glow_intensity: entry.glowIntensity,
     transparency: entry.transparency, size: entry.size, font_family: entry.fontFamily, manual: entry.manual,
     box_size: entry.boxSize ? [entry.boxSize.w, entry.boxSize.h] : null, rotation_deg: entry.rotationDeg ?? 0,
@@ -101,6 +103,7 @@ export function annotationFromWire(wire, { index = 0 } = {}) {
   const pos = Array.isArray(wire?.screen_pos) ? { x: wire.screen_pos[0], y: wire.screen_pos[1] } : null
   return normalizeAnnotation({
     id: wire?.id, name: wire?.name, text: wire?.text, icon: wire?.icon, calloutType: wire?.callout_type, color: wire?.color,
+    multiAnchor: wire?.multi_anchor,
     highlight: wire?.highlight, highlightType: wire?.highlight_type, glowColor: wire?.glow_color, glowIntensity: wire?.glow_intensity,
     transparency: wire?.transparency, size: wire?.size, fontFamily: wire?.font_family, manual: wire?.manual, screenPos: pos,
     boxSize: Array.isArray(wire?.box_size) ? { w: wire.box_size[0], h: wire.box_size[1] } : null, rotationDeg: wire?.rotation_deg,

@@ -259,8 +259,12 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   }
 
   function applyPreviews(infos, matrix) {
+    const display = designRenderer?.getDisplayGeometry?.()
+    return display ? display.transaction('residue-preview', () => applyPreviewFrame(infos, matrix)) : applyPreviewFrame(infos, matrix)
+  }
+
+  function applyPreviewFrame(infos, matrix) {
     const groups = new Map()
-    const movedHelices = new Set()
     const selectedExtras = []
     for (const x of infos) {
       if (x.kind === 'abstract' && x.target.helix_id === '__xb__') {
@@ -269,20 +273,12 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
       }
       if (x.kind !== 'atomistic' || !x.renderer.applyResiduesMatrix) {
         applyPreview(x, matrix)
-        if (x.kind === 'abstract' && x.target.helix_id !== '__xb__') movedHelices.add(x.target.helix_id)
         continue
       }
       if (!groups.has(x.renderer)) groups.set(x.renderer, [])
       groups.get(x.renderer).push(x.target)
     }
     for (const [renderer, members] of groups) renderer.applyResiduesMatrix(members, matrix)
-    // Cross-helix arcs live outside the residue meshes. Refresh once after all
-    // selected endpoints move, including the identity pass on Reset/Cancel.
-    if (movedHelices.size) {
-      const helixIds = [...movedHelices]
-      unfoldView?.applyClusterArcUpdate(helixIds)
-      designRenderer.applyClusterCrossoverUpdate?.(helixIds)
-    }
     // Endpoint refresh also repositions inserts. Explicitly selected inserts
     // retain their own preview delta instead of being overwritten by that pass.
     for (const x of selectedExtras) applyPreview(x, matrix)

@@ -48,7 +48,13 @@ export function fitAnnotationFont(rec, entry, viewport) {
     }
     pixels = Math.max(0.01, low); apply()
   }
-  const w = box.offsetWidth, h = box.offsetHeight
+  // offsetWidth/Height round to whole pixels. Rounding a natural text width
+  // down can wrap its last glyph when the box becomes absolutely positioned.
+  // Preserve the measured border box and pin it before changing positioning,
+  // so shrink-to-fit cannot reflow text inside the rotated wrapper either.
+  const bounds = box.getBoundingClientRect()
+  const w = bounds.width || box.offsetWidth, h = bounds.height || box.offsetHeight
+  box.style.width = `${w}px`; box.style.height = `${h}px`
   rec.displaySize = pixels / 13
   rec.boxSize = { w, h }
   rec.size = rotatedBoxSize(w, h, angle)

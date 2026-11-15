@@ -1603,3 +1603,15 @@ Confirm placement at narrow widths and that a failed edit clears activity while
 retaining the ordinary error message. Shared request/lifecycle code and existing
 editor regressions cover these routes, but those visual entry points have not all
 been individually driven in the browser this session.
+
+
+### MV-68 — Automatic annotation branch readability (PENDING, 2026-11-14)
+
+Load `VoltronCoreArmV2.nadoc`, select the purple X3–X15 strands, and attach one
+annotation with **Use selection**, then enable **Multiple anchors** (default off).
+Orbit and zoom through dense and edge-on views;
+check that endpoints remain identifiable and elbow detours remain readable.
+Repeat with separated bases/domains, a rotated manual box, and multiple nearby
+labels. Automated checks cover branch membership, exact selections, live positions,
+shared-view preservation and export; subjective readability and motion stability
+across these views still need a hand-check. No molecular edits are involved.

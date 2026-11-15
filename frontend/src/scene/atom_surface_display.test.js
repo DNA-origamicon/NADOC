@@ -428,15 +428,13 @@ describe('initAtomSurfaceDisplay', () => {
     expect(deps.atomisticRenderer.setVdwScale).toHaveBeenCalledWith(1.25)
   })
 
-  it('setCGVisible drives helix root + arcs + link-arc visibility', () => {
+  it('setCGVisible drives the molecular root and refreshes representation gates', () => {
     mountIds(DOM)
     const deps = makeDeps()
     const api = initAtomSurfaceDisplay(deps)
     api.setCGVisible(false)
     expect(deps._root.visible).toBe(false)
-    expect(deps.unfoldView.setArcsVisible).toHaveBeenCalledWith(false)
     expect(deps.unfoldView.refreshArcVisibility).toHaveBeenCalled()
-    expect(deps.overhangLinkArcs.setVisible).toHaveBeenCalledWith(false)
     api.setCGVisible(true)
     expect(deps._root.visible).toBe(true)
   })

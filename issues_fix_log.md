@@ -1,6 +1,6 @@
 # Issues fix log
 
-## ISSUE-196 — Flexible flags survive Relax all geometry refresh (2026-11-14)
+## ISSUE-198 — Flexible flags survive Relax all geometry refresh (2026-11-14)
 
 The live JJ_Hinge design retained 22 marks and 11 two-base connections after
 Relax all. The compact partial-helix response omitted `is_flexible_segment`,
@@ -30,7 +30,7 @@ limits or slow classifications changed. Its deferred report is:
 Evidence: `.development-artifacts/flex-relax-{smart,frontend,app-final,focused-final,smoke,build,lint}.log`.
 `main.js` LOC delta for this fix: 0.
 
-## ISSUE-195 — Exact cluster membership for both highlight layers (2026-11-14)
+## ISSUE-197 — Exact cluster membership for both highlight layers (2026-11-14)
 
 The solid green tint was correct; the separate Presenter selection halo resolved
 base clusters as whole helices. `annotation_targets` now shares the canonical
@@ -47,6 +47,16 @@ between that full run and the fixture recheck. Build and lint pass. Smoke:
 22 passed, two skipped; existing assembly fixture-load timeout and Square New Part
 request-capture failure recur. Test workspace files, revision stores, bridge
 credentials and managed reports were cleaned. `main.js` LOC delta: 0.
+
+## ISSUE-195 — Preserve annotation text box precision (2026-11-14)
+
+- `annotation_font_fit.js` retains fractional measured width/height and explicitly
+  fixes the inner box dimensions before absolute positioning. This prevents a
+  second shrink-to-fit pass from wrapping “Anchors” at the unchanged 13 px font.
+- Reproduced two text line rectangles before the fix; one afterward. Regression
+  covers fractional fonts, viewport resize, explicit newlines and narrow boxes;
+  existing browser resize/rotation workflow also passes. No molecular data edits.
+- Validation summary: `.development-artifacts/annotation-text-fit/validation.json`.
 
 ## ISSUE-194 — Routed scaffold ends inherit an earlier deformation (2026-11-14)
 
@@ -113,7 +123,44 @@ against the isolated commit sources. Browser scratch
 `/tmp/__e2e__guide-fa7brspb` was verified absent after cleanup.
 
 
-## ISSUE-193 — Periodic preview buffer ownership and Bend command admission (2026-11-13)
+The first push encountered concurrent master updates. Merged in an isolated
+worktree, retaining both issue-log entries and both slow-test lists. Recapture
+against the merged code passed in 6.8 minutes with independent saved/reopened
+replay, scaffold preservation and 16.02:1 dropdown contrast. Browser scratch
+`/tmp/__e2e__guide-kyfz3guz` was verified absent. The full frontend count above is
+from before this merge; the merged code receives the full guide workflow and
+focused Feature Log checks rather than an unrelated full-suite repeat.
+
+## ISSUE-193 — Exact atom sources for MD zoom insets (2026-11-14)
+
+- [x] `md_inset_source.js` owns a representation-independent MD source. Only
+  requested residue snapshots are retained (at most five frames); the existing
+  lightweight model/frame endpoints supply original atom identities and bonds.
+  Flex previews reuse their supplied atom means/topology. Playback interpolation
+  operates on atom coordinates. Changed frames/ranges invalidate pending paints.
+- [x] Inset atom layers use the exact source's topology and positions, wait visibly
+  while data is pending, and restore native topology on exit. Display MD publishes
+  selected atoms from its atomistic stream as well as its Full inset stream.
+- Real P1 frames 21547–21549 (zero-based): raw versus aligned within-residue
+  distance error < 9.75e-8 nm; the float32 flex mean matches the independent mean
+  exactly. In-browser Full/ballstick agreement: 265/265 atoms, zero flex error,
+  < 9.89e-7 nm relative-coordinate error for frames/interpolation. Real renderers,
+  read-only existing source, replayed coordinate transport. Inset image inspected.
+  `main.js` LOC Δ: 0. Validation logs use `.development-artifacts/inset-*`.
+- Final validation: frontend 10,491 passed / 1 skipped; 235 focused checks and
+  5 source/cancellation checks passed; both P1 browser checks passed. Display MD
+  has zero rendered-coordinate error for all 265 atoms and 293 bonds. General
+  smoke: 21 passed, 2 skipped, 3 failures in the recorded New Part / assembly
+  fixture areas (ISSUE-179/180). No newly persisted browser/test artifacts.
+
+## ISSUE-180 — Smoke follow-up during flex settings (2026-11-13)
+
+- [ ] Square creation request assertion remains unresolved; Honeycomb creation
+  request capture also timed out in this run. No New Part implementation changes.
+  Dedicated flex preview/settings app checks: 2 passed. Evidence:
+  `.development-artifacts/flex-settings-smoke.log` and `flex-settings-app-final.log`.
+
+## ISSUE-199 — Periodic preview buffer ownership and Bend command admission (2026-11-13)
 
 Shared assembly rendering intentionally migrates source matrices/colors into GPU
 textures. The periodic continuation preview still reread those retired buffers
@@ -1896,3 +1943,33 @@ standard width. Validation: 10,398 frontend tests passed, 18 focused tests, app
 exercise and lint passed. Smoke: 23 passed/2 skipped; assembly fixture setup timed
 out and passed its isolated retry. Evidence: `.development-artifacts/visualization-cards/validation.json`.
 Main.js LOC delta: 0; visual follow-up MV-64.
+
+## ISSUE-196 — Shared part-editor display geometry ownership (2026-11-14)
+
+Crossover lines previously kept independent native endpoints and simulation
+buffer writes. A visibility refresh could overwrite the frame; callers also had
+to remember separate insert, extension, and flexible-link refresh methods.
+
+The part editor now owns a stable molecular scene root and an exact-key display
+frame. Observed geometry mutations publish ordered producer/consumer updates;
+simulation frames, animation batches, residue previews, copy identities, extension
+sites, inserted bases and flexible/linker positions use that owner. Removed the
+arc-specific simulation, cluster, deformation and spacing update APIs. Whole-model
+visibility inherits through the root; representation gates remain per layer.
+Assembly instancing and physical atomistic/surface pipelines remain separate hosts.
+
+Validation: 956 frontend files, 10,542 tests passed / one skipped; lint passed;
+memory hygiene has zero errors (16 existing warnings). Real renderer tests cover
+amplification, partial-frame replacement, exact copies/extensions, inserted-base
+previews/reset, unfold, transforms, visibility and display rebuilds.
+Read-only browser checks passed for 6hb_test and VoltronCoreArmV2 with saved oxDNA
+job 34992198f43a. Voltron: 3,050 endpoint comparisons, max error 0.0000153 nm;
+deliberately displacing the line buffer failed the audit by 5 nm. Real line pixels
+were verified with the helix meshes temporarily hidden to remove occlusion.
+Both original design hashes were unchanged. Main.js is eight lines smaller.
+Compact validation/cleanup results: .development-artifacts/display-geometry-refactor/validation.json.
+Smoke: 23 passed / two skipped; existing ISSUE-180 Square New Part request
+assertion failed (missing captured lattice_type). Boot, real-design render,
+assembly exit and Close Session passed. Temporary images/traces/logs were
+removed after review; no new files remain in the inventoried workspace test,
+project or session roots. Unrelated worktree changes were preserved.

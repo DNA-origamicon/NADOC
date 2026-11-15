@@ -17,7 +17,7 @@ describe('mdVizApiAdapter', () => {
       'J1', undefined, { stride: undefined, onProgress: undefined },
     )
     expect(a.getOxdnaRmsf('J2')).toBe('rmsf:J2')
-    expect(api.getMdRmsf).toHaveBeenCalledWith('J2', undefined)
+    expect(api.getMdRmsf).toHaveBeenCalledWith('J2', undefined, undefined)
   })
 
   it('forwards an AbortSignal through to the MD endpoints', () => {
@@ -35,7 +35,7 @@ describe('mdVizApiAdapter', () => {
     a.getOxdnaTrajectory('J1', { align: true, signal: sig })
     a.getOxdnaRmsf('J2', { align: true, signal: sig })
     expect(api.getMdTrajectory).toHaveBeenCalledWith('J1', sig, { stride: undefined })
-    expect(api.getMdRmsf).toHaveBeenCalledWith('J2', sig)
+    expect(api.getMdRmsf).toHaveBeenCalledWith('J2', sig, undefined)
   })
 
   it('tolerates a bare call and never forwards align (the /md/ routes have no align param)', () => {
@@ -45,7 +45,7 @@ describe('mdVizApiAdapter', () => {
     a.getOxdnaRmsf('J2', { align: false })
     expect(api.getMdTrajectory).toHaveBeenCalledWith('J1', undefined, { stride: undefined })
     // align is dropped, not smuggled into the signal slot — md_trajectory.py always aligns.
-    expect(api.getMdRmsf).toHaveBeenCalledWith('J2', undefined)
+    expect(api.getMdRmsf).toHaveBeenCalledWith('J2', undefined, undefined)
   })
 
   it('maps the per-frame heavy reps, dropping the oxDNA-only align/scope', () => {
@@ -63,9 +63,9 @@ describe('mdVizApiAdapter', () => {
     const api = { getMdRmsfAtomistic: vi.fn(), getMdRmsfSurface: vi.fn() }
     const a = mdVizApiAdapter(api)
     a.getOxdnaRmsfAtomistic('J1', { align: true })
-    expect(api.getMdRmsfAtomistic).toHaveBeenCalledWith('J1', undefined)
+    expect(api.getMdRmsfAtomistic).toHaveBeenCalledWith('J1', undefined, undefined)
     a.getOxdnaRmsfSurface('J1', { probe_radius: 0.3 }, { align: true })
-    expect(api.getMdRmsfSurface).toHaveBeenCalledWith('J1', { probe_radius: 0.3 }, undefined)
+    expect(api.getMdRmsfSurface).toHaveBeenCalledWith('J1', { probe_radius: 0.3 }, undefined, undefined)
   })
 
   // ── Contract test: the REAL controller, not a hand-written stand-in ──────────
@@ -378,4 +378,15 @@ it('keeps ranged CG and atomistic frames in the original composite frame space',
   expect(ctrl.trajectoryInfo().frame).toBe(13)
   expect(ctrl.trajSpecMatches({ scope: 'lineage', stride: 1, ...range })).toBe(true)
   expect(ctrl.trajSpecMatches({ scope: 'lineage', stride: 1 })).toBe(false)
+})
+
+it('forwards the identical frame selection to each flex representation', () => {
+  const api = { getMdRmsf: vi.fn(), getMdRmsfAtomistic: vi.fn(), getMdRmsfSurface: vi.fn() }
+  const adapter = mdVizApiAdapter(api), frameRange = { start: 4, end: 13, interval: 3 }
+  adapter.getOxdnaRmsf('J', { frameRange })
+  adapter.getOxdnaRmsfAtomistic('J', { frameRange })
+  adapter.getOxdnaRmsfSurface('J', {}, { frameRange })
+  expect(api.getMdRmsf).toHaveBeenCalledWith('J', undefined, frameRange)
+  expect(api.getMdRmsfAtomistic).toHaveBeenCalledWith('J', undefined, frameRange)
+  expect(api.getMdRmsfSurface).toHaveBeenCalledWith('J', {}, undefined, frameRange)
 })

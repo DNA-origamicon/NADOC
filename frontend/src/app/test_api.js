@@ -348,6 +348,7 @@ export function installTestApi({
     },
     getAtomisticRenderer: () => atomisticRenderer,
     getDesignRenderer: () => designRenderer,
+    getUnfoldView: () => unfoldView,
     isCGVisible: () => !!(designRenderer.getHelixCtrl()?.root?.visible),
     /** Live rendered crossover-insert geometry for Full/atomistic registration probes.
      * Reads InstancedMesh matrices on both sides; source placement/API coordinates are

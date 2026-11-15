@@ -733,6 +733,8 @@ class TestProductionAppend:
 
         fastapi = types.ModuleType("fastapi")
         fastapi.APIRouter = _Router
+        fastapi.Depends = lambda dependency: None
+        fastapi.Query = lambda default=None, **kwargs: default
         fastapi.BackgroundTasks = object
         fastapi.HTTPException = _HTTPException
         fastapi.Request = object

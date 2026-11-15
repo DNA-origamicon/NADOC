@@ -7,6 +7,55 @@ review_after: 2026-10-01
 
 # MD job system
 
+## Progressive NAMD flexibility maps (2026-11-13)
+
+November 14 inset correction: `scene/md_inset_source.js` supplies exact MD atom
+means/frames independently of the main viewport representation. The shared display
+controller calls it for flex previews/finals, trajectory seeks and interpolation;
+at most five selected-residue frames are retained. `md_inset_atoms` carries explicit
+exact/pending state and selected topology. Zoom atom layers use PSF atoms/bonds and
+never a nucleotide-pose reconstruction while this source is active. Pending data
+is hidden behind the loading indicator. Native topology is restored on exit.
+
+The NAMD flex-map gear opens Start/End/Interval settings. Frame numbers are
+one-based and End is inclusive; the interactive default is the last 200 available
+frames at interval 1. Cancel discards the draft, Apply replaces the running map.
+Selections are shared across CG/atomistic/surface requests and included in both
+calculation/checkpoint and display cache identities. Internal all-frame analysis
+callers remain explicit and unchanged. Progress carries its selection identity so
+a previous range cannot flash during replacement; replacement waits for old worker
+cleanup. Color-scale controls appear after the first rendered preliminary map and
+retain edits through later updates. New calculations reset the controls, and failed
+calculations clear a partially displayed map.
+
+`md_flex_stream.py` now shares base RMSF and heavy-atom means in one DNA-prefix
+pass. The UI first requests a separate last-32-frame estimate, labeled preliminary,
+then receives throttled progressive snapshots while the final chronological pass
+preserves the existing alignment guard. Preview frames are not double weighted.
+PSF bond scanning retains only heavy DNA bonds. `md_residue_map.py` uses export's
+insert/extension threading on residue identities; playback and all flex variants,
+including reference-frame adjacency, cannot silently fall back to a full Universe
+or molecular rebuild. Unsupported package mappings fail explicitly.
+
+Running sufficient statistics are checkpointed every 32 frames, keyed by input
+file identities/design/options. Interactive workers yield after approximately 20
+seconds at a chunk boundary and resume automatically; identical requests share a
+worker, and the last disconnect cancels it while retaining the checkpoint. Changed
+trajectory files invalidate checkpoints. Two checkpoint revisions are retained per
+job; completed analysis caching remains shared with idle preparation. Snapshots
+carry revision/coverage/window metadata, are never cached as completed maps, and
+are ignored after a display epoch changes. Atomistic previews reuse the measured
+PSF model; surface meshing is deferred to the final mean to bound rebuild cost.
+
+Existing P1 `fc12195d0636` validation: lightweight setup 1.6 s for 21,550 frames,
+151,013 heavy DNA atoms and 169,074 bonds with full-model/Universe calls forbidden.
+Warm-metadata last-32 preview 2.8 s; 65-frame mean/RMSF parity against the previous
+calculation was exact. All 7,396 residue identities (676 inserted bases) also
+matched the atomistic exporter. After removing duplicate topology transport, the
+real preliminary packet was ready in 1.2 s with cached metadata (71 MB; peak
+worker RSS about 642 MiB). `md_flex_progress.py` keeps revision publication atomic
+and reads large snapshots off the API event loop. Evidence: `.development-artifacts/flex-parity.log`.
+
 ## Alpine late stderr inventory race (2026-11-12)
 
 Gerling WITHOUT_EXTRA_T production created November 5 12:47 MST reached Alpine's

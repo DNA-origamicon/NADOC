@@ -133,7 +133,7 @@ export function atomSelectionForState(state) {
 
 export function initAtomSurfaceDisplay({
   scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
-  unfoldView, overhangLinkArcs,
+  unfoldView,
   // (kind: 'atomistic' | 'surface') → true when a simulation overlay is active AND can
   // actually rebuild THAT kind from the job's atoms + relaxed frame (oxDNA or NAMD:
   // relaxed / rmsf / trajectory).  When so, switching to atomistic/surface skips the
@@ -560,9 +560,7 @@ export function initAtomSurfaceDisplay({
     // hides the whole group — instead each arc is collapsed per-region by the
     // mixed-representation rep gate (unfold_view._arcRepHidden), so a region pinned
     // to full still shows its crossovers under a global cylinder LOD.
-    unfoldView?.setArcsVisible(visible)
     unfoldView?.refreshArcVisibility()
-    overhangLinkArcs?.setVisible?.(visible)
   }
 
   function _setOverlayMode(enabled) {

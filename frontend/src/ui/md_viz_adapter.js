@@ -50,6 +50,7 @@ export function mdVizApiAdapter(api) {
     // tells the controller it may batch its prebuild; oxDNA leaves it unset and keeps
     // fetching one frame at a time, which is right for a per-frame reconstruction.
     heavyBatch: true,
+    exactInsetAtoms: true,
     cancelTrajectoryPrefetch: () => prefetch.cancel(),
     prefetchTrajectory: (jobId, stride) => prefetch.start(jobId, stride),
     progressiveTrajectory: typeof api.getMdTrajectoryMeta === 'function',
@@ -66,12 +67,12 @@ export function mdVizApiAdapter(api) {
     // has neither, but the method must still exist so its metadata-only bead trajectory
     // can proceed to the solvent/ion/box renderer.
     getOxdnaDisplay: (id) => api.getMdDisplayMeta(id),
-    getOxdnaRmsf: (id, { signal, onProgress } = {}) =>
-      withFlexProgress(api, id, 'rmsf', () => api.getMdRmsf(id, signal), onProgress),
-    getOxdnaRmsfAtomistic: (id, { signal, onProgress } = {}) =>
-      withFlexProgress(api, id, 'rmsf-atomistic', () => api.getMdRmsfAtomistic(id, signal), onProgress),
-    getOxdnaRmsfSurface: (id, params = {}, { signal, onProgress } = {}) =>
-      withFlexProgress(api, id, 'rmsf-surface', () => api.getMdRmsfSurface(id, params, signal), onProgress),
+    getOxdnaRmsf: (id, { signal, onProgress, onPartial, frameRange } = {}) =>
+      withFlexProgress(api, id, 'rmsf', () => api.getMdRmsf(id, signal, frameRange), onProgress, onPartial, frameRange ?? null),
+    getOxdnaRmsfAtomistic: (id, { signal, onProgress, frameRange } = {}) =>
+      withFlexProgress(api, id, 'rmsf-atomistic', () => api.getMdRmsfAtomistic(id, signal, frameRange), onProgress, undefined, frameRange ?? null),
+    getOxdnaRmsfSurface: (id, params = {}, { signal, onProgress, frameRange } = {}) =>
+      withFlexProgress(api, id, 'rmsf-surface', () => api.getMdRmsfSurface(id, params, signal, frameRange), onProgress, undefined, frameRange ?? null),
     // Heavy trajectory frames. The controller calls these POSITIONALLY as
     // `(id, frameIndices, align, scope, stride)` / `(id, frameIndices, params, align,
     // scope)`. `align`/`scope` are oxDNA-only and dropped (md_trajectory.py always

@@ -220,7 +220,7 @@ def test_md_rmsf_payload_carries_copy_for_loop_bases(monkeypatch):
         return fake_ctx
 
     def _fake_frame(
-        ctx, gidx, with_c1p=False, with_termini=False, with_base_centers=False
+        ctx, gidx, with_c1p=False, with_termini=False, with_base_centers=False, **kwargs
     ):
         # distinct, frame-varying positions per nucleotide; unit +z normals
         base = np.arange(n, dtype=float)[:, None] * np.array([1.0, 0.5, 0.25])
@@ -233,7 +233,10 @@ def test_md_rmsf_payload_carries_copy_for_loop_bases(monkeypatch):
             return p_nm, normals, empty, empty
         return p_nm, normals
 
-    monkeypatch.setattr(mt, "_build_md_nadoc_ctx", _fake_ctx)
+    from tests.md_flex_context import complete_context, atom_stub
+    complete_context(fake_ctx)
+    monkeypatch.setattr(mt, '_extract_md_atoms_frame', atom_stub)
+    monkeypatch.setattr(mt, "_build_playback_ctx", _fake_ctx)
     monkeypatch.setattr(mt, "_extract_md_nadoc_frame", _fake_frame)
 
     out = mt.md_rmsf("top.psf", [(0, 0, "seg.dcd")], "coord.pdb", _loop_design())

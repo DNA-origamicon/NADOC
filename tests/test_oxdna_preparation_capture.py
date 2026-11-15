@@ -148,6 +148,7 @@ def test_presentation_metadata_is_owned_without_changing_archive_scope():
     original = source()
     original.camera_poses = [m.CameraPose(thumbnail="data:image/png;base64,YQ==")]
     original.annotations[0].name = "Detail"
+    original.annotations[0].multi_anchor = True
     original.annotations[0].font_family = "Georgia"
     original.annotations[0].box_size = (120., 80.)
     original.annotations[0].rotation_deg = 30.
@@ -159,6 +160,7 @@ def test_presentation_metadata_is_owned_without_changing_archive_scope():
     expected = original.model_dump(mode="json")
     owned = core().capture_archive(original)
     assert owned.model_dump(mode="json") == expected
+    original.annotations[0].multi_anchor = False
     original.zoom_volumes[0].settings["colors"].append("blue")
     original.representation_overrides[0].strand_ids.clear()
     original.representation_overrides[0].coloring = "strand"

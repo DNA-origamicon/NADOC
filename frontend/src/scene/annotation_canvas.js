@@ -43,13 +43,15 @@ export function drawAnnotationCallouts(ctx, records, scale) {
       ctx.strokeStyle = rec.entry.color
       ctx.lineWidth = 2
       ctx.lineJoin = ctx.lineCap = 'round'
-      const points = rec.line.getAttribute('points').split(' ').map(p => p.split(',').map(Number))
-      ctx.beginPath()
-      points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.arc(Number(rec.dot.getAttribute('cx')), Number(rec.dot.getAttribute('cy')), 5, 0, Math.PI * 2)
-      ctx.stroke()
+      for (const branch of rec.branches ?? [rec]) {
+        const points = branch.line.getAttribute('points').split(' ').map(p => p.split(',').map(Number))
+        ctx.beginPath()
+        points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(Number(branch.dot.getAttribute('cx')), Number(branch.dot.getAttribute('cy')), 5, 0, Math.PI * 2)
+        ctx.stroke()
+      }
     }
     for (const rec of records) {
       if (!rec.rect) continue

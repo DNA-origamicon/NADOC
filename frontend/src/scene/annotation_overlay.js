@@ -20,6 +20,7 @@ import { isExternalRef } from './annotation_external.js'
 import { buildOccupancy } from './annotation_occupancy.js'
 import { annotationIconMarkup } from './annotation_icons.js'
 import { anchorFromPoints, matchTargetEntries, unresolvedBaseKeys } from './annotation_targets.js'
+import { annotationTargetGroups, annotationBranchAnchors, routeAnnotationBranches } from './annotation_branches.js'
 import { layoutCallouts } from './annotation_layout.js'
 
 const sharedOverlays = new WeakMap()
@@ -88,6 +89,7 @@ export function initAnnotationOverlay({
   const records = new Map()
   const v = new THREE.Vector3()
   let enabled = true          // part mode (vs assembly)
+  let routeCache = null
   let shown = null            // what the layer currently displays
 
   const viewport = () => getViewport?.() ?? { width: root.clientWidth || 1, height: root.clientHeight || 1 }
@@ -116,11 +118,12 @@ export function initAnnotationOverlay({
     const line = document.createElementNS(SVG_NS, 'polyline')
     const dot = document.createElementNS(SVG_NS, 'circle')
     dot.setAttribute('r', '5')
+    g.setAttribute('data-annotation-leaders', entry.id)
     g.append(line, dot)
     svg.append(g)
 
     const rec = {
-      id: entry.id, el, box, icon, text, grip, g, line, dot,
+      id: entry.id, el, box, icon, text, grip, g, line, dot, branches: [{ line, dot }], targetGroups: [],
       size: { w: 0, h: 0 }, rect: null, drag: null, dirty: true,
       src: null, srcLen: -1, design: null, matched: [], extra: [], externalRefs: [], halos: [], glow: null, points: null, pointCount: 0,
       shown: false, styleSig: '', tx: NaN, ty: NaN, hasAnchor: false,
@@ -172,6 +175,7 @@ export function initAnnotationOverlay({
     icon.hidden = !entry.icon
     rec.line.setAttribute('stroke', entry.color)
     rec.dot.setAttribute('stroke', entry.color)
+    rec.g.setAttribute('stroke', entry.color)
     rec.g.style.opacity = String(1 - entry.transparency)
     el.hidden = false
     rec.size = { w: el.offsetWidth, h: el.offsetHeight }
@@ -191,6 +195,7 @@ export function initAnnotationOverlay({
     rec.srcLen = src.length
     rec.design = design
     rec.matched = resolveTargetEntries?.(entry.refs) ?? matchTargetEntries(entry.refs, design, src)
+    rec.targetGroups = entry.multiAnchor === true ? annotationTargetGroups(entry.refs, design, src, resolveTargetEntries) : []
     rec.extra = unresolvedBaseKeys(entry.refs, rec.matched)
       .map(key => resolveBasePosition(key)).filter(Boolean)
     rec.externalRefs = entry.refs.filter(isExternalRef)
@@ -345,42 +350,78 @@ export function initAnnotationOverlay({
       const stale = (liveTargets != null && liveTargets !== rec.matched) || rec.dirty || !sameTargetDesign(rec.design, design) || (rec.src !== src && (src.length || rec.srcLen))
       if (stale && !resolveSharedPoints) rebuildTarget(rec, entry, src, design)
       const spheres = resolveSharedPoints ? [] : writeHighlight(rec)
-      let anchor = null
-      const points = resolveSharedPoints ? resolveSharedPoints(entry) : rec.matched.map(e => e.pos).concat(rec.extra, spheres)
-      const world = anchorFromPoints(points)
-      if (world) {
+      const shared = resolveSharedPoints?.(entry)
+      const project = world => {
         v.set(world.x, world.y, world.z).project(camera)
-        if (v.z > -1 && v.z < 1) anchor = { x: (v.x * 0.5 + 0.5) * width, y: (-v.y * 0.5 + 0.5) * height }
+        return v.z > -1 && v.z < 1 ? { x: (v.x * 0.5 + 0.5) * width, y: (-v.y * 0.5 + 0.5) * height } : null
       }
+      let anchors
+      if (entry.multiAnchor === true) {
+        const sharedGroups = new Map()
+        shared?.forEach((p, i) => {
+          const key = entry.branchGroups?.[i] ?? 0
+          if (!sharedGroups.has(key)) sharedGroups.set(key, [])
+          sharedGroups.get(key).push(p)
+        })
+        const groups = resolveSharedPoints ? [...sharedGroups.values()]
+          : [...rec.targetGroups, ...rec.extra.map(p => [p]), ...spheres.map(p => [p])]
+        anchors = annotationBranchAnchors(groups, project)
+      } else {
+        // Original single-anchor path: no grouping, per-base projection or routing search.
+        const world = anchorFromPoints(shared ?? rec.matched.map(e => e.pos).concat(rec.extra, spheres))
+        const projected = world ? project(world) : null
+        anchors = projected ? [projected] : []
+      }
+      const anchor = anchors.length ? anchors.reduce((c, p) => ({ x: c.x + p.x / anchors.length, y: c.y + p.y / anchors.length }), { x: 0, y: 0 }) : null
       rec.hasAnchor = !!anchor
       items.push({
         id: entry.id, size: rec.size, anchor,
         manualRect: entry.manual && entry.screenPos ? { x: entry.screenPos.x * width, y: entry.screenPos.y * height } : null,
       })
-      draw.push({ entry, rec, anchor })
+      draw.push({ entry, rec, anchor, anchors })
     }
     const previous = new Map(draw.filter(d => !d.entry.manual && d.rec.rect).map(d => [d.entry.id, d.rec.rect]))
     const occupancy = occupancyFor(camera, src, getOccluders() ?? [], width, height)
     const rects = layoutCallouts(items, { width, height }, { occupancy, previous })
-    for (const { entry, rec, anchor } of draw) {
+    const hasMultiAnchor = draw.some(({ entry }) => entry.multiAnchor === true)
+    const routeSignature = hasMultiAnchor ? JSON.stringify(draw.map(({ entry, rec, anchors }) =>
+      [entry.id, entry.multiAnchor, entry.calloutType, entry.rotationDeg, rec.boxSize, rects.get(entry.id), anchors])) : null
+    const cachedRoutes = routeCache?.signature === routeSignature && routeCache.occupancy === occupancy ? routeCache.routes : null
+    const nextRoutes = new Map()
+    const routed = []
+    for (const { entry, rec, anchor, anchors } of draw) {
       const rect = rects.get(entry.id)
       rec.rect = rect
       const tx = Math.round(rect.x), ty = Math.round(rect.y)
       if (tx !== rec.tx || ty !== rec.ty) { rec.el.style.transform = `translate(${tx}px, ${ty}px)`; rec.tx = tx; rec.ty = ty }
       rec.g.style.display = anchor ? '' : 'none'
-      if (anchor) {
-        const pts = rotatedAnnotationLeader(entry.calloutType, rect, rec.boxSize, entry.rotationDeg ?? 0, anchor)
-        rec.line.setAttribute('points', pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '))
-        rec.dot.setAttribute('cx', anchor.x.toFixed(1))
-        rec.dot.setAttribute('cy', anchor.y.toFixed(1))
+      const routes = entry.multiAnchor !== true
+        ? (anchor ? [rotatedAnnotationLeader(entry.calloutType, rect, rec.boxSize, entry.rotationDeg ?? 0, anchor)] : [])
+        : cachedRoutes?.get(entry.id) ?? routeAnnotationBranches({ anchors, type: entry.calloutType, rect, size: rec.boxSize,
+        angle: entry.rotationDeg ?? 0, occupancy, obstacles: [...rects.values()].filter(r => r !== rect), previousRoutes: routed })
+      nextRoutes.set(entry.id, routes)
+      routed.push(...routes)
+      while (rec.branches.length > Math.max(1, routes.length)) {
+        const branch = rec.branches.pop(); branch.line.remove(); branch.dot.remove()
       }
+      while (rec.branches.length < routes.length) {
+        const line = document.createElementNS(SVG_NS, 'polyline'), dot = document.createElementNS(SVG_NS, 'circle')
+        dot.setAttribute('r', '5'); rec.g.append(line, dot); rec.branches.push({ line, dot })
+      }
+      routes.forEach((pts, i) => {
+        const branch = rec.branches[i], end = pts.at(-1)
+        branch.line.setAttribute('stroke', entry.color); branch.dot.setAttribute('stroke', entry.color)
+        branch.line.setAttribute('points', pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '))
+        branch.dot.setAttribute('cx', end.x.toFixed(1)); branch.dot.setAttribute('cy', end.y.toFixed(1))
+      })
     }
+    routeCache = { signature: routeSignature, occupancy, routes: nextRoutes }
   }
 
   const unsubscribe = controller.subscribe(event => {
     if (event.type === 'update' && event.patch) {
       const rec = records.get(event.id)
-      if ('refs' in event.patch && rec) rec.dirty = true
+      if (('refs' in event.patch || 'multiAnchor' in event.patch) && rec) rec.dirty = true
       if ('rotationDeg' in event.patch && !event.patch.screenPos && rec?.rect && rec.entry.manual) {
         const { width, height } = viewport()
         const next = rotatedBoxSize(rec.boxSize.w, rec.boxSize.h, controller.get(event.id).rotationDeg)
@@ -402,9 +443,16 @@ export function initAnnotationOverlay({
     if (!shown) return []
     return controller.list().filter(annotationIsRenderable).map(entry => {
       const rec = records.get(entry.id)
+      const membership = new Map()
+      rec?.targetGroups.forEach((points, i) => points.forEach(p => membership.set(p, i)))
+      const next = rec?.targetGroups.length ?? 0
+      const branchGroups = entry.multiAnchor === true ? [...(rec?.matched ?? []).map(e => membership.get(e.pos) ?? 0),
+        ...(rec?.extra ?? []).map((_, i) => next + i),
+        ...(rec?.halos ?? []).filter(o => o.visible).map((_, i) => next + (rec?.extra.length ?? 0) + i)] : undefined
       return { id: entry.id, text: entry.text, icon: entry.icon, calloutType: entry.calloutType,
         color: entry.color, size: entry.size, fontFamily: entry.fontFamily, transparency: entry.transparency,
-        manual: entry.manual, screenPos: entry.screenPos, boxSize: entry.boxSize, rotationDeg: entry.rotationDeg,
+        manual: entry.manual, screenPos: entry.screenPos, boxSize: entry.boxSize, rotationDeg: entry.rotationDeg, multiAnchor: entry.multiAnchor === true,
+        ...(branchGroups ? { branchGroups } : {}),
         targets: [rec?.points, rec?.glow?.getMesh(), ...(rec?.halos ?? [])].filter(o => o?.visible).map(o => o.uuid) }
     })
   }

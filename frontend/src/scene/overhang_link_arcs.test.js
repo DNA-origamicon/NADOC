@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
+function frame(arcs, updates, amp = 1) { const d = arcs.getDisplayGeometry(); d.transaction('simulation', () => d.setSimulation(updates, amp)) }
+
 import * as THREE from 'three'
 import { store } from '../state/store.js'
 import { initOverhangLinkArcs, linkerLengthToBases, resolveLinkerAttachAnchor } from './overhang_link_arcs.js'
@@ -255,18 +257,18 @@ describe('linker arcs during simulation playback', () => {
     const updates = geometry.map(n => ({ ...n, backbone_position: n.backbone_position.map(v => v + 10) }))
     // A loop copy must not replace the actual endpoint's coordinates.
     updates.push({ ...updates[2], copy: 1, backbone_position: [99, 99, 99] })
-    arcs.applyFemPositions(updates)
+    frame(arcs, updates)
     expect(endpoint(mesh, 0)).toEqual([10, 11, 10])
     expect(endpoint(mesh, 1)).toEqual([14, 11, 10])
     expect(mesh.geometry.attributes.position).toBe(buffer)
     expect(Array.from(buffer.array)).not.toEqual(native)
     expect(geometry[2].backbone_position).toEqual([0, 1, 0])
-    arcs.applyFemPositions(updates, 0.5)
+    frame(arcs, updates, 0.5)
     expect(endpoint(mesh, 0)).toEqual([5, 6, 5])
     // A metadata refresh cannot put the arc back in its native position.
     arcs.rebuild({ ...design }, geometry)
     expect(endpoint(arcs.group.getObjectByName(mesh.name), 0)).toEqual([5, 6, 5])
-    arcs.applyFemPositions(null)
+    frame(arcs, null)
     expect(Array.from(arcs.group.getObjectByName(mesh.name).geometry.attributes.position.array)).toEqual(native)
     arcs.rebuild(null, null)
     arcs.rebuild(design, geometry)
@@ -283,11 +285,11 @@ describe('linker arcs during simulation playback', () => {
     arcs.rebuild(dsDesign, nucs)
     const a = arcs.group.getObjectByName('overhangDsConnectorArcA')
     expect(a.scale.x).toBe(0)
-    arcs.applyFemPositions(nucs.map((n, i) => ({ ...n, backbone_position: [i, i + 10, 2] })))
+    frame(arcs, nucs.map((n, i) => ({ ...n, backbone_position: [i, i + 10, 2] })))
     expect(endpoint(a, 0)).toEqual([0, 10, 2])
     expect(endpoint(a, 1)).toEqual([2, 12, 2])
     expect(a.scale.x).toBe(1)
-    arcs.applyFemPositions(null)
+    frame(arcs, null)
     expect(a.scale.x).toBe(0)
     arcs.dispose()
   })

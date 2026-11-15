@@ -122,7 +122,8 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
             const exact = layer.baseKeys ? new Set(layer.baseKeys) : null
             const selected = exact ? { ...data, atoms: data.atoms.filter(a => layer.strandId ? a.strand_id === layer.strandId : exact.has(atomBaseKey(a))) } : data
             const live = new Set(selected.atoms.map(a => a.serial))
-            entry.renderer.update(exact ? { ...selected, bonds: (selected.bonds ?? []).filter(([a, b]) => live.has(a) && live.has(b)) } : filterAtomData(selected, keys, layer.representation !== 'vdw'))
+            entry.nativeAtoms = exact ? { ...selected, bonds: (selected.bonds ?? []).filter(([a, b]) => live.has(a) && live.has(b)) } : filterAtomData(selected, keys, layer.representation !== 'vdw')
+            entry.renderer.update(entry.nativeAtoms)
             entry.renderer.setMode(layer.representation)
           } else {
             let nucleotideKeys = layer.baseKeys

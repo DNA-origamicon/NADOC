@@ -151,7 +151,11 @@ async def run_analysis(
             except WorkloadBusy as exc:
                 if not notified and qualname=='md_flex_analysis':
                     path=Path(args[2]);temporary=path.with_suffix('.tmp')
-                    temporary.write_text(json.dumps(dict(phase=str(exc),done=0,total=0,updated_at=time.time())))
+                    try:
+                        previous = json.loads(path.read_text())
+                    except (OSError, ValueError):
+                        previous = {}
+                    temporary.write_text(json.dumps(dict(previous, phase=str(exc),done=0,total=0,updated_at=time.time())))
                     temporary.replace(path);notified=True
                 await asyncio.sleep(.1)
         async with trajectory_activity('bulk' if qualname in _BULK else 'playback',cancel=cancelled):

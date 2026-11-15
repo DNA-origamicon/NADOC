@@ -30,6 +30,22 @@ modified rotation to pan internally; Trackball needs the explicit pan mapping.
 Real-controller unit tests cover translation without rotation and subsequent
 plain rotation. App verification remains MV-65 while NAMD blocks smoke.
 
+## Spreadsheet range selection (2026-11-14)
+
+The 3D editor spreadsheet uses canonical selection-controller intents: plain row
+click replaces, Shift-click selects an inclusive range in current displayed sort
+order, Ctrl/Cmd-click toggles, and Ctrl/Cmd+Shift-click adds a range. The clicked
+endpoint becomes primary; repeated Shift clicks retain the original row anchor.
+Sorting uses stable row IDs, removed anchors fall back to a single pick, and
+switching documents/contexts resets the anchor. Inputs/buttons keep editing
+behavior. Spreadsheet-originated selection updates row highlights without
+scrolling back to the first selected row; 3D-originated changes still reveal it.
+`spreadsheet_row_selection.js` owns this behavior without another selection store.
+Browser regression verifies actual row clicks and annotation capture of the subset.
+Validation: 10,535 frontend tests and the app workflow passed; lint passed. Smoke
+retains two ISSUE-180 failures (22 passed/two skipped). Test artifacts removed;
+compact results: `.development-artifacts/spreadsheet-multiselect/validation.json`.
+
 ## Current model
 
 ```js

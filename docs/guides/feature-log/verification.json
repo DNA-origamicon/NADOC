@@ -1,6 +1,6 @@
 {
   "guide": "feature-history",
-  "source_revision": "5571c8d5140a88ee36dbf53ff7fa001118d5b02b",
+  "source_revision": "0d48d91a07ca279213b3ed44000d00d60f097e07",
   "source_worktree_dirty": true,
   "publication": {
     "status": "verified",
@@ -10,7 +10,7 @@
     "document_operations": 4,
     "loadouts_checked": 2,
     "path": "example.nadoc",
-    "sha256": "38696f54c8080ce971b5cc24b97a81d6f7d5db3dd30a5419ea44d41adcd51342"
+    "sha256": "64dc0d0982eb4f5fc1e93f524adf5783fedb6508c62ef2303118209cd0a62758"
   },
   "reopened_audit": {
     "status": "verified",

@@ -1,3 +1,4 @@
+import { createDisplayGeometry } from './display_geometry.js'
 import { requireNativeBackbonePosition } from '../viewer/native_placement.js'
 /**
  * Overhang Link Arcs.
@@ -53,11 +54,13 @@ const GEO_SS_BEAD      = new THREE.SphereGeometry(SS_BEAD_RADIUS, 8, 6)
 const GEO_SS_SLAB      = new THREE.BoxGeometry(1, 1, 1)
 const Y_HAT            = new THREE.Vector3(0, 1, 0)
 
-export function initOverhangLinkArcs(scene, { storeRef = store, staticLookup = false } = {}) {
+export function initOverhangLinkArcs(scene, { storeRef = store, staticLookup = false, displayGeometry = null } = {}) {
+  const ownsDisplay = !displayGeometry
+  displayGeometry ??= createDisplayGeometry(scene)
   let disposed = false
   const group = new THREE.Group()
   group.name = 'overhangLinkArcs'
-  scene.add(group)
+  const releaseDisplayLayer = displayGeometry.register('overhang-links', { group, update: () => _applyDisplayPositions() })
   const _raycaster = new THREE.Raycaster()
   const _ndc = new THREE.Vector2()
   let _ssEntries = []
@@ -77,9 +80,6 @@ export function initOverhangLinkArcs(scene, { storeRef = store, staticLookup = f
   // the random-walk shape).
   let _lastDesign = null
   let _lastGeometry = null
-  let _simulationPositions = null
-  let _simulationAmp = 1
-  const keyOf = n => `${n.helix_id}:${n.bp_index}:${n.direction}:${n.copy ?? 0}`
   if (!staticLookup) ensureFjcLookup().catch(() => {})
   const unsubscribeLookup = staticLookup ? null : onFjcLookupLoaded(() => {
     if (!disposed && _lastDesign && _lastGeometry) rebuild(_lastDesign, _lastGeometry)
@@ -89,19 +89,20 @@ export function initOverhangLinkArcs(scene, { storeRef = store, staticLookup = f
 
   function rebuild(design, geometry) {
     if (disposed) return
+    const sourceChanged = _lastGeometry !== geometry
     _lastDesign = design
     _lastGeometry = geometry
     _clear()
     if (!design || !geometry) {
-      _simulationPositions = null
       if (DEBUG) console.debug('[overhangLinkArcs] skip rebuild — design=%o geometry=%o', !!design, !!geometry)
       return
     }
     // geometry from the store is the bare nucleotides array, not a wrapped object.
     const nucs = Array.isArray(geometry) ? geometry : (geometry.nucleotides ?? [])
+    if (ownsDisplay && sourceChanged) displayGeometry.beginGeneration(nucs)
     const conns = design.overhang_connections ?? []
     if (DEBUG) console.debug('[overhangLinkArcs] rebuild: %d connection(s), %d nucs in geometry', conns.length, nucs.length)
-    if (conns.length === 0) { _simulationPositions = null; return }
+    if (conns.length === 0) return
     const nucsByOvhg   = _indexNucsByOverhang(nucs)
     const nucsByStrand = _indexNucsByStrand(nucs)
     const strandById   = new Map((design.strands ?? []).map(s => [s.id, s]))
@@ -192,35 +193,11 @@ export function initOverhangLinkArcs(scene, { storeRef = store, staticLookup = f
     _applyHighlight()          // paints cluster colour when in cluster mode
     _applyClusterAlpha()
     _applyDetailVisibility()
-    if (_simulationPositions) _applySimulation()
+    _applyDisplayPositions()
   }
 
-  // Only retain coordinates belonging to these linkers, not the full trajectory.
-  function applyFemPositions(updates, amp = 1) {
-    if (!_ssEntries.length) { _simulationPositions = null; return }
-    _simulationAmp = amp
-    if (updates) {
-      const wanted = new Set()
-      for (const e of _ssEntries) {
-        wanted.add(keyOf(e.nucA)); wanted.add(keyOf(e.nucB))
-        for (const sid of e.strandIds) {
-          for (const n of e.nucsByStrand.get(sid) ?? []) wanted.add(keyOf(n))
-        }
-      }
-      _simulationPositions = new Map(updates.filter(n => wanted.has(keyOf(n))).map(n => [keyOf(n), n]))
-    } else _simulationPositions = null
-    _applySimulation()
-  }
-
-  function _applySimulation() {
-    const project = n => {
-      const u = _simulationPositions?.get(keyOf(n))
-      if (!u) return n
-      const native = n.backbone_position ?? n.base_position
-      return { ...n, backbone_position: native.map((v, i) => v + _simulationAmp * (u.backbone_position[i] - v)),
-        base_normal: Number.isFinite(u.nx) ? [u.nx, u.ny, u.nz] : n.base_normal,
-        axis_tangent: Number.isFinite(u.tx) ? [u.tx, u.ty, u.tz] : n.axis_tangent }
-    }
+  function _applyDisplayPositions() {
+    const project = n => displayGeometry.project(n) ?? n
     for (const e of _ssEntries) {
       const anchor = a => { const nuc = project(a.nuc); return { ...a, nuc, pos: _vec3(nuc.backbone_position ?? nuc.base_position) } }
       const a = anchor(e.anchorA), b = anchor(e.anchorB)
@@ -297,9 +274,9 @@ export function initOverhangLinkArcs(scene, { storeRef = store, staticLookup = f
 
   function dispose() {
     if (disposed) return
-    disposed = true; unsubscribe?.(); unsubscribeLookup?.()
+    disposed = true
+    releaseDisplayLayer(); if (ownsDisplay) displayGeometry.dispose(); unsubscribe?.(); unsubscribeLookup?.()
     _lastDesign = null; _lastGeometry = null
-    _simulationPositions = null
     _lastDesign = _lastGeometry = null
     _clear()
     if (group.parent) group.parent.remove(group)
@@ -486,7 +463,7 @@ export function initOverhangLinkArcs(scene, { storeRef = store, staticLookup = f
     refreshClusterDisplay(newState.currentDesign)
   })
 
-  return { rebuild, applyFemPositions, dispose, group, hitTest, setHighlightedStrands, setDetailLevel, setRepresentation, setVisible, setConnectionScales, resetConnectionScales, refreshClusterDisplay }
+  return { rebuild, getDisplayGeometry: () => displayGeometry, dispose, group, hitTest, setHighlightedStrands, setDetailLevel, setRepresentation, setVisible, setConnectionScales, resetConnectionScales, refreshClusterDisplay }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

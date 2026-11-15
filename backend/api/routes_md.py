@@ -24,6 +24,8 @@ from backend.api.simulation_submodel import SubmodelSelection, read_selection, s
 from backend.core import simulation_runtime
 
 from backend.api.startup_cache import coalesce_job_reads
+from backend.api.md_flex_range import flex_range_query
+from fastapi import Depends
 
 import asyncio
 import hashlib
@@ -604,6 +606,20 @@ _FLEX_PROGRESS_PATHS: dict[tuple[str, str], Path] = {}
 
 
 async def _run_md_flex(request, job_id, kind, analysis, args, *, timeout_s=600.0):
+    from backend.core.md_flex_requests import subscribe
+    # Argument identity includes design/representation settings. File revisions are
+    # validated by the calculation cache; duplicate viewers share one worker.
+    key = (job_id, kind, repr(args))
+    try:
+        return await subscribe(key, request, lambda: _compute_md_flex(
+            None, job_id, kind, analysis, args, timeout_s=timeout_s))
+    except RuntimeError as error:
+        if str(error).startswith('FlexFrameRangeError:'):
+            raise HTTPException(422, str(error).partition(':')[2].strip()) from error
+        raise
+
+
+async def _compute_md_flex(request, job_id, kind, analysis, args, *, timeout_s=600.0):
     # Desktop and native VR share this route. Warm artifacts need no analysis
     # process/import startup; decode away from the API loop so VR polling continues.
     def read_cached():
@@ -621,39 +637,44 @@ async def _run_md_flex(request, job_id, kind, analysis, args, *, timeout_s=600.0
     os.close(fd)
     path = Path(name)
     key = (job_id, kind)
+    from backend.core.md_flex_progress import selection_from_args
+    path.write_text(json.dumps(dict(phase='starting', frame_range=selection_from_args(args))))
     _FLEX_PROGRESS_PATHS[key] = path
     try:
-        return await _run_md_analysis(
-            request, job_id, kind, 'md_flex_analysis',
-            (analysis, args, str(path)), timeout_s=timeout_s,
-        )
+        while True:
+            result = await _run_md_analysis(
+                request, job_id, kind, 'md_flex_analysis',
+                (analysis, args, str(path)), timeout_s=timeout_s,
+            )
+            if not result.get('continue_calculation'):
+                return result
+            # Release the worker/activity lease between bounded slices. The next
+            # worker resumes sufficient statistics, not the trajectory from zero.
+            await asyncio.sleep(0.05)
+
     finally:
         if _FLEX_PROGRESS_PATHS.get(key) == path:
             _FLEX_PROGRESS_PATHS.pop(key, None)
         path.unlink(missing_ok=True)
-        path.with_suffix('.tmp').unlink(missing_ok=True)
+        for suffix in ('.tmp', '.partial.tmp', '.partial.json'):
+            path.with_suffix(suffix).unlink(missing_ok=True)
 
 
 @router.get('/md/jobs/{job_id}/flex-progress')
-async def get_md_flex_progress(job_id: str, kind: str = 'rmsf') -> dict:
+async def get_md_flex_progress(job_id: str, kind: str = 'rmsf', since: int = 0) -> dict:
     path = _FLEX_PROGRESS_PATHS.get((job_id, kind))
     if path is None:
         return {'active': False}
-    try:
-        state = json.loads(path.read_text())
-        updated = state.pop('updated_at', None)
-        if updated is not None:
-            state['elapsed_seconds'] = state.get('elapsed_seconds', 0) + max(0, time.time() - updated)
-        return {'active': True, **state}
-    except (OSError, ValueError):
-        return {'active': True, 'phase': 'starting', 'done': 0, 'total': 1}
+    from backend.core.md_flex_progress import read_progress
+    return await run_in_threadpool(read_progress, path, since)
+
 
 
 @router.get("/md/jobs/{job_id}/rmsf")
-async def get_md_job_rmsf(job_id: str, request: Request) -> dict:
+async def get_md_job_rmsf(job_id: str, request: Request, frame_range: dict = Depends(flex_range_query)) -> dict:
     """Per-nucleotide flexibility map (RMSF) over the NAMD run — the MD analogue of
-    GET /oxdna/jobs/{id}/rmsf. Pools EVERY written segment (flex-map gating is "all
-    segments"), Kabsch-aligns each frame to the design, and returns the per-base mean
+    GET /oxdna/jobs/{id}/rmsf. Selects an inclusive frame range across written
+    segments (default: last 200), Kabsch-aligns each frame, and returns the per-base mean
     backbone position + base normal + RMSF. SAME payload shape as the oxDNA endpoint,
     so the frontend flexibility-map code consumes it unchanged. A confidence block
     flags short runs (autocorrelated frames → true error ≥ 1/sqrt(2N))."""
@@ -668,7 +689,7 @@ async def get_md_job_rmsf(job_id: str, request: Request) -> dict:
         }
     psf, ref, segments, design = inputs
     result = await _run_md_flex(
-        request, job_id, "rmsf", "md_rmsf", (psf, segments, ref, design)
+        request, job_id, "rmsf", "md_rmsf", (psf, segments, ref, design, 0, False, frame_range)
     )
     if result.get("ready"):
         result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
@@ -1173,7 +1194,7 @@ async def md_atomistic_model_route(job_id: str, request: Request) -> dict:
 
 
 @router.post("/md/jobs/{job_id}/rmsf-atomistic")
-async def md_rmsf_atomistic_route(job_id: str, request: Request) -> dict:
+async def md_rmsf_atomistic_route(job_id: str, request: Request, frame_range: dict = Depends(flex_range_query)) -> dict:
     """The flexibility ensemble's average coordinates in the NAMD atom serial space."""
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
@@ -1184,14 +1205,14 @@ async def md_rmsf_atomistic_route(job_id: str, request: Request) -> dict:
         job_id,
         "rmsf-atomistic",
         "md_rmsf_atomistic",
-        (psf, segments, ref, design),
+        (psf, segments, ref, design, 0, frame_range),
         timeout_s=600.0,
     )
 
 
 @router.post("/md/jobs/{job_id}/rmsf-surface")
 async def md_rmsf_surface_route(
-    job_id: str, body: MdRmsfSurfaceBody, request: Request
+    job_id: str, body: MdRmsfSurfaceBody, request: Request, frame_range: dict = Depends(flex_range_query)
 ) -> dict:
     """NAMD mean molecular surface coloured by per-nucleotide flexibility."""
     inputs = _md_traj_inputs(job_id)
@@ -1212,6 +1233,7 @@ async def md_rmsf_surface_route(
             body.grid_spacing,
             body.radius_inflate,
             body.smooth,
+            0, frame_range,
         ),
         timeout_s=900.0,
     )

@@ -1835,7 +1835,7 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     const toggle = $('md-jobs-flex-toggle')
     toggle.checked = true
     toggle.dispatchEvent(new Event('change'))
-    expect(viz.displayRmsf).toHaveBeenCalledWith('J9', { awaitHeavy: true })
+    expect(viz.displayRmsf).toHaveBeenCalledWith('J9', { awaitHeavy: true, frameRange: null, refetch: true })
     const emit = detail => window.dispatchEvent(new CustomEvent('nadoc:md-flex-progress', {
       detail: { jobId: 'J9', ...detail },
     }))

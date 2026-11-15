@@ -1,3 +1,4 @@
+import { createDisplayGeometry } from './display_geometry.js'
 /**
  * Crossover-arc bookkeeping across an animation.
  *
@@ -34,6 +35,7 @@ function geoAt(pos) {
 function makeHarness({ design, clusterTransforms = [], cameraPoses = [], onPlaybackFrame, fetchGeometry } = {}) {
   const calls = { arc: [], extArc: [], xover: [], lerp: [], order: [], events: [] }
 
+  const display = createDisplayGeometry()
   const helixCtrl = {
     applyPositionLerp: vi.fn((from, to, t, exclude) => {
       calls.lerp.push({ t, exclude: exclude ? [...exclude] : null, from, to })
@@ -44,13 +46,10 @@ function makeHarness({ design, clusterTransforms = [], cameraPoses = [], onPlayb
     getNucLivePos: () => new THREE.Vector3(),
     getExtParentHelixId: () => null,
   }
-  const unfoldView = {
-    applyClusterArcUpdate:    vi.fn((ids) => { calls.arc.push([...ids]); calls.order.push('arc') }),
-    applyClusterExtArcUpdate: vi.fn((ids) => calls.extArc.push([...ids])),
-  }
-  const designRenderer = {
-    applyClusterCrossoverUpdate: vi.fn((ids) => calls.xover.push([...ids])),
-  }
+  const observedHelix = display.observe(helixCtrl)
+  display.register('connections', { update: () => { calls.arc.push([...HELICES]); calls.order.push('arc'); calls.extArc.push([...HELICES]); calls.xover.push([...HELICES]) } })
+  const unfoldView = {}
+  const designRenderer = { getDisplayGeometry: () => display }
   const trajectoryKeyframes = {
     prepare: vi.fn(async () => new Map()),
     suspend: vi.fn(), setPlaying: vi.fn(), cancel: vi.fn(), invalidate: vi.fn(),
@@ -68,7 +67,7 @@ function makeHarness({ design, clusterTransforms = [], cameraPoses = [], onPlayb
     getCameraPoses:       () => cameraPoses,
     getDesign:            () => design,
     getClusterTransforms: () => clusterTransforms,
-    getHelixCtrl:         () => helixCtrl,
+    getHelixCtrl:         () => observedHelix,
     getBluntEnds:         () => null,
     getUnfoldView:        () => unfoldView,
     getDesignRenderer:    () => designRenderer,

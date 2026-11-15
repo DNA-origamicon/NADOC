@@ -4179,7 +4179,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // Address the specific loop copy when the update carries one (copy defaults to
         // 0 → the plain bead, so non-loop designs and copy-less updates are unchanged).
         const _bk = `${upd.helix_id}:${upd.bp_index}:${upd.direction}`
-        const entry = _simCopyKeyToEntry.get(`${_bk}:${upd.copy ?? 0}`) ?? _simKeyToEntry.get(_bk)
+        const entry = _simCopyKeyToEntry.get(`${_bk}:${upd.copy ?? 0}`)
         if (!entry) continue
         const bp = upd.backbone_position
         const eq = entry.nuc.backbone_position
@@ -5357,7 +5357,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /**
      * Given a __ext_* synthetic helix ID, return its parent real helix ID.
-     * Used by unfold_view.applyClusterArcUpdate to check cluster membership
+     * Used by the display-frame extension layout to check cluster membership
      * for extension-arc endpoints.
      * Returns null for non-extension helix IDs.
      */
