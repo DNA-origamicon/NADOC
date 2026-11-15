@@ -88,3 +88,15 @@ it('drops hidden instances from existing hover glows and preserves visible neigh
   layer.refresh()
   expect(layer.count()).toBe(0)
 })
+
+it('keeps coarse selection glow hidden across pool growth and restores it with the design', () => {
+  const scene = new Scene(), layer = createGlowLayer(scene, 0x3fb950, 2.1, 'selectionGlow')
+  layer.setEntries([{ pos: new Vector3() }])
+  layer.setVisible(false)
+  layer.setEntries([{ pos: new Vector3() }, { pos: new Vector3(1, 0, 0) }])
+  layer.refresh()
+  expect(scene.children.find(m => m.name === 'selectionGlow').visible).toBe(false)
+  layer.setVisible(true)
+  expect(scene.children.find(m => m.name === 'selectionGlow').visible).toBe(true)
+  layer.dispose()
+})

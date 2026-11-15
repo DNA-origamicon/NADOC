@@ -37,6 +37,7 @@ it('exports selection, pings by button or period, ignores text entry, and clears
   expect(ping.id).toBeTruthy(); expect(container.querySelector('.selection-ping').hidden).toBe(false)
   const bytes = prepareScene({ scene, camera: { position: [0,0,20], target: [0,0,0], up: [0,1,0], fov: 55, orbitMode: 'orbit' }, view: { selection: source.capture() } })
   const guest = await loadPreparedScene(bytes), guestContainer = document.createElement('div'); document.body.append(guestContainer)
+  expect(guest.scene.getObjectByName('Presenter selection').material.colorWrite).toBe(true)
   const shared = mountSharedSelection({ container: guestContainer, runtime: { camera } }); shared.update(guest)
   expect(guestContainer.textContent).toContain('Presenter selected: Strand')
   expect(guestContainer.querySelector('.selection-ping').hidden).toBe(false)
@@ -70,4 +71,30 @@ it('resolves assembly clusters and overhangs against their own source and live p
   expect(overhang.points.map(p => p.toArray())).toEqual([[21,3,4]])
   expect(overhang.label).toBe('Selected overhang')
   expect(entries[0].pos.toArray()).toEqual([1,0,0])
+})
+
+it('uses live atom/bond positions for presentation targets without painting duplicate coarse halos', () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera()
+  const container = document.createElement('div'); document.body.append(container)
+  const coarse = new THREE.InstancedMesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial(), 1)
+  coarse.setMatrixAt(0, new THREE.Matrix4()); coarse.visible = false; scene.add(coarse)
+  const atoms = new THREE.InstancedMesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial(), 1)
+  atoms.setMatrixAt(0, new THREE.Matrix4().makeTranslation(2, 3, 4)); scene.add(atoms)
+  const state = { currentDesign: design, selection: { items: [{ kind: 'strand', id: 's' }] } }
+  const source = initPresentationSelection({ scene, store: { getState: () => state }, container,
+    getCamera: () => camera, addFrameCallback() {}, removeFrameCallback() {},
+    getEntries: () => [{ ...entry(0), instMesh: coarse, id: 0 }], resolveBasePosition: () => null,
+    getAtomisticRenderers: () => [{ getMode: () => 'ballstick', selectionHighlightEntries: () => [{ instMesh: atoms, id: 0 }] }],
+  })
+  source.update()
+  const cloud = scene.getObjectByName('Presenter selection')
+  expect(cloud.material.colorWrite).toBe(false)
+  expect(cloud.geometry.drawRange.count).toBe(1)
+  expect([...cloud.geometry.attributes.position.array.slice(0, 3)]).toEqual([2, 3, 4])
+  atoms.setMatrixAt(0, new THREE.Matrix4().makeTranslation(5, 6, 7)); atoms.position.x = 10
+  source.update()
+  expect([...cloud.geometry.attributes.position.array.slice(0, 3)]).toEqual([15, 6, 7])
+  expect(source.capture()).not.toBeNull()
+  source.dispose()
+  for (const mesh of [coarse, atoms]) { mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose() }
 })

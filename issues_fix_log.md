@@ -1,5 +1,111 @@
 # Issues fix log
 
+## ISSUE-198 follow-up — Preserve colors and follow displayed atoms (2026-11-14)
+
+The first fix was incomplete: native selection explicitly painted atoms white,
+and a separate `Presenter selection` point cloud still drew green discs at coarse
+positions. Checking only `selectionGlow` and white instance colors missed both.
+
+Non-surface atomistic selection now uses a color-preserving silhouette outline
+of actual sphere/cylinder instances. Cached membership is rebound on rebuilds;
+current instance/world matrices, clipping and visibility are used when drawing.
+Annotation and atomistic outline providers coexist. Cluster/group bounds retain
+actual atom/bond instances without applying the coarse surface tint. Existing
+coarse glow follows whole-design visibility even after MD hides its source root.
+The presentation cloud is a non-painting local ping/export target, updated from
+live selected atom/bond instances; prepared-viewer halos remain supported.
+
+App verification: opened existing 2hb_2xT, selected P3 Alpine (da4af0483372),
+Display MD, Ball-and-stick, S1. Inspected pixels: red strand surfaces retained,
+green outlines track atom/bond contours, no coarse discs. Confirmed 693 selected
+instances, zero instance-color changes, hidden coarse glow, non-painting presenter
+cloud. Switching to native positions rebinds the selection to 699 instances.
+No molecular structure or simulation run was authored/modified.
+
+Additional app verification used the existing P3 trajectory, sampled every 1000
+frames (25 displayed frames): stepping frame 1 → 2 moved S1's atom/bond outline
+with the displayed coordinates. Stick used only `atomBonds`; VDW only
+`atomSpheres`. Native/MD/trajectory view switches preserved selection. The final
+outline also checks scene depth so hidden atoms cannot outline through the
+foreground. Temporary screenshot captures were inspected and removed.
+
+Validation so far: `just test-frontend` — 962 files, 10,602 passed, 1 skipped
+(190.22 s). Final focused presentation/silhouette/tint/highlight tests — 51 passed.
+Targeted browser regression passed (33.3 s), including all three non-surface
+representations, click targets, preserved colors and no painted presenter points.
+Build passed (6.32 s). Smoke: 22 passed, 2 skipped, two failures — the existing
+Square-lattice assertion (ISSUE-180), plus Close Session's progress-modal timing.
+The latter passed in isolation (40.0 s); no smoke assertions were weakened.
+
+Final review also added an atomistic mesh-rebuild notification for cluster/group
+bounds, including equal-count MD/native replacements, without broadcasting every
+coordinate-only frame. Group bounds also refresh on each display frame, with callback cleanup on
+renderer disposal. Final full frontend run: 962 files, 10,604 passed, 1 skipped
+(185.98 s). Final focused checks, including the display-frame integration added
+after that run: 68 passed. Final browser regression: 1 passed (32.3 s). Final
+build passed (6.17 s); `just lint` and `git diff --check` passed. `main.js` has zero net line growth (thin wiring only).
+Cleanup verified: no __e2e__ parts/project manifests, Playwright output directories,
+or temporary review captures remain. Removed the owned diagnostic script and
+failed-capture metadata (3,538 bytes); screenshots were removed by their browser
+workflow's finally block. Existing user structures/jobs and unrelated worktree
+changes were preserved.
+
+Observation limits/retries: the attached viewer was hidden, so review used a
+separate browser at 1500×1000. Initial UI locators encountered hidden duplicate
+job rows and a status label appended to Display MD; the real controls were then
+used. The last VDW occlusion review showed the rendered atom scene correctly,
+though the MD status indicator remained “warming…”; no new latest-frame arrival
+is claimed from that last capture. Earlier Display MD and explicit trajectory
+frame-stepping checks establish coordinate tracking. No refresh was forced past
+the disabled remote-job control.
+
+## ISSUE-198 — Highlight the active representation (2026-11-14)
+
+Initial attempt (superseded by the follow-up below): the coarse-glow compositor resolves every pool against current source visibility
+and representation on every composition. It no longer restores raw Full entries
+when another selection pool refreshes. Atomistic selection uses native atom and
+bond colors, not generic bead-radius halos. Cluster/group bounds exclude hidden
+instances and Stick's private sphere proxies. Coarse connection highlights remain
+available in Full/Beads/Cylinders, but not in their atomistic replacements.
+
+Native highlights cover strands, domains, bases, ends, overhangs, extensions,
+clusters/groups, bonds and crossovers. Explicit connection records select actual
+covalent bonds; VDW selects their physical endpoint atoms. Insert copies and
+extra crossover bases are matched by canonical identity. Coordinates are unchanged.
+
+The app regression checks real clicks, strand/domain/base/end highlight colors,
+zero coarse selection glow in all three atomistic representations, and restored
+Full glow on switching back. Inspected Stick output shows the selected nucleotide
+on its white bond cylinders. Unit regressions cover all native filter mappings,
+connection endpoint identity, hidden/mixed representations, and manager-level
+recomposition. Validation: 961 frontend files / 10,596 tests passed (one skipped), browser
+regression passed, build/lint/diff checks passed. Smoke recorded 22 passed,
+two skipped, the known ISSUE-180 Square-lattice assertion and an assembly-fixture
+load timeout. The isolated assembly retry passed (15 s) without changing its
+thresholds. Test parts, recent project snapshots, browser outputs and isolated
+bridge credentials were removed. Logs: `.development-artifacts/atomistic-highlight-*`.
+`main.js` LOC delta: 0.
+
+
+## ISSUE-197 — Pick displayed atomistic balls and sticks (2026-11-14)
+
+Extracted `atomistic_renderer/picking.js`: VDW tests spheres, Ball & Stick tests
+spheres and cylinders, Stick tests cylinders only. Bond hits retain nucleotide
+identity through the nearest endpoint in the live cylinder frame. Visibility,
+instance alpha, clipping and moved-instance bounds participate in picking.
+Global and regional design selection reuse this implementation; the separate
+shared-assembly bounding-box picker remains unchanged. No molecular edits.
+
+Validation: 957 frontend files / 10,548 tests passed (one skipped); build, lint
+and diff checks passed. Smoke: 23 passed, two skipped, one known ISSUE-180
+Square-lattice request assertion failure. The browser click regression passes
+for VDW, Ball & Stick and Stick (23.6 s). Earlier browser failures were test
+state carry-over: clicking the same selected base toggled it off; the final
+fixture clears canonical selection between modes. Inspected ball/stick screenshots
+confirmed the rendered target. Temporary screenshots and workspace test artifacts
+were removed; no recent picking-test project snapshots remain. `main.js` LOC delta: 0.
+
+
 ## ISSUE-195 — Preserve annotation text box precision (2026-11-14)
 
 - `annotation_font_fit.js` retains fractional measured width/height and explicitly

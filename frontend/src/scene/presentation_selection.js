@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { isVisibleInstance } from './base_pick.js'
 import { createSelectionHaloMaterial, updateSelectionHaloPositions, MAX_SELECTION_HALO_POINTS } from './selection_halo.js'
 import { matchTargetEntries, createTargetEntryMatcher, unresolvedBaseKeys, describeTarget } from './annotation_targets.js'
 import { createExternalTargets } from './annotation_external.js'
@@ -12,7 +13,7 @@ export function resolvePresentationSelection({ state, entries, resolveBasePositi
   if (!state.assemblyActive) {
     const refs = state.selection?.items?.length ? state.selection.items : state.activeClusterId ? [{ kind: 'cluster', id: state.activeClusterId }] : []
     const matched = matchEntries(refs, state.currentDesign, entries)
-    const points = matched.map(e => e.pos)
+    const points = []
     const unresolved = unresolvedBaseKeys(refs, matched)
     for (const key of unresolved) { const p = resolveBasePosition(key); if (p) points.push(p) }
     for (const ref of refs) {
@@ -20,7 +21,8 @@ export function resolvePresentationSelection({ state, entries, resolveBasePositi
       if (s) for (const [x, y, z] of [[0,0,0],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]) points.push(new THREE.Vector3(s.x + x*s.radius, s.y + y*s.radius, s.z + z*s.radius))
     }
     for (const e of extras) if (e.position) points.push(e.position)
-    return { cacheable: !extras.length && !unresolved.length && !refs.some(r => ['protein', 'nanoparticle'].includes(r.kind)), key: JSON.stringify(['part', state.currentDesign?.id, refs, extras.map(e => e.id)]), label: [refs.length ? describeTarget(refs, state.currentDesign) : '', extras.length ? `${extras.length} loop/skip marker(s)` : ''].filter(Boolean).join(' · '), points }
+    return { cacheable: !extras.length && !unresolved.length && !refs.some(r => ['protein', 'nanoparticle'].includes(r.kind)), key: JSON.stringify(['part', state.currentDesign?.id, refs, extras.map(e => e.id)]), label: [refs.length ? describeTarget(refs, state.currentDesign) : '', extras.length ? `${extras.length} loop/skip marker(s)` : ''].filter(Boolean).join(' · '),
+      get points() { return [...matched.filter(e => !e.instMesh || isVisibleInstance(e.instMesh, e.id)).map(e => e.pos), ...points] } }
   }
   const overhangs = state.assemblyOverhangSelection ?? [], ids = new Set(state.multiSelectedInstanceIds ?? [])
   if (state.activeInstanceId) ids.add(state.activeInstanceId)
@@ -48,7 +50,7 @@ export function resolvePresentationSelection({ state, entries, resolveBasePositi
 }
 
 export function initPresentationSelection({ scene, store, container, getCamera, addFrameCallback, removeFrameCallback,
-  getEntries, resolveBasePosition, getProteinRenderer, getNanoparticleSubsystem, assemblyRenderer, getAssemblyCluster = () => null, getExtras = () => [],
+  getEntries, resolveBasePosition, getAtomisticRenderers = () => [], getProteinRenderer, getNanoparticleSubsystem, assemblyRenderer, getAssemblyCluster = () => null, getExtras = () => [],
   document: doc = document, now = Date.now }) {
   const matchEntries = createTargetEntryMatcher()
   const external = createExternalTargets({ getDesign: () => store.getState().currentDesign, getProteinRenderer, getNanoparticleSubsystem })
@@ -70,7 +72,20 @@ export function initPresentationSelection({ scene, store, container, getCamera, 
     const value = cached ? cache.value : resolvePresentationSelection({ state, entries, resolveBasePosition, resolveExternal: external.resolve, assemblyRenderer, assemblyCluster: getAssemblyCluster(), extras, matchEntries })
     cache = { value, design: state.currentDesign, selection: state.selection, cluster: state.activeClusterId, entries }
     if (value.key !== key) { key = value.key; revision++; ping = null; effect.clear() }
-    const points = value.points.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z))
+    const matrix = new THREE.Matrix4()
+    const atomPoints = []
+    for (const renderer of getAtomisticRenderers()) {
+      for (const { instMesh, id } of renderer?.selectionHighlightEntries?.() ?? []) {
+        if (!instMesh.parent || !isVisibleInstance(instMesh, id)) continue
+        instMesh.updateWorldMatrix(true, false)
+        instMesh.getMatrixAt(id, matrix)
+        atomPoints.push(new THREE.Vector3().setFromMatrixPosition(matrix).applyMatrix4(instMesh.matrixWorld))
+      }
+    }
+    // Atomistic selection already has its surface outline. Retain the live
+    // ping/export target without painting a second halo over those atoms.
+    material.colorWrite = atomPoints.length === 0
+    const points = [...value.points, ...atomPoints].filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z))
     const stride = Math.max(1, Math.ceil(points.length / MAX_SELECTION_HALO_POINTS)), count = Math.ceil(points.length / stride)
     updateSelectionHaloPositions(geometry, points, stride)
     cloud.visible = count > 0

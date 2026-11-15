@@ -1,5 +1,31 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-198 — Atomistic selection resurrects coarse glow geometry (2026-11-14)
+
+- [x] Resolve all coarse highlight pools against the current representation every
+  time they are composed; cached strand entries can no longer bypass filtering
+  when Base/End/measurement pools refresh.
+- [x] Atomistic selection outlines live atom/bond silhouettes and preserves
+  their display/scalar colors. Coarse glow follows whole-design visibility;
+  the presentation overlay no longer paints a duplicate atomistic bead halo.
+  Stick cluster/group bounds exclude private sphere proxies and
+  hidden coarse instances. Coarse crossover tubes remain in coarse views only.
+- [x] Preserve insertion-copy and crossover-extra-base identity. Bond/crossover
+  filters select actual covalent cylinders, or their endpoint atoms in VDW.
+- Validation is recorded in the fix log; molecular coordinates are unchanged.
+
+
+## ISSUE-197 — Atomistic clicks omit visible bonds (2026-11-14)
+
+- [x] Existing design/global and region-override picking already routes through
+  the atomistic renderer, but its sphere-only raycast omitted visible cylinders
+  and used invisible ball proxies in Stick.
+- [x] Pick displayed spheres/cylinders, map bond halves to endpoint identities,
+  reject hidden/clipped hits, and refresh bounds after live coordinate changes.
+- Validation is recorded in the fix log. Shared-assembly instance bounding-box
+  selection is a separate existing path, outside this design-picker correction.
+
+
 ## ISSUE-196 — Connection geometry escapes the active display frame (2026-11-14)
 
 - [x] Replace part-editor per-operation arc/insert/link refresh fanout with one

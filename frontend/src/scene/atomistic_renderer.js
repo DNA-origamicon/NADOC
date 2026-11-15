@@ -1,3 +1,5 @@
+import { atomisticSelectionEntries } from './atomistic_renderer/selection_highlight.js'
+import { registerSilhouetteHighlights, SilhouetteHighlight } from './silhouette_highlight.js'
 /**
  * Atomistic renderer — Phase AA.
  *
@@ -9,14 +11,8 @@
  *   'ballstick' — Ball-and-stick: small sphere (0.07 nm) + bond cylinders.
  *   'stick'     — Classic stick: bond cylinders only (no atom spheres).
  *
- * Selection highlighting (mirrors the coarse-grained bead model):
- *   strand     — all atoms on the selected strand → white; others stay unchanged
- *   domain     — atoms on matching helix+direction within the strand → white;
- *                rest of strand → 40% CPK; other strands → 15% CPK
- *   nucleotide — atoms at the selected bp → white; same domain → 55% CPK;
- *                rest of strand → 30% CPK; others → 15% CPK
- *   multi-lasso — atoms in any selected strand_id → white; others stay unchanged
- *   (no selection) — all atoms at full CPK colour
+ * Selection outlines the live atom/bond silhouettes without changing their colours.
+ * The outline reads current instance/world matrices each render, including MD frames.
  *
  * Sphere impostors (Phase C, 2026-07-30): when `impostorsEnabled()` each atom
  * mesh is a 2-triangle billboard quad ray-painting a lit sphere instead of a
@@ -57,6 +53,7 @@ import {
 import { resolveAtomColor } from './atomistic_renderer/color_resolver.js'
 import { makeAtomTable } from './atom_table.js'
 import { buildAtomSerialIndex } from './atom_serial_index.js'
+import { pickAtomistic } from './atomistic_renderer/picking.js'
 
 const sharedColors = { mode: 'cpk', strands: new Map(), bases: new Map(), scalar: null }
 let _vdwScale = 1.0
@@ -74,7 +71,7 @@ const _HIDDEN_BOND = new THREE.Matrix4().makeScale(0, 0, 0)
 
 // ── Renderer factory ──────────────────────────────────────────────────────────
 
-export function initAtomisticRenderer(scene, { independentColors = false, coloredStrandId = null } = {}) {
+export function initAtomisticRenderer(scene, { independentColors = false } = {}) {
   const colors = independentColors ? { mode: 'cpk', strands: new Map(), bases: new Map(), scalar: null } : sharedColors
   // Colour preferences are shared by renderer instances; skip a repeated paint
   // only when this instance has actually painted those same preferences.
@@ -156,6 +153,10 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
    *  changed. The live MD path calls update() every frame with an identical signature,
    *  so this is what keeps an O(N-atoms) re-match off the frame loop. */
   function _notifyAtoms() {
+    // Group bounds hold instance references. Rebind them even when an MD/native
+    // mesh replacement has the same atom count; coordinate-only updates retain
+    // their meshes and do not enter this path.
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nadoc:atomistic-rebuilt'))
     const sig = `${_state.mode}|${_state.atoms.count}|${_state.atoms.columnar}`
     if (sig === _atomsSig) return
     _atomsSig = sig
@@ -276,6 +277,7 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
   }
 
   function _rebuild(data) {
+    selectionEntries = null
     _clearScene()
     const table = _state.atoms = makeAtomTable(data)
     if (_state.mode === 'off' || !table.count) { _weldOverlay?.update(null); _notifyAtoms(); return }
@@ -296,11 +298,10 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
 
     const useImpostors = impostorsEnabled(data?.sphereImpostors === true)
 
-    // Stick uses the same atom instances as ball-and-stick for picking, lasso,
+    // Stick retains atom instances for lasso,
     // live selection glow, and animated positions.  Its instances are deliberately
     // NOT attached to the scene, so they never render, cast shadows, or enter photo
-    // mode; they are CPU-side pick proxies only. Keeping them here is what gives Stick
-    // the complete atomistic selection surface without putting the balls back on screen.
+    // mode; click picking tests the visible bond cylinders instead.
     for (const [el, rows] of Object.entries(buckets)) {
       if (!rows.length) continue
       const meta = ELEMENTS[el] ?? DEFAULT_ELEMENT
@@ -459,10 +460,8 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
              scalarColors: colors.scalar, clusterColors: _state.clusterColors }
   }
 
-  function _applyColors(selection) {
-    const hasSelection = !!(selection && (
-      selection.strandIds?.length || selection.domains?.length || selection.bases?.length ||
-      selection.extensionIds?.length || selection.helixIds?.length))
+  function _applyColors() {
+    selectionEntries = null
     const ctx    = _colorCtx()
     const table  = _state.atoms
     // Re-resolve mutable maps each repaint, but share endpoint results across
@@ -475,7 +474,7 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
     const alphaResolved = rowAlpha ? new Uint8Array(table.count) : null
     function colorAt(row) {
       if (!resolved[row]) {
-        rowHex[row] = resolveAtomColor(ctx, table.get(row), selection, hasSelection)
+        rowHex[row] = resolveAtomColor(ctx, table.get(row), null, false)
         resolved[row] = 1
       }
       const hex = rowHex[row]
@@ -592,9 +591,19 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
 
   // ── Public API ────────────────────────────────────────────────────────────
 
+  let selectionEntries = null
+  const selectionOutline = new SilhouetteHighlight({ depthJump: 0.003, exteriorOnly: true, occlusionScene: scene })
+  function getSelectionEntries() {
+    return selectionEntries ??= atomisticSelectionEntries(_state)
+  }
+  const unregisterOutline = registerSilhouetteHighlights(scene, (renderer, camera, pixelScale) => {
+    selectionOutline.render(renderer, camera, getSelectionEntries(), 0x3fb950, 0.7, pixelScale * 0.75)
+  })
+
   const unsubscribeSubmodel = subscribeSubmodelVisibility(() => _applyColors(_state.lastSel))
 
   return {
+    selectionHighlightEntries: getSelectionEntries,
     /** Uniform alpha for a dedicated overlay renderer (for example a view volume). */
     setUniformOpacity(opacity = 1) {
       const alpha = Math.max(0, Math.min(1, Number(opacity)))
@@ -667,27 +676,12 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
     },
 
     /**
-     * Raycast the rendered atoms. Returns the closest hit's atom (+ distance)
+     * Raycast rendered spheres and bonds. Returns the closest hit's atom (+ distance)
      * or null. Used for click-to-select; the atom's `helix_id` carries the
      * protein sentinel `__protein__{attachmentId}`.
      */
     raycastPick(raycaster) {
-      const meshes = Object.values(_state.elementMeshes)
-      if (!meshes.length) return null
-      const hits = raycaster.intersectObjects(meshes, false)
-      if (!hits.length) return null
-      const hit = hits[0]
-      // Find which element bucket this mesh is, then map instanceId → atom.
-      for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
-        if (mesh === hit.object) {
-          const row = _state.elementAtoms[el]?.[hit.instanceId]
-          // materialize (not get) — this reference escapes to selection_manager/main.js
-          // and must not be a flyweight that the next iteration re-points.
-          return row === undefined ? null
-            : { atom: _state.atoms.materialize(row), distance: hit.distance }
-        }
-      }
-      return null
+      return pickAtomistic(_state, raycaster)
     },
 
     /**
@@ -756,7 +750,7 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
     },
 
     /** Build live glow entries for all atoms belonging to the supplied nucleotides. */
-    selectionAtomEntries(nucs, { scale = 1.35, includeBonds = false } = {}) {
+    selectionAtomEntries(nucs, { scale = 1.35, includeBonds = false, renderedOnly = false } = {}) {
       if (_state.mode === 'off' || !nucs?.length) return []
       const keys = new Set()
       const xbaseKeys = new Set()
@@ -772,7 +766,10 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
           const a = table.get(group[i])
           const key = `${a.helix_id}:${a.bp_index}:${a.direction}:${Number(a.copy_k ?? 0)}`
           const xbKey = `${a.crossover_id}:${a.extra_base_k}`
-          if (keys.has(key) || xbaseKeys.has(xbKey)) { out.push(_atomGlowEntry(el, i, scale)); selectedRows.add(group[i]) }
+          if (keys.has(key) || xbaseKeys.has(xbKey)) {
+            if (!renderedOnly || _state.mode !== 'stick') out.push(_atomGlowEntry(el, i, scale))
+            selectedRows.add(group[i])
+          }
         }
       }
       if (includeBonds && _state.bondMesh) {
@@ -995,6 +992,7 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
      */
     setMode(mode) {
       if (mode === _state.mode) return
+      selectionEntries = null
       if (
         (mode === 'stick' && _state.mode === 'ballstick') ||
         (mode === 'ballstick' && _state.mode === 'stick')
@@ -1018,18 +1016,15 @@ export function initAtomisticRenderer(scene, { independentColors = false, colore
      * Call whenever canonical selection changes.
      */
     highlight(selection) {
-      // Strand-local coloring remains visible while its strand is selected;
-      // selection glow and finer domain/base highlights still identify it.
-      if (coloredStrandId && selection?.strandIds?.includes(coloredStrandId)) {
-        selection = { ...selection, strandIds: selection.strandIds.filter(id => id !== coloredStrandId) }
-      }
       _state.lastSel = selection
-      _applyColors(selection)
+      selectionEntries = null
     },
 
     /** Remove all scene objects and free GPU memory. */
     dispose() {
       unsubscribeSubmodel()
+      unregisterOutline()
+      selectionOutline.dispose()
       _clearScene()
       for (const mat of _state.matCache.values()) mat.dispose()
       _state.matCache.clear()

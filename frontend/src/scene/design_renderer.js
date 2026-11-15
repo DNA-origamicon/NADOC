@@ -38,7 +38,7 @@ import { sameConnectionTopology, sameCrossoverTopology, sameForcedLigationTopolo
  * @param {import('../state/store.js').store} storeRef
  * @returns {{ setMode, getBackboneEntries, setStrandColor, getHelixCtrl, dispose }}
  */
-export function initDesignRenderer(scene, storeRef) {
+export function initDesignRenderer(scene, storeRef, { addFrameCallback, removeFrameCallback } = {}) {
   const displayGeometry = createDisplayGeometry(scene)
   const simulationListeners = new Set()
   let simulationGeometry = null, simulationDesign = null
@@ -90,6 +90,7 @@ export function initDesignRenderer(scene, storeRef) {
   let _externalActive   = false
   // Selection halo: 2.1 is 25% smaller than the original 2.8× bead radius.
   const _clusterSelection = createClusterSelection(scene)
+  addFrameCallback?.(_clusterSelection.refresh)
   const _glowLayer         = createGlowLayer(scene, 0x3fb950, 2.1, 'selectionGlow')
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
@@ -1581,6 +1582,7 @@ export function initDesignRenderer(scene, storeRef) {
     setDesignVisible(visible) {
       displayGeometry.root.visible = visible
       _designVisible = visible
+      _glowLayer.setVisible(visible)
       if (_helixCtrl?.root) _helixCtrl.root.visible = visible
       if (_structuralOverlay?.ctrl.root) _structuralOverlay.ctrl.root.visible = visible
     },
@@ -1867,7 +1869,7 @@ export function initDesignRenderer(scene, storeRef) {
         if (!ids.has(ad.nucA.strand_id)) continue
         for (let i = 0; i < ad.beadCount; i++) {
           _xoverBeadsMesh.getMatrixAt(ad.beadStartIdx + i, m)
-          _xoverGlowLive.push({ pos: new THREE.Vector3().setFromMatrixPosition(m), arcData: ad, localIdx: i })
+          _xoverGlowLive.push({ instMesh: _xoverBeadsMesh, id: ad.beadStartIdx + i, pos: new THREE.Vector3().setFromMatrixPosition(m), arcData: ad, localIdx: i })
         }
       }
       return _xoverGlowLive
@@ -2178,6 +2180,7 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     dispose() {
+      removeFrameCallback?.(_clusterSelection.refresh)
       _piercingMarkers.dispose()
       _clusterSelection.dispose()
       if (_frozenRoot) { scene.remove(_frozenRoot); _frozenRoot = null }

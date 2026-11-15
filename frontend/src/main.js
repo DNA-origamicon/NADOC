@@ -413,7 +413,7 @@ async function main() {
   }
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
-  const designRenderer = initDesignRenderer(scene, store)
+  const designRenderer = initDesignRenderer(scene, store, { addFrameCallback, removeFrameCallback })
   const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, getAssemblyRenderer: () => assemblyRenderer, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView() ?? _multiOverlay?.getBroadcastView(), getRepresentation: () => _currentRepr === 'surface' && _atomSurface.getSurfaceParams().detail === 'chimerax' ? 'surface-detail' : _currentRepr, getDetailLevel: () => designRenderer.getDetailLevel(), getVisualization: () => captureSharedVisualization(document, simulateJobs?.getSelectedDetails?.()) })
   const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store } })
   initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
@@ -5441,7 +5441,7 @@ async function main() {
     addFrameCallback, removeFrameCallback, getEntries: () => designRenderer.getBackboneEntries?.() ?? [],
     resolveBasePosition: key => selectionManager.getBaseWorldPosition?.(key) ?? null,
     getProteinRenderer: () => proteinRenderer, getNanoparticleSubsystem: () => nanoparticleSubsystem,
-    assemblyRenderer, getAssemblyCluster: () => _selectedAssemblyCluster,
+    assemblyRenderer, getAssemblyCluster: () => _selectedAssemblyCluster, getAtomisticRenderers: () => [atomisticRenderer, _atomSurface.getRegionVdwRenderer(), _atomSurface.getRegionBallstickRenderer(), _atomSurface.getRegionStickRenderer()],
     getExtras: () => selectionManager.getPresentationSelectionExtras(),
   })
 

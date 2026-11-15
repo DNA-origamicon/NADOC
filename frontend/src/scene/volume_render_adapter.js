@@ -6,7 +6,7 @@ export function combineAtomRenderers(base, additional) {
   return new Proxy(base, { get(target, key) {
     if (key === 'getMode') return () => all().find(r => r.getMode() !== 'off')?.getMode() ?? 'off'
     if (key === 'raycastPick') return ray => all().map(r => r.raycastPick?.(ray)).filter(Boolean).sort((a,b) => a.distance - b.distance)[0] ?? null
-    if (key === 'selectionAtomEntries') return (...args) => all().flatMap(r => r.selectionAtomEntries?.(...args) ?? [])
+    if (['selectionAtomEntries', 'selectionHighlightEntries'].includes(key)) return (...args) => all().flatMap(r => r[key]?.(...args) ?? [])
     if (key === 'residueInfo') return (...args) => all().map(r => r.residueInfo?.(...args)).find(Boolean) ?? null
     if (['visitAtoms', 'highlight', 'applyResidueMatrix'].includes(key)) return (...args) => { for (const r of all()) r[key]?.(...args) }
     return typeof target[key] === 'function' ? target[key].bind(target) : target[key]

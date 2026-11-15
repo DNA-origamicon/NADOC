@@ -1,3 +1,4 @@
+import { atomSelectionConnections } from './atom_selection_connections.js'
 import { strandDisplayOverrides } from './strand_representation.js'
 import { combineAtomRenderers, combineSurfaceRenderers } from './volume_render_adapter.js'
 import { initViewVolumeDisplays } from './view_volume_displays.js'
@@ -111,8 +112,9 @@ export function atomSelectionForState(state) {
       lo: Math.min(domain.start_bp, domain.end_bp), hi: Math.max(domain.start_bp, domain.end_bp),
     }] : []
   })
+  const connections = atomSelectionConnections(highlight, state?.currentDesign)
   const bases = [...highlight.baseKeys, ...highlight.endKeys]
-    .map(parseBaseKey).filter(ref => ref && ref.helix_id !== '__xb__')
+    .map(parseBaseKey).filter(Boolean).concat(connections.bases)
   const groupKeys = partGroupNucKeysFor(state?.currentDesign, highlight.partGroupIds)
   const extensionIds = [...new Set([...highlight.extensionIds,
     ...(state?.currentDesign?.extensions ?? []).filter(ext => groupKeys.has(`h:__ext_${ext.id}`)).map(ext => ext.id),
@@ -122,7 +124,8 @@ export function atomSelectionForState(state) {
   const helixIds = [...new Set(selectedMembers
     .filter(cluster => !(cluster.domain_ids ?? []).length)
     .flatMap(cluster => cluster.helix_ids ?? []))]
-  return { strandIds: strands, domains, bases, extensionIds, helixIds }
+  return { strandIds: strands, domains, bases, extensionIds, helixIds,
+    ...(connections.bonds.length ? { bonds: connections.bonds } : {}) }
 }
 
 export function initAtomSurfaceDisplay({

@@ -39,15 +39,17 @@ function setup() {
   const canvas = document.createElement('canvas'); document.body.append(canvas)
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 500, height: 500 })
   const camera = new THREE.PerspectiveCamera(60, 1, .1, 100); camera.position.z = 10; camera.updateMatrixWorld()
+  const root = new THREE.Group()
   const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(.1), new THREE.MeshBasicMaterial(), 2)
+  root.add(mesh)
   mesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(-1, 0, 0))
   mesh.setMatrixAt(1, new THREE.Matrix4().makeTranslation(1, 0, 0)); mesh.updateMatrixWorld()
   const entries = [0, 1].map(i => ({ id: i, instMesh: mesh, pos: new THREE.Vector3(i ? 1 : -1, 0, 0), nuc: {
     helix_id: 'h', strand_id: 's', domain_index: i, bp_index: i ? 25 : 14, direction: 'FORWARD', strand_type: 'scaffold',
   } }))
   held.state.currentGeometry = entries.map(e => e.nuc)
-  const renderer = new Proxy({ getBackboneEntries: () => entries, getHelixCtrl: () => ({ root: { visible: true } }),
-    isColumnAtomistic: () => false,
+  const renderer = new Proxy({ getBackboneEntries: () => entries, getHelixCtrl: () => ({ root }),
+    isColumnAtomistic: () => false, isDomainCylinder: () => false,
     getCylinderMesh: () => null, setClusterSelectionGroups: vi.fn(), setPreviewGlow: vi.fn(),
   }, { get(target, key) { return target[key] ??= vi.fn(() => []) } })
   const controller = createSelectionController({ store })
@@ -176,5 +178,36 @@ it.each([true, false])('single-strand menu preserves Isolate without experimenta
     expect([...document.querySelectorAll('div')].some(node => node.textContent === 'Isolate')).toBe(true)
     expect([...document.querySelectorAll('option')].some(option => option.textContent === '＋ New group…')).toBe(!organized)
     expect(document.querySelector('[data-group-create]')).toBeNull()
+  } finally { d.dispose() }
+})
+
+it.each([
+  { kind: 'strand', id: 's' },
+  { kind: 'domain', strandId: 's', domainIndex: 0 },
+  { kind: 'end', key: 'h:14:FORWARD' },
+  { kind: 'base', key: 'h:14:FORWARD' },
+])('never reintroduces hidden Full glow while composing $kind selection', ref => {
+  const d = setup()
+  try {
+    d.entries[0].nuc.is_five_prime = true
+    const root = d.renderer.getHelixCtrl().root
+    root.visible = false
+    d.controller.replace([ref])
+    d.manager.refreshBaseGlow()
+    expect(d.renderer.setGlowEntries).toHaveBeenLastCalledWith([])
+    expect(d.renderer.glowCylinderDomains).toHaveBeenLastCalledWith([])
+    root.visible = true
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change'))
+    expect(d.renderer.setGlowEntries.mock.calls.at(-1)[0].length).toBeGreaterThan(0)
+  } finally { d.dispose() }
+})
+
+it('reprojects group geometry when atomistic meshes are replaced without a store change', () => {
+  const d = setup()
+  try {
+    d.controller.replace([{ kind: 'cluster', id: 'same' }])
+    d.renderer.setClusterSelectionGroups.mockClear()
+    window.dispatchEvent(new CustomEvent('nadoc:atomistic-rebuilt'))
+    expect(d.renderer.setClusterSelectionGroups).toHaveBeenCalled()
   } finally { d.dispose() }
 })

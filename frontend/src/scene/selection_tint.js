@@ -72,7 +72,7 @@ export function updateSelectionTint(mesh, previous, next) {
 }
 
 export function createClusterSelection(scene) {
-  let selected = new Map()
+  let selected = new Map(), tinted = new Map()
   let groups = []
   let versions = ''
   const geometry = new THREE.BufferGeometry()
@@ -89,8 +89,8 @@ export function createClusterSelection(scene) {
   const instanceAttributes = new WeakMap()
 
   function clear() {
-    for (const [mesh, ids] of selected) updateSelectionTint(mesh, ids, new Set())
-    selected = new Map(); groups = []; versions = ''; corners.visible = false
+    for (const [mesh, ids] of tinted) updateSelectionTint(mesh, ids, new Set())
+    selected = new Map(); tinted = new Map(); groups = []; versions = ''; corners.visible = false
   }
   function refresh(force = false) {
     if (!groups.length) return
@@ -168,16 +168,20 @@ export function createClusterSelection(scene) {
     setGroups(next) {
       const sameGroups = groups.length === next.length && groups.every((g, i) =>
         g.length === next[i].length && g.every((e, j) => e.instMesh === next[i][j].instMesh && e.id === next[i][j].id))
-      const nextSelected = new Map()
-      for (const group of next) for (const { instMesh: mesh, id } of group) {
+      const nextSelected = new Map(), nextTinted = new Map()
+      for (const group of next) for (const { instMesh: mesh, id, tint = true } of group) {
         if (!mesh?.isMesh || !Number.isInteger(id) || id < 0 || (mesh.isInstancedMesh && id >= mesh.count)) continue
         let ids = nextSelected.get(mesh)
         if (!ids) nextSelected.set(mesh, ids = new Set())
         ids.add(id)
+        if (tint) {
+          if (!nextTinted.has(mesh)) nextTinted.set(mesh, new Set())
+          nextTinted.get(mesh).add(id)
+        }
       }
-      for (const mesh of new Set([...selected.keys(), ...nextSelected.keys()]))
-        updateSelectionTint(mesh, selected.get(mesh) ?? new Set(), nextSelected.get(mesh) ?? new Set())
-      selected = nextSelected; groups = next.map(g => g.map(({ instMesh, id }) => ({ instMesh, id })))
+      for (const mesh of new Set([...tinted.keys(), ...nextTinted.keys()]))
+        updateSelectionTint(mesh, tinted.get(mesh) ?? new Set(), nextTinted.get(mesh) ?? new Set())
+      tinted = nextTinted; selected = nextSelected; groups = next.map(g => g.map(({ instMesh, id }) => ({ instMesh, id })))
       if (!groups.length) corners.visible = false
       refresh(!sameGroups)
     },
