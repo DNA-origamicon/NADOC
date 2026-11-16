@@ -1924,6 +1924,17 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     from backend.core.validator import validate_design
     import json as _json
 
+    from backend.api.part_cadnano_import_recording import prepare_ordinary
+    try:
+        prepared, history_exclusion = prepare_ordinary(body.content, relax_origami=body.relax_origami)
+    except ValueError as exc:
+        raise HTTPException(400, detail=f"caDNAno import failed: {exc}") from exc
+    if prepared is not None:
+        design, response = prepared
+        design_state.load_design(design)
+        response["revision"] = design_state.revision()
+        return response
+
     try:
         data = _json.loads(body.content)
     except Exception as exc:
@@ -1952,6 +1963,7 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
         resp["relaxation"] = relaxation
     if import_warnings:
         resp["import_warnings"] = import_warnings
+    resp["import_history"] = {"status": "unverified", "detail": history_exclusion}
     return resp
 
 

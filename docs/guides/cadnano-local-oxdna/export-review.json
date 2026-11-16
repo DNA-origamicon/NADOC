@@ -1,0 +1,21 @@
+{
+  "source_part": "source.nadoc",
+  "export": "6hb84-cadnano.json",
+  "operation": "Export → caDNAno → Export with listed losses",
+  "review_text": "caDNAno export compatibility\n\nThese features in the current design will change or be omitted. Keep the .nadoc file as your complete design.\n\nCrossover annotations (38): Crossover operation labels and junction IDs are not retained.\nAssigned strand sequences (11): caDNAno v2 JSON does not store strand sequences. Export the sequence table separately.\nNegative nucleotide coordinates (1): All nucleotide labels shift by +21 to fit caDNAno arrays; relative offsets are retained.\nRecipe root (6): Not retained in this format; the .nadoc file retains this information.\nLattice frames (1): Not retained in this format; the .nadoc file retains this information.\nCluster membership and transforms (1): Not retained in this format; the .nadoc file retains this information.\nDocument history (1): Not retained in this format; the .nadoc file retains this information.\nLoadouts (1): Not retained in this format; the .nadoc file retains this information.\nFeature log (3): Not retained in this format; the .nadoc file retains this information.\nHelix coordinates and phase (6): Only lattice cells, nucleotide paths and insertions/deletions are exported. Absolute axis placement, phase and custom twist are reconstructed by the receiving application.\nCancel\nExport with listed losses",
+  "initial_extrusion_bp": 63,
+  "routed_length_bp": 84,
+  "helix_lengths_bp": [
+    84,
+    84,
+    84,
+    84,
+    84,
+    84
+  ],
+  "source_commands": [
+    "bundle-create",
+    "auto-scaffold-seamed",
+    "full-autostaple"
+  ]
+}

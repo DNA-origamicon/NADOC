@@ -1,0 +1,54 @@
+{
+  "guide": "oxdna",
+  "source_revision": "90e18a63ff2056660104616c372a931c51cadf5f",
+  "source_worktree_dirty": true,
+  "publication": {
+    "status": "verified",
+    "commands": 3,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1,
+    "path": "example.nadoc",
+    "sha256": "8a0d3e30e909b3a5b6d19f4d6e20c6f73efa5e3a519f16bb747523f6279afc8f"
+  },
+  "reopened_audit": {
+    "status": "verified",
+    "commands": 3,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "document_operations": 1,
+    "loadouts_checked": 1
+  },
+  "additional_examples": {
+    "source.nadoc": {
+      "status": "verified",
+      "source_publication": {
+        "status": "verified",
+        "commands": 3,
+        "physical_reference_checked": true,
+        "recovery_snapshots_used": false,
+        "document_operations": 1,
+        "loadouts_checked": 1,
+        "path": "source.nadoc",
+        "sha256": "a3083271287b58d07d0f4c838c36a35337e5a323d9928b066ea46a0e18fe3ff7"
+      },
+      "source_part": "source.nadoc",
+      "export": "6hb84-cadnano.json",
+      "export_sha256": "563e7753e016288fa2ae39a91044b7ace71daf2134a4aa8552e2ac9b7130e957",
+      "export_operation": "GET /api/design/export/cadnano",
+      "import_operation": "cadnano-import",
+      "import_source": {
+        "version": 1,
+        "sha256": "563e7753e016288fa2ae39a91044b7ace71daf2134a4aa8552e2ac9b7130e957",
+        "size_bytes": 19179,
+        "format": "cadnano-v2",
+        "media_type": "application/json"
+      },
+      "upstream_history_preserved": true,
+      "recovery_snapshots_used": false
+    }
+  },
+  "interaction": "Real browser input; rendered cell positions are read-only observations",
+  "test_library_adapter": false
+}

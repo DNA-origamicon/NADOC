@@ -1,0 +1,147 @@
+{
+  "mode": "real local native oxDNA; no mocked jobs or status",
+  "relaxation": {
+    "job_id": "1136de5650a0",
+    "status": "completed",
+    "stages": [
+      {
+        "name": "1_mc_relax",
+        "kind": "mc",
+        "steps": 1000,
+        "status": "done",
+        "started_at": 1794804106.718541,
+        "resumed": false,
+        "completed_steps": 0
+      },
+      {
+        "name": "2_md_relax",
+        "kind": "md_relax",
+        "steps": 1000000,
+        "status": "done",
+        "started_at": 1794804113.6281657,
+        "resumed": false,
+        "completed_steps": 0
+      },
+      {
+        "name": "3_equil",
+        "kind": "equil",
+        "steps": 100000,
+        "status": "done",
+        "started_at": 1794804158.530804,
+        "resumed": false,
+        "completed_steps": 0
+      }
+    ],
+    "health_samples": [
+      {
+        "wall_time": 1794804113.627521,
+        "stage": "1_mc_relax",
+        "bp_retained_fraction": 0.6904761904761905,
+        "potential_energy": -0.154897,
+        "max_backbone_clash": 1.312567143311532,
+        "max_backbone_fene": 1.293623766860414,
+        "steps_per_s": 147.70995726793714,
+        "passed": true,
+        "reason": "clash bonds=0, max stretch=1.31 nm"
+      },
+      {
+        "wall_time": 1794804158.5301843,
+        "stage": "2_md_relax",
+        "bp_retained_fraction": 0.8492063492063492,
+        "potential_energy": -1.328914,
+        "max_backbone_clash": 1.4710560791724745,
+        "max_backbone_fene": 0.906418204230135,
+        "steps_per_s": 22288.446454730063,
+        "passed": true,
+        "reason": "base-pair retention 85%"
+      },
+      {
+        "wall_time": 1794804164.8789494,
+        "stage": "3_equil",
+        "bp_retained_fraction": 0.8677248677248677,
+        "potential_energy": -1.333186,
+        "max_backbone_clash": 1.4439646926644636,
+        "max_backbone_fene": 0.8985727560886272,
+        "steps_per_s": 15846.083645087658,
+        "passed": true,
+        "reason": "base-pair retention 87%"
+      }
+    ],
+    "run_config": {
+      "kind": "relax",
+      "backend": "CUDA",
+      "interaction_type": "DNA2",
+      "engine_variant": "auto",
+      "protein_present": false,
+      "fixed_core_present": false,
+      "stage_overrides": {},
+      "device": "0",
+      "salt_concentration": 0.5,
+      "mc_steps": 1000,
+      "md_relax_steps": 1000000,
+      "equil_steps": 100000,
+      "min_bp_retained": 0.5,
+      "max_relax_retries": 3,
+      "seed": 23808770,
+      "surface": null,
+      "anchors": [],
+      "surface_anchors": [],
+      "surface_strands": null,
+      "execution_target": "local",
+      "cluster_name": null,
+      "partition": null,
+      "slurm_resources": null,
+      "runpod_gpu_key": null,
+      "runpod_budget_usd": null,
+      "runpod_volume_id": null,
+      "runpod_estimated_cost_usd": null,
+      "runpod_quoted_rate_usd_per_hour": null
+    },
+    "n_nucleotides": 882,
+    "retries": 0
+  },
+  "production": {
+    "job_id": "f566a9340272",
+    "status": "running",
+    "stages": [
+      {
+        "name": "1_production",
+        "kind": "production",
+        "steps": 5000000,
+        "status": "running",
+        "started_at": 1794804172.5038884,
+        "resumed": false,
+        "completed_steps": 0
+      }
+    ],
+    "native_trajectory_observed": true,
+    "native_frame_times": [
+      10000
+    ],
+    "execution_target": "local",
+    "run_config": {
+      "kind": "run",
+      "seed": 1553605234,
+      "stage_overrides": {},
+      "inherited_parameters": {
+        "temperature": "296K",
+        "dt": 0.003,
+        "thermostat": "bussi",
+        "diff_coeff": null,
+        "gamma_trans": null,
+        "refresh_vel": true,
+        "bussi_tau": 1000,
+        "newtonian_steps": 53
+      },
+      "steps": 5000000,
+      "steps_per_frame": 10000,
+      "anchor_stiff": 1000,
+      "field": null,
+      "surface": null,
+      "anchors": [],
+      "surface_anchors": [],
+      "surface_strands": null
+    }
+  },
+  "scope": "Default production launched and native output observed; capture cleanup stops the job. No convergence claim or completed production dataset."
+}

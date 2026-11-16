@@ -811,8 +811,38 @@
         "LAMMPS CPU fallback",
         "NAMD seed generation"
       ],
-      "status": "planned",
-      "guide": null
+      "status": "partial",
+      "guide": "cadnano-local-oxdna",
+      "recipe": "frontend/guides/cadnano-local-oxdna.spec.js",
+      "covered_workflows": [
+        "Import a cadnano part and assign scaffold and staple sequences",
+        "Configure and complete local staged oxDNA relaxation",
+        "Create and launch local production from the completed relaxation"
+      ],
+      "introduction": "Import a NADOC-exported 84 bp honeycomb 6HB, assign sequences, relax it with local oxDNA, and start a production simulation from the relaxed configuration. This walkthrough uses the default GPU stage lengths and records real native simulation output.",
+      "watch": [
+        "frontend/guides/cadnano-local-oxdna.spec.js",
+        "frontend/src/ui/import*.js",
+        "frontend/src/ui/scaffold*.js",
+        "frontend/src/ui/oxdna*.js",
+        "frontend/src/ui/md_job_wizard_target*.js",
+        "frontend/src/ui/job_temperature.js",
+        "backend/api/routes_oxdna*.py",
+        "backend/core/oxdna*.py",
+        "backend/core/cadnano.py",
+        "backend/core/part_cadnano_source.py",
+        "backend/api/part_cadnano_commands.py",
+        "backend/api/routes_part_cadnano_import.py",
+        "backend/api/part_cadnano_import_recording.py",
+        "backend/api/crud.py",
+        "backend/api/part_import_relaxation.py",
+        "frontend/guides/cadnano-source.js",
+        "scripts/guide_cadnano_audit.py",
+        "backend/api/routes_design_interchange.py",
+        "backend/core/interchange_compatibility.py",
+        "frontend/src/ui/interchange_warning.js"
+      ],
+      "example_family": "cadnano"
     },
     "mrdna": {
       "name": "mrDNA",

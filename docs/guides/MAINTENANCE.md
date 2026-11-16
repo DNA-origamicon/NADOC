@@ -283,3 +283,33 @@ against the corresponding strand states. A read-only path-view observation adapt
 locates visible endpoints; only pointer input performs edits. Advanced repair proposals are intentionally excluded from this designer lesson.
 Assembly/configuration controls retain reference-only coverage.
 Keep inventory coverage partial until those contexts receive their own exercises.
+
+## cadnano to local oxDNA production
+
+Generate with `--feature oxdna`; render/check with `--guide cadnano-local-oxdna`.
+This recipe first authors a 6HB with a 63 bp Extrude, Seamed Autoscaffold
+(resulting in 84 bp helices) and Standard Full Autostaple, then exports it through
+the normal compatibility-review dialog. The tutorial imports that cadnano file
+through the ordinary UI, assigns
+scaffold and staple sequences, and uses real local oxDNA jobs. It requires an
+installed local CUDA-capable oxDNA engine and GPU for the captured default path.
+It retains the normal stage lengths and health gates. Use this recipe only when
+local simulation execution is authorized: it completes relaxation, launches the
+default production job, verifies native trajectory output, then stops the job
+in failure-safe teardown. It does not establish production convergence.
+
+All job files, worker receipts and trajectories remain under the owned scratch
+workspace and are removed with it. Only compact simulation verification joins the
+guide assets. The publication guard independently replays both source and imported parts.
+`guide_cadnano_audit` re-exports the replay-audited source, compares the download
+byte for byte and verifies that the imported part pins those exact bytes. Keep
+`source.nadoc`, `6hb84-cadnano.json`, `example.nadoc` and verification together;
+cadnano cannot carry the source feature log itself. Ordinary source imports
+outside the recorded command's qualification envelope remain unverified and
+cannot be published by this generator.
+
+The recipe prints `POST_IMPORT_BUTTON_CLICKS` from trusted primary pointer-down events on controls.
+Keep the interpreted count and assumptions in
+`docs/benchmarks/desktop/cadnano-local-oxdna-clicks.md`, separate from the user
+guide. Start counting after the import response (including Save); stop at the
+production Run click. Screenshot numbering is not an interaction count.
