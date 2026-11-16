@@ -7,7 +7,6 @@ whole point is that they become a red row in the UI instead of a charge on the c
 from __future__ import annotations
 
 import asyncio
-import json
 
 import httpx
 import pytest
@@ -171,59 +170,25 @@ class TestEachFailureBlocks:
 
 
 class TestStockFetch:
-    def test_parses_graphql_stock(self):
-        payload = {
-            "data": {
-                "gpuTypes": [
-                    {
-                        "id": "NVIDIA GeForce RTX 4090",
-                        "displayName": "RTX 4090",
-                        "memoryInGb": 24,
-                        "lowestPrice": {
-                            "stockStatus": "Low",
-                            "uninterruptablePrice": 0.34,
-                            "minimumBidPrice": 0.34,
-                        },
-                    },
-                ]
+    def test_parses_v2_secure_stock_and_preserves_ui_contract(self):
+        def handler(req):
+            assert req.method == "GET"
+            assert str(req.url).startswith("https://api.runpod.io/v2/catalog/gpus?")
+            assert dict(req.url.params) == {
+                "include": "AVAILABILITY", "product": "POD", "cloud": "SECURE",
             }
-        }
-        transport = httpx.MockTransport(lambda r: httpx.Response(200, json=payload))
-        stock = asyncio.run(pf.fetch_gpu_stock("k", transport=transport))
-        assert stock["NVIDIA GeForce RTX 4090"]["stock"] == "Low"
-        assert stock["NVIDIA GeForce RTX 4090"]["on_demand"] == 0.34
+            assert req.headers["Authorization"] == "Bearer SECRET"
+            assert "SECRET" not in str(req.url)
+            return httpx.Response(200, json={"gpus": [{
+                "id": "g", "name": "GPU", "memory": 24,
+                "availability": "LOW", "price": {"secure": 0.34, "community": 0.20},
+            }, {"id": "empty", "availability": "NONE"}]})
+        stock = asyncio.run(pf.fetch_gpu_stock("SECRET", transport=httpx.MockTransport(handler)))
+        assert stock["g"] == {"stock": "Low", "on_demand": 0.34,
+                              "spot": None, "vram_gb": 24, "display": "GPU"}
+        assert not pf.in_stock(stock["empty"])
 
-    def test_sends_the_key_as_a_query_param_with_a_browser_user_agent(self):
-        """Cloudflare 403s (error 1010) on python's default UA, and this endpoint takes
-        the key as a QUERY PARAM, not a Bearer header. Both learned the hard way."""
-        seen = {}
-
-        def handler(req):
-            seen["url"] = str(req.url)
-            seen["ua"] = req.headers.get("user-agent", "")
-            return httpx.Response(200, json={"data": {"gpuTypes": []}})
-
-        asyncio.run(
-            pf.fetch_gpu_stock("SECRET", transport=httpx.MockTransport(handler))
-        )
-        assert "api_key=SECRET" in seen["url"]
-        assert "Mozilla" in seen["ua"]
-
-    def test_requests_the_secure_cloud_rate_that_nadoc_actually_rents(self):
-        """An unfiltered lowestPrice can be Community pricing while launches are SECURE."""
-        seen = {}
-
-        def handler(req):
-            seen["query"] = json.loads(req.content)["query"]
-            return httpx.Response(200, json={"data": {"gpuTypes": []}})
-
-        asyncio.run(
-            pf.fetch_gpu_stock("k", transport=httpx.MockTransport(handler))
-        )
-        compact = "".join(seen["query"].split())
-        assert "lowestPrice(input:{gpuCount:1,secureCloud:true})" in compact
-
-    @pytest.mark.parametrize("status", [None, "", "None"])
+    @pytest.mark.parametrize("status", [None, "", "None", "NONE"])
     def test_absent_stock_means_unavailable(self, status):
         assert pf.in_stock({"stock": status}) is False
 

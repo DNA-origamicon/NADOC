@@ -1,6 +1,6 @@
 """RunPod REST/GraphQL client — provision, poll and bound a GPU pod.
 
-Endpoint: ``https://rest.runpod.io/v1/pods`` (REST v1, not the legacy GraphQL API).
+Endpoint: ``https://api.runpod.io/v2/pods``. Provider expiry remains GraphQL-only.
 
 Split deliberately in two:
 
@@ -69,7 +69,7 @@ def _handing_off() -> bool:
 _MAX_API_RETRIES = 5
 _RETRY_BASE_S = 2.0
 
-API_BASE = "https://rest.runpod.io/v1"
+API_BASE = "https://api.runpod.io/v2"
 
 # NAMD is statically linked against the CUDA runtime, so the container only has to supply
 # the NVIDIA driver stack. The patched namd3 lives on the NETWORK VOLUME, not in the
@@ -125,7 +125,7 @@ class PodInfo:
     @property
     def is_terminated(self) -> bool:
         """The pod is not going to run anything. NOT the same as 'it costs nothing'."""
-        return self.desired_status in {"TERMINATED", "EXITED"}
+        return self.desired_status in {"TERMINATED", "EXITED", "ERROR"}
 
     @property
     def is_destroyed(self) -> bool:
@@ -156,7 +156,7 @@ def build_create_payload(
     allowed_cuda_versions: Optional[list[str]] = None,
     terminate_after: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Body for ``POST /v1/pods``.
+    """NADOC launch specification, translated at the provider boundary.
 
     Notes that are easy to get wrong:
 
@@ -216,15 +216,17 @@ def termination_deadline(lifetime_s: int, *, now: Optional[datetime] = None) -> 
 
 def parse_pod(data: dict[str, Any]) -> PodInfo:
     """Parse a pod object from any of the pod endpoints."""
+    direct = (data.get("ssh") or {}).get("direct") or {}
     ports = data.get("portMappings") or {}
     raw_port = ports.get("22") if isinstance(ports, dict) else None
+    raw_port = direct.get("port", raw_port)
     try:
         ssh_port = int(raw_port) if raw_port is not None else None
     except (TypeError, ValueError):
         ssh_port = None
 
-    ip = data.get("publicIp") or None
-    cost = data.get("costPerHr")
+    ip = direct.get("host") or data.get("publicIp") or None
+    cost = data.get("cost", data.get("costPerHr"))
     try:
         cost = float(cost) if cost is not None else None
     except (TypeError, ValueError):
@@ -232,7 +234,7 @@ def parse_pod(data: dict[str, Any]) -> PodInfo:
 
     return PodInfo(
         id=str(data.get("id", "")),
-        desired_status=str(data.get("desiredStatus") or "UNKNOWN"),
+        desired_status=str(data.get("status") or data.get("desiredStatus") or "UNKNOWN"),
         public_ip=ip,
         ssh_port=ssh_port,
         cost_per_hr=cost,
@@ -504,10 +506,32 @@ class RunpodClient:
         await asyncio.sleep(delay)
 
     async def create_pod(self, payload: dict[str, Any]) -> PodInfo:
+        if payload.get("interruptible"):
+            raise RunpodError("RunPod no longer offers spot pods; select on-demand execution.")
+        gpu_ids = payload.get("gpuTypeIds") or []
+        if not gpu_ids:
+            raise RunpodError("At least one GPU candidate is required")
+        if len(gpu_ids) > 1:
+            return await self.create_pod_first_available([
+                {**payload, "gpuTypeIds": [gpu_id]} for gpu_id in gpu_ids
+            ])
+        wire = {
+            "name": payload["name"], "image": payload["imageName"],
+            "cloud": payload.get("cloudType", "COMMUNITY"),
+            "gpu": {"id": gpu_ids[0], "count": payload.get("gpuCount", 1),
+                    "allowedCudaVersions": payload.get("allowedCudaVersions", DEFAULT_ALLOWED_CUDA)},
+            "disk": payload.get("containerDiskInGb", DEFAULT_CONTAINER_DISK_GB),
+            "ports": payload.get("ports", ["22/tcp"]), "startSsh": True,
+        }
+        if payload.get("networkVolumeId"):
+            wire["mounts"] = {"network": [{"volumeId": payload["networkVolumeId"],
+                                          "path": payload.get("volumeMountPath", VOLUME_MOUNT_PATH)}]}
+        if payload.get("env"):
+            wire["env"] = dict(payload["env"])
         info = (
             await self._create_pod_graphql(payload)
             if payload.get("terminateAfter")
-            else parse_pod(await self._request("POST", "/pods", json=payload) or {})
+            else parse_pod(await self._request("POST", "/pods", json=wire) or {})
         )
         self.record_lifecycle(
             "pod_created",
@@ -560,7 +584,6 @@ class RunpodClient:
         try:
             response = await self._client.post(
                 self._graphql_url,
-                params={"api_key": self._api_key},
                 json={"query": query, "variables": {"input": gql_input}},
             )
         except httpx.HTTPError as exc:
@@ -579,22 +602,32 @@ class RunpodClient:
     async def get_pod(self, pod_id: str) -> PodInfo:
         return parse_pod(await self._request("GET", f"/pods/{pod_id}") or {})
 
+    async def _list(self, path: str, key: str) -> list[dict[str, Any]]:
+        """Read all pages so orphan reaping and volume selection cannot miss resources."""
+        rows = []
+        cursor = None
+        seen = set()
+        while True:
+            data = await self._request("GET", path, params={"cursor": cursor} if cursor else {})
+            if isinstance(data, list):
+                return rows + data
+            data = data or {}
+            rows.extend(data.get(key) or data.get("data") or [])
+            pagination = data.get("pagination") or {}
+            if not pagination.get("hasNextPage"):
+                return rows
+            cursor = pagination.get("nextCursor")
+            if not cursor or cursor in seen:
+                raise RunpodError("RunPod returned invalid pagination")
+            seen.add(cursor)
+
     async def list_pods(self) -> list[PodInfo]:
-        data = await self._request("GET", "/pods") or []
-        if isinstance(data, dict):  # some deployments wrap it
-            data = data.get("pods") or data.get("data") or []
-        return [parse_pod(p) for p in data]
+        return [parse_pod(p) for p in await self._list("/pods", "pods")]
 
     async def list_network_volumes(self) -> list[dict[str, Any]]:
-        """Every network volume on the account (``GET /networkvolumes``).
-
-        Read-only — creates nothing, bills nothing. Used by the setup wizard to offer the
-        volume as a dropdown. Same wrapping tolerance as ``list_pods``.
-        """
-        data = await self._request("GET", "/networkvolumes") or []
-        if isinstance(data, dict):  # some deployments wrap it
-            data = data.get("networkVolumes") or data.get("data") or []
-        return [parse_network_volume(v) for v in data]
+        return [parse_network_volume(v) for v in await self._list(
+            "/network-volumes", "networkVolumes"
+        )]
 
     async def terminate_pod(
         self,
@@ -688,6 +721,7 @@ class RunpodClient:
                 message = str(exc).lower()
                 if not any(marker in message for marker in (
                     "no instances", "no longer any instances", "supply_constraint",
+                    "insufficient capacity", "no available resources",
                 )):
                     raise
                 last = exc
