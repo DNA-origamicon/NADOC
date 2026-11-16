@@ -1,5 +1,14 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-202 — Deferred trajectory analysis outlives deleted jobs (2026-11-16)
+
+- [x] CPD browser cleanup exposed queued background analysis loading job.json
+  after deletion and logging FileNotFoundError. Simulation execution was unaffected.
+- [x] Treat a missing MD/oxDNA job at background load as cancelled work; do not
+  recreate the directory. Preserve failures for an existing corrupt manifest.
+- Validation: focused deletion/corruption cases and the backend regression run.
+
+
 ## ISSUE-201 — Atomistic selection resurrects coarse glow geometry (2026-11-14)
 
 - [x] Resolve all coarse highlight pools against the current representation every

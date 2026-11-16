@@ -898,6 +898,10 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         captured_input = oxdna_preparation_capture.capture_for_request(body)
     design = (captured_input.design if captured_input is not None
               else design_state.get_or_404().without_reference_geometry())
+    if design.photoproduct_junctions:
+        # The provisional CPD plugin is a CPU interaction; resolve this before
+        # GPU admission and persist the actual backend in the managed job.
+        body = body.model_copy(update={"backend": "CPU"})
     from backend.core.streptavidin import require_coating_simulation_support
     try:
         from backend.physics.oxdna_mobile_gold import has_mobile_gold
@@ -1385,13 +1389,15 @@ async def copy_oxdna_job(job_id: str, body: Optional[OxdnaRunLocation] = None) -
     _apply_oxdna_run_dir(copied, body.run_dir if body else None)
     copied_dir = copied.job_dir(ws)
     copied_dir.mkdir(parents=True, exist_ok=copied.archived)
-    files = {"submodel_selection.json", "topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", "attachment_forces.txt", AVERAGE_SEQUENCE_FILE}
+    files = {"submodel_selection.json", "topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", "attachment_forces.txt", AVERAGE_SEQUENCE_FILE, "cpd.dat", "cpd_model.json", "cpd_manifest.json"}
     files.update(spec.forces_file for spec in copied_specs if spec.forces_file)
     files.update(spec.parfile for spec in copied_specs if spec.parfile)
     try:
         for name in files:
             if name and (source_dir / name).is_file():
                 shutil.copy2(source_dir / name, copied_dir / name)
+        from backend.physics.oxdna_cpd import inherit as inherit_cpd
+        inherit_cpd(source_dir, copied_dir, copied_specs)
         if any(spec.parfile for spec in copied_specs):
             from backend.physics.oxdna_attachments import inherit_attachments
             inherit_attachments(source_dir, copied_dir)
@@ -1437,6 +1443,8 @@ def _copy_child_parameters(parent_dir, child_dir, specs, *, missing_only=False):
     """Carry the exact frozen interaction inputs with every continuation."""
     from backend.physics.oxdna_attachments import inherit_attachments
     inherit_attachments(parent_dir, child_dir)
+    from backend.physics.oxdna_cpd import inherit as inherit_cpd
+    inherit_cpd(parent_dir, child_dir, specs)
     required = {spec.parfile for spec in specs if spec.parfile}
     for name in required:
         if not (parent_dir / name).is_file():
@@ -1625,6 +1633,11 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             raise HTTPException(400, f"Invalid oxDNA stage override: {exc}") from exc
         seed = job.random_seed or _fresh_oxdna_seed(updates.get("seed"))
         specs = assign_stage_seeds(specs, seed)
+        from backend.physics.oxdna_cpd import inherit as inherit_cpd
+        inherit_cpd(job.job_dir(_workspace()), job.job_dir(_workspace()), specs)
+        if any(spec.interaction == "CpdDNA2" for spec in specs):
+            backend = "CPU"
+            updates["backend"] = "CPU"
         (job.job_dir(_workspace()) / "stages_spec.json").write_text(
             json.dumps([asdict(spec) for spec in specs], indent=2), encoding="utf-8"
         )
@@ -1678,6 +1691,8 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
     design = _load_snapshot_design(job.job_dir(_workspace()))
     if design is None:
         raise HTTPException(409, "This job has no frozen design snapshot and cannot be edited exactly.")
+    if design.photoproduct_junctions:
+        body.backend = "CPU"
     relax_has_forces = bool(
         body.surface or body.anchors or body.surface_anchors or body.surface_strands
     )
@@ -1741,6 +1756,8 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
                     source.replace(jd / name)
                 elif name == "equil_forces.txt":
                     (jd / name).unlink(missing_ok=True)
+    from backend.physics.oxdna_cpd import inherit as inherit_cpd
+    inherit_cpd(job.job_dir(_workspace()), job.job_dir(_workspace()), specs)
     (job.job_dir(_workspace()) / "stages_spec.json").write_text(
         json.dumps([asdict(spec) for spec in specs], indent=2), encoding="utf-8"
     )
@@ -2019,6 +2036,8 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     prod = assign_stage_seeds([prod], stage_seed)[0]
     _inherit_continuation_parameters([prod], job, _workspace())
     prod = hybridize_stage(prod, protein=any(s.parfile for s in specs))
+    from backend.physics.oxdna_cpd import inherit as inherit_cpd
+    inherit_cpd(job.job_dir(_workspace()), job.job_dir(_workspace()), [prod])
     from backend.physics.oxdna_peg import configure_peg_stages, is_peg
     peg_spec = (job.run_config or {}).get("surface_strands")
     if is_peg(peg_spec):

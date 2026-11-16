@@ -48,14 +48,14 @@ export function validateOxdnaWizard(values = {}) {
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
-export function oxdnaWizardDefaults(overrides = {}) { return { ...DEFAULTS, ...overrides } }
+export function oxdnaWizardDefaults(overrides = {}) { return { ...DEFAULTS, ...overrides, ...((overrides.cpd_present || overrides.cpd) ? { cpd_present: true, backend: 'CPU' } : {}) } }
 
 const interval = steps => Math.max(1, Math.floor(Number(steps) / 100))
 
 export function oxdnaStagePlan(values = {}) {
   const v = oxdnaWizardDefaults(values)
-  const interaction = v.protein_present ? 'DNANM' : v.interaction_type
-  const shared = { ...(interaction === 'DNA2' ? { use_average_seq: false, seq_dep_file: '../oxDNA2_average_sequence_parameters.txt' } : {}), interaction_type: interaction, ...(v.protein_present ? { parfile: 'anm.par' } : {}), temperature: '296K', salt_concentration: Number(v.salt_concentration), topology: 'topology.top', device: String(v.device) }
+  const interaction = v.cpd_present ? 'CpdDNA2' : v.protein_present ? 'DNANM' : v.interaction_type
+  const shared = { ...(['DNA2', 'CpdDNA2'].includes(interaction) ? { use_average_seq: false, seq_dep_file: '../oxDNA2_average_sequence_parameters.txt' } : {}), interaction_type: interaction, ...(v.protein_present ? { parfile: 'anm.par' } : {}), temperature: '296K', salt_concentration: Number(v.salt_concentration), topology: 'topology.top', device: String(v.device) }
   const stages = [
     { name: '1_mc_relax', purpose: 'Clear local clashes with mutual base-pair traps', ...shared,
       sim_type: 'MC', backend: 'CPU', steps: Number(v.mc_steps), ensemble: 'NVT', delta_translation: 0.1,
@@ -89,6 +89,11 @@ export function oxdnaStagePlan(values = {}) {
     stage.fix_diffusion = false
     if (stage.sim_type === 'MD') stage.dt = Math.min(stage.dt, 0.0001)
   }
+  if (v.cpd_present) for (const stage of resolved) {
+    stage.backend = 'CPU'
+    stage.interaction_type = 'CpdDNA2'
+    if (stage.sim_type === 'MD') stage.dt = Math.min(stage.dt, 0.0001)
+  }
   return resolved
 }
 
@@ -110,7 +115,8 @@ export function oxdnaWizardPayload(values, targetFields = {}) {
 
 export function oxdnaConfigDocument(values, targetFields = {}) {
   const payload = oxdnaWizardPayload(values, targetFields)
-  const target = ['# NADOC oxDNA job', `execution_target = ${payload.execution_target || 'local'}`,
+  const target = ['# NADOC oxDNA job',
+    ...(values.cpd_present ? ['# Experimental isomer-specific CPD model; local CPU; melting thermodynamics unvalidated.'] : []), `execution_target = ${payload.execution_target || 'local'}`,
     `engine_variant = ${payload.engine_variant}`,
     ...(payload.partition ? [`partition = ${payload.partition}`] : []),
     ...(payload.runpod_gpu_key ? [`runpod_gpu_key = ${payload.runpod_gpu_key}`] : []),

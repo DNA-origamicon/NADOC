@@ -307,3 +307,13 @@ describe('oxDNA production wizard model', () => {
     expect(oxdnaProductionParents(jobs, 'X.nadoc', { includeJobId: 'd' }).map(j => j.job_id)).toEqual(['d', 'c', 'a'])
   })
 })
+
+
+it('shows the actual permanent CPD model and integration limit', () => {
+  const values = { cpd_present: true, backend: 'CUDA', stage_overrides: { '2_md_relax': { dt: 0.005, backend: 'CUDA' } } }
+  expect(oxdnaWizardPayload(values).backend).toBe('CPU')
+  const stages = oxdnaStagePlan(values)
+  expect(stages.every(s => s.backend === 'CPU' && s.interaction_type === 'CpdDNA2')).toBe(true)
+  expect(stages.filter(s => s.sim_type === 'MD').every(s => s.dt === 0.0001)).toBe(true)
+  expect(oxdnaConfigDocument(values)).toContain('melting thermodynamics unvalidated')
+})

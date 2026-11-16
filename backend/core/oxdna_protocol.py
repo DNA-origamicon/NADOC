@@ -439,7 +439,7 @@ def render_stage_input(
     lines.append("")
     interaction = spec.interaction or "DNA2"
     lines.append(f"interaction_type = {interaction}")
-    if interaction in ("DNA2", "DNA2GOLD"):
+    if interaction in ("DNA2", "DNA2GOLD", "CpdDNA2"):
         # Pinned CUDA DNA2 omits the average-strength overrides in its initializer.
         # Upstream's equal-strength file reproduces the average model on both backends.
         lines.append("use_average_seq = false")

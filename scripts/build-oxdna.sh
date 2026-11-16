@@ -144,6 +144,10 @@ printf '%s\n' v1 > "$INSTALL_DIR/bussi-cuda-rng"
 printf '%s\n' v3 > "$INSTALL_DIR/physics-corrections"
 ln -sfn "$INSTALL_DIR" "$CURRENT"
 
+# Build the permanent cis-syn CPD interaction against this exact installed ABI.
+"$OXPY_PYTHON" "$PROJECT_ROOT/tools/oxdna_cpd/build.py" \
+  --source "$SOURCE_DIR" --library "$INSTALL_DIR/lib" --output "$ENGINE_ROOT/cpd-v1"
+
 if command -v uv >/dev/null 2>&1; then
   uv pip install --python "$OXPY_PYTHON" --reinstall "$BUILD_DIR/python"
 else

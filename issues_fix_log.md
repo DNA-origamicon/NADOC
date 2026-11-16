@@ -1,5 +1,12 @@
 # Issues fix log
 
+## ISSUE-202 — Skip background work for deleted jobs (2026-11-16)
+
+MD and oxDNA background analysis now stop when their queued job has been deleted.
+This resolves the cleanup race observed during the four-isomer CPD browser check;
+existing malformed job manifests still raise errors. No simulation physics changed.
+
+
 ## ISSUE-201 follow-up — Preserve colors and follow displayed atoms (2026-11-14)
 
 Push integration: merged incoming exact-base cluster selection fixes without

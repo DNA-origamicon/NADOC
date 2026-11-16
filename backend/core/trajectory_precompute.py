@@ -124,12 +124,18 @@ def prepare(workspace, engine, job_id):
             from backend.core.md_job import MdJob
             from backend.api import routes_md_metrics as metrics
             from backend.core.md_trajectory import md_rmsf, md_rmsf_atomistic, md_rmsf_surface
-            job = MdJob.load(job_id, ws)
+            try:
+                job = MdJob.load(job_id, ws)
+            except FileNotFoundError:
+                return  # Deleted while this low-priority work was queued.
             request = metrics.MdMetricsStartRequest(max_frames=0)
         else:
             from backend.core.oxdna_job import OxdnaJob
             from backend.api import routes_oxdna_metrics as metrics
-            job = OxdnaJob.load(job_id, ws)
+            try:
+                job = OxdnaJob.load(job_id, ws)
+            except FileNotFoundError:
+                return  # Deleted while this low-priority work was queued.
             request = metrics.MetricsStartRequest()
         if job.status.value in _DEFER_BACKGROUND:
             return

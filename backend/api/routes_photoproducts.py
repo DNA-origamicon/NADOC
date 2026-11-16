@@ -225,6 +225,16 @@ def convert_design_photoproduct(body: PhotoproductCreateBody) -> dict:
     from backend.core.cpd_design import convert_extra_pair
     from backend.core.cpd_conversion import convert_thymine_pair
     converter = convert_thymine_pair if body.placement != "legacy" else convert_extra_pair
+    parameters = {"base_keys": body.base_keys, "stereochemistry": body.stereochemistry,
+                  "history_seed": identity, "method": body.placement if body.placement != "legacy" else "convert"}
+    if body.placement != "legacy" and body.stereochemistry == "cis-syn":
+        from backend.core.part_cpd_conversion import prepare, build
+        parameters = prepare(body.base_keys, identity)
+        converter = lambda current, *_args, **_kwargs: (build(current, parameters), None)
+    elif body.placement != "legacy" and body.stereochemistry in {"cis-anti-I", "trans-syn-I", "trans-syn-II"}:
+        from backend.core.part_cpd_conversion_isomers import prepare, build
+        parameters = prepare(body.base_keys, identity, body.stereochemistry)
+        converter = lambda current, *_args, **_kwargs: (build(current, parameters), None)
     def apply(current):
         try:
             return converter(current, body.base_keys, body.stereochemistry, identity_seed=identity)[0]
@@ -232,8 +242,7 @@ def convert_design_photoproduct(body: PhotoproductCreateBody) -> dict:
             raise HTTPException(422, detail=str(exc)) from exc
     updated, validation, entry = design_state.mutate_with_feature_log(
         "photoproduct-create", f"Convert thymines to {body.stereochemistry} CPD",
-        {"base_keys": body.base_keys, "stereochemistry": body.stereochemistry, "history_seed": identity,
-         "method": body.placement if body.placement != "legacy" else "convert"}, apply,
+        parameters, apply,
         expected_revision=body.expected_revision,
     )
     if body.placement != "legacy":

@@ -712,6 +712,12 @@ def prepare_oxdna_job(
         info["mobile_gold"] = manifest
         job.backend = "CUDA"
     from backend.physics.oxdna_attachments import attachment_text, FILENAME
+    from backend.physics.oxdna_cpd import prepare as prepare_cpd
+    cpd = prepare_cpd(design, jd, specs)
+    if cpd:
+        job.backend = "CPU"
+        job.run_config = {**(job.run_config or {}), "cpd": cpd, "backend": "CPU"}
+        info["cpd"] = cpd
     (jd / FILENAME).unlink(missing_ok=True)
     (jd / FILENAME).write_text(attachment_text(jd))
     # Self-contained design snapshot for health checks (decoupled from live state).
@@ -1919,6 +1925,8 @@ async def run_job(
             if spec.interaction != "DNA2GOLD" or spec.backend != "CUDA" or spec.sim_type != "MD":
                 raise ValueError("Mobile gold cannot fall back to DNA-only or CPU dynamics")
             spec.gold_file = str((jd / "mobile_gold.dat").resolve())
+        from backend.physics.oxdna_cpd import stage_input as cpd_stage_input
+        cpd_input = cpd_stage_input(jd, spec)
         input_path.write_text(
             render_stage_input(
                 spec,
@@ -1928,7 +1936,7 @@ async def run_job(
                 parfile_name=parfile,
                 sequence_parameters_name=str(jd / "oxDNA2_average_sequence_parameters.txt")
                     if (jd / "oxDNA2_average_sequence_parameters.txt").exists() else None,
-            )
+            ) + cpd_input
         )
 
         logger.info(

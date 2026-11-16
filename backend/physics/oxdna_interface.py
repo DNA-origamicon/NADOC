@@ -1186,7 +1186,8 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
             prev = nuc
     # Pass 3: re-seat flexible ssDNA runs onto a contour-length arc between their
     # posed rigid anchors (near-relaxed ssDNA seed instead of a rigid half-helix).
-    return _apply_flexible_segment_arc(design, resolved_map)
+    from backend.physics.oxdna_cpd import project_extra_particles
+    return project_extra_particles(design, _apply_flexible_segment_arc(design, resolved_map))
 
 
 def extension_beads(design: Design) -> list[tuple[tuple, tuple, str]]:
@@ -1433,6 +1434,8 @@ def oxdna_native_seed_map(
     for hid, bp in fwd & rev:
         f = resolved_map[(hid, bp, "FORWARD")]
         r = resolved_map[(hid, bp, "REVERSE")]
+        if f.get("cpd_particle_frame") or r.get("cpd_particle_frame"):
+            continue
         f_base = (
             np.asarray(f["backbone_position"], float)
             + _POS_BASE_NM * a1_of[(hid, bp, "FORWARD")]
@@ -1451,6 +1454,9 @@ def oxdna_native_seed_map(
 
     out: dict[tuple, dict] = {}
     for key, nuc in resolved_map.items():
+        if nuc.get("cpd_particle_frame"):
+            out[key] = nuc
+            continue
         shifted = dict(nuc)
         shifted["backbone_position"] = (
             np.asarray(nuc["backbone_position"], float) + delta * shift_dir[key]
