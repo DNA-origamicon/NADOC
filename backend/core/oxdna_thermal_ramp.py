@@ -1,12 +1,10 @@
-"""Temperature plateaus and observable-stability gates (not equilibrium proofs)."""
+"""Fixed-duration thermal plateaus with informational energy observations."""
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import replace
 import json
 import math
 
-import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -15,28 +13,24 @@ class ThermalRamp(BaseModel):
     start_c: float = Field(25, gt=-273.15, le=200)
     end_c: float = Field(85, gt=-273.15, le=200)
     step_c: float = Field(5, gt=0, le=200)
-    block_steps: int = Field(1_000_000, ge=1000, le=200_000_000)
-    max_steps: int = Field(10_000_000, ge=1000, le=200_000_000)
-    gate: bool = True
-    window_samples: int = Field(20, ge=10, le=1000)
-    min_effective_samples: int = Field(10, ge=5)
-    consecutive_passes: int = Field(2, ge=1, le=10)
-    energy_tolerance: float = Field(0.02, gt=0)
-    pairing_tolerance: float = Field(0.02, gt=0, le=1)
-    check_pairing: bool = True
+    block_steps: int = Field(10_000_000, ge=1000, le=200_000_000)
+    # Read old saved protocols, but never serialize or honor adaptive controls.
+    max_steps: int | None = Field(None, exclude=True)
+    gate: bool = Field(False, exclude=True)
+    window_samples: int = Field(20, exclude=True)
+    min_effective_samples: int = Field(10, exclude=True)
+    consecutive_passes: int = Field(2, exclude=True)
+    energy_tolerance: float = Field(.02, exclude=True)
+    pairing_tolerance: float = Field(.02, exclude=True)
+    check_pairing: bool = Field(False, exclude=True)
 
     @model_validator(mode="after")
-    def valid_budget(self):
+    def valid_schedule(self):
         if math.ceil(abs(self.end_c - self.start_c) / self.step_c - 1e-10) > 100:
             raise ValueError("Thermal ramps support at most 101 temperature plateaus.")
-        if self.gate and self.max_steps < self.block_steps * self.consecutive_passes:
-            raise ValueError("Maximum dwell must allow the required number of sampling blocks.")
-        if self.gate and self.max_steps % self.block_steps:
-            raise ValueError("Maximum dwell must be a whole number of sampling blocks.")
-        if self.min_effective_samples > self.window_samples:
-            raise ValueError("Minimum effective samples cannot exceed the window size.")
-        if self.gate and self.block_steps < 3 * self.window_samples:
-            raise ValueError("Each block must accommodate three sampling windows.")
+        self.gate = False
+        self.check_pairing = False
+        self.max_steps = self.block_steps
         return self
 
     def temperatures(self):
@@ -48,9 +42,8 @@ class ThermalRamp(BaseModel):
 
 def sampling_cadence(cfg, requested=None):
     """Exact divisors keep resumed step accounting and plateau budgets exact."""
-    limit = min(requested or (cfg.block_steps if cfg.gate else max(1, cfg.block_steps // 100)),
-                cfg.block_steps // (3 * cfg.window_samples) if cfg.gate else cfg.block_steps)
-    common = math.gcd(cfg.block_steps, cfg.max_steps) if cfg.gate else cfg.block_steps
+    limit = min(requested or min(50_000, max(1, cfg.block_steps // 100)), cfg.block_steps)
+    common = cfg.block_steps
     divisors = {d for i in range(1, math.isqrt(common) + 1) if common % i == 0
                 for d in (i, common // i) if d <= limit}
     return max(divisors)
@@ -72,120 +65,38 @@ def ramp_stages(stage, config):
             for i, c in enumerate(cfg.temperatures())]
 
 
-def stability(values, tolerance, cfg):
-    """Three window means + linear drift + autocorrelation-adjusted sample counts."""
-    n = cfg.window_samples
-    data = np.asarray(list(values)[-3 * n:], dtype=float)
-    if len(data) < 3 * n or not np.isfinite(data).all():
-        return {"passed": False, "reason": "insufficient or nonfinite samples", "samples": len(data)}
-    windows = data.reshape(3, n)
-    ess = []
-    for window in windows:
-        centered = window - window.mean()
-        variance = float(centered @ centered)
-        correlation_sum = 0.0
-        if variance > 1e-20:
-            for lag in range(1, n):
-                rho = float(centered[:-lag] @ centered[lag:]) / variance
-                if rho <= 0:
-                    break
-                correlation_sum += rho
-        ess.append(n / (1 + 2 * correlation_sum))
-    spread = float(np.ptp(windows.mean(axis=1)))
-    drift = abs(float(np.polyfit(np.arange(len(data)), data, 1)[0])) * (len(data) - 1)
-    return {"passed": bool(spread <= tolerance and drift <= tolerance and min(ess) >= cfg.min_effective_samples),
-            "window_means": windows.mean(axis=1).tolist(),
-            "mean_spread": spread, "drift": drift, "effective_samples": ess,
-            "tolerance": tolerance, "samples": len(data)}
-
-
-def _recent_files(directory, stem):
-    archives = sorted(directory.glob(f"{stem}.r*.dat"), key=lambda p: int(p.stem.split('.r')[-1]))
-    return [*archives, directory / f"{stem}.dat"]
-
-
-def accumulated_stability(values, tolerance, initial_cfg, expanded_cfg):
-    """More evidence must not average away a recent shift in the observable."""
-    result = stability(values, tolerance, expanded_cfg)
-    recent = stability(values, tolerance, initial_cfg)
-    result['recent_mean_spread'] = recent.get('mean_spread')
-    result['recent_drift'] = recent.get('drift')
-    result['passed'] = bool(result['passed'] and recent.get('mean_spread', math.inf) <= tolerance
-                            and recent.get('drift', math.inf) <= tolerance)
-    return result
-
-
 def evaluate(directory, design, cfg, *, n_trailing_extra=0, evaluated_steps=None):
-    from backend.core.oxdna_health import base_pair_retention, parse_energy_dat
-    from backend.physics.oxdna_interface import iter_trajectory_frames_full
-    # A fixed tail cannot accumulate independent evidence when a plateau extends.
-    # Grow deterministically with completed blocks, never by searching for a pass.
-    # Bound each window to the same 1000-observation limit as the UI setting.
-    blocks = max(1, (evaluated_steps or cfg.block_steps) // cfg.block_steps)
-    initial_cfg = cfg
-    cfg = cfg.model_copy(update={'window_samples': min(1000, cfg.window_samples * blocks)})
-    energy = deque(maxlen=3 * cfg.window_samples)
-    pairing = deque(maxlen=3 * cfg.window_samples)
-    for path in reversed(_recent_files(directory, "energy")):
-        rows = [u for t, u in parse_energy_dat(path) if t > 0]
-        energy.extendleft(reversed(rows[-(energy.maxlen - len(energy)):]))
-        if len(energy) == energy.maxlen:
-            break
-    result = {"energy": accumulated_stability(energy, cfg.energy_tolerance, initial_cfg, cfg)}
-    if cfg.check_pairing:
-        pairs = 0
-        for path in reversed(_recent_files(directory, "trajectory")):
-            if path.exists():
-                recent = deque(maxlen=pairing.maxlen - len(pairing))
-                for frame in iter_trajectory_frames_full(path, design, n_trailing_extra=n_trailing_extra):
-                    fraction, pairs = base_pair_retention(design, frame)
-                    recent.append(fraction)
-                pairing.extendleft(reversed(recent))
-                if len(pairing) == pairing.maxlen:
-                    break
-        result["pairing"] = accumulated_stability(pairing, cfg.pairing_tolerance, initial_cfg, cfg) if pairs else {
-            "passed": False, "reason": "No designed pairs; disable the pairing gate for this system."}
-    result["passed"] = all(metric["passed"] for metric in result.values())
-    return result
+    """Record complete energy data, with no fitted model or equilibrium verdict."""
+    from backend.core.oxdna_thermal_metrics import energy_observations
+    summary, _ = energy_observations(directory, evaluated_steps=evaluated_steps)
+    return {"energy": summary}
 
 
 def advance(job, workspace, specs, idx, design):
-    """Idempotent boundary decision; caller persists the changed stage and job."""
-    from backend.core.oxdna_job import OxdnaStatus
-    from backend.core.oxdna_runner import capture_bead_count
+    """After native completion/health checks, always advance the fixed schedule."""
     spec = specs[idx]
     if not spec.thermal_ramp:
         return "done"
-    cfg = ThermalRamp.model_validate(spec.thermal_ramp)
     reports = dict((job.run_config or {}).get("thermal_progress") or {})
-    report = reports.get(spec.name, {})
-    if report.get("evaluated_steps") != spec.steps or (not cfg.gate and "gate_enabled" not in report):
-        metrics = evaluate(job.stage_dir(workspace, spec.name), design, cfg,
-                           n_trailing_extra=capture_bead_count(job), evaluated_steps=spec.steps)
-        previous_streak = report.get("consecutive_passes", 0) if report.get("gate_version") == 2 else 0
-        streak = previous_streak + 1 if metrics["passed"] else 0
-        done = not cfg.gate or streak >= cfg.consecutive_passes
-        report = {"temperature": spec.temperature, "evaluated_steps": spec.steps, "gate_version": 2,
-                  "consecutive_passes": streak, "metrics": metrics, "gate_enabled": cfg.gate,
-                  "stability_status": "passed" if metrics["passed"] else "not_demonstrated",
-                  "decision": "done" if done else "failed" if spec.steps >= cfg.max_steps else "extend"}
-        reports[spec.name] = report
-        job.run_config = {**(job.run_config or {}), "thermal_progress": reports}
-        # job.json is authoritative for restart; this file is a human-readable export.
-        encoded = json.dumps(report, indent=2)
-        for filename in ("thermal_check.json", f"thermal_check_{spec.steps}.json"):
-            (job.stage_dir(workspace, spec.name) / filename).write_text(encoded)
-    if report["decision"] == "extend":
-        specs[idx] = replace(spec, steps=min(cfg.max_steps, spec.steps + cfg.block_steps), refresh_vel=False)
-        job.stages[idx].steps = specs[idx].steps
-        job.stages[idx].status = "pending"
-        job.current_stage_idx = idx
-    elif report["decision"] == "failed":
-        job.stages[idx].status = "failed"
-        job.status = OxdnaStatus.failed
-        job.error = (f"Thermal plateau {spec.temperature} did not stabilize within {cfg.max_steps:,} steps. "
-                     "Temperature was not advanced. Inspect thermal_check.json and increase sampling or review tolerances.")
-    return report["decision"]
+    previous = reports.get(spec.name, {})
+    if previous.get('protocol_version') == 4 and previous.get('evaluated_steps') == spec.steps:
+        return 'done'
+    try:
+        metrics = evaluate(job.stage_dir(workspace, spec.name), design,
+                           ThermalRamp.model_validate(spec.thermal_ramp), evaluated_steps=spec.steps)
+    except Exception as error:
+        metrics = {'energy': {'status': 'unavailable', 'reason': str(error)}}
+    report = {"temperature": spec.temperature, "evaluated_steps": spec.steps,
+              "protocol_version": 4, "metrics": metrics, "gate_enabled": False,
+              "stability_status": "not_assessed", "decision": "done"}
+    if previous:
+        report['previous_decision'] = previous
+    reports[spec.name] = report
+    job.run_config = {**(job.run_config or {}), "thermal_progress": reports}
+    encoded = json.dumps(report, indent=2)
+    for filename in ('thermal_check.json', f'thermal_dwell_{spec.steps}.json'):
+        (job.stage_dir(workspace, spec.name) / filename).write_text(encoded)
+    return 'done'
 
 
 def configure_child(child, stage, config):
@@ -203,7 +114,8 @@ def configure_child(child, stage, config):
 def reset_copy(specs, config):
     if config is not None:
         config.pop("thermal_progress", None)
-    return [replace(s, steps=ThermalRamp.model_validate(s.thermal_ramp).block_steps, refresh_vel=True)
+    return [replace(s, steps=ThermalRamp.model_validate(s.thermal_ramp).block_steps, refresh_vel=True,
+                    thermal_ramp=ThermalRamp.model_validate(s.thermal_ramp).model_dump())
             if s.thermal_ramp else s for s in specs]
 
 
@@ -256,7 +168,7 @@ def restart_plateau(job, workspace, specs, idx):
     # Retain failed evidence outside the active sampling namespace.
     archive = directory / f"thermal_retry_{job.production_retries}"
     archive.mkdir(exist_ok=True)
-    for pattern in ("energy*.dat", "trajectory*.dat", "thermal_check*.json", "error_conf.dat"):
+    for pattern in ("energy*.dat", "trajectory*.dat", "thermal_check*.json", "thermal_dwell*.json", "thermal_energy_curve.json", "thermal_attempt_*.json", "error_conf.dat"):
         for path in directory.glob(pattern):
             path.replace(archive / path.name)
 

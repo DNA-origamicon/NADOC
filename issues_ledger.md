@@ -1,5 +1,40 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-211 — Comparable fixed-duration thermal ramps (2026-11-17)
+
+Reduce the default from 50M to 10M steps per temperature and remove adaptive
+progression entirely. A single duration in the wizard controls every stage.
+Energy remains recorded for metrics without exponential fitting or convergence
+acceptance. Old saved gate controls must not re-enable adaptation; preserve
+historical decisions, numerical health checks and existing job durations.
+
+
+## ISSUE-210 — Manual advance of a thermal ramp (2026-11-17)
+
+Add Skip to next stage to the Tm parent and every temperature child context menu.
+Always address the active plateau; preserve its partial data, mark it skipped,
+and use its valid checkpoint to launch the next temperature. Coordinate with
+runtime ownership, server restart, duplicate requests, natural stage completion,
+and a later Stop request. Do not mark a manual skip as an equilibration pass.
+
+
+## ISSUE-209 — oxDNA energy needs metrics display/export with thermal annotations (2026-11-17)
+
+The metrics card exposed geometry but not the recorded oxDNA energy history.
+Add independent energy generation for active or completed jobs, an annotated
+potential-energy plot, and PNG/CSV export. Preserve resumed samples and exact
+per-row temperature identity, and keep metric caches isolated by selected job.
+
+
+## ISSUE-208 — Energy waiting must fit the complete relaxation history (2026-11-17)
+
+Raw energies were retained, but gate v2 used only a bounded trailing portion.
+Replace that energy decision with a full-history exponential fit at every sampling
+boundary, preserving restart time offsets and exposing complete stored curves.
+Report time constant, asymptote, remaining relaxation and uncertainty; reject
+unidentified/poor fits rather than manufacture a plateau. Preserve fixed-dwell
+nonblocking behavior, old verdicts and independent optional pairing checks.
+
 ## ISSUE-207 — Fixed-dwell thermal runs must report actual stability (2026-11-17)
 
 The cis-anti GPU ramp exhausted its energy gate at 25°C; the native blocks were

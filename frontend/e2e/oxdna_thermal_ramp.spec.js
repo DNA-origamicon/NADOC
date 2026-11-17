@@ -4,7 +4,7 @@
  */
 import { expect, test } from '@playwright/test'
 
-test('production wizard toggles heating, cooling and observable stability', async ({ page }, testInfo) => {
+test('production wizard toggles heating, cooling and fixed duration', async ({ page }, testInfo) => {
   if (process.env.NADOC_THERMAL_VISUAL_REVIEW) test.setTimeout(120000)
   const errors = []
   page.on('pageerror', error => errors.push(String(error)))
@@ -16,7 +16,10 @@ test('production wizard toggles heating, cooling and observable stability', asyn
   const wizard = page.locator('.modal--oxdna-wizard')
   await wizard.locator('.wizard-mode', { hasText: 'Production' }).click()
   await wizard.locator('[data-thermal-field="enabled"]').check()
-  await expect(wizard.locator('[data-thermal-field="gate"]')).toBeChecked()
+  await expect(wizard.locator('[data-thermal-field="gate"]')).toHaveCount(0)
+  await expect(wizard.locator('[data-thermal-field="block_steps"]')).toHaveValue('10000000')
+  await expect(wizard.locator('[data-thermal-field="max_steps"]')).toHaveCount(0)
+  await expect(wizard).toContainText('Every temperature runs for this fixed number of steps')
   for (const width of [1440, 760, 480]) {
     await page.setViewportSize({ width, height: 1000 })
     const layout = await wizard.locator('[data-thermal-controls]').evaluate(root => {
@@ -59,7 +62,9 @@ test('production wizard toggles heating, cooling and observable stability', asyn
 
   await page.setViewportSize({ width: 1280, height: 720 })
   await expect(wizard.locator('[data-job-temperature]')).toBeHidden()
-  await expect(wizard.locator('[data-oxdna-field="steps"]')).toBeDisabled()
+  await expect(wizard.locator('[data-oxdna-field="steps"]')).toHaveCount(0)
+  await wizard.locator('[data-thermal-field="block_steps"]').fill('2000000')
+  await wizard.locator('[data-thermal-field="block_steps"]').press('Tab')
   await wizard.locator('[data-thermal-field="start_c"]').fill('85')
   await wizard.locator('[data-thermal-field="start_c"]').press('Tab')
   await wizard.locator('[data-thermal-field="end_c"]').fill('25')
@@ -69,9 +74,11 @@ test('production wizard toggles heating, cooling and observable stability', asyn
   await expect(config).toContainText('temperature = 358.15K')
   await expect(config).toContainText('temperature = 298.15K')
   await expect(config).toContainText('13_thermal')
-  await expect(config).toContainText('"gate":true')
+  await expect(config).not.toContainText('"gate"')
+  await expect(config).toContainText('steps = 2000000')
+  expect(((await config.textContent()).match(/steps = 2000000/g) || [])).toHaveLength(13)
+  await expect(wizard).toContainText('26,000,000 steps')
   await wizard.locator('.wizard-tab', { hasText: 'Run parameters' }).click()
-  await wizard.locator('[data-thermal-field="gate"]').uncheck()
   await expect(wizard.locator('[data-thermal-field="max_steps"]')).toHaveCount(0)
   await wizard.locator('[data-thermal-field="enabled"]').uncheck()
   await expect(wizard.locator('[data-job-temperature]')).toBeVisible()

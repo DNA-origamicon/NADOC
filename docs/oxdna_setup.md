@@ -445,14 +445,14 @@ Existing trajectories already contain the required beads; reopen the trajectory
 after refreshing the application. This display correction does not alter the
 simulation or repair attachments in older runs.
 
-## Temperature ramps and observable-stability gates
+## Temperature ramps and fixed stage duration
 
 In **Dynamics → oxDNA → New job → Production**, select a completed relaxation
 (or production continuation), then enable **Thermal ramp**. Start/end temperatures
 are in °C; the positive increment works for heating or cooling and always includes
-the endpoint. The Summary shows every plateau. Disable the stability checkbox for
-fixed dwell, or set sampling-block steps and maximum steps per temperature for
-adaptive dwell. The current implementation uses the **local, full-system runner**;
+the endpoint. Set **Steps per temperature** once; every stage uses that fixed
+number of integration steps. The default is **10 million steps per temperature**.
+The Summary shows every plateau and the exact total planned steps. The current implementation uses the **local, full-system runner**;
 a simulation submodel box must be disabled. Ordinary CPU/CUDA physics and frozen
 CPD models are inherited from the parent. CPD supports local CPU or CUDA MD with its smaller timestep; choose GPU (CUDA)
 in the production wizard to continue a CPU-relaxed parent on the GPU. No authored topology or molecular geometry changes.
@@ -483,85 +483,72 @@ the ticks aligned with the displayed frames. The design-reference seed and older
 archived attempts without a saved input have no temperature label. New resumed
 attempts preserve their input alongside archived frames.
 
-The optional gate compares potential energy per particle and, by default, the
-geometric fraction of designed base pairs. It checks three equal-sized trailing
-windows at each block boundary: the range of window means and full-window linear drift
-must each lie below the selected absolute tolerance. Every window also needs the
-selected effective sample count, estimated from positive autocorrelations up to
-the first nonpositive lag. Each extension grows the window by its configured
-initial sample count, up to 1,000 observations per window, so longer sampling
-can accumulate independent evidence. Window growth depends only on completed
-blocks, never on searching for a passing result. Two consecutive passing block
-boundaries are required by default; their overlapping evidence is not independent.
-The original short-window drift and mean-spread checks also remain active, so
-larger windows cannot conceal a recent shift.
-The pairing metric is a base-site distance proxy, not a native hydrogen-bond
-energy measurement. Disable it for systems without designed complementary pairs.
-A low pairing fraction can pass: actual melting is allowed.
+Progression is fixed-duration only. There is no stability checkbox, maximum dwell,
+consecutive-pass requirement, or automatic stage extension. Potential-energy
+fluctuations and dissociation do not change the scheduled duration. Native
+numerical checks still reject invalid configurations, nonfinite energies and
+unsafe covalent backbones. Manual skip remains an explicit, recorded exception
+to the planned duration.
 
-Defaults: 25–85 °C in 5 °C increments, one million steps per block, ten million
-maximum steps per temperature, initially 20 samples/window, ten minimum effective samples,
-energy tolerance 0.02 oxDNA units/particle, pairing tolerance 0.02. Maximum dwell
-must be a whole number of blocks. Output cadence is increased as necessary to
-provide at least three windows per block; the preview includes that output cost.
-The maximum applies to a valid sampling attempt; numerical-instability retries
-have the separate existing production retry budget and reset the gate evidence.
+Raw `energy.dat` and resumed `energy.rN.dat` histories remain intact.
+`thermal_energy_curve.json` stores complete observations and descriptive statistics
+(sample count, mean, standard deviation, minimum and maximum), without automatic
+curve fitting or an equilibrium verdict. `thermal_dwell_<steps>.json` records fixed
+stage completion with `gate_enabled: false` and `stability_status: not_assessed`.
+`GET /api/oxdna/jobs/{id}/thermal-metrics` exposes the recorded curves and decisions.
+Historical gate decisions remain preserved. The explicit offline exponential-fit
+analysis script remains available for historical research, but is never part of
+running or manually skipping a stage.
 
-The runner extends a plateau from its checkpoint, preserving velocities within
-that temperature, and refreshes velocities when changing temperature. Each resumed
-native process gets a reproducible seed derived from its job, stage, banked steps
-and retry number, recorded in `thermal_attempt_<steps>_retry<N>.json`, so sampling
-blocks do not repeat the same noise sequence. Stop/resume
-retains sampled steps; restart reconciliation cannot treat an unchecked native
-completion as a passed gate. Copies start with fresh gate evidence. Generated
-plateaus are edited through `thermal_ramp`, and shared physics through
-`stage_overrides.1_production`, rather than individual generated stage rows.
-Queued/copied production jobs also expose the toggle in **Edit settings**.
+Right-click a **Tm Run** or any of its temperature rows and choose **Skip to next
+stage** to interrupt the currently active temperature and continue to the next one.
+The clicked child does not determine which stage is skipped. The option is available
+for local running/stopped/failed ramps, and disabled at the final temperature.
+The current process stops before the next launches; its latest valid saved state
+(or incoming state if no recoverable output exists yet) seeds the next temperature.
+Samples remain available for playback and energy metrics. The row and saved decision
+say **Skipped**, not converged. Diagnostic failure does not prevent a manual skip;
+a missing valid starting configuration does. A detached controller survives API-server
+restart, guards against stale/double requests, and honors a subsequent Stop request.
 
-In adaptive (gated) mode, if the maximum dwell is exhausted, the job fails with an explicit unsettled
-plateau message and does **not** advance temperature. Inspect recorded settings
-(`thermal_progress`), `thermal_check.json`, and the per-block
-`thermal_check_<steps>.json` files for window means, drift, effective sample
-counts and the decision. All trajectories and energies remain available for
-analysis. An exhausted gate can be resumed without discarding outputs through
-`POST /api/oxdna/jobs/{id}/start` with `{"thermal_max_steps": 20000000}`.
-The new cap must exceed the previous cap and allow all required consecutive
-passes. This explicit extension preserves the previous verdict in
-`thermal_budget_changes`, keeps velocities/checkpoints and all sampled segments,
-and starts the next block at the same temperature. It changes neither tolerances
-nor the required effective sample count. Gate version 2 records growing windows;
-a pass streak from version 1 is not counted toward version 2 acceptance.
-Longer sampling or independent runs may be needed; loosening a gate
-changes its meaning and is not evidence of physical convergence.
+The oxDNA **Graphs and Metrics → Potential energy** row offers Generate, Display,
+and Export (PNG/CSV). Generate reads all currently recorded production/field energy
+samples, including resumed segments, independently of trajectory geometry. It works
+while a job runs; generate again to refresh the snapshot. Time is shown in native
+oxDNA units, with stages and chained jobs concatenated over their recorded durations.
+Thermal stages have dashed temperature markers in both the display and PNG export;
+these are thermostat setpoints from executed inputs, not measured temperatures.
+CSV includes each sample's time, potential energy per particle, temperature, stage,
+and job ID, preserving duplicate resume/temperature boundary records. Pending stages
+without recorded energy are omitted. Generating metrics never changes the schedule.
 
-With **fixed dwell**, each plateau advances after its configured steps and numerical
-health checks. Stability is still measured: `thermal_check.json` records
-`gate_enabled: false`, the actual energy/optional-pairing metrics, and
-`stability_status: passed` or `not_demonstrated`. Missing statistical evidence or
-observable drift does not fail a fixed-dwell job and is never relabeled as a
-convergence pass. Neither mode imposes a minimum retained-pair fraction on thermal
-production or rejects expansion merely because strands dissociate. Invalid
-checkpoints, nonfinite energy and overstretched covalent backbones remain errors.
+Defaults: 25–85 °C in 5 °C increments and **10,000,000 steps per temperature**.
+The integration timestep is unchanged. Default energy-recording intervals remain
+at most 50,000 steps; explicit intervals are respected subject to exact duration
+divisibility. Each resumed process uses a reproducible seed derived from job,
+stage, banked steps and retry number, recorded in `thermal_attempt_*.json`.
+Stop/resume preserves accumulated steps and the saved step budget; it does not
+start a new full dwell. Numerical retries retain their separate retry budget.
+
+New/copy/edit submissions omit retired adaptive controls. Older saved `gate: true`
+settings cannot enable adaptive progression in the updated runner. The retired
+`thermal_max_steps` resume request is rejected without altering the saved plan.
+An already-running detached worker retains the code/settings it loaded at launch;
+these changes do not shorten or restart an ongoing job. New jobs default to 10M;
+existing saved step counts remain unchanged unless explicitly edited/copied.
 
 `scripts/watch_oxdna_ramp.py JOB_DIRECTORY AUDIT_DIRECTORY` watches filesystem
-commit events without completion polling, journals block verdicts, and alerts on
-each completed temperature, numerical retry, terminal failure/completion, or a
-worker that stops updating for 20 minutes. It audits this CPD GPU melt workflow
-and preserves separate numerical-completion and stability results.
-
-Observable stability is a heuristic, **not proof of global thermodynamic
-equilibrium**, and a thermal ramp alone does not validate melting temperatures.
-Compare independent replicas and heating/cooling histories before interpreting
-relative CPD effects. Rare transitions or metastable plateaus can escape these
-checks. For thermodynamic sampling context, see the upstream
-[oxDNA umbrella-sampling tutorial](https://lorenzo-rovigatti.github.io/oxDNA/umbrella_sampling.html).
+commit events without completion polling, records completed temperatures, and
+alerts on retries, failures or a worker that stops updating. It does not extend
+stage budgets or require energy convergence. Fixed durations make the sampling
+schedule comparable; they do not establish thermodynamic equilibration.
 
 For explicitly authorized native workflow checks, an existing managed parent can
 be used without constructing another design:
 
 ```bash
 uv run python -m scripts.validate_oxdna_thermal_ramp PARENT_JOB_ID WORKSPACE \
-  --config '{"start_c":25,"end_c":30,"step_c":5,"gate":false,"block_steps":10000}'
+  --config '{"start_c":25,"end_c":30,"step_c":5,"block_steps":10000}'
 ```
 
 This tests execution; these short runs do not establish melting thermodynamics.

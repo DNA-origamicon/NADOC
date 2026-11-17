@@ -14,7 +14,7 @@ test('wizard creates a Tm tree whose parent and children load the requested temp
   await page.route(`**/api/oxdna/jobs/${parent.job_id}/run`, async r=>{
     const body=r.request().postDataJSON(); payloads.push(body)
     expect(body.backend).toBe('CUDA')
-    expect(body.thermal_ramp).toMatchObject({start_c:25,end_c:35,step_c:5,gate:true})
+    expect(body.thermal_ramp).toMatchObject({start_c:25,end_c:35,step_c:5,block_steps:10000000})
     job.run_config={kind:'run',...body}; jobs.push(job)
     await r.fulfill({json:job})
   })

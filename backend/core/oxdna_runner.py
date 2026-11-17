@@ -1009,7 +1009,7 @@ def job_overall_fraction(
     n = len(job.stages)
     if not n:
         return 0.0
-    done = sum(1 for s in job.stages if s.status == "done")
+    done = sum(1 for s in job.stages if s.status in ("done", "skipped"))
     idx = job.current_stage_idx
     stage_frac = 0.0
     if 0 <= idx < n and idx < len(specs):
@@ -1042,7 +1042,7 @@ def job_progress(
     """Return overall + current-stage progress fractions + an ETA + a live health
     snapshot for the panel."""
     n = len(job.stages)
-    done = sum(1 for s in job.stages if s.status == "done")
+    done = sum(1 for s in job.stages if s.status in ("done", "skipped"))
     idx = job.current_stage_idx
     stage_frac = 0.0
     eta_seconds: float | None = None
@@ -1820,7 +1820,7 @@ async def run_job(
         stage_dir.mkdir(parents=True, exist_ok=True)
 
         # Recover a completed native block whose controller was interrupted before
-        # recording its gate decision. Never infer thermal acceptance from exit zero.
+        # recording its completion. Retain native checkpoint and numerical health checks.
         from backend.core.oxdna_thermal_ramp import recovered_boundary_ready
         if spec.thermal_ramp and recovered_boundary_ready(job, workspace_dir, spec, design):
             from backend.core.oxdna_thermal_ramp import advance
@@ -2485,7 +2485,7 @@ def reconcile_oxdna_status(
 
     interrupted = False
     for idx, st in enumerate(job.stages):
-        if st.status == "done":
+        if st.status in ("done", "skipped"):
             continue
         sdir = job.stage_dir(workspace_dir, st.name)
         expected = expected_energy_lines(specs[idx])
@@ -2512,7 +2512,7 @@ def reconcile_oxdna_status(
             interrupted = True
             break
 
-    if all(s.status == "done" for s in job.stages):
+    if all(s.status in ("done", "skipped") for s in job.stages):
         job.status = OxdnaStatus.completed
         job.current_stage_idx = len(job.stages)
         job.error = None
@@ -2520,7 +2520,7 @@ def reconcile_oxdna_status(
         # The runner died partway through a stage that never finished on disk.
         job.status = OxdnaStatus.stopped
         job.current_stage_idx = next(
-            (i for i, s in enumerate(job.stages) if s.status not in ("done",)),
+            (i for i, s in enumerate(job.stages) if s.status not in ("done", "skipped")),
             len(job.stages),
         )
     else:

@@ -36,7 +36,8 @@ export function thermalRunSteps(job) {
         ? start + Math.sign(end - start) * Math.min((Number(match[1]) - 1) * increment, Math.abs(end - start)) : null
     const current = index === job.current_stage_idx
     let status = 'waiting'
-    if (stage.status === 'done') status = 'completed'
+    if (stage.status === 'skipped') status = 'skipped'
+    else if (stage.status === 'done') status = 'completed'
     else if (stage.status === 'failed' || (current && job.status === 'failed')) status = 'failed'
     else if (current && ['stopped', 'paused'].includes(job.status)) status = job.status
     else if (job.status === 'running' && (stage.status === 'running' || (current && stage.started_at))) status = 'running'

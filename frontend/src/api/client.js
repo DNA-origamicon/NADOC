@@ -3194,6 +3194,7 @@ export const getOxdnaStrain = (id, opts) => {
 }
 /** Graphs & Metrics card: start a background twist/curvature/base-pairing compute for a
  *  job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getOxdnaMetricsRun`. */
+export const skipOxdnaStage = (id, body) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/skip-stage`, body)
 export const startOxdnaMetrics   = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/metrics/start`, body)
 /** Poll a Graphs & Metrics run → {state, progress, eta_s, frames_done, frames_total, result?}. */
 export const getOxdnaMetricsRun  = (runId)       => _oxdnaJSON('GET',  `/oxdna/metrics/${runId}`)

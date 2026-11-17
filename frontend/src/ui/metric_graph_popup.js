@@ -62,7 +62,7 @@ function _build() {
 export function metricSpecs(metric, result, scope) {
   const meta = METRIC_META[metric]
   const bp = metric === 'base_pairing'
-  const temporalBasis = meta.temporal.xLabel === 'simulation time (ns)'
+  const temporalBasis = meta.temporal.xLabel.startsWith('simulation time')
     ? 'sim time'
     : 'trajectory frame'
   const sampleNote = meta.source !== 'namd-log' && result?.sampling === 'uniform'
@@ -81,6 +81,9 @@ export function metricSpecs(metric, result, scope) {
         ? `Temporal — vs ${temporalBasis} (jobs concatenated)`
         : `Temporal — vs ${temporalBasis}`) + sampleNote,
       xLabel: meta.temporal.xLabel, yLabel: meta.temporal.yLabel,
+      annotations: (result?.[metric]?.temporal?.boundaries || [])
+        .filter(b => Number.isFinite(b.temperature_c))
+        .map(b => ({ x: b.start_x, label: `${b.temperature_c}°C` })),
       zeroLine: meta.zeroLine, yMin: bp ? 0 : null, yMax: bp ? 1 : null,
     }),
   }

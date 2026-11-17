@@ -147,3 +147,28 @@ describe('metricSpecs', () => {
     expect(specs.temporal.yLabel).toBe('aligned RMSD (nm)')
   })
 })
+
+
+it('annotates thermal energy graphs and exports exact temperatures at duplicate boundaries', () => {
+  const result = { oxdna_energy: { temporal: {
+    per_frame: [-1, -2, -3, -4], x_values: [0, 10, 10, 20],
+    temperature_c: [25, 25, 30, 30], stage_names: ['warm', 'warm', 'hot', 'hot'],
+    job_ids: ['j1', 'j1', 'j1', 'j1'], boundaries: [
+      { start_x: 0, temperature_c: 25 }, { start_x: 10, temperature_c: 30 }],
+  } } }
+  const specs = metricSpecs('oxdna_energy', result, 'latest')
+  expect(specs.spatial).toBeNull()
+  expect(specs.temporal.xLabel).toBe('simulation time (oxDNA units)')
+  expect(specs.temporal.annotations.map(a => a.label)).toEqual(['25°C', '30°C'])
+  expect(specs.temporal.annotations[1].px).toBeGreaterThan(specs.temporal.annotations[0].px)
+  const csv = metricCSVs(result, 'oxdna_energy').temporal
+  expect(csv).toContain('10,-2,25,"warm","j1"')
+  expect(csv).toContain('10,-3,30,"hot","j1"')
+})
+
+it('keeps nearby energy ticks distinct instead of rounding all to one decimal', () => {
+  const spec = buildChartSpec({ series: [{ points: [[0, -1.42], [10, -1.34]] }] })
+  const labels = spec.yTicks.map(tick => tick.label)
+  expect(new Set(labels).size).toBe(labels.length)
+  expect(labels).toContain('-1.40')
+})

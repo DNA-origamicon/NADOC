@@ -4,11 +4,11 @@ import '../styles/oxdna_thermal_job.css'
 const expandedByList = new WeakMap()
 const states = {
   completed: ['✓', 'Completed'], running: ['●', 'Running'], waiting: ['○', 'Queued'],
-  failed: ['!', 'Failed'], stopped: ['■', 'Stopped'], paused: ['Ⅱ', 'Paused'],
+  skipped: ['↷', 'Skipped'], failed: ['!', 'Failed'], stopped: ['■', 'Stopped'], paused: ['Ⅱ', 'Paused'],
 }
 
 /** Expansion belongs to this list, and survives polling/rebuilding its DOM. */
-export function thermalJobGroup(list, row, model, doc = document, onSelect) {
+export function thermalJobGroup(list, row, model, doc = document, onSelect, onContextMenu) {
   if (!model.thermalSteps) return row
   let expanded = expandedByList.get(list)
   if (!expanded) { expanded = new Set(); expandedByList.set(list, expanded) }
@@ -23,6 +23,8 @@ export function thermalJobGroup(list, row, model, doc = document, onSelect) {
   const summary = doc.createElement('div')
   summary.className = 'thermal-job-summary'
   summary.textContent = `${model.thermalSteps.filter(s => s.status === 'completed').length} / ${model.thermalSteps.length} temperature steps completed`
+  const skipped = model.thermalSteps.filter(s => s.status === 'skipped').length
+  if (skipped) summary.textContent += ` · ${skipped} skipped`
   details.append(summary)
   const children = doc.createElement('ol')
   children.setAttribute('aria-label', `Temperature steps for ${model.label}`)
@@ -46,6 +48,7 @@ export function thermalJobGroup(list, row, model, doc = document, onSelect) {
     select.append(temperature, state)
     select.addEventListener('click', event => { event.stopPropagation(); onSelect?.(model.jobId, step.name) })
     select.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation() })
+    item.addEventListener('contextmenu', event => { event.stopPropagation(); onContextMenu?.(model.jobId, event) })
     item.append(select); children.append(item)
   }
   if (!model.thermalSteps.length) summary.textContent = 'Temperature steps are being prepared.'

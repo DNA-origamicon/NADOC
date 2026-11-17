@@ -10,14 +10,14 @@ def fixture(directory, status, count=13):
         name=f'{i+1}_thermal'
         specs.append({'name':name,'temperature':f'{298.15+5*i}K','steps':2_000_000,
                       'backend':'CUDA','interaction':'CpdDNA2','min_bp_retained':0,
-                      'thermal_ramp':{'check_pairing':False,'consecutive_passes':2}})
+                      'thermal_ramp':{'block_steps':2_000_000}})
         stages.append({'name':name,'status':'done' if status=='completed' else 'running'})
         if status=='completed':
             d=directory/name;d.mkdir()
             (d/'input.txt').write_text('backend = CUDA\ninteraction_type = CpdDNA2\nuse_edge = true')
             (d/'oxdna.log').write_text('NADOC_CPD_CUDA_V1\nEND OF THE SIMULATION, everything went OK!')
             (d/'last_conf.dat').touch()  # Hash-only fixture, not a molecular configuration.
-            progress[name]={'decision':'done','metrics':{'passed':True},'consecutive_passes':2}
+            progress[name]={'decision':'done','gate_enabled':False,'stability_status':'not_assessed','metrics':{'energy':{'status':'recorded'}}}
             health.append({'stage':name,'passed':True,'bp_retained_fraction':0.0})
     job={'job_id':'fixture','backend':'CUDA','status':status,'stages':stages,'current_stage_idx':0,
          'run_config':{'thermal_progress':progress},'health_samples':health}

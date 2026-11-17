@@ -15,9 +15,12 @@ describe('thermal ramps', () => {
   })
   it('rejects unsafe bounds and matches exact budget cadence', () => {
     expect(thermalError(THERMAL_DEFAULTS)).toBeNull()
+    expect(THERMAL_DEFAULTS.block_steps).toBe(10_000_000)
+    expect(THERMAL_DEFAULTS.max_steps).toBeUndefined()
+    expect(thermalCadence(THERMAL_DEFAULTS)).toBe(50_000)
     expect(thermalError({ ...THERMAL_DEFAULTS, gate: false, block_steps: 20000000 })).toBeNull()
     expect(thermalCadence({ ...THERMAL_DEFAULTS, gate: false }, 10000)).toBe(10000)
-    for (const bad of [{ step_c: 0 }, { start_c: NaN }, { max_steps: 1000 }, { max_steps: 2500000 }, { min_effective_samples: 30 }])
+    for (const bad of [{ step_c: 0 }, { start_c: NaN }, { block_steps: 999 }, { block_steps: 200000001 }, { block_steps: 1000.5 }])
       expect(thermalError({ ...THERMAL_DEFAULTS, ...bad })).toBeTruthy()
     const cadence = thermalCadence(THERMAL_DEFAULTS, 9876)
     expect(cadence).toBeLessThanOrEqual(9876)
@@ -31,7 +34,7 @@ describe('thermal ramps', () => {
     expect(validateOxdnaProductionWizard({ ...values, stage_overrides: { '1_production': { thermostat: 'no' } } }).valid).toBe(false)
     expect(oxdnaProductionPayload({}).thermal_ramp).toBeUndefined()
   })
-  it('enables the panel, edits criteria and disables the gate and ramp', () => {
+  it('enables the panel, edits fixed duration and disables the ramp', () => {
     let value = null
     const mount = document.createElement('div')
     document.body.append(mount)
@@ -42,11 +45,23 @@ describe('thermal ramps', () => {
     const end = mount.querySelector('[data-thermal-field="end_c"]')
     end.value = '95'; end.dispatchEvent(new Event('change'))
     expect(value.end_c).toBe(95)
-    mount.querySelector('[data-thermal-field="gate"]').click()
-    expect(value.gate).toBe(false)
+    expect(mount.querySelector('[data-thermal-field="gate"]')).toBeNull()
+    expect(mount.querySelector('[data-thermal-field="max_steps"]')).toBeNull()
     expect(mount.querySelector('[data-thermal-field="energy_tolerance"]')).toBeNull()
     mount.querySelector('[data-thermal-field="enabled"]').click()
     expect(value).toBeNull()
     mount.remove()
   })
+})
+
+
+it('strips obsolete gate controls from saved jobs and gives every temperature the same duration', () => {
+  const values = { parentJobId: 'parent', thermal_ramp: { ...THERMAL_DEFAULTS, block_steps: 123000,
+    gate: true, max_steps: 1000000, consecutive_passes: 5, energy_tolerance: .0001 } }
+  expect(oxdnaProductionPayload(values).thermal_ramp).toEqual({ ...THERMAL_DEFAULTS, block_steps: 123000 })
+  expect(oxdnaProductionPayload({ ...values, steps: -1 }).steps).toBe(123000)
+  expect(validateOxdnaProductionWizard({ ...values, steps: -1 }).valid).toBe(true)
+  const stages = oxdnaProductionStagePlan(values)
+  expect(stages).toHaveLength(13)
+  expect(stages.every(stage => stage.steps === 123000 && stage.purpose === 'Fixed temperature dwell')).toBe(true)
 })

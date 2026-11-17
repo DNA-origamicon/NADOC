@@ -31,6 +31,7 @@ import { createOptimisticJobDeletion } from './simulation_job_deletion.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { getRunDir, mountDirectoryButton } from './run_location.js'
 import { renderJobList } from './jobs_panel_render.js'
+import { thermalSkipAction, skipThermalStage } from './oxdna_thermal_skip.js'
 import { createContextMenu } from './primitives/context_menu.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
 import { relaxIndexMap, relaxRowLabel, runIndicatorTags, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
@@ -759,6 +760,10 @@ export function initSimulateJobs({
       })
       items.push({ type: 'separator' })
     }
+    const skip = thermalSkipAction(node)
+    if (skip) items.push({ label: 'Skip to next stage', disabled: !skip.enabled, title: skip.title,
+      onClick: () => { void skipThermalStage(node, { api, refresh: _fetch, toast: showToast }) },
+    })
     if (node.remote_only && ['namd', 'oxdna'].includes(node.engine)) {
       items.push({
         label: `Transfer job to this computer${node.source_peer_name ? ` from ${node.source_peer_name}` : ''}`,

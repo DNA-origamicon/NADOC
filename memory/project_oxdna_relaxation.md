@@ -12,7 +12,33 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
-- Fixed-dwell thermal reporting (2026-11-17, ISSUE-207): always compute observable
+- Manual thermal skip (2026-11-17, ISSUE-210): parent and child context menus
+  target the current plateau, with expected-stage guard. Detached controller stops
+  the old owner, validates/recovers its checkpoint, persists `skipped`, then
+  transfers the idle lease to a fresh worker generation. Never inherits the old
+  stop signal or skips a newly advanced temperature. Later Stop cancels pending
+  skip. Raw samples and prior gate decisions remain; final temperature disabled.
+  Local running/stopped/failed ramps only. No actual user stage skipped for testing.
+
+- Energy metrics card (2026-11-17): Potential energy Generate/Display/Export reads
+  full production/field energy histories without loading geometry. Live snapshots
+  refresh on Generate. PNG and display annotate thermostat setpoints at stage
+  boundaries; CSV preserves per-sample temperature/stage/job identity. Separate
+  oxDNA-unit metadata prevents NAMD kcal/mol labels leaking into oxDNA plots.
+  `oxdna_energy_series.py` owns read-only assembly; shared graph/card own rendering.
+
+- Fixed-duration ramps (2026-11-17, ISSUE-211) supersede the earlier adaptive
+  behavior: default 10M steps per temperature (one fifth of 50M). Wizard exposes
+  only start/end/increment and Steps per temperature. No gating, automatic
+  extension, exponential fitting or stationarity pass is used during execution
+  or manual skip. Complete energies and descriptive statistics are saved;
+  protocol v4 reports `not_assessed`. Legacy adaptive fields are accepted for
+  reading but omitted on new serialization and cannot enable gating. Retired
+  extension requests reject without changing a plan. Existing workers and saved
+  durations are not silently restarted/resized. Historical fits remain available
+  through the explicit offline analysis script only.
+
+- Historical fixed-dwell reporting (ISSUE-207, superseded by v4): computed
   stability; `gate_enabled: false` advances after numerical health checks even
   when `stability_status` is `not_demonstrated`. Never substitute a fake stability
   pass for gate-off mode. Real cis-anti GPU job 60694a597e17 completed 13 × 5M-step
@@ -31,7 +57,7 @@ CG-to-atomistic handoff. Historical phases and experiments are in
   `/cpd-backend` with checkpoint/gate preservation and recorded old specifications.
   The wizard exposes production backend selection. See `docs/oxdna_cpd.md`.
 
-- Thermal gate recovery (2026-11-16, ISSUE-205): fixed-tail checks previously
+- Historical thermal gate recovery (ISSUE-205, superseded by v4): fixed-tail checks previously
   discarded accumulated evidence on every extension. Version 2 grows trailing
   windows with completed blocks (bounded at 1,000 samples/window), preserving
   drift/mean/ESS thresholds and resetting old-version pass streaks. Explicit
@@ -39,12 +65,11 @@ CG-to-atomistic handoff. Historical phases and experiments are in
   the prior verdict/cap and resumes the next block without resetting outputs.
 
 - Thermal ramps (2026-11-16): Production wizard toggle and copied-job editor;
-  local full-system heating/cooling, optional energy/geometric-pairing stability
-  windows with autocorrelation sample-count gate, consecutive passes and hard
-  dwell cap. Runner extends checkpoints; copies/retries reset evidence and
-  reconciliation cannot bypass a gate. `backend/core/oxdna_thermal_ramp.py` owns
+  local full-system heating/cooling with a fixed step count per temperature.
+  Runner resumes checkpoints; copies/retries reset evidence and
+  reconciliation retains numerical health checks. `backend/core/oxdna_thermal_ramp.py` owns
   schedule/decisions; per-attempt seeds prevent repeated noise across blocks.
-  Native CPD gated heating and fixed-dwell cooling completed. See [workflow and limitations](../docs/oxdna_setup.md#temperature-ramps-and-observable-stability-gates).
+  Native CPD gated heating and fixed-dwell cooling completed. See [workflow and limitations](../docs/oxdna_setup.md#temperature-ramps-and-fixed-stage-duration).
   Stability is not thermodynamic equilibration; CPD Tm ranking remains unvalidated.
   Job lists label ramps `Tm Run N` (production numbering per design). The shared
   `oxdna_thermal_job` model/renderer expands real temperature stages with live

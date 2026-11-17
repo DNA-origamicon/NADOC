@@ -76,3 +76,16 @@ it('expands without selecting the job and retains expansion through polling', ()
   list.querySelector('button').click()
   expect(list.querySelector('.thermal-job-details').hidden).toBe(true)
 })
+
+it('routes every child context menu to its parent and labels skipped temperatures honestly', () => {
+  const list = document.createElement('div'), onContextMenu = vi.fn()
+  const value = job()
+  value.stages[0].status = 'skipped'
+  renderJobList(list, buildJobListModel([value], ctx), { onContextMenu })
+  expect(list.querySelector('[data-thermal-stage="1_thermal"]').textContent).toContain('Skipped')
+  for (const child of list.querySelectorAll('[data-thermal-stage]')) {
+    child.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }))
+    expect(onContextMenu).toHaveBeenLastCalledWith('tm', expect.any(MouseEvent))
+  }
+  expect(onContextMenu).toHaveBeenCalledTimes(4)
+})

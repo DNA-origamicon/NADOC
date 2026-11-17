@@ -12,10 +12,9 @@ import os
 from pathlib import Path
 import select
 import time
-import urllib.request
 
 
-def monitor(directory, output, *, resume_max=None, idle_seconds=1200):
+def monitor(directory, output, *, idle_seconds=1200):
     directory, output = Path(directory).resolve(), Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     libc = ctypes.CDLL(None, use_errno=True)
@@ -34,21 +33,13 @@ def monitor(directory, output, *, resume_max=None, idle_seconds=1200):
         if alert:
             print(json.dumps(record), flush=True)
     try:
-        original = json.loads((directory / 'job.json').read_text())
-        if resume_max is not None:
-            request = urllib.request.Request(
-                f"http://127.0.0.1:8000/api/oxdna/jobs/{original['job_id']}/start",
-                data=json.dumps({'thermal_max_steps': resume_max}).encode(),
-                headers={'Content-Type': 'application/json'}, method='POST')
-            with urllib.request.urlopen(request, timeout=60) as response:
-                emit('resume', {'response': json.load(response), 'maximum': resume_max})
         last_change = time.monotonic()
         while True:
             job = json.loads((directory / 'job.json').read_text())
             specs = json.loads((directory / 'stages_spec.json').read_text())
             assert job['backend'] == 'CUDA'
             assert all(s['backend'] == 'CUDA' and s['interaction'] == 'CpdDNA2'
-                       and s['min_bp_retained'] == 0 and not s['thermal_ramp']['check_pairing']
+                       and s['min_bp_retained'] == 0 and not s['thermal_ramp'].get('check_pairing', False)
                        for s in specs)
             retry = job.get('production_retries', 0)
             if previous_retry is not None and retry != previous_retry:
@@ -63,11 +54,6 @@ def monitor(directory, output, *, resume_max=None, idle_seconds=1200):
                     emit('stage_state', {'stage': name, 'status': stage['status'], 'report': report}, False)
                 if stage['status'] == 'done' and name not in done:
                     assert report['decision'] == 'done'
-                    if spec['thermal_ramp'].get('gate', True):
-                        assert report['metrics']['passed']
-                        assert report['consecutive_passes'] >= spec['thermal_ramp']['consecutive_passes']
-                    else:
-                        assert report['gate_enabled'] is False
                     native = (directory / name / 'input.txt').read_text()
                     log = (directory / name / 'oxdna.log').read_text()
                     assert 'backend = CUDA' in native and 'interaction_type = CpdDNA2' in native
@@ -112,6 +98,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
     parser.add_argument('output', type=Path)
-    parser.add_argument('--resume-max', type=int)
     args = parser.parse_args()
-    raise SystemExit(monitor(args.directory, args.output, resume_max=args.resume_max))
+    raise SystemExit(monitor(args.directory, args.output))

@@ -1,5 +1,5 @@
 import '../styles/oxdna_wizard.css'
-import { thermalControls } from './oxdna_thermal_ramp.js'
+import { thermalControls, thermalConfig } from './oxdna_thermal_ramp.js'
 import { temperatureControl, updateTemperatureControl, oxdnaTemperature, oxdnaTemperatureOverrides } from './job_temperature.js'
 import { showWizardJobId } from './job_wizard_identity.js'
 import { createButton, createModal, createInput, createSelect, el } from './primitives/index.js'
@@ -174,10 +174,10 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       el('span', { className: 'wizard-field__label', text: 'Execution backend' }), backend,
     ] }))
     for (const field of PRODUCTION_FIELDS) {
+      if (field.key === 'steps' && values.thermal_ramp) continue
       const input = createInput({ size: 'sm', type: field.type, min: field.min, step: field.step, value: values[field.key] })
       input.dataset.oxdnaField = field.key
       input.value = values[field.key]
-      if (field.key === 'steps' && values.thermal_ramp) { input.disabled = true; input.title = 'The thermal ramp controls steps per temperature.' }
       input.addEventListener('input', () => {
         values[field.key] = Number(input.value)
         renderConfig(); paintValidation()
@@ -248,13 +248,13 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     const parentJob = getJobs().find(j => j.job_id === parentJobId) || {}
     const stages = oxdnaProductionStagePlan(values, parentJob)
     updateTemperatureControl(panels.settings, oxdnaTemperature(stages))
-    const maxSteps = stages.length * (values.thermal_ramp?.gate ? values.thermal_ramp.max_steps : stages[0].steps)
+    const maxSteps = stages.reduce((total, stage) => total + stage.steps, 0)
     stageSummary.textContent = values.thermal_ramp
-      ? `${stages.length} stages · up to ${maxSteps.toLocaleString()} steps · ${outputEstimate(stages.map(s => ({ ...s, steps: values.thermal_ramp.gate ? values.thermal_ramp.max_steps : s.steps })))}`
+      ? `${stages.length} stages · ${maxSteps.toLocaleString()} steps · ${outputEstimate(stages)}`
       : `1 stage · ${stages[0].steps.toLocaleString()} scheduled steps · ${outputEstimate(stages)}`
     renderActiveStageTable(stages)
     configPre.textContent = `continue_from = ${parentJob.job_id || '(none selected)'}\n`
-      + (values.thermal_ramp ? `# thermal_ramp = ${JSON.stringify(values.thermal_ramp)}\n` : '')
+      + (values.thermal_ramp ? `# thermal_ramp = ${JSON.stringify(thermalConfig(values.thermal_ramp))}\n` : '')
       + stages.map(stage => `# ${stage.name}: ${stage.purpose}\n` + Object.entries(stage)
         .filter(([key, value]) => key !== 'purpose' && value != null)
         .map(([key, value]) => `${key} = ${value}`).join('\n')).join('\n\n')
@@ -642,6 +642,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
         rows: 24, spellcheck: 'false', 'aria-label': 'Editable oxDNA job configuration',
         style: 'box-sizing:border-box;width:100%;resize:vertical',
       } })
+      if (editable.thermal_ramp) editable.thermal_ramp = thermalConfig(editable.thermal_ramp)
       derivedEditor.value = JSON.stringify(editable, null, 2)
       const thermostatControls = el('div', { className: 'wizard-grid' })
       for (const stage of editable.stages.filter(stage => !editable.thermal_ramp && stage.kind !== 'mc' && !stage.name.includes('mc_relax'))) {

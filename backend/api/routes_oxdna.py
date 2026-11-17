@@ -2749,9 +2749,26 @@ async def preview_oxdna_field_anchors(job_id: str, body: AnchorPreviewRequest) -
     }
 
 
+class ThermalSkipRequest(BaseModel):
+    expected_stage: str
+
+
+@router.post('/oxdna/jobs/{job_id}/skip-stage', status_code=202)
+async def skip_oxdna_stage(job_id: str, body: ThermalSkipRequest) -> dict:
+    from backend.core.oxdna_thermal_skip import begin_skip, wait_skip
+    _load_job(job_id)
+    try:
+        result = await run_in_threadpool(begin_skip, job_id, _workspace(), body.expected_stage)
+        return await run_in_threadpool(wait_skip, job_id, _workspace(), result['request_id'])
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+
+
 @router.post("/oxdna/jobs/{job_id}/stop")
 async def stop_oxdna_job(job_id: str) -> dict:
-    _load_job(job_id)  # validate existence; native runner owns every status write
+    from backend.core.oxdna_thermal_skip import cancel_skip
+    job = _load_job(job_id)  # native runner owns every status write
+    cancel_skip(job.job_dir(_workspace()))
     cancelled = stop_job(job_id, _workspace())
     if not cancelled:
         return {"ok": True, "message": "Job was not actively running"}
@@ -3785,6 +3802,12 @@ async def get_oxdna_occupancy_progress(job_id: str) -> dict:
     if not p:
         return {"active": False}
     return {"active": True, **p}
+
+
+@router.get("/oxdna/jobs/{job_id}/thermal-metrics")
+async def get_oxdna_thermal_metrics(job_id: str) -> dict:
+    from backend.core.oxdna_thermal_metrics import read_metrics
+    return await run_in_threadpool(read_metrics, _load_job(job_id), _workspace())
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory-meta")

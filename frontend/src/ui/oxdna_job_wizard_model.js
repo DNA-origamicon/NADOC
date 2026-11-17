@@ -1,4 +1,4 @@
-import { thermalError, thermalStages } from './oxdna_thermal_ramp.js'
+import { thermalError, thermalStages, thermalConfig } from './oxdna_thermal_ramp.js'
 // GPU default is user-authorized; further convergence and sampling checks are
 // required for DNA/protein and fixed gold/strep/DNA (TD-OXDNA-PHYSICS).
 const DEFAULTS = Object.freeze({
@@ -156,7 +156,7 @@ export function validateOxdnaProductionWizard(values = {}) {
     if (!Number.isFinite(n) || n < min || (max != null && n > max)) errors[key] = message
   }
   // Bounds match RunRequest (backend/api/routes_oxdna.py): steps 1e3-2e8, steps_per_frame 1-2e8.
-  range('steps', 1000, 200_000_000, 'Production steps must be between 1,000 and 200,000,000.')
+  if (!v.thermal_ramp) range('steps', 1000, 200_000_000, 'Production steps must be between 1,000 and 200,000,000.')
   range('steps_per_frame', 1, 200_000_000, 'Steps/frame must be between 1 and 200,000,000.')
   const [stage] = oxdnaProductionStagePlan(v)
   if (v.thermal_ramp && stage.thermostat === 'no') errors.thermostat = 'Thermal ramps require a thermostat.'
@@ -199,9 +199,9 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
  *  time in oxdna_jobs_panel.js, exactly as the (removed) Full Sim button already did. */
 export function oxdnaProductionPayload(values) {
   const v = oxdnaProductionDefaults(values)
-  return { steps: Number(v.steps), steps_per_frame: Number(v.steps_per_frame),
+  return { steps: Number(v.thermal_ramp ? thermalConfig(v.thermal_ramp).block_steps : v.steps), steps_per_frame: Number(v.steps_per_frame),
     ...(v.backend ? { backend: v.backend } : {}),
-    ...(v.thermal_ramp ? { thermal_ramp: structuredClone(v.thermal_ramp) } : {}),
+    ...(v.thermal_ramp ? { thermal_ramp: thermalConfig(v.thermal_ramp) } : {}),
     ...(Object.keys(v.stage_overrides || {}).length ? { stage_overrides: structuredClone(v.stage_overrides) } : {}),
   }
 }

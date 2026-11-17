@@ -224,7 +224,7 @@ export function renderJobList(listEl, model, {
   listEl.innerHTML = ''
   for (const rm of model.rows) {
     const row = renderJobRow(rm, { doc, onClick, onAction, onWarning, onChevron, onContextMenu })
-    listEl.appendChild(thermalJobGroup(listEl, row, rm, doc, onThermalSelect))
+    listEl.appendChild(thermalJobGroup(listEl, row, rm, doc, onThermalSelect, onContextMenu))
   }
   if (legendState && !legendState.el) {
     legendState.el = makeStatusLegend(doc)

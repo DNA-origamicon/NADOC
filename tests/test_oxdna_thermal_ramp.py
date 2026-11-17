@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from backend.core.oxdna_protocol import build_production_stage
 from backend.core.oxdna_thermal_ramp import (
-    ThermalRamp, advance, ramp_stages, reset_copy, sampling_cadence, stability,
+    ThermalRamp, advance, ramp_stages, reset_copy, sampling_cadence,
 )
 
 
@@ -19,6 +19,8 @@ def stage():
 @pytest.mark.parametrize("start,end,step,expected", [(25, 36, 5, [25, 30, 35, 36]), (36, 25, 5, [36, 31, 26, 25]), (25, 25, 5, [25]), (25.4, 25.7, .1, [25.4, 25.5, 25.6, 25.7])])
 def test_schedule(start, end, step, expected):
     cfg = ThermalRamp(start_c=start, end_c=end, step_c=step)
+    assert cfg.block_steps == 10_000_000 and not cfg.gate
+    assert sampling_cadence(cfg) == 50_000
     assert cfg.temperatures() == pytest.approx(expected)
     specs = ramp_stages(replace(stage(), interaction="CpdDNA2", dt=0.0001, forces_file="frozen.txt", external_forces=True), cfg)
     assert [float(s.temperature[:-1]) for s in specs] == pytest.approx([t + 273.15 for t in expected])
@@ -26,20 +28,12 @@ def test_schedule(start, end, step, expected):
     assert all(s.min_bp_retained == 0 and s.max_backbone_force is None for s in specs)
 
 
-@pytest.mark.parametrize("kwargs", [{"step_c": 0}, {"start_c": float("nan")}, {"step_c": .01}, {"max_steps": 1000}, {"min_effective_samples": 30}, {"max_steps": 2500000}])
+@pytest.mark.parametrize("kwargs", [{"step_c": 0}, {"start_c": float("nan")}, {"step_c": .01}, {"block_steps": 999}, {"block_steps": 200000001}, {"block_steps": 1000.5}])
 def test_invalid_schedule(kwargs):
     with pytest.raises(ValidationError):
         ThermalRamp(**kwargs)
 
 
-def test_stationarity_allows_melting_but_rejects_drift_and_autocorrelation():
-    cfg = ThermalRamp()
-    assert stability([0] * 60, .02, cfg)["passed"]  # fully melted stable plateau
-    assert stability(np.tile([-.005, .005], 30), .02, cfg)["passed"]
-    assert not stability(np.linspace(0, 1, 60), .02, cfg)["passed"]
-    assert not stability(np.tile(np.linspace(0, .001, 20), 3), .02, cfg)["passed"]
-    assert not stability([0] * 59, .02, cfg)["passed"]
-    assert not stability([float("nan")] * 60, .02, cfg)["passed"]
 
 
 def test_cadence_and_thermostat():
@@ -56,43 +50,14 @@ def fake_job(tmp_path, spec):
                            stage_dir=lambda *_: tmp_path, current_stage_idx=0)
 
 
-def test_gate_extends_then_passes_and_copy_resets(tmp_path, monkeypatch):
-    import backend.core.oxdna_thermal_ramp as ramp
-    monkeypatch.setattr(ramp, "evaluate", lambda *a, **k: {"passed": True})
-    specs = ramp_stages(stage(), ThermalRamp(end_c=25))
-    job = fake_job(tmp_path, specs[0])
-    assert advance(job, tmp_path, specs, 0, None) == "extend"
-    assert specs[0].steps == 2000000 and not specs[0].refresh_vel
-    assert advance(job, tmp_path, specs, 0, None) == "done"
-    assert advance(job, tmp_path, specs, 0, None) == "done"  # replay does not count twice
-    assert job.run_config["thermal_progress"]["1_thermal"]["consecutive_passes"] == 2
-    copied = reset_copy(specs, job.run_config)
-    assert copied[0].steps == 1000000 and copied[0].refresh_vel
-    assert "thermal_progress" not in job.run_config
 
 
-def test_gate_stops_at_cap_and_fixed_dwell_reports_without_blocking(tmp_path, monkeypatch):
-    import backend.core.oxdna_thermal_ramp as ramp
-    monkeypatch.setattr(ramp, "evaluate", lambda *a, **k: {"passed": False})
-    specs = ramp_stages(stage(), ThermalRamp(end_c=25, max_steps=2000000))
-    job = fake_job(tmp_path, specs[0])
-    assert advance(job, tmp_path, specs, 0, None) == "extend"
-    assert advance(job, tmp_path, specs, 0, None) == "failed"
-    assert "not advanced" in job.error and job.current_stage_idx == 0
-    specs = ramp_stages(stage(), ThermalRamp(gate=False))
-    job = fake_job(tmp_path, specs[0])
-    assert advance(job, tmp_path, specs, 0, None) == "done"
-    report = job.run_config['thermal_progress']['1_thermal']
-    assert report['metrics']['passed'] is False
-    assert report['gate_enabled'] is False
-    assert report['stability_status'] == 'not_demonstrated'
-    assert job.status == 'running' and job.error is None
 
 
 def test_reconciliation_cannot_bypass_an_unchecked_temperature(tmp_path, monkeypatch):
     from backend.core import oxdna_runner as runner
     from backend.core.oxdna_job import OxdnaStatus
-    specs = ramp_stages(stage(), ThermalRamp(end_c=25))
+    specs = ramp_stages(stage(), ThermalRamp(block_steps=1_000_000, end_c=25))
     job = fake_job(tmp_path, specs[0])
     job.job_id = 'thermal-test'
     job.archived = False
@@ -112,7 +77,7 @@ def test_reconciliation_cannot_bypass_an_unchecked_temperature(tmp_path, monkeyp
 
 def test_numerical_retry_discards_gate_evidence_and_archives_samples(tmp_path):
     from backend.core.oxdna_thermal_ramp import restart_plateau
-    specs = ramp_stages(stage(), ThermalRamp(end_c=25))
+    specs = ramp_stages(stage(), ThermalRamp(block_steps=1_000_000, end_c=25))
     specs[0] = replace(specs[0], steps=3000000)
     job = fake_job(tmp_path, specs[0])
     job.production_retries = 1
@@ -130,7 +95,7 @@ def test_numerical_retry_discards_gate_evidence_and_archives_samples(tmp_path):
 def test_edit_rejects_silent_plateau_overrides_and_unsupported_runner(tmp_path):
     from fastapi import HTTPException
     from backend.core.oxdna_thermal_ramp import require_full_system, validate_edit
-    spec = ramp_stages(stage(), ThermalRamp(end_c=25))[0]
+    spec = ramp_stages(stage(), ThermalRamp(block_steps=1_000_000, end_c=25))[0]
     job = fake_job(tmp_path, spec)
     validate_edit(job, {'thermal_ramp': None, 'stages': [{'name': spec.name, 'kind': spec.kind, 'steps': spec.steps}]})
     with pytest.raises(HTTPException, match='generated thermal'):
@@ -165,7 +130,7 @@ def test_fixed_dwell_does_not_require_a_hidden_gate_budget():
 
 def test_extensions_and_retries_use_reproducible_distinct_noise(tmp_path):
     from backend.core.oxdna_thermal_ramp import prepare_attempt
-    spec = replace(ramp_stages(stage(), ThermalRamp(end_c=25))[0], seed=12345)
+    spec = replace(ramp_stages(stage(), ThermalRamp(block_steps=1_000_000, end_c=25))[0], seed=12345)
     job = fake_job(tmp_path, spec)
     job.random_seed = 12345
     job.production_retries = 0
@@ -179,7 +144,7 @@ def test_extensions_and_retries_use_reproducible_distinct_noise(tmp_path):
     assert len(list(tmp_path.glob('thermal_attempt_*.json'))) == 3
 
 
-def test_extensions_accumulate_correlated_evidence_without_relaxing_gate(tmp_path):
+def test_energy_uses_all_available_samples_without_a_tail_limit(tmp_path):
     from backend.core.oxdna_thermal_ramp import evaluate
     cfg = ThermalRamp(check_pairing=False)
     # Small stationary fluctuations, strongly correlated within groups of 5.
@@ -187,58 +152,28 @@ def test_extensions_accumulate_correlated_evidence_without_relaxing_gate(tmp_pat
     (tmp_path / 'energy.dat').write_text('\n'.join(f'{i+1} {v}' for i, v in enumerate(values)))
     short = evaluate(tmp_path, None, cfg, evaluated_steps=cfg.block_steps)
     long = evaluate(tmp_path, None, cfg, evaluated_steps=cfg.max_steps)
-    assert not short['passed']
-    assert long['passed']
-    assert short['energy']['samples'] == 60
+    assert short['energy']['status'] == 'recorded'
+    assert long['energy']['status'] == 'recorded'
+    assert short['energy']['samples'] == 600
     assert long['energy']['samples'] == 600
-    assert long['energy']['tolerance'] == cfg.energy_tolerance
+    import json
+    assert json.loads((tmp_path / 'thermal_energy_curve.json').read_text())['fit'] is None
     (tmp_path / 'energy.dat').write_text('\n'.join(f'{i+1} {v}' for i, v in enumerate(np.linspace(0, 1, 600))))
-    assert not evaluate(tmp_path, None, cfg, evaluated_steps=cfg.max_steps)['passed']
+    assert evaluate(tmp_path, None, cfg, evaluated_steps=cfg.max_steps)['energy']['maximum'] == 1
 
 
-def test_accumulated_evidence_does_not_hide_a_recent_shift():
-    from backend.core.oxdna_thermal_ramp import accumulated_stability
-    initial = ThermalRamp(check_pairing=False)
-    expanded = initial.model_copy(update={'window_samples': 200})
-    values = [0.] * 570 + [.04] * 30
-    result = accumulated_stability(values, .02, initial, expanded)
-    assert result['mean_spread'] < .02
-    assert result['recent_mean_spread'] > .02
-    assert not result['passed']
 
 
-def test_explicit_budget_extension_preserves_evidence_and_uses_next_block(tmp_path):
-    from backend.core.oxdna_thermal_resume import extend_budget
-    cfg = ThermalRamp(end_c=25, max_steps=2000000)
-    specs = ramp_stages(stage(), cfg)
-    specs[0] = replace(specs[0], steps=cfg.max_steps)
-    job = fake_job(tmp_path, specs[0])
-    job.status = 'failed'
-    job.run_config = {'thermal_ramp': cfg.model_dump(), 'thermal_progress': {'1_thermal': {
-        'evaluated_steps': cfg.max_steps, 'decision': 'failed', 'consecutive_passes': 0}}}
-    job.stages[0].status = 'failed'
-    job.stages[0].started_at = 123
-    (tmp_path / 'thermal_check_2000000.json').write_text('original evidence')
-    updated = extend_budget(job, specs, 4000000)
-    assert updated[0].steps == 3000000
-    assert not updated[0].refresh_vel
-    assert updated[0].thermal_ramp['max_steps'] == 4000000
-    assert job.run_config['thermal_progress']['1_thermal']['decision'] == 'failed'
-    assert job.run_config['thermal_budget_changes'][0]['old_max_steps'] == 2000000
-    assert job.stages[0].started_at == 123
-    assert (tmp_path / 'thermal_check_2000000.json').read_text() == 'original evidence'
-    with pytest.raises(ValueError):
-        extend_budget(job, updated, 2000000)
 
 
-def test_resume_route_persists_extended_plan_and_keeps_existing_outputs(tmp_path, monkeypatch):
+def test_resume_route_rejects_retired_extension_without_mutating_history(tmp_path, monkeypatch):
     import asyncio
     import json
     from dataclasses import asdict
     import backend.api.routes_oxdna as routes
     from backend.core.oxdna_job import OxdnaJob, OxdnaStatus, new_oxdna_job
     from backend.core.oxdna_thermal_resume import ThermalResumeRequest
-    cfg = ThermalRamp(end_c=25, max_steps=2000000)
+    cfg = ThermalRamp(block_steps=1_000_000, end_c=25, max_steps=2000000)
     specs = [replace(ramp_stages(stage(), cfg)[0], steps=2000000)]
     job = new_oxdna_job('thermal resume', [s.to_status() for s in specs], n_nucleotides=0,
                         run_config={'thermal_ramp': cfg.model_dump(), 'thermal_progress': {'1_thermal': {
@@ -255,11 +190,60 @@ def test_resume_route_persists_extended_plan_and_keeps_existing_outputs(tmp_path
     monkeypatch.setattr(routes, '_submodel_preflight', lambda j, s: s)
     launched = []
     monkeypatch.setattr(routes, 'start_job', lambda j, w, s: launched.append(s))
-    asyncio.run(routes.start_oxdna_job(job.job_id, ThermalResumeRequest(thermal_max_steps=4000000)))
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException, match='removed'):
+        asyncio.run(routes.start_oxdna_job(job.job_id, ThermalResumeRequest(thermal_max_steps=4000000)))
     restored = OxdnaJob.load(job.job_id, tmp_path)
-    assert restored.status == OxdnaStatus.running
-    assert restored.stages[0].steps == 3000000
-    assert restored.run_config['thermal_budget_changes'][0]['previous_check']['decision'] == 'failed'
-    assert routes.load_stage_specs(jd)[0].thermal_ramp['max_steps'] == 4000000
-    assert launched[0][0].steps == 3000000
+    assert restored.status == OxdnaStatus.failed
+    assert restored.stages[0].steps == 2000000
+    assert not launched
     assert evidence.read_text() == 'preserve this sampling history'
+
+
+
+
+@pytest.mark.parametrize('legacy_gate', [False, True])
+def test_fixed_duration_advances_regardless_of_observations(tmp_path, monkeypatch, legacy_gate):
+    import backend.core.oxdna_thermal_ramp as ramp
+    monkeypatch.setattr(ramp, 'evaluate', lambda *args, **kwargs: {'energy': {'status': 'recorded', 'maximum': 1000}})
+    cfg = ThermalRamp(block_steps=1000000, gate=legacy_gate, max_steps=1000, min_effective_samples=900)
+    specs = ramp_stages(stage(), cfg)
+    job = fake_job(tmp_path, specs[0])
+    job.run_config = {'thermal_progress': {'1_thermal': {'decision': 'failed', 'gate_version': 3}}}
+    before_steps = [s.steps for s in specs]
+    assert advance(job, tmp_path, specs, 0, None) == 'done'
+    assert advance(job, tmp_path, specs, 0, None) == 'done'
+    assert [s.steps for s in specs] == before_steps
+    report = job.run_config['thermal_progress']['1_thermal']
+    assert report['gate_enabled'] is False and report['stability_status'] == 'not_assessed'
+    assert report['previous_decision']['decision'] == 'failed'
+    assert set(cfg.model_dump()) == {'start_c', 'end_c', 'step_c', 'block_steps'}
+    assert not cfg.gate
+    assert all(s.steps == 1000000 for s in specs)
+    reset_copy(specs, job.run_config)
+    assert 'thermal_progress' not in job.run_config
+
+
+def test_energy_diagnostic_errors_cannot_stop_or_extend_stage(tmp_path, monkeypatch):
+    import backend.core.oxdna_thermal_ramp as ramp
+    def unavailable(*args, **kwargs):
+        raise ValueError('unreadable energy')
+    monkeypatch.setattr(ramp, 'evaluate', unavailable)
+    specs = ramp_stages(stage(), ThermalRamp(block_steps=1000000))
+    job = fake_job(tmp_path, specs[0])
+    assert advance(job, tmp_path, specs, 0, None) == 'done'
+    assert job.status == 'running' and job.error is None
+    assert specs[0].steps == 1000000
+    assert job.run_config['thermal_progress']['1_thermal']['metrics']['energy']['status'] == 'unavailable'
+
+
+def test_recording_energy_never_requires_exponential_fit(tmp_path, monkeypatch):
+    import backend.core.oxdna_energy_fit as fitting
+    from backend.core.oxdna_thermal_ramp import evaluate
+    monkeypatch.setattr(fitting, 'fit_energy', lambda *args: pytest.fail('No automatic exponential fitting'))
+    (tmp_path / 'energy.dat').write_text('0 -2\n1 -1\n2 10\n')
+    metrics = evaluate(tmp_path, None, ThermalRamp())
+    assert metrics['energy']['samples'] == 3
+    assert metrics['energy']['minimum'] == -2
+    assert metrics['energy']['maximum'] == 10
+    assert 'passed' not in metrics

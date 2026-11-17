@@ -1,5 +1,87 @@
 # Issues fix log
 
+## ISSUE-211 — Fixed-duration thermal ramps (2026-11-17)
+
+Reduced the default from 50M to 10M steps per temperature. The wizard exposes
+one duration and an exact total; adaptive controls and duplicate production
+steps are removed. Every stage uses the chosen fixed count. Legacy gate fields
+cannot enable adaptive execution; budget-extension requests reject without
+mutation. Energy histories and descriptive statistics remain available, without
+automatic exponential fits or stability verdicts. Numerical health checks remain.
+Existing workers and saved durations were not restarted or resized.
+
+Validation: FAST 20,982 passed / 90 skipped; frontend 10,662 passed / one skipped;
+focused backend 22 passed / one deselected, skip 11 passed, monitor 4 passed,
+frontend 29 passed. Both browser workflows passed; desktop, 760px and 480px
+screenshots visually reviewed with aligned, unclipped thermal controls. Ruff and
+diff checks passed. FULL deferred in .nadoc-slow-pending. main.js task LOC delta 0.
+Receipt: `.development-artifacts/oxdna-fixed-thermal-20261117.json`.
+
+## ISSUE-210 — Manual thermal-stage advance (2026-11-17)
+
+Parent and all temperature child context menus now expose Skip to next stage.
+The expected active-stage name guards stale clicks; the final temperature is
+ineligible. A detached controller terminates the current owner, acquires the
+idle lease, validates/recovers its checkpoint, preserves samples/prior verdicts,
+marks the stage skipped and starts the next temperature. Fresh generation
+publication prevents the new worker inheriting the old Stop mailbox. Natural
+completion, concurrent execution, duplicate commands and later Stop requests
+are handled without skipping an unintended temperature. Diagnostic failure does
+not prevent a manual advance; a valid starting configuration is still required.
+Restart reconciliation and progress account for skipped stages without treating
+them as equilibration passes. Failed handoffs surface in the command and job error.
+
+Validation: 11 focused skip tests, 14 shared runtime tests, 126 focused frontend
+tests; browser parent/child menus and final-stage disabling passed with mocked
+jobs. FAST 20,980 passed / 90 skipped; frontend 10,661 passed / 1 skipped. FULL
+remains deferred. Cleanup verified. No real user stage skipped. main.js task
+LOC delta 0. Receipt: `.development-artifacts/oxdna-thermal-skip-20261117.json`.
+
+
+## ISSUE-209 — Energy metrics and thermal plot annotations (2026-11-17)
+
+Added an independent, read-only oxDNA potential-energy Generate/Display/Export
+path. It reads production/field energy histories during active jobs without
+trajectory geometry, retaining resumed samples and ignoring unfinished output
+lines. Plots and PNGs annotate executed thermostat setpoints at stage boundaries;
+CSV carries native time, potential energy per particle, temperature, stage and
+job identity. Job/scope caches prevent another selection's graph from appearing.
+Nearby energy-axis ticks now retain enough decimal places to remain distinct.
+
+Validation: live job 67bdaecee7f3 generated/displayed/exported 958 samples at 25°C;
+13-temperature layout independently reviewed with a plotting fixture (the older
+completed ramp was no longer in the library). Four energy-series and ten existing
+energy-fit tests passed; focused graph/card tests 32 passed; frontend suite 10,657
+passed, one skipped. Backend FAST 20,970 passed / 90 skipped, with one unrelated
+repair-draft capture-time-limit setup error; exact isolated rerun passed. FULL
+remains deferred. Main.js task LOC delta 0. No simulation launched or changed.
+Evidence: `.development-artifacts/oxdna-energy-metrics-20261117.json`.
+
+
+## ISSUE-208 — Full-history exponential energy diagnosis (2026-11-17)
+
+Gate v3 fits all distinct energy times at the current temperature to
+E_inf + A exp(-t/tau), including resumed segments reconstructed from attempt
+receipts. Acceptance bounds remaining relaxation with correlation-adjusted local
+parameter uncertainty and checks fit identifiability, residual structure and
+independent information. Flat histories are explicitly constant-model diagnoses.
+Pairing remains a separate optional window check; fixed dwell remains nonblocking.
+
+Every raw native energy row remains stored; display-ready JSON includes potential,
+kinetic and total energy, segment identities/times, source hashes, fitted values
+and diagnostics. Periodic check files retain earlier fits. The thermal-metrics
+API serves these alongside untouched historical decisions. Idle-job backfill was
+verified on 13 completed temperatures; the 67-segment audit retained 4,355 raw
+rows and fitted 4,289 distinct times. The shorter completed curves do not establish
+a reliable plateau under the new diagnosis; no physical rerun was performed.
+
+Validation: 10 fit + 24 ramp focused passed; frontend 10,655 passed / 1 skipped;
+browser 1 passed, cleanup verified. Backend FAST: 20,966 passed / 90 skipped, one
+VR test isolation failure (a late trajectory-precompute launch intercepted by its
+subprocess mock); that exact test passed alone. Broad FULL remains deferred.
+No per-test timing violators. Main.js task LOC delta: 0. Evidence and plots:
+`.development-artifacts/thermal-exponential-fit-20261117/`.
+
 ## ISSUE-207 — Fixed-dwell stability reporting and real CPD ramp (2026-11-17)
 
 Fixed dwell now evaluates stability and records `gate_enabled: false` plus an
