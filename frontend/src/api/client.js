@@ -2707,6 +2707,19 @@ export async function relaxFlexibleSegments(transforms, label) {
   return _syncFromDesignResponse(json)
 }
 
+/** Joint solve and atomic feature commit; no optimistic geometry mutation. */
+export async function solveFlexibleSegments(scope = 'all', connId = null) {
+  const json = await _request('POST', '/design/flexible-relax',
+    { scope, conn_id: connId }, { timeoutMs: 180000 })
+  if (!json) throw new Error(lastErrorMessage() || 'Flexible relaxation failed')
+  if (!json.unchanged) {
+    if (json.diff_kind === 'cluster_only') await _syncClusterOnlyDiff(json)
+    else if (json.diff_kind === 'positions_only') await _syncPositionsOnlyDiff(json)
+    else await _syncFromDesignResponse(json)
+  }
+  return json.relaxation
+}
+
 export async function relaxOrigami() {
   const json = await _request('POST', '/design/relax-origami', {}, { timeoutMs: 180000 })
   if (!json) return null

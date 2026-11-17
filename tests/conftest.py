@@ -912,6 +912,9 @@ _SLOW_TESTS = {
     # Mock field lifecycle still builds/exports a bundle, spawns stage processes,
     # polls completion and parses trajectory frames (5.17 s in the Nov 4 fast run).
     "test_equilibration_timeline_inconclusive_on_short_run",
+    # Builds/exports a routed bundle, runs mock stage subprocesses and parses
+    # extension display geometry: 5.64 s in the Nov 17 fast sweep (3.41 s alone).
+    "test_display_route_surfaces_extension_tails",
     # test_headless_oxdna_build.py (real oxpy relax/field/iterate passes that slipped past)
     "test_autorefine_regional_runs_end_to_end_and_reports_pattern",
     "test_field_sweep_oracle_fires_on_gap",

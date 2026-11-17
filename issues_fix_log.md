@@ -1,5 +1,92 @@
 # Issues fix log
 
+## ISSUE-201 — Staged duplex contacts in flexible-network Relax (2026-11-17)
+
+The user authorized the successful staged-contact method after comparing joint
+penalties, constrained fitting and expand/reclose variants. Relax all and Relax
+connected flexible network now solve tether and inter-body duplex-capsule
+constraints jointly, keeping the largest participating body fixed per component.
+Five contact weights (0.1, 0.3, 1, 3, 10) repair initially overlapping poses;
+already-slack tethers do not bypass contact checking. The contact math and
+ownership-aware native-axis extraction live in `flexible_contacts.py`.
+
+Both contour excess and capsule penetration must be <= 0.001 nm. Actual native
+posed geometry is independently remeasured inside the atomic recorded mutation;
+bad clearance or movement of fixed-body capsules rejects without changing
+history, revision or undo. Feature metadata records initial/final contacts,
+scope/limitations, model radius and stage settings. Absolute-pose replay remains
+unchanged, preserving old features and deterministic independent replay.
+
+Read-only production solve on saved JJ_Hinge: 28 initial overlaps become zero,
+all 11 tethers close (maximum excess 0.000187992 nm; capsule penetration
+0.000001347 nm), Geometry Cluster 1 stays fixed, 91.99 seconds. Source SHA256
+unchanged. No legacy derivative is authored or published. Focused network tests:
+9 passed / 1 historical-source skip, including guard publication/reopen/replay,
+undo/redo, slack-but-overlapping repair, infeasibility, and atomic rejection of
+falsely optimistic clearance reports.
+
+Coverage is participating clusters' paired duplex axes only. ssDNA/overhangs,
+nonparticipating obstacles, intra-body clashes and continuous collision-free
+trajectories remain follow-on work. `main.js` LOC delta: 0.
+
+Validation: `just test-smart` selected FAST, 20,986 passed / 20 skipped. Its
+timing guard flagged the pre-existing mock-job extension-display integration
+test at 5.64 s; required slow-test triage identified bundle construction/export,
+stage subprocesses and display parsing. Focused rerun passed (3.41 s call).
+Registered that test in `_SLOW_TESTS` with the existing oxDNA area routing;
+verified slow collection retains it. No budget/guard changes. The remaining
+tests in the measured broad run were <= 4.84 s; broad timing was not rerun
+solely for this classification change.
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+Two dedicated browser cases pass (ordinary and deleted-slot flexible regions),
+checking solver/contact diagnostics, fixed poses, flexible rendering and undo.
+Inspected the ordinary relaxed Full view. Temporary captures, both __e2e__ host
+files, their project stores, bridge credentials and session/output paths verified
+absent after teardown. Lint and diff whitespace checks pass.
+
+## ISSUE-200 — Joint flexible-network solve with a fixed largest cluster (2026-11-17)
+
+The old pairwise Relax all leaves three JJ_Hinge tethers at 7.785, 5.892 and
+6.940 nm against 1.18 nm contours; successive pair solves undo previous closure.
+The shared backend kinematic solve now minimises all positive contour violations
+jointly, fixing the largest participating rigid cluster in each connected
+component and giving other bodies translation/rotation freedom. Exact-base and
+domain membership participate in the size calculation. Slack remains free.
+
+The existing Relax API accepts scope requests, independently checks final posed
+anchor distances and the fixed reference, and commits only converged, current-
+revision results. App and headless authoring share this path. The feature stores
+explicit absolute poses, solver settings, fixed IDs and actual final per-tether
+measurements. Its new proof contract replays poses without rerunning optimisation.
+Pose-only recording preserves topology and avoids pending-ligation retries.
+
+Validation: 48 focused backend tests pass, including recorded import/mark/relax,
+guarded publication, saved/reopened independent replay, undo/redo, rollback,
+rotation composition and the optional read-only JJ_Hinge numeric regression.
+That regression closes all 11 tethers to within 0.001 nm with Geometry Cluster 1
+fixed. The legacy source has no recipe root and was not modified or republished.
+Three browser checks pass: ordinary and deleted-slot two-base relaxation plus
+read-only JJ_Hinge rendering. Screenshots inspected and removed; test workspace
+files and dedicated bridge credentials verified absent after teardown.
+
+Frontend: 10,560 passed / one skipped across 959 files; final focused controller
+and client checks: 18 passed. Lint and diff whitespace checks pass.
+Smoke: 23 passed / two skipped / existing ISSUE-180 Square New Part request
+assertion fails (`lattice_type` undefined). No New Part changes.
+
+`just test-smart`: FAST, 20,978 passed / 19 skipped. Aggregate timing warning
+(510 seconds pytest wall time, no individual budget violators); required triage
+found broad suite volume and existing mock lifecycle/replay work, with no reason
+to reclassify tests or alter guards. Deferred output:
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+`main.js` LOC Δ: 0.
+
 ## ISSUE-198 — Flexible flags survive Relax all geometry refresh (2026-11-14)
 
 The live JJ_Hinge design retained 22 marks and 11 two-base connections after

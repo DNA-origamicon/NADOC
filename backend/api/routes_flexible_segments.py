@@ -143,8 +143,7 @@ def _flex_log_response(
 
 
 class FlexibleRelaxTransform(BaseModel):
-    """New absolute rigid pose for one cluster, produced by the frontend ssDNA
-    relax solve (same {pivot, translation, rotation} shape as a cluster patch)."""
+    """Absolute rigid pose from a solve (same shape as a cluster patch)."""
 
     cluster_id: str
     pivot: list[float]
@@ -153,15 +152,16 @@ class FlexibleRelaxTransform(BaseModel):
 
 
 class FlexibleRelaxBody(BaseModel):
-    """Atomic relax commit: apply N cluster transforms as ONE feature-log step.
+    """Solve a connected flexible network or commit explicitly supplied poses.
 
-    The relax minimisation (pull the smaller cluster of each flexible-connected
-    pair in until no tether exceeds its contour length) runs in the frontend on
-    live anchor positions; this endpoint just persists the resulting cluster
-    poses as a single revertable / deletable / undoable operation."""
+    Scope requests use the authoritative joint solver, fixing the largest body.
+    Explicit poses remain supported for existing integrations and replay.
+    """
 
-    transforms: list[FlexibleRelaxTransform]
+    transforms: list[FlexibleRelaxTransform] = []
     label: Optional[str] = None
+    scope: Optional[Literal["all", "one"]] = None
+    conn_id: Optional[str] = None
 
 
 @router.post("/design/flexible-relax", status_code=200)
@@ -169,55 +169,122 @@ def flexible_relax(body: FlexibleRelaxBody) -> dict:
     """Commit a flexible-segment relax: apply all moved-cluster transforms in a
     single ``mutate_with_feature_log`` step (one SnapshotLogEntry → revertable +
     deletable + a single undo). Display/pose-layer only — never touches topology."""
+    source_revision = design_state.revision()
+    design0 = design_state.get_or_404()
+    result = None
+    if body.scope is not None:
+        if body.transforms:
+            raise HTTPException(400, detail="Supply a solve scope or explicit poses, not both.")
+        from backend.core.flexible_network import solve_design_network
+        try:
+            result = solve_design_network(design0, scope=body.scope, conn_id=body.conn_id)
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc)) from exc
+        if not result["converged"]:
+            raise HTTPException(422, detail={
+                "message": f"Flexible relaxation did not converge; maximum remaining overstretch "
+                           f"{result['max_excess_nm']:.3f} nm, duplex overlap "
+                           f"{result.get('contacts', {}).get('max_penetration_nm', 0):.3f} nm. No changes applied.",
+                "relaxation": result,
+            })
+        if not result["transforms"]:
+            return {"relaxation": result, "unchanged": True}
+        body = body.model_copy(update={
+            "transforms": [FlexibleRelaxTransform(**t) for t in result["transforms"]],
+            "label": body.label or ("Relax all flexible segments" if body.scope == "all"
+                                   else "Relax flexible network"),
+        })
     if not body.transforms:
         raise HTTPException(400, detail="No cluster transforms provided.")
-    design0 = design_state.get_or_404()
     known = {c.id for c in design0.cluster_transforms}
     for t in body.transforms:
         if t.cluster_id not in known:
             raise HTTPException(404, detail=f"Cluster {t.cluster_id!r} not found.")
 
     def fn(d: Design) -> Design:
-        by_id = {t.cluster_id: t for t in body.transforms}
-        cts = [
-            c.model_copy(
-                update={
-                    "pivot": list(by_id[c.id].pivot),
-                    "translation": list(by_id[c.id].translation),
-                    "rotation": list(by_id[c.id].rotation),
-                }
-            )
-            if c.id in by_id
-            else c
-            for c in d.cluster_transforms
-        ]
-        return d.copy_with(cluster_transforms=cts)
+        from backend.api.part_flexible_commands import apply_poses
+        updated = apply_poses(d, [t.model_dump() for t in body.transforms], carry=result is not None)
+        if result is not None:
+            from backend.core.flexible_relax import _geom_index, _anchor_world_pos
+            import numpy as np
+            geom = _geom_index(updated)
+            original = _geom_index(d)
+            fixed = set(result["fixed_cluster_ids"])
+            selected = {c["connection_id"]: c for c in result["connections"]}
+            for c in updated.flexible_connections:
+                if c.id not in selected:
+                    continue
+                a = _anchor_world_pos(geom, updated, c.anchor_a)
+                b = _anchor_world_pos(geom, updated, c.anchor_b)
+                if a is None or b is None:
+                    raise HTTPException(422, detail="Relaxed anchor could not be resolved. No changes applied.")
+                for cid, anchor, point in ((c.cluster_a_id, c.anchor_a, a),
+                                           (c.cluster_b_id, c.anchor_b, b)):
+                    if cid in fixed and not np.allclose(
+                        point, _anchor_world_pos(original, d, anchor), atol=1e-8, rtol=0
+                    ):
+                        raise HTTPException(422, detail="Overlapping cluster transforms would move the "
+                                            "fixed reference. No changes applied.")
+                length = float(np.linalg.norm(a - b))
+                if length > c.contour_length_nm + result["tolerance_nm"]:
+                    raise HTTPException(422, detail="Cluster pose composition does not satisfy all flexible "
+                                        "tethers. No changes applied.")
+                selected[c.id].update(length_nm=length, excess_nm=max(0., length - c.contour_length_nm))
+            # Persist/report the actual NADOC geometry measurements, rather than
+            # optimizer predictions (native coordinates may have lower precision).
+            result["max_excess_nm"] = max((c["excess_nm"] for c in selected.values()), default=0.)
+            params["relaxation"]["max_excess_nm"] = result["max_excess_nm"]
+            if result.get('solver') == 'rigid-flex-staged-contact-v1':
+                from backend.core.flexible_contacts import Contacts, design_capsules
+                ids = set(result['cluster_sizes'])
+                capsules = design_capsules(updated, ids)
+                clearance = Contacts(capsules, [], {}).report(np.zeros(0))
+                if clearance['max_penetration_nm'] > result['tolerance_nm']:
+                    raise HTTPException(422, detail='Relaxed duplexes still overlap. No changes applied.')
+                old_fixed = {c['id']: c for c in design_capsules(d, fixed)}
+                new_fixed = {c['id']: c for c in capsules if c['owner'] in fixed}
+                if old_fixed.keys() != new_fixed.keys() or any(
+                    not np.allclose(old_fixed[k][p], new_fixed[k][p], atol=1e-8, rtol=0)
+                    for k in old_fixed for p in ('p', 'q')
+                ):
+                    raise HTTPException(422, detail='Fixed cluster collision geometry moved. No changes applied.')
+                result['contacts'] = clearance
+                params['relaxation']['contacts'] = clearance
+        return updated
 
     n = len(body.transforms)
     label = body.label or (
         "Relax flexible segment" if n == 1 else "Relax flexible segments"
     )
-    params = {"cluster_ids": [t.cluster_id for t in body.transforms]}
+    params = {"cluster_ids": [t.cluster_id for t in body.transforms],
+              "transforms": [t.model_dump() for t in body.transforms]}
+    if result is not None:
+        params.update(scope=body.scope, conn_id=body.conn_id,
+                      relaxation={k: v for k, v in result.items() if k != "transforms"})
+    from backend.api.part_flexible_commands import values
+    try:
+        values({"_proof_version": 1, **params})
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
     updated, validation, _entry = design_state.mutate_with_feature_log(
-        "flexible-relax", label, params, fn
+        "flexible-relax", label, params, fn,
+        expected_revision=source_revision if result is not None else None,
     )
-    # Unlike an overhang-rotation commit, the server does no additional
-    # authoritative computation here — the frontend already ran the relax
-    # solve and this just persists the exact same cluster poses it previewed
-    # with, so there's no "trust the server over stale preview" concern.
-    # helix_ids per affected cluster are already known from cluster_transforms
-    # (captured on design0, before the mutation, since ids/composition don't
-    # change here — only pose fields do).
+    # Return authoritative geometry for every affected cluster, including exact
+    # base selections on a shared helix and the flexible classification flags.
     by_cluster = {c.id: c for c in design0.cluster_transforms}
     changed_helix_ids = sorted({
         hid
         for t in body.transforms
         for hid in (by_cluster[t.cluster_id].helix_ids or [])
     })
-    return _design_response_with_geometry(
+    payload = _design_response_with_geometry(
         updated, validation,
         changed_helix_ids=changed_helix_ids, compact_deformed=True, partial_axes=True,
     )
+    if result is not None:
+        payload["relaxation"] = result
+    return payload
 
 
 @router.post("/design/flexible-segment", status_code=200)

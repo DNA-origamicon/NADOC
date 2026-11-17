@@ -1,5 +1,34 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-201 — Joint flexible relaxation permits rigid-body overlaps (2026-11-17)
+
+- [x] User's saved retry closes all 11 tethers but has 28 inter-body capsule
+  overlaps (2 nm duplex diameter; maximum penetration 1.835 nm).
+- [x] Read-only numeric benchmark compares simultaneous contact penalties,
+  contact continuation and constrained SLSQP; largest participating body fixed.
+  Continuation recovers closure and clearance within 0.001 nm from both the
+  saved jumble and the recorded pre-Relax state. Direct SLSQP trials fail.
+- [x] User-authorized production integration: staged capsule contacts, independent
+  native-geometry clearance and fixed-body verification before atomic commit;
+  exact pose replay and contact diagnostics in the feature log.
+- [ ] Full obstacle/ssDNA coverage and continuous collision prevention remain
+  follow-on work; successful endpoint clearance is not a noncrossing-path proof.
+
+
+## ISSUE-200 — Relax all breaks tethers solved earlier (2026-11-17)
+
+- [x] Saved JJ_Hinge confirms 3/11 tethers remain overstretched; two worsen.
+- [x] Replace independent pair solves with one rigid network solve, fixing the
+  largest participating cluster per component and allowing translation/rotation.
+- [x] Check every final contour and the fixed reference in actual posed geometry;
+  reject nonconvergence without partial commit or false success.
+- [x] Add the missing versioned Relax replay contract with explicit poses and
+  solver diagnostics; save/reopen, independent replay and undo/redo regressions.
+- [x] 48 focused backend checks, 3 dedicated browser checks and frontend suite
+  pass. Smoke retains the independently tracked Square New Part assertion,
+  ISSUE-180; relaxation checks and assembly exit pass.
+
+
 ## ISSUE-198 — Relax all visually re-rigidifies flexible bases (2026-11-14)
 
 - [x] Current JJ_Hinge retains all 22 marked bases / 11 flexible connections
@@ -375,6 +404,11 @@ files carry all the state a cold session needs.
 
 
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
+
+- November 17 flexible-network validation reproduces Square `lattice_type`
+  undefined at `smoke.spec.js:200`: 23 passed, two skipped, one failed.
+  Dedicated network browser checks: three passed. New Part code is unchanged.
+  Evidence: `.development-artifacts/flexible-network-smoke.log`.
 
 - November 14 annotation-branch validation reproduced both recorded failures:
   Honeycomb request timeout and Square `lattice_type` undefined. Smoke: 22 passed,

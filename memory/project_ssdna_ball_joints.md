@@ -19,6 +19,160 @@ Mark a contiguous run of UNPAIRED beads as a flexible tether. Each marked run br
 
 **REPLACED the earlier auto-cut "ball joint" approach** (mark beads → derive new arms → Powell solve). The user found that paradigm wrong. Rigid arms are now the user's OWN clusters; no auto-cut, no solver, no new clusters. (Old `ball_joint_arms.py`/`ball_joint_solve.py` deleted; `ClusterRigidTransform.kind` removed.)
 
+## November 17, 2026 — actual JJ_Hinge app verification
+
+Follow-up to the user's failure report: the preceding production check was only
+a numeric solve, not an applied/rendered JJ check. The local file now ends at F18
+(all cluster poses identity), SHA256
+`b2e3723a8bc5afc1030e6b720d53b280f58a74bfe3b96bbf5d5908d1b1c24834`.
+Two isolated app runs invoked the real Relax all controller/API and committed
+F19 successfully. Maximum actual tether excess was 0.000348 / 0.000511 nm;
+actual duplex-capsule penetration 0.00000248 / 0.00000363 nm, zero overlaps
+at 0.001 nm tolerance. Largest cluster stayed fixed under route validation.
+Full geometry refetch changed rendered backbone coordinates by exactly zero.
+Inspected front/side/top/oblique full-representation views: separated bundles
+forming an open hinge, no visible inter-bundle duplex intersections. This does
+not certify atomistic or excluded ssDNA/overhang contacts. The user's failure
+was not reproduced from this saved state; no production fix was inferred.
+The optional JJ browser regression now applies Relax and checks refresh parity.
+Autosave/session caching off; source unchanged; no derivative published.
+Screenshots/traces are disposable; compact evidence:
+`.development-artifacts/jj-actual-relax-visual.json`.
+
+## November 17, 2026 — staged contacts in production Relax
+
+User explicitly authorized integration after the comparison trials. Scope-based
+Relax now uses `rigid-flex-staged-contact-v1`: the same joint rigid network,
+with contact residual weights 0.1, 0.3, 1, 3, 10, 150 evaluations per stage,
+1e-5 pose regularization, and 1e-9 optimization tolerances. BLAS is limited to
+one thread as in Relax Origami. Already-slack tethers no longer bypass overlap
+repair. The pure numeric anchor-only API remains compatible when no capsules
+are supplied; the app/headless design adapter always supplies collision geometry.
+
+`flexible_contacts.py` owns finite-segment distances, dynamic broad-phase
+screening, and contiguous paired-duplex axis capsules using canonical cluster
+ownership. The contact model covers participating rigid clusters, including
+cross-component contacts. It excludes intra-body contacts, ssDNA/overhangs and
+nonparticipating obstacles. No atomistic or noncrossing-trajectory guarantee.
+
+Acceptance requires every tether and capsule penetration <= 0.001 nm. Before
+atomic commit, the route independently reconstructs native posed capsule geometry
+and checks clearance and all fixed-body capsules, in addition to the existing
+anchor checks. Failure records nothing and does not change undo/revision state.
+Recorded feature parameters include initial/final contact metrics, coverage,
+model/radius/tolerances and the complete stage schedule. Existing absolute-pose
+replay remains deterministic without rerunning optimization.
+
+Production read-only JJ_Hinge check: 11 tethers close, 0.000187992 nm maximum
+excess; 28 initial capsule overlaps become zero at 0.001 nm tolerance (maximum
+penetration 0.000001347 nm). Geometry Cluster 1 fixed; 91.99 seconds. Source
+SHA256 remains `30fd5a0571658be4d9bef5096818c7d401a83c58d61f4fdd89055f5aa671dc98`.
+No derivative of the legacy document is published.
+
+## November 17, 2026 — joint flexible-network relaxation
+
+Relax commands now share the backend kinematic least-squares solver in
+`flexible_network.py`. All tether contour inequalities are solved simultaneously
+with six rigid degrees of freedom per movable body. The largest participating
+cluster by owned backbone-slot count stays fixed in each connected component;
+ties use cluster ID. Overlapping organizational groups with no owned tether
+endpoints are excluded. Scope one solves the selected connection's complete
+component, exposed as **Relax connected flexible network**; all solves every
+component. Slack stays free. This is kinematic fitting, not molecular dynamics;
+the subsequently authorized staged contacts are described above.
+
+The previously saved JJ_Hinge had three residual lengths of 7.785, 5.892 and 6.940 nm after
+the old pairwise solve (1.18 nm contours). Repeated pairwise translations trade
+violations between neighbors; 80 sweeps do not resolve them. The joint numeric
+solve closes all 11 with Geometry Cluster 1 fixed. The legacy source remains
+unchanged by the agent; it has no recipe root and is not an agent-publishable derivative.
+The user's subsequent saved retry closes all 11 but contains inter-body overlaps.
+
+The public `/design/flexible-relax` scope request computes and verifies actual
+NADOC posed-anchor closure (0.001 nm tolerance) before one atomic commit.
+Nonconvergence, unresolved anchors, moving a fixed reference through overlapping
+poses, or stale source revision reject without a partial commit. Pose-only
+recording skips topology reconciliation and pending-ligation retries.
+`part_flexible_commands.py` replays recorded absolute poses independently;
+parameters retain solver version, selection, fixed IDs and per-tether metrics.
+The existing explicit-transform request remains supported. Headless Relax uses
+the same route; the older single-body PBD code remains for drag parity.
+
+## November 17, 2026 — collision-aware solver investigation (isolated)
+
+The user's saved retry (SHA256
+`30fd5a0571658be4d9bef5096818c7d401a83c58d61f4fdd89055f5aa671dc98`)
+closes all 11 tethers but has 28 intersecting inter-body duplex-axis capsule
+pairs, maximum penetration 1.834712 nm. The pre-Relax snapshot already has
+3 capsule overlaps, so collision-free initialization cannot be assumed.
+
+`experiments/flexible_collision_benchmark.py` reads either existing state and
+solves numeric arrays only. It never edits, exports or publishes a structure.
+262 contiguous occupied paired-axis capsules, radius `HELIX_RADIUS_NM` (1 nm),
+cover participating rigid bodies; all 17,926 inter-body pairs are checked.
+Exact-base ownership, missing/flexible slots and bends delimit capsules.
+Geometry Cluster 1 is fixed. Overhangs, ssDNA paths, internal-body clashes,
+nonparticipating bodies and atomistic sterics are outside this benchmark.
+Endpoint clearance is not a collision-free motion-path guarantee.
+
+Saved-state trials: simultaneous equal-weight hinge/contact least squares
+failed (0.210816 nm max tether excess; 23 overlaps). Contact continuation
+(residual weights 0.1, 0.3, 1, 3, 10; 150 evaluations/stage) succeeded:
+0.00017831 nm max tether excess, 0 overlaps at 0.001 nm tolerance,
+0.00000128 nm max penetration. Direct SLSQP from the infeasible saved state
+failed both with pose-vector norm and physical endpoint-displacement objectives.
+No failed trial is eligible for committing. Full metrics and timings live in
+`.development-artifacts/flexible-collision-*.jsonl`; no candidate poses are saved.
+At investigation time production Relax was still tether-only; the subsequent
+authorized staged-contact integration is documented above.
+
+Starting at the existing pre-Relax snapshot, continuation also passes both
+0.001 nm acceptance thresholds: tether excess 0.00060071 nm, penetration
+0.00000427 nm, zero overlaps, 69.0 s (AABB broad phase enabled). Its final
+optimizer flag is false (evaluation budget); acceptance is independently based
+on all final inequalities. Feasible-seeded physical-displacement SLSQP also
+passes (0.00013817 / 0.00019784 nm respectively), but costs another 68.0 s and
+does not meaningfully improve endpoint displacement. Thus continuation alone
+is the best measured cost/closure/clearance compromise here, not cold SLSQP.
+The reported RMS displacement samples capsule start points including the fixed
+body; it is not mass-weighted RMSD. Four focused geometric oracle tests pass.
+
+Research: [XPBD](https://matthias-research.github.io/pages/publications/XPBD.pdf)
+offers compliant joint/contact projection; it was researched, not benchmarked
+as a dynamics implementation here. [Rigid IPC](https://ipc-sim.github.io/rigid-ipc/)
+offers collision-free rigid trajectories but requires an intersection-free
+initial state and conservative continuous collision detection. Merely adding
+a barrier or endpoint test does not implement IPC. The practical candidate is
+continuation recovery; constrained refinement did not justify its extra cost;
+continuous collision checking and proper body/ssDNA coverage remain necessary
+before claiming general collision prevention.
+Future integration must evaluate contacts even when all tethers are already
+within contour: the current tether-only early no-op cannot detect the jumble.
+
+Follow-up: explicit expand/separate-then-relax trials on the same saved state
+did not outperform joint contact continuation. The isolated benchmark now has:
+
+- `radial_expand_relax`: rigid body centers translated away from the fixed
+  body's geometric centroid, trying factors 1.25–8. First clear seed was 3x,
+  temporarily overstretching a tether by 72.563 nm. Reapplying joint contact
+  continuation ended with 7.7484 nm excess / 122 capsule overlaps (rejected).
+- `separate_reclose`: contact-only local separation with a small pose penalty,
+  then per-tether temporary allowances reduced through 1, .5, .25, .1, 0 while
+  retaining contact residual weight 10. Initial separation cleared contacts
+  with 1.5481 nm tether excess; final 0.32380 nm excess / 5 overlaps (rejected).
+- `radial_expand_reclose`: same 3x seed, then the strong-contact gradual
+  reclosure above; final 0.78545 nm excess / 12 overlaps (rejected).
+
+Every stage is numerical only: body dimensions and actual contour parameters
+stay unchanged, root body is fixed, and no intermediate overstretched state is
+committed. These schedules are bounded local trials, not a proof that all
+expansion methods fail. Joint contact continuation remains the successful
+tested approach on this input. [LAMMPS soft push-off](https://docs.lammps.org/pair_soft.html)
+is a related established approach using finite repulsion to separate initial
+overlaps; our kinematic prototype does not invoke LAMMPS or implement its
+potential. Radial expansion may be useful as an optional restart, but clearance
+of the expanded seed does not establish closability or a noncrossing return path.
+
 ## November 14, 2026 — reject marks without an inter-cluster tether
 
 New mark requests must produce a connection between different existing clusters.

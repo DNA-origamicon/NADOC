@@ -92,8 +92,10 @@ for (const mode of [false, true, 'deleted']) {
         .filter(m => m.name === 'flexSegmentBeads').map(m => m.count) }
     })
     expect(rendered).toEqual({ visible: true, counts: [2] })
-    // Exercise the same relax-all controller used by the context menu. The
-    // compact partial response must not recreate these beads in rigid meshes.
+    // Exercise the context-menu controller, including authoritative network
+    // closure and an unchanged fixed reference, through real API/store/rendering.
+    const beforePoses = await page.evaluate(() => window.__nadocTest.store.getState()
+      .currentDesign.cluster_transforms)
     await page.evaluate(async () => {
       const t = window.__nadocTest
       const api = await import('/src/api/client.js')
@@ -114,6 +116,19 @@ for (const mode of [false, true, 'deleted']) {
         operation: s.currentDesign.feature_log.at(-1).op_kind }
     })
     expect(relaxed).toEqual({ marks: 2, flags: 2, rigid: 0, beads: [2], operation: 'flexible-relax' })
+    const solved = await page.evaluate(() => {
+      const design = window.__nadocTest.store.getState().currentDesign
+      return { poses: design.cluster_transforms, report: design.feature_log.at(-1).params.relaxation }
+    })
+    expect(solved.report.converged).toBe(true)
+    expect(solved.report.solver).toBe('rigid-flex-staged-contact-v1')
+    expect(solved.report.contacts.max_penetration_nm).toBeLessThanOrEqual(.001)
+    expect(solved.report.max_excess_nm).toBeLessThanOrEqual(.001)
+    for (const id of solved.report.fixed_cluster_ids) {
+      expect(solved.poses.find(c => c.id === id)).toEqual(beforePoses.find(c => c.id === id))
+    }
+    await page.keyboard.press('f')
+    await page.screenshot({ path: test.info().outputPath('two-base-relaxed.png') })
     await page.evaluate(async () => { const api = await import('/src/api/client.js'); await api.undo() })
     await page.evaluate(async () => { const api = await import('/src/api/client.js'); await api.undo() })
     await page.waitForFunction(() => window.__nadocTest.store.getState().currentDesign.flexible_segment_marks.length === 0)
@@ -187,4 +202,92 @@ test('JJ_Hinge rejects its saved intra-cluster run with an explanation', async (
   await page.screenshot({ path: test.info().outputPath('jj-hinge-rejection.png') })
   await page.getByRole('button', { name: 'OK', exact: true }).click()
   expect(await digest()).toBe(before)
+})
+
+test('JJ_Hinge actual relax all and rendered clearance', async ({ page }) => {
+  test.setTimeout(360000)
+  const fixture = path.resolve('../workspace/Assembly Tests/JJ_Hinge_AuNP_stacked_poly_FINAL_with_fluors.nadoc')
+  test.skip(!existsSync(fixture), 'Local user design unavailable')
+  const original = readFileSync(fixture, 'utf8')
+  await page.addInitScript(() => localStorage.setItem('nadoc:preferences:v1', JSON.stringify({ autosave: false })))
+  await page.goto('/?doc=__e2e__jj-network-read-only')
+  await page.waitForFunction(() => !!window.__nadocTest?.store)
+  await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
+  await page.click('#menu-file-new')
+  await page.fill('#new-design-name', '__e2e__jj-network-host')
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(page.locator('#welcome-screen')).not.toBeVisible()
+  await page.evaluate(async fixture => {
+    const api = await import('/src/api/client.js')
+    window.__nadocTest.pauseViewerRenderingForTest()
+    await api.loadDesign(fixture)
+    console.log('JJ loaded')
+    window.__nadocTest.setRepresentation('full')
+  }, fixture)
+  await page.waitForFunction(() => window.__nadocTest.store.getState().currentGeometry?.length > 1000)
+  await page.keyboard.press('f')
+  await page.evaluate(() => window.__nadocTest.renderViewerFrameForTest())
+  await page.screenshot({ path: test.info().outputPath('jj-hinge-read-only.png') })
+  console.log('JJ before screenshot captured')
+  const count = await page.evaluate(() => window.__nadocTest.store.getState().currentDesign.feature_log.length)
+  page.on('response', async response => {
+    if (response.url().includes('flexible') && response.request().method() === 'POST') console.log('JJ relax response', response.status())
+  })
+  await page.evaluate(async () => {
+    const t = window.__nadocTest
+    const api = await import('/src/api/client.js')
+    const { initFlexRelax } = await import('/src/scene/flex_relax.js')
+    await initFlexRelax({ store: t.store, api, designRenderer: t.getDesignRenderer(),
+      isTranslateRotateActive: () => false }).relaxFlexible('all')
+  })
+  await page.keyboard.press('f')
+  await page.evaluate(() => window.__nadocTest.renderViewerFrameForTest())
+  await page.screenshot({ path: test.info().outputPath('jj-hinge-after.png') })
+  console.log('JJ visible messages', await page.locator('.toast-message').allTextContents())
+  const result = await page.evaluate(() => {
+    const d = window.__nadocTest.store.getState().currentDesign
+    return { count: d.feature_log.length, report: d.feature_log.at(-1).params.relaxation }
+  })
+  console.log('JJ actual result', JSON.stringify(result))
+  const refreshed = await page.evaluate(async () => {
+    const t = window.__nadocTest
+    const key = n => [n.helix_id, n.bp_index, n.direction, n.copy_k ?? 0].join(':')
+    const before = new Map(t.getDesignRenderer().getBackboneEntries().map(e => [key(e.nuc), e.pos.toArray()]))
+    const api = await import('/src/api/client.js')
+    await api.getGeometry()
+    let maximum = 0
+    for (const e of t.getDesignRenderer().getBackboneEntries()) {
+      const p = before.get(key(e.nuc))
+      if (p) maximum = Math.max(maximum, Math.hypot(...e.pos.toArray().map((v, i) => v-p[i])))
+    }
+    return maximum
+  })
+  console.log('JJ rendered coordinate change after authoritative refresh', refreshed)
+  expect(refreshed).toBeLessThan(.001)
+  const frame = await page.evaluate(() => {
+    const positions = window.__nadocTest.getDesignRenderer().getBackboneEntries().map(e => e.pos.toArray())
+    const low = [0,1,2].map(i => Math.min(...positions.map(p => p[i])))
+    const high = [0,1,2].map(i => Math.max(...positions.map(p => p[i])))
+    return { center: low.map((v,i) => (v+high[i])/2), span: Math.max(...low.map((v,i) => high[i]-v)) }
+  })
+  for (const [name, direction, up] of [
+    ['front', [0,0,1], [0,1,0]], ['side', [1,0,0], [0,1,0]],
+    ['top', [0,1,0], [0,0,1]], ['oblique', [1,1,1], [0,1,0]],
+  ]) {
+    await page.evaluate(({ frame, direction, up }) => {
+      const t = window.__nadocTest
+      const norm = Math.hypot(...direction)
+      t.applyCameraPoseForTest({ target: frame.center,
+        position: frame.center.map((v,i) => v+direction[i]/norm*frame.span*1.8), up, fov: 40 })
+      t.renderViewerFrameForTest()
+    }, { frame, direction, up })
+    await page.screenshot({ path: test.info().outputPath('jj-hinge-'+name+'.png') })
+  }
+
+  expect(result.count).toBe(count + 1)
+  expect(result.report.solver).toBe('rigid-flex-staged-contact-v1')
+  expect(result.report.converged).toBe(true)
+  expect(result.report.contacts.max_penetration_nm).toBeLessThanOrEqual(.001)
+
+  expect(readFileSync(fixture, 'utf8')).toBe(original)
 })

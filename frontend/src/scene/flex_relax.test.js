@@ -2,7 +2,7 @@
  * Tests for scene/flex_relax.js (extracted from main.js's Move/Rotate region).
  *
  * Two layers:
- *  - Pure cores (makeWorldPosResolver / buildTetherPayload / clusterBeadCount),
+ *  - Pure cores (makeWorldPosResolver / buildTetherPayload),
  *    tested against hand-built design + backbone-entry snapshots. flexTetherConnections
  *    stays REAL (it's already its own tested module).
  *  - initFlexRelax factory wiring, with ui/toast.js + ui/op_progress.js mocked so
@@ -20,14 +20,8 @@ import { createMockStore } from '../test-helpers/mock_store.js'
 import {
   makeWorldPosResolver,
   buildTetherPayload,
-  clusterBeadCount,
   initFlexRelax,
 } from './flex_relax.js'
-
-// A position stub with a controllable distance, mimicking THREE.Vector3.distanceTo.
-function pos(distanceTo) {
-  return { distanceTo: () => distanceTo }
-}
 
 // Design with one strand whose two domains live on h1 / h2 so flexAnchorKey
 // resolves the connection anchors to 'h1:5:fwd' / 'h2:8:rev'.
@@ -102,26 +96,6 @@ describe('buildTetherPayload (pure)', () => {
   })
 })
 
-describe('clusterBeadCount (pure)', () => {
-  const design = makeDesign()
-  const entries = [
-    { nuc: { helix_id: 'h1' } },
-    { nuc: { helix_id: 'h1' } },
-    { nuc: { helix_id: 'h2' } },
-    { nuc: { helix_id: 'h3' } },
-  ]
-
-  it('counts backbone entries whose helix is in the cluster', () => {
-    expect(clusterBeadCount('c1', design, entries)).toBe(2)
-    expect(clusterBeadCount('c2', design, entries)).toBe(1)
-  })
-
-  it('returns 0 for an unknown cluster or empty entries', () => {
-    expect(clusterBeadCount('nope', design, entries)).toBe(0)
-    expect(clusterBeadCount('c1', design, [])).toBe(0)
-  })
-})
-
 describe('initFlexRelax factory', () => {
   let store, api, designRenderer, clusterGizmo, deps, trActive
 
@@ -129,7 +103,9 @@ describe('initFlexRelax factory', () => {
     store = createMockStore({ currentDesign: makeDesign(designOverrides), assemblyActive: false })
     api = {
       getFlexibleConnections: vi.fn().mockResolvedValue({ gates: {}, connections: [] }),
-      relaxFlexibleSegments: vi.fn().mockResolvedValue({}),
+      solveFlexibleSegments: vi.fn().mockResolvedValue({
+        converged: true, transforms: [], connections: [], max_excess_nm: 0,
+      }),
     }
     designRenderer = { getBackboneEntries: vi.fn(() => entries) }
     clusterGizmo = {
@@ -180,7 +156,7 @@ describe('initFlexRelax factory', () => {
     store.setState({ assemblyActive: true })
     await flex.relaxFlexible('all')
     expect(showToast).not.toHaveBeenCalled()
-    expect(api.relaxFlexibleSegments).not.toHaveBeenCalled()
+    expect(api.solveFlexibleSegments).not.toHaveBeenCalled()
   })
 
   it('relaxFlexible refuses while a move is in progress', async () => {
@@ -188,7 +164,7 @@ describe('initFlexRelax factory', () => {
     trActive = true
     await flex.relaxFlexible('all')
     expect(showToast).toHaveBeenCalledWith('Finish the current move first', { severity: 'error' })
-    expect(api.relaxFlexibleSegments).not.toHaveBeenCalled()
+    expect(api.solveFlexibleSegments).not.toHaveBeenCalled()
   })
 
   it('relaxFlexible toasts when there are no flexible segments', async () => {
@@ -198,41 +174,40 @@ describe('initFlexRelax factory', () => {
     expect(clusterGizmo.relaxClusterHeadless).not.toHaveBeenCalled()
   })
 
-  it('relax-one: solves the overstretched pair headlessly and commits atomically', async () => {
-    const entries = [
-      { nuc: { helix_id: 'h1', bp_index: 5, direction: 'fwd' }, pos: pos(10) },
-      { nuc: { helix_id: 'h2', bp_index: 8, direction: 'rev' }, pos: pos(10) },
-    ]
-    const flex = makeFlex({ entries, designOverrides: { flexible_connections: [CONN] } })
-    clusterGizmo.getAllPendingTransforms.mockReturnValue([
-      { clusterId: 'c1', pivot: [0, 0, 0], translation: [1, 0, 0], rotation: [0, 0, 0, 1] },
-    ])
-
+  it('relax-one requests a joint network solve and reports global convergence', async () => {
+    const flex = makeFlex({ designOverrides: { flexible_connections: [CONN] } })
+    api.solveFlexibleSegments.mockResolvedValue({
+      converged: true, transforms: [{ cluster_id: 'c2' }],
+      connections: [CONN], max_excess_nm: .0001,
+    })
     await flex.relaxFlexible('one', 'conn1')
-
-    // smaller/tied cluster c1 picked as mover; single tether → translateOnly.
-    expect(clusterGizmo.relaxClusterHeadless).toHaveBeenCalled()
-    const [movedId, opts] = clusterGizmo.relaxClusterHeadless.mock.calls[0]
-    expect(movedId).toBe('c1')
-    expect(opts.translateOnly).toBe(true)
-    // one atomic commit with the mapped pending transform + the 'one' label.
-    expect(api.relaxFlexibleSegments).toHaveBeenCalledTimes(1)
-    const [transforms, label] = api.relaxFlexibleSegments.mock.calls[0]
-    expect(transforms).toEqual([{ cluster_id: 'c1', pivot: [0, 0, 0], translation: [1, 0, 0], rotation: [0, 0, 0, 1] }])
-    expect(label).toBe('Relax flexible segment')
-    expect(showOpProgress).toHaveBeenCalled()
+    expect(api.solveFlexibleSegments).toHaveBeenCalledExactlyOnceWith('one', 'conn1')
+    expect(clusterGizmo.relaxClusterHeadless).not.toHaveBeenCalled()
+    expect(showToast).toHaveBeenCalledWith('Relaxed 1 flexible segment; maximum overstretch 0.000 nm')
     expect(hideOpProgress).toHaveBeenCalled()
   })
 
-  it('relax: skips non-overstretched pairs (no headless solve, no commit)', async () => {
-    const entries = [
-      { nuc: { helix_id: 'h1', bp_index: 5, direction: 'fwd' }, pos: pos(1) },  // 1 nm < 3 contour
-      { nuc: { helix_id: 'h2', bp_index: 8, direction: 'rev' }, pos: pos(1) },
-    ]
-    const flex = makeFlex({ entries, designOverrides: { flexible_connections: [CONN] } })
+  it('reports an already satisfied network without a geometry commit', async () => {
+    const flex = makeFlex({ designOverrides: { flexible_connections: [CONN] } })
     await flex.relaxFlexible('all')
-    expect(clusterGizmo.relaxClusterHeadless).not.toHaveBeenCalled()
-    expect(api.relaxFlexibleSegments).not.toHaveBeenCalled()
+    expect(api.solveFlexibleSegments).toHaveBeenCalledExactlyOnceWith('all', null)
     expect(showToast).toHaveBeenCalledWith('Flexible segments already relaxed')
+    expect(clusterGizmo.relaxClusterHeadless).not.toHaveBeenCalled()
+  })
+
+  it('shows solver failures and clears progress without painting speculative poses', async () => {
+    const flex = makeFlex({ designOverrides: { flexible_connections: [CONN] } })
+    api.solveFlexibleSegments.mockRejectedValue(new Error('No changes applied'))
+    await flex.relaxFlexible('all')
+    expect(showToast).toHaveBeenCalledWith('No changes applied', { severity: 'error' })
+    expect(hideOpProgress).toHaveBeenCalled()
+    expect(clusterGizmo.relaxClusterHeadless).not.toHaveBeenCalled()
+  })
+
+  it('never reports success from an unconverged response', async () => {
+    const flex = makeFlex({ designOverrides: { flexible_connections: [CONN] } })
+    api.solveFlexibleSegments.mockResolvedValue({ converged: false })
+    await flex.relaxFlexible('all')
+    expect(showToast).toHaveBeenCalledWith('Flexible relaxation did not converge', { severity: 'error' })
   })
 })
