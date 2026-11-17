@@ -135,6 +135,7 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
   mesh.frustumCulled = false
   scene.add(mesh)
 
+  let visible = true
   let _entries = []   // kept so refresh() can re-read current entry.pos values
 
   function _ensureCapacity(needed) {
@@ -145,6 +146,7 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     mesh.count       = 0
     mesh.name        = name
+    mesh.visible     = visible
     mesh.renderOrder = 1
     mesh.frustumCulled = false
     scene.add(mesh)
@@ -178,6 +180,7 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
     },
 
     /** Position glow spheres over the given backbone entries. */
+    setVisible(value) { visible = !!value; mesh.visible = visible },
     setEntries(entries) {
       _entries = entries
       _writeEntries(entries)

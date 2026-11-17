@@ -13,6 +13,11 @@
 
 // Per-metric axis metadata (labels + units) for both domains.
 export const METRIC_META = {
+  oxdna_energy: {
+    label: 'Potential energy', spatial: null, source: 'oxdna-log', zeroLine: false,
+    temporal: { xLabel: 'simulation time (oxDNA units)', yLabel: 'potential energy / particle (oxDNA units)',
+      csvX: 'simulation_time_oxdna', csvValue: 'potential_energy_per_particle' },
+  },
   twist: {
     label: 'Twist',
     spatial: { xLabel: 'axial position (nm)', yLabel: 'cum. twist, sim−analytic (deg)' },
@@ -98,12 +103,14 @@ export function dataToPixel(v, dMin, dMax, pMin, pMax) {
   return pMin + ((v - dMin) / (dMax - dMin)) * (pMax - pMin)
 }
 
-function _fmtTick(v) {
+function _fmtTick(v, step = 1) {
   if (v === 0) return '0'
   const a = Math.abs(v)
   if (a >= 1000 || a < 0.01) return v.toExponential(1)
   if (Number.isInteger(v)) return String(v)
-  return v.toFixed(a < 1 ? 2 : 1)
+  const precision = Math.max(a < 1 ? 2 : 1,
+    Math.min(8, -Math.floor(Math.log10(Math.abs(step) || 1))))
+  return v.toFixed(precision)
 }
 
 /**
@@ -113,9 +120,9 @@ function _fmtTick(v) {
  */
 export function buildChartSpec({
   series = [], width = 520, height = 300, title = '', xLabel = '', yLabel = '',
-  zeroLine = false, yMin = null, yMax = null,
+  zeroLine = false, yMin = null, yMax = null, annotations = [],
 } = {}) {
-  const pad = { l: 78, r: 18, t: title ? 38 : 18, b: 50 }
+  const pad = { l: 78, r: 18, t: (title ? 38 : 18) + (annotations.length ? 44 : 0), b: 50 }
   const nonEmpty = series.filter(s => s.points && s.points.length)
   if (!nonEmpty.length) {
     return { empty: true, width, height, title, pad, series: [], xTicks: [], yTicks: [], legend: [] }
@@ -140,10 +147,12 @@ export function buildChartSpec({
   return {
     empty: false, width, height, pad, title, xLabel, yLabel,
     plot: { x0: px0, x1: px1, y0: py0, y1: py1 },
+    annotations: annotations.filter(a => a.x >= xlo && a.x <= xhi)
+      .map(a => ({ ...a, px: X(a.x) })),
     xTicks: xTickVals.filter(v => v >= xlo - 1e-9 && v <= xhi + 1e-9)
-      .map(v => ({ v, px: X(v), label: _fmtTick(v) })),
+      .map(v => ({ v, px: X(v), label: _fmtTick(v, xTickVals[1] - xTickVals[0]) })),
     yTicks: yTickVals.filter(v => v >= ylo - 1e-9 && v <= yhi + 1e-9)
-      .map(v => ({ v, py: Y(v), label: _fmtTick(v) })),
+      .map(v => ({ v, py: Y(v), label: _fmtTick(v, yTickVals[1] - yTickVals[0]) })),
     zeroY: zeroLine && ylo <= 0 && yhi >= 0 ? Y(0) : null,
     series: nonEmpty.map(s => ({
       label: s.label, color: s.color,
@@ -181,6 +190,13 @@ function _shortId(jobId, i) {
 /** CSV text for both domains of a metric → `{ temporal, spatial }`. */
 export function metricCSVs(result, metric) {
   const block = result?.[metric] || {}
+  if (metric === 'oxdna_energy') {
+    const t = block.temporal || {}
+    const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`
+    return { spatial: '', temporal: ['simulation_time_oxdna,potential_energy_per_particle,temperature_c,stage,job_id',
+      ...(t.per_frame || []).map((v, i) => [t.x_values[i], v, t.temperature_c[i] ?? '',
+        quote(t.stage_names[i]), quote(t.job_ids[i])].join(','))].join('\n') + '\n' }
+  }
   const meta = METRIC_META[metric]?.temporal || {}
   const xHeader = meta.csvX || 'frame'
   const valueHeader = meta.csvValue || 'value'
@@ -229,7 +245,7 @@ export function drawChart(canvas, spec) {
 
   if (spec.title) {
     ctx.fillStyle = _C.text; ctx.textAlign = 'center'; ctx.font = '16px var(--font-ui, sans-serif)'
-    ctx.fillText(spec.title, width / 2, spec.pad.t / 2)
+    ctx.fillText(spec.title, width / 2, 19)
     ctx.font = '14px var(--font-ui, sans-serif)'
   }
   // grid + y ticks
@@ -259,6 +275,13 @@ export function drawChart(canvas, spec) {
     ctx.stroke(); ctx.lineWidth = 1
   }
   // axis labels
+  for (const mark of spec.annotations || []) {
+    ctx.strokeStyle = '#e3b341'; ctx.setLineDash([3, 3]); ctx.beginPath()
+    ctx.moveTo(mark.px, plot.y1); ctx.lineTo(mark.px, plot.y0); ctx.stroke(); ctx.setLineDash([])
+    ctx.save(); ctx.translate(mark.px + 3, plot.y1 - 5); ctx.rotate(-Math.PI / 4)
+    ctx.textAlign = 'left'; ctx.fillStyle = '#e3b341'; ctx.font = '11px sans-serif'
+    ctx.fillText(mark.label, 0, 0); ctx.restore()
+  }
   ctx.fillStyle = _C.text; ctx.textAlign = 'center'
   if (spec.xLabel) ctx.fillText(spec.xLabel, (plot.x0 + plot.x1) / 2, height - 6)
   if (spec.yLabel) {

@@ -20,6 +20,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -43,6 +44,7 @@ class MetricsStartRequest(BaseModel):
         "latest"  # "latest" (this job only) | "chain" (whole parent/child lineage)
     )
     n_slices: int = 0  # 0 => auto (~1-turn slabs), matching the measure defaults
+    metric: Literal['oxdna_energy'] | None = None
 
 
 def _set(run_id: str, **fields) -> None:
@@ -104,6 +106,11 @@ def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> No
 
     try:
         jobs = _resolve_jobs(job_id, req.scope, ws)
+        if req.metric == 'oxdna_energy':
+            from backend.core.oxdna_energy_series import energy_series
+            result = energy_series(jobs, ws, req.scope)
+            _set(run_id, state='done', progress=1.0, eta_s=0.0, result=result)
+            return
         inputs = [(j, _job_inputs(j, ws)) for j in jobs]
         inputs = [(j, io) for j, io in inputs if io is not None]
         if not inputs:

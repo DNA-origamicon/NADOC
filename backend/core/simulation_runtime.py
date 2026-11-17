@@ -516,6 +516,9 @@ def launch_detached(job, workspace_dir, module, repo_root, *, on_spawn=None, on_
     log = None
     proc = None
     try:
+        # An idle-status reservation can hand off its lease without having
+        # published it yet. New workers must not inherit the old stop generation.
+        lease.identify('launcher')
         read_fd, write_fd = os.pipe()
         log = open(jd / 'worker.log', 'w')
         env = dict(os.environ, **{_FD_ENV: str(lease.fd), _READY_ENV: str(read_fd)})

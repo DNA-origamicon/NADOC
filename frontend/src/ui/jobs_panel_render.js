@@ -1,3 +1,4 @@
+import { thermalJobGroup } from './oxdna_thermal_job_render.js'
 import { disconnectedStorageIcon } from './job_storage.js'
 const rowMetadata = new WeakMap()
 export const simulationJobMetadata = row => rowMetadata.get(row)
@@ -213,7 +214,7 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onWarning, 
  */
 export function renderJobList(listEl, model, {
   doc = document, onClick, onAction, onWarning, onChevron, onContextMenu, emptyText = 'No jobs yet.',
-  dimColor = '#8a8a8a', legendState = null,
+  dimColor = '#8a8a8a', legendState = null, onThermalSelect,
 } = {}) {
   if (!listEl) return
   if (model.empty) {
@@ -222,7 +223,8 @@ export function renderJobList(listEl, model, {
   }
   listEl.innerHTML = ''
   for (const rm of model.rows) {
-    listEl.appendChild(renderJobRow(rm, { doc, onClick, onAction, onWarning, onChevron, onContextMenu }))
+    const row = renderJobRow(rm, { doc, onClick, onAction, onWarning, onChevron, onContextMenu })
+    listEl.appendChild(thermalJobGroup(listEl, row, rm, doc, onThermalSelect, onContextMenu))
   }
   if (legendState && !legendState.el) {
     legendState.el = makeStatusLegend(doc)

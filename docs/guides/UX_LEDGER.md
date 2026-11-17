@@ -110,3 +110,24 @@ Merge follow-up: recaptured against incoming master changes. Reviewed end-region
 images 19, 22, 25 and 31 and the Move dialog at 37 again; the scaffold ends remain
 in place and the standard dropdown retains 16.02:1 contrast. Independent saved
 and reopened process audits and all browser history checks passed.
+
+cadnano → local oxDNA review, November 15:
+
+| ID | Action | Finding | Handling | Status |
+|---|---|---|---|---|
+| GUIDE-UX-019 | Import cadnano from the ordinary menu | The ordinary upload did not record its source, although the pinned cadnano import command existed. A later sequence operation became F1 on top of an unrecorded structure. | Route bounded ordinary uploads through the existing command, retain original bytes, and audit saved/reopened replay. Out-of-contract sources report unverified provenance. | Fixed for qualified imports; focused tests and the complete browser capture pass. Saved/reopened source and imported parts independently replay, and the exported/imported bytes match. |
+| GUIDE-UX-020 | Default local CUDA relaxation of `6hb_cadnano_native_test1.json` | Two independently seeded runs failed in MD relaxation after all three automatic retries. Native oxDNA reported a cell exceeding `_max_n_per_cell`; neither reached equilibration or production. | Preserve the failure in the workflow evidence and use the user-requested NADOC-exported 84 bp 6HB for the tutorial. Do not disable health gates or portray the failed run as successful. | Open. Jobs `db7684b38433` (seed 1789063936) and `70a8c3ee79a1` (seed 8887835), 5,292 nts, installed upstream physics-v3 CUDA build. Scratch trajectories removed by failure-safe cleanup. |
+
+Final capture review: imported Full views 05–06 and relaxed Full views 23–24
+show both ends and complementary sides at readable scale without clipping.
+Relaxed single-stranded loops and terminal runs remain visible. These views
+support gross continuity inspection, not atom-level acceptance or convergence.
+Settings views 16 and 18 show unchanged health gates and actual generated input;
+production views 27 and 30 show inherited local CUDA settings and native progress.
+The final relaxation passed all stages without retries (final designed-base-pair
+retention 0.8677); production emitted nonzero-time frames before cleanup stopped
+it. Both part histories, the export chain and artifact cleanup passed verification.
+The production parent selector has pale text on a white background (view 27);
+its contrast remains a UI follow-up, although the selected parent and inheritance
+are independently checked by the recipe. No simulation-health settings were
+weakened to produce this guide.

@@ -1,3 +1,4 @@
+import { coarseSelectionGeometry, coarseConnectionVisible } from './selection_representation.js'
 import { canonicalSelection } from './selection_model.js'
 import { assignClusterSelection } from '../ui/cluster_base_selection.js'
 import { connIdForBead } from './design_queries.js'
@@ -1612,8 +1613,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return [...entries, ...slabs, ...cones,
         ...slabs.filter(e => e.connectorMesh).map(e => ({ instMesh: e.connectorMesh, id: e.connectorId })),
         ...(designRenderer.selectionCylinderEntries?.(refs) ?? []),
-        ...atoms.flatMap(r => r.selectionAtomEntries?.(entries.map(e => ({ ...e.nuc, copy_k: e._copy ?? e.nuc.copy_k ?? 0 })), { includeBonds: true }) ?? []),
-      ]
+        ...atoms.flatMap(r => r.selectionAtomEntries?.(entries.map(e => ({ ...e.nuc, copy_k: e._copy ?? e.nuc.copy_k ?? 0 })), { includeBonds: true, renderedOnly: true })?.map(e => ({ ...e, tint: false })) ?? []),
+      ].filter(e => e.instMesh?.parent && isVisibleInstance(e.instMesh, e.id))
     })
     designRenderer.setClusterSelectionGroups?.(groups)
   }
@@ -2925,45 +2926,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // path now composes here instead. (Same single-writer discipline the instanceAlpha
   // channel has; see .claude/rules/rendering.md.)
   function _composeGlow(beadEntries = _selectionGlowEntries) {
-    designRenderer.setGlowEntries([
+    const { beads, cylinders } = coarseSelectionGeometry([
       ...beadEntries,
       ..._ctrlBeads.map(b => b.entry),
       ..._endBeads.map(b => b.entry),
       ..._baseGlowEntries,
-    ])
+    ], designRenderer)
+    designRenderer.setGlowEntries(beads)
+    designRenderer.glowCylinderDomains(cylinders)
   }
 
-  // Merged glow: always combines selection glow + ctrl bead glow + base pool.
+  // Keep logical source entries; every writer resolves the current representation.
+  // Atomistic colors are projected by atom_surface_display onto real atoms/bonds.
   function _setSelectionGlow(entries) {
     _selectionGlowEntries = entries
-    // Split highlighted entries: bead-rendered domains keep the sphere glow;
-    // cylinder-rendered domains get the additive cylinder glow instead (no double
-    // halo). Both come from the same entry list, so every highlight path is covered.
-    const beadEntries = []
-    const cylRefs = new Map()
-    const globalAtomRenderer = getAtomisticRenderer?.()
-    const globalAtomActive = globalAtomRenderer?.getMode?.() !== 'off' &&
-      designRenderer.getHelixCtrl()?.root?.visible === false
-    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.(), getRegionStickRenderer?.()]
-      .filter((r, i, all) => r?.getMode?.() !== 'off' && all.indexOf(r) === i)
-    const atomEntries = atomRenderers.flatMap(r => r.selectionAtomEntries?.(
-      entries.filter(e => e.nuc).map(e => ({ ...e.nuc, copy_k: e._copy ?? e.nuc.copy_k ?? 0 })),
-    ) ?? [])
-    for (const e of entries) {
-      const sid = e.nuc?.strand_id, di = e.nuc?.domain_index
-      if (sid != null && di != null && designRenderer.isDomainCylinder?.(sid, di)) {
-        cylRefs.set(`${sid}:${di}`, { strandId: sid, domainIndex: di })
-      } else if (globalAtomActive || (atomRenderers.length && e.nuc && (() => {
-        const r = designRenderer.columnRepAt?.(e.nuc.helix_id, e.nuc.bp_index)
-        return r === 'vdw' || r === 'ballstick' || r === 'stick'
-      })())) {
-        // The atom renderer contributes one live entry per atom for this nucleotide.
-      } else {
-        beadEntries.push(e)
-      }
-    }
-    _composeGlow([...beadEntries, ...atomEntries])
-    designRenderer.glowCylinderDomains([...cylRefs.values()])
+    _composeGlow()
   }
 
   let _projectingClusters = false
@@ -3101,6 +3078,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // is safe and the glow tracks a bead that is moving under MD playback.
   const _basePosScratch = new THREE.Vector3()
   const _baseGlowEntry = (cand) => ({
+    instMesh: cand.instMesh, id: cand.id, nuc: cand.nuc,
     get pos() { return worldPosOf(cand, _basePosScratch) },
   })
 
@@ -3112,21 +3090,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
     const want = new Set(_baseKeys)
-    const globalAtomRenderer = getAtomisticRenderer?.()
-    const globalAtomActive = globalAtomRenderer?.getMode?.() !== 'off' &&
-      designRenderer.getHelixCtrl()?.root?.visible === false
-    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.(), getRegionStickRenderer?.()]
-      .filter((r, i, all) => r?.getMode?.() !== 'off' && all.indexOf(r) === i)
-    const targets = _baseKeys.map(parseBaseKey).filter(Boolean)
-    const atomEntries = atomRenderers.flatMap(r => r.selectionAtomEntries?.(targets) ?? [])
-    const coarseEntries = _baseCandidates().filter(c => {
-      if (!want.has(c.key)) return false
-      if (globalAtomActive) return false
-      const p = parseBaseKey(c.key)
-      return !p || p.helix_id === '__xb__' ||
-        !designRenderer.isColumnAtomistic?.(p.helix_id, p.bp_index)
-    }).map(_baseGlowEntry)
-    _baseGlowEntries = [...coarseEntries, ...atomEntries]
+    _baseGlowEntries = _baseCandidates().filter(c => want.has(c.key)).map(_baseGlowEntry)
     _composeGlow()
   }
 
@@ -3205,7 +3169,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // recolor + glow-sphere highlight so single- and multi-select look identical.
   function _applyMultiCrossoverHighlight(arcs) {
     _multiCrossoverArcs = arcs
-    designRenderer.setSelectionArcs?.(_multiCrossoverArcs.map(a => a.getPositions?.() ?? []))
+    designRenderer.setSelectionArcs?.(_multiCrossoverArcs.filter(a =>
+      coarseConnectionVisible(a, designRenderer),
+    ).map(a => a.getPositions?.() ?? []))
   }
 
   function _crossoverRefForArc(arc, design = store.getState().currentDesign) {
@@ -4835,6 +4801,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // fires and the selection halo would vanish on every surface-strand edit.
   window.addEventListener('nadoc:display-rebuilt', () => _reresolveAfterRebuild(store.getState()))
   window.addEventListener('nadoc:representation-change', () => _reresolveAfterRebuild(store.getState()))
+  window.addEventListener('nadoc:atomistic-rebuilt', () => {
+    const state = store.getState()
+    if (!state.assemblyActive && state.selection?.items?.some(r => r.kind === 'cluster' || r.kind === 'part_group'))
+      _reresolveAfterRebuild(state)
+  })
   window.addEventListener('nadoc:document-reset', () => { _groupPickMode = 'groups'; _clearHoverPreview() })
 
   // Canonical refs are the source of truth. Keep renderer adapters synchronized for

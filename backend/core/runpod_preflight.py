@@ -10,10 +10,8 @@ is that they become a red row in the UI instead of a charge on the card.
     gpu_stock       no allowed card in stock          -> 500 "no instances currently available"
     sizing          system too big for any card       -> would rent and OOM
 
-Stock comes from RunPod's GraphQL API (the REST v1 API exposes no availability endpoint at
-all — /gpus, /availability, /datacenters are all 400). ⚠️ It is a GLOBAL figure: a network
-volume PINS the pod to its datacenter (ours: EU-RO-1), so "in stock" worldwide still does
-not guarantee a card *there*. Preflight can prove a NO; it cannot prove a YES. Say so.
+Stock comes from the REST v2 GPU catalog, filtered to Secure Cloud. Global
+availability does not guarantee capacity in the network volume's datacenter.
 """
 
 from __future__ import annotations
@@ -33,18 +31,9 @@ from backend.core.runpod_script import (
 
 GRAPHQL_URL = "https://api.runpod.io/graphql"
 
-# Cloudflare 403s (error 1010) on a default python user-agent, and the GraphQL endpoint
-# wants the key as a QUERY PARAM, not a Bearer header. Both learned the hard way.
+# Retain the browser user-agent for the balance endpoint's Cloudflare policy.
 _UA = "Mozilla/5.0 (X11; Linux x86_64) NADOC/1.0"
-
-_STOCK_QUERY = (
-    "query { gpuTypes { id displayName memoryInGb "
-    "lowestPrice(input:{gpuCount:1,secureCloud:true}) { "
-    "uninterruptablePrice minimumBidPrice stockStatus } } }"
-)
-
-# RunPod reports stock as None / "Low" / "Medium" / "High".
-_OUT_OF_STOCK = {None, "", "None"}
+_OUT_OF_STOCK = {None, "", "None", "NONE"}
 
 
 @dataclass
@@ -74,32 +63,26 @@ class Preflight:
 async def fetch_gpu_stock(
     api_key: str, *, transport: Optional[httpx.AsyncBaseTransport] = None
 ) -> dict[str, dict]:
-    """Live Secure Cloud prices/stock from RunPod's GraphQL API.
+    """Live Secure Cloud catalog, normalized to the existing UI contract."""
+    from backend.core.runpod_api import RunpodClient
 
-    NADOC launches ``cloudType=SECURE`` pods, so an unfiltered ``lowestPrice`` is not an
-    honest quote: it can return a cheaper Community Cloud rate that the launch path can never
-    pay. Keep this query uncached and scoped to ``secureCloud:true`` so every caller gets the
-    current price for the same market it will actually rent from.
-    """
-    async with httpx.AsyncClient(transport=transport, timeout=20.0) as client:
-        resp = await client.post(
-            f"{GRAPHQL_URL}?api_key={api_key}",
-            content=json.dumps({"query": _STOCK_QUERY}),
-            headers={"Content-Type": "application/json", "User-Agent": _UA},
-        )
-    resp.raise_for_status()
-    rows = ((resp.json() or {}).get("data") or {}).get("gpuTypes") or []
-    out: dict[str, dict] = {}
-    for row in rows:
-        price = row.get("lowestPrice") or {}
-        out[str(row.get("id"))] = {
-            "stock": price.get("stockStatus"),
-            "on_demand": price.get("uninterruptablePrice"),
-            "spot": price.get("minimumBidPrice"),
-            "vram_gb": row.get("memoryInGb"),
-            "display": row.get("displayName"),
+    client = RunpodClient(api_key, transport=transport)
+    try:
+        body = await client._request("GET", "/catalog/gpus", params={
+            "include": "AVAILABILITY", "product": "POD", "cloud": "SECURE",
+        })
+    finally:
+        await client.aclose()
+    return {
+        str(row["id"]): {
+            "stock": (row.get("availability") or "NONE").title(),
+            "on_demand": (row.get("price") or {}).get("secure"),
+            "spot": None,
+            "vram_gb": row.get("memory"),
+            "display": row.get("name"),
         }
-    return out
+        for row in (body or {}).get("gpus", [])
+    }
 
 
 async def fetch_balance(
@@ -111,19 +94,17 @@ async def fetch_balance(
     dies at 80% for want of credit wastes everything spent to that point. The setup wizard
     shows this so the user tops up BEFORE renting.
 
-    Balance lives ONLY on the legacy GraphQL API (``myself { clientBalance }``) — the REST
-    v1 API exposes no billing endpoint. Same quirks as ``fetch_gpu_stock``: key as a query
-    param, a browser User-Agent (Cloudflare 403s ``error code: 1010`` on a bare python UA —
-    that is a bot-block, NOT a bad key). Never raises: an unreadable balance is
-    ``{"available": False, "reason": ...}``, because the caller is an endpoint, not a gate.
+    Balance has no REST v2 equivalent; retain GraphQL with Bearer authentication.
+    Never raises: an unreadable balance is reported as unavailable.
     """
     query = "query { myself { clientBalance currentSpendPerHr } }"
     try:
         async with httpx.AsyncClient(transport=transport, timeout=20.0) as client:
             resp = await client.post(
-                f"{GRAPHQL_URL}?api_key={api_key}",
+                GRAPHQL_URL,
                 content=json.dumps({"query": query}),
-                headers={"Content-Type": "application/json", "User-Agent": _UA},
+                headers={"Content-Type": "application/json", "User-Agent": _UA,
+                         "Authorization": f"Bearer {api_key}"},
             )
         if resp.status_code in (401, 403):
             body = resp.text[:120]

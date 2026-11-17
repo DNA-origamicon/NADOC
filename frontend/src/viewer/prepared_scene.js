@@ -60,7 +60,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
     if (!loopSkipGlyph && !hullCutouts && !impostor && !alpha && !sectionCap && !selectionHalo && compile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
     const data = m.isLineMaterial ? encodeWideLineMaterial(m) : m.toJSON(meta)
     delete data.userData
-    materials.set(m.uuid, { ...data, ...(loopSkipGlyph ? { loopSkipGlyph } : {}), instanceAlpha: alpha, sectionCap, ...(selectionHalo ? { selectionHalo: true } : {}), ...(hullCutouts ? { hullCutouts } : {}), ...(impostor ? { impostor } : {}),
+    materials.set(m.uuid, { ...data, ...(loopSkipGlyph ? { loopSkipGlyph } : {}), instanceAlpha: alpha, sectionCap, ...(selectionHalo ? { selectionHalo: true, colorWrite: true } : {}), ...(hullCutouts ? { hullCutouts } : {}), ...(impostor ? { impostor } : {}),
       sectionPlanes: (m.clippingPlanes ?? []).map(p => [...p.normal.toArray(), p.constant]),
       clipIntersection: m.clipIntersection, clipShadows: m.clipShadows,
       colors: Object.fromEntries(COLOR_KEYS.filter(k => m[k]?.isColor).map(k => [k, m[k].toArray()])) })

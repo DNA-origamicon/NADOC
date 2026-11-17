@@ -526,7 +526,7 @@ class TestRunJobOnPodAlwaysTerminates:
             )
         )
         assert status == MdStatus.completed
-        assert deleted == ["/v1/pods/pod1"], "the pod MUST be destroyed"
+        assert deleted == ["/v2/pods/pod1"], "the pod MUST be destroyed"
 
     def test_terminates_the_pod_when_the_run_fails(self, tmp_path, monkeypatch):
         self._patch_conn(
@@ -555,7 +555,7 @@ class TestRunJobOnPodAlwaysTerminates:
         )
         assert status == MdStatus.failed
         assert "d_01" in (job.error or "")
-        assert deleted == ["/v1/pods/pod1"]
+        assert deleted == ["/v2/pods/pod1"]
 
     def test_terminates_the_pod_when_something_raises_mid_run(
         self, tmp_path, monkeypatch
@@ -583,7 +583,7 @@ class TestRunJobOnPodAlwaysTerminates:
                     sleep=_nosleep,
                 )
             )
-        assert deleted == ["/v1/pods/pod1"], "a crash must not leak a billing GPU"
+        assert deleted == ["/v2/pods/pod1"], "a crash must not leak a billing GPU"
         failures = [e for e in client.lifecycle_events('pod1') if e['event'] == 'startup_failed']
         assert len(failures) == 1
         assert failures[0]['error'] == 'ssh exploded'
@@ -1148,7 +1148,7 @@ class TestAdoptAlsoAlwaysTerminates:
             )
         )
         assert status == MdStatus.completed
-        assert deleted == ["/v1/pods/pod1"], "an adopted pod MUST still be destroyed"
+        assert deleted == ["/v2/pods/pod1"], "an adopted pod MUST still be destroyed"
 
     def test_destroys_the_pod_when_the_adopted_run_failed(self, tmp_path, monkeypatch):
         self._patch_conn(
@@ -1170,7 +1170,7 @@ class TestAdoptAlsoAlwaysTerminates:
                 sleep=_nosleep,
             )
         )
-        assert deleted == ["/v1/pods/pod1"]
+        assert deleted == ["/v2/pods/pod1"]
 
     def test_never_relaunches_a_live_chain(self, tmp_path, monkeypatch):
         """Two chains on one GPU means two NAMDs writing the same restart files. Adopt

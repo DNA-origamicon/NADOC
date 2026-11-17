@@ -1,3 +1,5 @@
+import { baseInteractionsEnabled, setBaseInteractionsEnabled } from '../scene/atomistic_renderer/interaction_overlay.js'
+
 // Representation option sliders — the per-representation tuning rows in the
 // right sidebar (bead radius, cylinder radius, hull-prism scan margin, hull
 // curve detail) plus the show/hide logic that reveals only the rows relevant
@@ -57,6 +59,12 @@ export function initReprOptionSliders({
   setAtomisticSlidersVisible,
   setSurfacePanelVisible,
 }) {
+  const interactions = document.getElementById('show-base-interactions')
+  if (interactions) {
+    interactions.checked = baseInteractionsEnabled()
+    interactions.addEventListener('change', () => setBaseInteractionsEnabled(interactions.checked))
+  }
+
   let _currentBeadRadius = 0.10   // current bead radius (nm); matches sl-bead-radius default
 
   const _slBeadRadius = document.getElementById('sl-bead-radius')
@@ -127,6 +135,7 @@ export function initReprOptionSliders({
       if (sl) sl.value = String(tick)
       if (sv) sv.textContent = String(tick)
     }
+    document.getElementById('repr-base-interactions-row')?.style.setProperty('display', vis.atomisticSliders ? '' : 'none')
     setAtomisticSlidersVisible(vis.atomisticSliders)
     setSurfacePanelVisible(vis.surfacePanel)
   }

@@ -1,3 +1,4 @@
+import { thermalRunNumbers } from './oxdna_thermal_job.js'
 import { whenOperationIdle } from '../perf/operation_timing.js'
 import { beginPanelLoading } from './panel_loading.js'
 import { sidebarPanelVisible } from './display_tab_policy.js'
@@ -30,6 +31,7 @@ import { createOptimisticJobDeletion } from './simulation_job_deletion.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { getRunDir, mountDirectoryButton } from './run_location.js'
 import { renderJobList } from './jobs_panel_render.js'
+import { thermalSkipAction, skipThermalStage } from './oxdna_thermal_skip.js'
 import { createContextMenu } from './primitives/context_menu.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
 import { relaxIndexMap, relaxRowLabel, runIndicatorTags, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
@@ -639,6 +641,8 @@ export function initSimulateJobs({
     // hiding a design must not renumber it.
     const relaxNo = relaxIndexMap(_nodes.filter((n) => engineGroup(n) === 'oxdna'))
     return {
+      thermalNumbers: thermalRunNumbers(_nodes),
+      selectedThermalStage: _sel.engine === 'oxdna' ? oxdnaPanel?.getSelectedThermalStage?.() ?? null : null,
       engine: 'oxdna',                       // fallback; engineOf resolves per row
       engineOf: (n) => (n.engine === 'lammps' ? 'lammps' : n.engine),
       selectedId: _sel.id,
@@ -678,7 +682,7 @@ export function initSimulateJobs({
     renderJobList(listEl, buildJobListModel(nodes, ctx), {
       onClick: (jobId) => {
         if (selectionPending) return
-        if (jobId !== _sel.id) { _select(jobId, true); return }
+        if (jobId !== _sel.id || (_sel.engine === 'oxdna' && oxdnaPanel?.getSelectedThermalStage?.())) { _select(jobId, true); return }
         const node = _selectedNode()
         if (node?.engine === 'namd' && !selectionExplicit) { selectionExplicit = true; _dispatchDetail(node, true); return }
         // A freshly launched SNUPI job remains highlighted while it transitions
@@ -699,6 +703,7 @@ export function initSimulateJobs({
         }
       },
       onContextMenu: (jobId, e) => _openRowMenu(jobId, e),
+      onThermalSelect: (jobId, stage) => _select(jobId, true, stage),
       emptyText: _showAllTypes
         ? 'No simulation runs for this design yet — press ▶ Relax to start one.'
         : `No ${_activeEngine === 'namd' ? 'NAMD' : _activeEngine} runs for this design yet. Toggle “Show all job types” to see every engine’s runs.`,
@@ -755,6 +760,10 @@ export function initSimulateJobs({
       })
       items.push({ type: 'separator' })
     }
+    const skip = thermalSkipAction(node)
+    if (skip) items.push({ label: 'Skip to next stage', disabled: !skip.enabled, title: skip.title,
+      onClick: () => { void skipThermalStage(node, { api, refresh: _fetch, toast: showToast }) },
+    })
     if (node.remote_only && ['namd', 'oxdna'].includes(node.engine)) {
       items.push({
         label: `Transfer job to this computer${node.source_peer_name ? ` from ${node.source_peer_name}` : ''}`,
@@ -1045,11 +1054,11 @@ export function initSimulateJobs({
   // ── selection ────────────────────────────────────────────────────────────
   let selectionExplicit = false
   let selectionPending = false
-  function _select(jobId, explicit = false) {
+  function _select(jobId, explicit = false, thermalStage = null) {
     if (!_listReady) return
     const node = _nodes.find((n) => n.job_id === jobId)
     if (!node) return
-    if (_sel.engine === node.engine && _sel.id === jobId) return
+    if (_sel.engine === node.engine && _sel.id === jobId && thermalStage === (node.engine === 'oxdna' ? oxdnaPanel?.getSelectedThermalStage?.() ?? null : null)) return
     if (selectionPending) return
     const previous = _sel
     const path = _currentPath()
@@ -1072,7 +1081,7 @@ export function initSimulateJobs({
       _paintPendingSelection()
     }
     try {
-      const result = _dispatchDetail(node, explicit)
+      const result = _dispatchDetail(node, explicit, thermalStage)
       if (!result?.then) { const accepted = commit(result); finish(); return accepted }
       return result.then(commit).finally(finish)
     } catch (error) { finish(); throw error }
@@ -1108,7 +1117,7 @@ export function initSimulateJobs({
   // A LAMMPS run is the CPU fallback for oxDNA (same oxDNA2 bead model), so it shows in
   // the oxDNA panel's OWN viz card via selectLammpsJob — same display/RMSF/deviation/
   // trajectory tools, just a different loader.
-  function _dispatchDetail(node, explicit = false) {
+  function _dispatchDetail(node, explicit = false, thermalStage = null) {
     if (node.engine !== 'namd') mdPanel?.deselectJob?.()
     if (node.engine === 'lammps') {
       engineSelector?.select?.('oxdna')
@@ -1119,7 +1128,7 @@ export function initSimulateJobs({
     if (!panel) return
     engineSelector?.select?.(node.engine)     // reveal that engine's detail host
     if (node.engine === 'namd') return panel?.selectJob?.(node.job_id, { explicit })
-    return panel?.selectJob?.(node.job_id)
+    return node.engine === 'oxdna' && thermalStage ? panel?.selectJob?.(node.job_id, { thermalStage }) : panel?.selectJob?.(node.job_id)
   }
 
   // ── run / stop / resume (dispatch by node engine) ──────────────────────────

@@ -34,6 +34,8 @@ The source metadata is a contract, not a hint. A caller authoring an arbitrary
 physical fold must first convert to physical records, then move those records.
 An unknown named landmark cannot silently be written into a CM column.
 """
+    from backend.physics.oxdna_cpd import physical_geometry
+    geometry = physical_geometry(design, geometry)
     out = []
     anchor_frames = {}
     native_extensions = set()

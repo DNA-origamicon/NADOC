@@ -1,6 +1,6 @@
 # Issues fix log
 
-## ISSUE-201 — Staged duplex contacts in flexible-network Relax (2026-11-17)
+## ISSUE-213 — Staged duplex contacts in flexible-network Relax (2026-11-17)
 
 The user authorized the successful staged-contact method after comparing joint
 penalties, constrained fitting and expand/reclose variants. Relax all and Relax
@@ -47,7 +47,7 @@ Inspected the ordinary relaxed Full view. Temporary captures, both __e2e__ host
 files, their project stores, bridge credentials and session/output paths verified
 absent after teardown. Lint and diff whitespace checks pass.
 
-## ISSUE-200 — Joint flexible-network solve with a fixed largest cluster (2026-11-17)
+## ISSUE-212 — Joint flexible-network solve with a fixed largest cluster (2026-11-17)
 
 The old pairwise Relax all leaves three JJ_Hinge tethers at 7.785, 5.892 and
 6.940 nm against 1.18 nm contours; successive pair solves undo previous closure.
@@ -86,6 +86,274 @@ to reclassify tests or alter guards. Deferred output:
 > session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 
 `main.js` LOC Δ: 0.
+
+## ISSUE-211 — Fixed-duration thermal ramps (2026-11-17)
+
+Reduced the default from 50M to 10M steps per temperature. The wizard exposes
+one duration and an exact total; adaptive controls and duplicate production
+steps are removed. Every stage uses the chosen fixed count. Legacy gate fields
+cannot enable adaptive execution; budget-extension requests reject without
+mutation. Energy histories and descriptive statistics remain available, without
+automatic exponential fits or stability verdicts. Numerical health checks remain.
+Existing workers and saved durations were not restarted or resized.
+
+Validation: FAST 20,982 passed / 90 skipped; frontend 10,662 passed / one skipped;
+focused backend 22 passed / one deselected, skip 11 passed, monitor 4 passed,
+frontend 29 passed. Both browser workflows passed; desktop, 760px and 480px
+screenshots visually reviewed with aligned, unclipped thermal controls. Ruff and
+diff checks passed. FULL deferred in .nadoc-slow-pending. main.js task LOC delta 0.
+Receipt: `.development-artifacts/oxdna-fixed-thermal-20261117.json`.
+
+## ISSUE-210 — Manual thermal-stage advance (2026-11-17)
+
+Parent and all temperature child context menus now expose Skip to next stage.
+The expected active-stage name guards stale clicks; the final temperature is
+ineligible. A detached controller terminates the current owner, acquires the
+idle lease, validates/recovers its checkpoint, preserves samples/prior verdicts,
+marks the stage skipped and starts the next temperature. Fresh generation
+publication prevents the new worker inheriting the old Stop mailbox. Natural
+completion, concurrent execution, duplicate commands and later Stop requests
+are handled without skipping an unintended temperature. Diagnostic failure does
+not prevent a manual advance; a valid starting configuration is still required.
+Restart reconciliation and progress account for skipped stages without treating
+them as equilibration passes. Failed handoffs surface in the command and job error.
+
+Validation: 11 focused skip tests, 14 shared runtime tests, 126 focused frontend
+tests; browser parent/child menus and final-stage disabling passed with mocked
+jobs. FAST 20,980 passed / 90 skipped; frontend 10,661 passed / 1 skipped. FULL
+remains deferred. Cleanup verified. No real user stage skipped. main.js task
+LOC delta 0. Receipt: `.development-artifacts/oxdna-thermal-skip-20261117.json`.
+
+
+## ISSUE-209 — Energy metrics and thermal plot annotations (2026-11-17)
+
+Added an independent, read-only oxDNA potential-energy Generate/Display/Export
+path. It reads production/field energy histories during active jobs without
+trajectory geometry, retaining resumed samples and ignoring unfinished output
+lines. Plots and PNGs annotate executed thermostat setpoints at stage boundaries;
+CSV carries native time, potential energy per particle, temperature, stage and
+job identity. Job/scope caches prevent another selection's graph from appearing.
+Nearby energy-axis ticks now retain enough decimal places to remain distinct.
+
+Validation: live job 67bdaecee7f3 generated/displayed/exported 958 samples at 25°C;
+13-temperature layout independently reviewed with a plotting fixture (the older
+completed ramp was no longer in the library). Four energy-series and ten existing
+energy-fit tests passed; focused graph/card tests 32 passed; frontend suite 10,657
+passed, one skipped. Backend FAST 20,970 passed / 90 skipped, with one unrelated
+repair-draft capture-time-limit setup error; exact isolated rerun passed. FULL
+remains deferred. Main.js task LOC delta 0. No simulation launched or changed.
+Evidence: `.development-artifacts/oxdna-energy-metrics-20261117.json`.
+
+
+## ISSUE-208 — Full-history exponential energy diagnosis (2026-11-17)
+
+Gate v3 fits all distinct energy times at the current temperature to
+E_inf + A exp(-t/tau), including resumed segments reconstructed from attempt
+receipts. Acceptance bounds remaining relaxation with correlation-adjusted local
+parameter uncertainty and checks fit identifiability, residual structure and
+independent information. Flat histories are explicitly constant-model diagnoses.
+Pairing remains a separate optional window check; fixed dwell remains nonblocking.
+
+Every raw native energy row remains stored; display-ready JSON includes potential,
+kinetic and total energy, segment identities/times, source hashes, fitted values
+and diagnostics. Periodic check files retain earlier fits. The thermal-metrics
+API serves these alongside untouched historical decisions. Idle-job backfill was
+verified on 13 completed temperatures; the 67-segment audit retained 4,355 raw
+rows and fitted 4,289 distinct times. The shorter completed curves do not establish
+a reliable plateau under the new diagnosis; no physical rerun was performed.
+
+Validation: 10 fit + 24 ramp focused passed; frontend 10,655 passed / 1 skipped;
+browser 1 passed, cleanup verified. Backend FAST: 20,966 passed / 90 skipped, one
+VR test isolation failure (a late trajectory-precompute launch intercepted by its
+subprocess mock); that exact test passed alone. Broad FULL remains deferred.
+No per-test timing violators. Main.js task LOC delta: 0. Evidence and plots:
+`.development-artifacts/thermal-exponential-fit-20261117/`.
+
+## ISSUE-207 — Fixed-dwell stability reporting and real CPD ramp (2026-11-17)
+
+Fixed dwell now evaluates stability and records `gate_enabled: false` plus an
+honest `stability_status`; an unsettled observable no longer masquerades as a
+stability pass. Completion remains independent of that diagnostic. Regression
+checks cover a fully melted state, failed stability with successful fixed dwell,
+and event-driven terminal/stall notifications. No main.js task changes.
+
+Real job 60694a597e17 completed all 13 CUDA plateaus, 25–85°C, 5M steps each,
+65M total, at 02:58:57 America/Denver on November 17. Zero native failures or
+numerical retries; finite energies and all checkpoints/target inputs verified.
+Trajectory API exposes 6,500 frames and 13 markers. Only 60°C passed its energy
+stability diagnostic; 12 plateaus remain unconverged by that criterion. Endpoint
+pair retention was 83% at 85°C, so the expected 40–60°C bulk melt was not observed.
+The earlier adaptive run remains stopped with its evidence intact (25°C passed
+at 67M, 30°C at 3M before the user selected fixed dwell).
+
+Validation: FAST 20,957 passed / 90 skipped; 23 thermal + 4 monitor focused passed.
+Aggregate 185.90s, zero per-test timing violators; broad FULL suite remains deferred.
+Receipt and per-stage CSV: `.development-artifacts/cpd-melt-ramp-20261117/fixed-dwell/`.
+
+## ISSUE-206 — CUDA CPD interaction and managed GPU thermal ramps (2026-11-16)
+
+Added checked-build CUDA DNA2 kernels with permanent CPD forces/body torques,
+reacted-pair exclusions and preserved backbone FENE. Frozen CUDA hashes accompany
+the original model; CPU parents can create GPU continuations. Removed forced-CPU
+job/edit rules, exposed production backend, and recorded idle-job backend changes.
+Build, audit, benchmark and full-ramp scripts are reusable. Main.js task delta: 0.
+Validation: `.development-artifacts/cpd-cuda-force-audit.json`,
+`cpd-cuda-ramp-validation.json`, `cpd-cuda-benchmark.json` and final receipt.
+The 96-nt user checkpoint measured 2.90× CPU throughput with managed edge lists.
+Stopped ramp 175f1c31fdd9 now uses CUDA for remaining MD; its 17M-step checkpoint,
+stage statuses and gate configuration are preserved. It remains stopped.
+
+
+## ISSUE-205 — Accumulate thermal evidence and resume exhausted sampling (2026-11-16)
+
+Gate v2 grows three trailing windows deterministically with completed blocks,
+bounded at 1,000 samples/window, retaining the original tolerances and ESS floor.
+Pass streaks cannot mix gate versions. Explicit start-request budget extensions
+preserve failed verdicts and all outputs, advance the step target by one block,
+and resume the same temperature. Tests cover correlated stationary evidence,
+continued drift rejection, preserved outputs and saved/reloaded resume metadata.
+Main.js task LOC delta: 0. Receipt: `.development-artifacts/thermal-gate-repair.json`.
+
+
+
+## ISSUE-204 — Preserve ramp submission and select temperature trajectories (2026-11-16)
+
+Forwarded the wizard's thermal settings through the production submit handler.
+Temperature children now select actual managed stages, with matching timeline
+markers and streamed frame ranges. Parent selection loads the full ramp. The
+browser regression exercises wizard submission rather than only fabricated list
+entries; focused backend tests include resumed segments and exclude ancestors.
+Task changes to main.js: 0 lines. Validation receipt:
+`.development-artifacts/thermal-selection-validation.json`.
+
+
+## ISSUE-203 — Visually verify and format the thermal wizard (2026-11-16)
+
+Replaced raw inputs and inherited tall rows with themed controls, adjacent
+checkbox labels and grouped responsive fields. Inspected rendered desktop,
+narrow and small-window views; input alignment and bounds are checked in the
+existing browser workflow. Main.js LOC delta: 0. Review receipt:
+`.development-artifacts/thermal-ramp-layout-review.json`.
+
+
+## ISSUE-202 — Skip background work for deleted jobs (2026-11-16)
+
+MD and oxDNA background analysis now stop when their queued job has been deleted.
+This resolves the cleanup race observed during the four-isomer CPD browser check;
+existing malformed job manifests still raise errors. No simulation physics changed.
+
+
+## ISSUE-201 follow-up — Preserve colors and follow displayed atoms (2026-11-14)
+
+Push integration: merged incoming exact-base cluster selection fixes without
+dropping atomistic connection/copy handling or either presentation regression.
+Renumbered these atomistic records to ISSUE-200/201 because incoming history
+already uses ISSUE-197–199. Merged frontend validation: 965 files, 10,622 passed,
+1 skipped; atomistic browser regression passed (32.5 s).
+
+The first fix was incomplete: native selection explicitly painted atoms white,
+and a separate `Presenter selection` point cloud still drew green discs at coarse
+positions. Checking only `selectionGlow` and white instance colors missed both.
+
+Non-surface atomistic selection now uses a color-preserving silhouette outline
+of actual sphere/cylinder instances. Cached membership is rebound on rebuilds;
+current instance/world matrices, clipping and visibility are used when drawing.
+Annotation and atomistic outline providers coexist. Cluster/group bounds retain
+actual atom/bond instances without applying the coarse surface tint. Existing
+coarse glow follows whole-design visibility even after MD hides its source root.
+The presentation cloud is a non-painting local ping/export target, updated from
+live selected atom/bond instances; prepared-viewer halos remain supported.
+
+App verification: opened existing 2hb_2xT, selected P3 Alpine (da4af0483372),
+Display MD, Ball-and-stick, S1. Inspected pixels: red strand surfaces retained,
+green outlines track atom/bond contours, no coarse discs. Confirmed 693 selected
+instances, zero instance-color changes, hidden coarse glow, non-painting presenter
+cloud. Switching to native positions rebinds the selection to 699 instances.
+No molecular structure or simulation run was authored/modified.
+
+Additional app verification used the existing P3 trajectory, sampled every 1000
+frames (25 displayed frames): stepping frame 1 → 2 moved S1's atom/bond outline
+with the displayed coordinates. Stick used only `atomBonds`; VDW only
+`atomSpheres`. Native/MD/trajectory view switches preserved selection. The final
+outline also checks scene depth so hidden atoms cannot outline through the
+foreground. Temporary screenshot captures were inspected and removed.
+
+Validation so far: `just test-frontend` — 962 files, 10,602 passed, 1 skipped
+(190.22 s). Final focused presentation/silhouette/tint/highlight tests — 51 passed.
+Targeted browser regression passed (33.3 s), including all three non-surface
+representations, click targets, preserved colors and no painted presenter points.
+Build passed (6.32 s). Smoke: 22 passed, 2 skipped, two failures — the existing
+Square-lattice assertion (ISSUE-180), plus Close Session's progress-modal timing.
+The latter passed in isolation (40.0 s); no smoke assertions were weakened.
+
+Final review also added an atomistic mesh-rebuild notification for cluster/group
+bounds, including equal-count MD/native replacements, without broadcasting every
+coordinate-only frame. Group bounds also refresh on each display frame, with callback cleanup on
+renderer disposal. Final full frontend run: 962 files, 10,604 passed, 1 skipped
+(185.98 s). Final focused checks, including the display-frame integration added
+after that run: 68 passed. Final browser regression: 1 passed (32.3 s). Final
+build passed (6.17 s); `just lint` and `git diff --check` passed. `main.js` has zero net line growth (thin wiring only).
+Cleanup verified: no __e2e__ parts/project manifests, Playwright output directories,
+or temporary review captures remain. Removed the owned diagnostic script and
+failed-capture metadata (3,538 bytes); screenshots were removed by their browser
+workflow's finally block. Existing user structures/jobs and unrelated worktree
+changes were preserved.
+
+Observation limits/retries: the attached viewer was hidden, so review used a
+separate browser at 1500×1000. Initial UI locators encountered hidden duplicate
+job rows and a status label appended to Display MD; the real controls were then
+used. The last VDW occlusion review showed the rendered atom scene correctly,
+though the MD status indicator remained “warming…”; no new latest-frame arrival
+is claimed from that last capture. Earlier Display MD and explicit trajectory
+frame-stepping checks establish coordinate tracking. No refresh was forced past
+the disabled remote-job control.
+
+## ISSUE-201 — Highlight the active representation (2026-11-14)
+
+Initial attempt (superseded by the follow-up below): the coarse-glow compositor resolves every pool against current source visibility
+and representation on every composition. It no longer restores raw Full entries
+when another selection pool refreshes. Atomistic selection uses native atom and
+bond colors, not generic bead-radius halos. Cluster/group bounds exclude hidden
+instances and Stick's private sphere proxies. Coarse connection highlights remain
+available in Full/Beads/Cylinders, but not in their atomistic replacements.
+
+Native highlights cover strands, domains, bases, ends, overhangs, extensions,
+clusters/groups, bonds and crossovers. Explicit connection records select actual
+covalent bonds; VDW selects their physical endpoint atoms. Insert copies and
+extra crossover bases are matched by canonical identity. Coordinates are unchanged.
+
+The app regression checks real clicks, strand/domain/base/end highlight colors,
+zero coarse selection glow in all three atomistic representations, and restored
+Full glow on switching back. Inspected Stick output shows the selected nucleotide
+on its white bond cylinders. Unit regressions cover all native filter mappings,
+connection endpoint identity, hidden/mixed representations, and manager-level
+recomposition. Validation: 961 frontend files / 10,596 tests passed (one skipped), browser
+regression passed, build/lint/diff checks passed. Smoke recorded 22 passed,
+two skipped, the known ISSUE-180 Square-lattice assertion and an assembly-fixture
+load timeout. The isolated assembly retry passed (15 s) without changing its
+thresholds. Test parts, recent project snapshots, browser outputs and isolated
+bridge credentials were removed. Logs: `.development-artifacts/atomistic-highlight-*`.
+`main.js` LOC delta: 0.
+
+
+## ISSUE-200 — Pick displayed atomistic balls and sticks (2026-11-14)
+
+Extracted `atomistic_renderer/picking.js`: VDW tests spheres, Ball & Stick tests
+spheres and cylinders, Stick tests cylinders only. Bond hits retain nucleotide
+identity through the nearest endpoint in the live cylinder frame. Visibility,
+instance alpha, clipping and moved-instance bounds participate in picking.
+Global and regional design selection reuse this implementation; the separate
+shared-assembly bounding-box picker remains unchanged. No molecular edits.
+
+Validation: 957 frontend files / 10,548 tests passed (one skipped); build, lint
+and diff checks passed. Smoke: 23 passed, two skipped, one known ISSUE-180
+Square-lattice request assertion failure. The browser click regression passes
+for VDW, Ball & Stick and Stick (23.6 s). Earlier browser failures were test
+state carry-over: clicking the same selected base toggled it off; the final
+fixture clears canonical selection between modes. Inspected ball/stick screenshots
+confirmed the rendered target. Temporary screenshots and workspace test artifacts
+were removed; no recent picking-test project snapshots remain. `main.js` LOC delta: 0.
+
 
 ## ISSUE-198 — Flexible flags survive Relax all geometry refresh (2026-11-14)
 

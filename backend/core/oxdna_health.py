@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from backend.core.trajectory_cache import persistent_analysis
 
+from backend.core.oxdna_temperature_markers import temperature_metadata, temperature_markers
+
 import math
 import os
 from dataclasses import dataclass
@@ -2891,7 +2893,8 @@ def _aligned_cache_key(stages, reference_conf_path, max_frames, copies):
             sig.append((str(path), -1, -1))
     return (tuple(sig), int(max_frames), bool(copies),
             tuple(len(item) < 6 or item[5] is not False for item in stages),
-            tuple(item[6] if len(item) > 6 else None for item in stages))
+            tuple(item[6] if len(item) > 6 else None for item in stages),
+            tuple(item[7] if len(item) > 7 else None for item in stages))
 
 
 def _traj_file_sig(path):
@@ -3327,7 +3330,8 @@ def _aligned_downsampled_frames(
                 }
             )
         out_stages.append(
-            {"name": name, "kind": kind, "n_frames": len(stage_frames), "field": field}
+            {"name": name, "kind": kind, "n_frames": len(stage_frames), "field": field,
+             **temperature_metadata(item, seed_here and picked[0] == 0)}
         )
         ordered_frames.extend(stage_frames)
 
@@ -3335,7 +3339,7 @@ def _aligned_downsampled_frames(
         progress(total_kept, total_kept)  # snap to 100% (the seed frame needs no align)
     if not ordered_frames:
         return key_list, [], [], []
-    return _store((key_list, ordered_frames, out_stages, markers))
+    return _store((key_list, ordered_frames, out_stages, temperature_markers(out_stages, markers)))
 
 
 def _flatten_cg_frame_array(frame: dict, key_list):
@@ -3681,6 +3685,7 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
                 "interval": item[6] if len(item) > 6 else None,
                 "marker_label": marker_label,
                 "field": field,
+                **temperature_metadata(item),
             }
         )
     # Seed frame is prepended to the first non-empty stage (mirrors the composite).
@@ -3688,6 +3693,8 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
         if s["count"] > 0:
             if s["prepend_seed"]:
                 s["count"] += 1
+                if "temperature_c" in s:
+                    s["temperature_start"] = 1
             break
 
     total = sum(s["count"] for s in per_stage)
@@ -3730,6 +3737,7 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
                 "kind": s["kind"],
                 "n_frames": keep,
                 "field": s.get("field"),
+                **({k: s[k] for k in ("temperature_c", "temperature_start")} if "temperature_c" in s else {}),
             }
         )
         out_n += keep
@@ -3737,7 +3745,7 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
         "n_frames": out_n,
         "n_nucleotides": len(key_list),
         "stages": out_stages,
-        "markers": markers,
+        "markers": temperature_markers(out_stages, markers),
     }
 
 

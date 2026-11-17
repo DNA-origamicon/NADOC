@@ -80,9 +80,13 @@ def main(output=None, replace=False, feature_id="extrude", guide_id=None):
         from backend.core.models import Design
         from scripts.agent_structure_guard import audit, publish
         files = list((root / 'workspace').glob('__e2e__*.nadoc'))
-        if not files or (len(files) != 1 and feature.get('example_family') != 'polymer'):
+        if not files or (len(files) != 1 and feature.get('example_family') not in {'polymer', 'cadnano'}):
             raise RuntimeError('AGENT_PROCESS_REQUIRED: expected one saved example')
         files.sort(key=lambda path: ('straight' not in path.name, path.name))
+        if feature.get('example_family') == 'cadnano':
+            files.sort(key=lambda path: path.name != '__e2e__cadnano-local-oxdna.nadoc')
+            if len(files) != 2:
+                raise RuntimeError('AGENT_PROCESS_REQUIRED: expected source and imported parts')
         saved = Design.model_validate_json(files[0].read_text())
         audit(saved)
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -102,6 +106,11 @@ def main(output=None, replace=False, feature_id="extrude", guide_id=None):
                 family_proofs[assembly_file.name] = publish_assembly(Assembly.from_json(assembly_file.read_text()), stage / assembly_file.name)
             if sum(name.endswith('.nass') for name in family_proofs) != 2:
                 raise RuntimeError('AGENT_PROCESS_REQUIRED: expected straight and circular assemblies')
+        if feature.get('example_family') == 'cadnano':
+            from scripts.guide_cadnano_audit import publish_source
+            family_proofs['source.nadoc'] = publish_source(
+                root / 'workspace' / '__e2e__6hb84-source.nadoc', saved,
+                root / 'guide' / '6hb84-cadnano.json', stage)
         revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip()
         (stage / 'verification.json').write_text(json.dumps({
             'guide': feature_id, 'source_revision': revision,
@@ -156,7 +165,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', help='Optional preview destination; default docs/guides/extrude')
     parser.add_argument('--replace', action='store_true', help='Regenerate the existing guide after review, preserving first-created date')
-    parser.add_argument('--feature', default='extrude', choices=['extrude', 'bend-and-twist', 'sweep', 'polymerization', 'feature-history'])
+    parser.add_argument('--feature', default='extrude', choices=['extrude', 'bend-and-twist', 'sweep', 'polymerization', 'feature-history', 'oxdna'])
     parser.add_argument('--guide', help='Choose a lesson within the feature, e.g. twist')
     args = parser.parse_args()
     main(args.output, args.replace, args.feature, args.guide)

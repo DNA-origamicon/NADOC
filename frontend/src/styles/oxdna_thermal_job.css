@@ -1,0 +1,27 @@
+.thermal-job-group { min-width: 0; }
+#simulate-jobs-list:has(.thermal-job-details:not([hidden])),
+#oxdna-jobs-list:has(.thermal-job-details:not([hidden])) {
+  max-height: min(360px, 45vh) !important; /* Override the compact list's inline height only while expanded. */
+}
+.thermal-job-toggle {
+  flex: 0 0 20px; width: 20px; height: 22px; padding: 0;
+  border: 0; border-radius: 3px; background: transparent;
+  color: var(--color-text-muted); cursor: pointer; font-size: 13px;
+}
+.thermal-job-toggle:hover, .thermal-job-toggle:focus-visible { background: var(--color-bg-raised); color: var(--color-text-primary); }
+.thermal-job-details { margin: 3px 4px 8px; padding: 4px 0 4px 10px; border-left: 1px solid var(--color-border-default); font-size: 11px; }
+.thermal-job-details[hidden] { display: none; }
+.thermal-job-summary { color: var(--color-text-muted); margin-bottom: 5px; }
+.thermal-job-details ol { list-style: none; padding: 0; margin: 0; }
+.thermal-job-step { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 5px 7px; color: var(--color-text-primary); border-radius: 3px; }
+.thermal-job-state { color: var(--color-text-muted); white-space: nowrap; }
+.thermal-job-step[data-status="completed"] .thermal-job-state { color: var(--color-success, #3fb950); }
+.thermal-job-step[data-status="running"] { background: var(--color-accent-soft); }
+.thermal-job-step[data-status="running"] .thermal-job-state { color: var(--color-accent); }
+.thermal-job-step[data-status="failed"] .thermal-job-state { color: var(--color-danger, #f85149); }
+.thermal-job-step { padding: 0; display: block; }
+.thermal-job-select { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; padding: 6px 4px; border: 0; border-radius: 3px; background: transparent; color: var(--color-text-primary); font: inherit; text-align: left; cursor: pointer; }
+.thermal-job-select:hover, .thermal-job-select[aria-pressed="true"] { background: var(--color-accent-soft); }
+.thermal-job-select:focus-visible { outline: 1px solid var(--color-accent); }
+.thermal-job-state { display: inline-flex; align-items: center; gap: 3px; }
+.thermal-trajectory-selection { padding: 6px 0; color: var(--color-accent); font-size: 11px; }

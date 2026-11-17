@@ -1,6 +1,6 @@
 # Issues & bugs ledger — "fix next issue" loop
 
-## ISSUE-201 — Joint flexible relaxation permits rigid-body overlaps (2026-11-17)
+## ISSUE-213 — Joint flexible relaxation permits rigid-body overlaps (2026-11-17)
 
 - [x] User's saved retry closes all 11 tethers but has 28 inter-body capsule
   overlaps (2 nm duplex diameter; maximum penetration 1.835 nm).
@@ -15,7 +15,7 @@
   follow-on work; successful endpoint clearance is not a noncrossing-path proof.
 
 
-## ISSUE-200 — Relax all breaks tethers solved earlier (2026-11-17)
+## ISSUE-212 — Relax all breaks tethers solved earlier (2026-11-17)
 
 - [x] Saved JJ_Hinge confirms 3/11 tethers remain overstretched; two worsen.
 - [x] Replace independent pair solves with one rigid network solve, fixing the
@@ -27,6 +27,134 @@
 - [x] 48 focused backend checks, 3 dedicated browser checks and frontend suite
   pass. Smoke retains the independently tracked Square New Part assertion,
   ISSUE-180; relaxation checks and assembly exit pass.
+
+## ISSUE-211 — Comparable fixed-duration thermal ramps (2026-11-17)
+
+Reduce the default from 50M to 10M steps per temperature and remove adaptive
+progression entirely. A single duration in the wizard controls every stage.
+Energy remains recorded for metrics without exponential fitting or convergence
+acceptance. Old saved gate controls must not re-enable adaptation; preserve
+historical decisions, numerical health checks and existing job durations.
+
+
+## ISSUE-210 — Manual advance of a thermal ramp (2026-11-17)
+
+Add Skip to next stage to the Tm parent and every temperature child context menu.
+Always address the active plateau; preserve its partial data, mark it skipped,
+and use its valid checkpoint to launch the next temperature. Coordinate with
+runtime ownership, server restart, duplicate requests, natural stage completion,
+and a later Stop request. Do not mark a manual skip as an equilibration pass.
+
+
+## ISSUE-209 — oxDNA energy needs metrics display/export with thermal annotations (2026-11-17)
+
+The metrics card exposed geometry but not the recorded oxDNA energy history.
+Add independent energy generation for active or completed jobs, an annotated
+potential-energy plot, and PNG/CSV export. Preserve resumed samples and exact
+per-row temperature identity, and keep metric caches isolated by selected job.
+
+
+## ISSUE-208 — Energy waiting must fit the complete relaxation history (2026-11-17)
+
+Raw energies were retained, but gate v2 used only a bounded trailing portion.
+Replace that energy decision with a full-history exponential fit at every sampling
+boundary, preserving restart time offsets and exposing complete stored curves.
+Report time constant, asymptote, remaining relaxation and uncertainty; reject
+unidentified/poor fits rather than manufacture a plateau. Preserve fixed-dwell
+nonblocking behavior, old verdicts and independent optional pairing checks.
+
+## ISSUE-207 — Fixed-dwell thermal runs must report actual stability (2026-11-17)
+
+The cis-anti GPU ramp exhausted its energy gate at 25°C; the native blocks were
+healthy. User selected fixed dwell with convergence reported separately. Fixed
+dwell previously substituted `passed: true` without measuring stability. Evaluate
+the observables in both modes, but only gate adaptive runs. Preserve dissociation
+with no retained-pair floor; keep genuine numerical health checks. Add event-driven
+stage/failure/stall alerts for the real 13-temperature production validation.
+
+## ISSUE-206 — CPD jobs had no CUDA execution path (2026-11-16)
+
+The CPU-only plugin and forced backend in preparation/edit/continuation paths
+prevented GPU thermal ramps. Implement CUDA permanent welds, frozen package
+capability checks, explicit backend selection and idle-job migration. Numerical
+audits cover every isomer, adjacent/nonadjacent welds, edge/matrix lists and
+actual particle sorting. Four full 13-temperature native workflow checks completed.
+Small-system performance is measured independently from execution correctness.
+
+
+## ISSUE-205 — Extended thermal sampling kept a fixed statistical tail (2026-11-16)
+
+User job 175f1c31fdd9 stopped at its first 25°C plateau after 10M healthy steps.
+Energy drift/spread passed the final original check, but two 20-sample windows
+had ESS below 10. Every extension discarded all but 60 observations, so additional
+sampling did not accumulate statistical power. Growing-window checks retain more
+evidence without relaxing thresholds; explicit budget extension preserves the
+checkpoint and failed checks. Historical data still do not justify acceptance.
+
+
+
+## ISSUE-204 — Wizard drops thermal settings before creating production jobs (2026-11-16)
+
+- Symptom: enabling a ramp in the wizard still creates an ordinary production row.
+- Cause: `_launchProduction` rebuilt the request from steps and stage overrides,
+  omitting `thermal_ramp`. Earlier UI checks toggled the wizard and separately
+  rendered mocked ramp jobs, so they missed the actual submission boundary.
+- Fix: preserve the ramp in POST /run. Render selectable temperature children with
+  production run numbers, queued/running spinners and complete/error states. Scope
+  all metadata, paginated coordinates and reconstruction requests to the selected
+  real stage, or to the parent's whole thermal ramp. Preserve resumed segments.
+- Regression: browser submits the wizard, asserts POST payload and Tm Run 2 tree,
+  advances statuses, then loads parent → 30C child → parent. Backend tests verify
+  scope membership, frame counts and marker equivalence. Existing ordinary jobs
+  are not relabeled as ramps.
+
+
+## ISSUE-203 — Thermal-ramp wizard controls inherit incompatible field layout (2026-11-16)
+
+- [x] Visual inspection showed 142 px field rows, distant checkbox labels and
+  unstyled white inputs. The shared three-column layout reserved space for
+  provenance that these controls do not have.
+- [x] Use themed input/select primitives and a scoped, responsive thermal card;
+  group schedule, sampling and stability fields. Subgrid aligns input rows when
+  labels wrap. Keep checkbox labels beside their controls.
+- Visually inspected at 1440, 760 and 480 px widths. Browser checks cover bounds,
+  checkbox spacing and aligned inputs. Screenshots are temporary and cleaned;
+  compact evidence: `.development-artifacts/thermal-ramp-layout-review.json`.
+
+
+## ISSUE-202 — Deferred trajectory analysis outlives deleted jobs (2026-11-16)
+
+- [x] CPD browser cleanup exposed queued background analysis loading job.json
+  after deletion and logging FileNotFoundError. Simulation execution was unaffected.
+- [x] Treat a missing MD/oxDNA job at background load as cancelled work; do not
+  recreate the directory. Preserve failures for an existing corrupt manifest.
+- Validation: focused deletion/corruption cases and the backend regression run.
+
+
+## ISSUE-201 — Atomistic selection resurrects coarse glow geometry (2026-11-14)
+
+- [x] Resolve all coarse highlight pools against the current representation every
+  time they are composed; cached strand entries can no longer bypass filtering
+  when Base/End/measurement pools refresh.
+- [x] Atomistic selection outlines live atom/bond silhouettes and preserves
+  their display/scalar colors. Coarse glow follows whole-design visibility;
+  the presentation overlay no longer paints a duplicate atomistic bead halo.
+  Stick cluster/group bounds exclude private sphere proxies and
+  hidden coarse instances. Coarse crossover tubes remain in coarse views only.
+- [x] Preserve insertion-copy and crossover-extra-base identity. Bond/crossover
+  filters select actual covalent cylinders, or their endpoint atoms in VDW.
+- Validation is recorded in the fix log; molecular coordinates are unchanged.
+
+
+## ISSUE-200 — Atomistic clicks omit visible bonds (2026-11-14)
+
+- [x] Existing design/global and region-override picking already routes through
+  the atomistic renderer, but its sphere-only raycast omitted visible cylinders
+  and used invisible ball proxies in Stick.
+- [x] Pick displayed spheres/cylinders, map bond halves to endpoint identities,
+  reject hidden/clipped hits, and refresh bounds after live coordinate changes.
+- Validation is recorded in the fix log. Shared-assembly instance bounding-box
+  selection is a separate existing path, outside this design-picker correction.
 
 
 ## ISSUE-198 — Relax all visually re-rigidifies flexible bases (2026-11-14)

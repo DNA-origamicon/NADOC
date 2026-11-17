@@ -113,3 +113,14 @@ it('invalidates corner bounds for parent transforms, visibility and edited geome
   expect(corners.geometry.attributes.position.getX(0) - before).toBeCloseTo(7)
   layer.dispose()
 })
+
+it('allows atomistic group bounds without tinting the atom or bond surface', () => {
+  const scene = new THREE.Scene(), m = mesh(); scene.add(m)
+  const layer = createClusterSelection(scene)
+  layer.setGroups([[{ instMesh: m, id: 0, tint: false }]])
+  expect(m.geometry.getAttribute('instanceSelection')).toBeUndefined()
+  expect(scene.getObjectByName('clusterSelectionCorners').visible).toBe(true)
+  layer.clear()
+  expect(m.geometry.getAttribute('instanceSelection')).toBeUndefined()
+  layer.dispose(); m.geometry.dispose(); m.material.dispose(); m.dispose()
+})

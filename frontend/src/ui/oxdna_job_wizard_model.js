@@ -1,3 +1,4 @@
+import { thermalError, thermalStages, thermalConfig } from './oxdna_thermal_ramp.js'
 // GPU default is user-authorized; further convergence and sampling checks are
 // required for DNA/protein and fixed gold/strep/DNA (TD-OXDNA-PHYSICS).
 const DEFAULTS = Object.freeze({
@@ -48,14 +49,14 @@ export function validateOxdnaWizard(values = {}) {
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
-export function oxdnaWizardDefaults(overrides = {}) { return { ...DEFAULTS, ...overrides } }
+export function oxdnaWizardDefaults(overrides = {}) { return { ...DEFAULTS, ...overrides, ...((overrides.cpd_present || overrides.cpd) ? { cpd_present: true } : {}) } }
 
 const interval = steps => Math.max(1, Math.floor(Number(steps) / 100))
 
 export function oxdnaStagePlan(values = {}) {
   const v = oxdnaWizardDefaults(values)
-  const interaction = v.protein_present ? 'DNANM' : v.interaction_type
-  const shared = { ...(interaction === 'DNA2' ? { use_average_seq: false, seq_dep_file: '../oxDNA2_average_sequence_parameters.txt' } : {}), interaction_type: interaction, ...(v.protein_present ? { parfile: 'anm.par' } : {}), temperature: '296K', salt_concentration: Number(v.salt_concentration), topology: 'topology.top', device: String(v.device) }
+  const interaction = v.cpd_present ? 'CpdDNA2' : v.protein_present ? 'DNANM' : v.interaction_type
+  const shared = { ...(['DNA2', 'CpdDNA2'].includes(interaction) ? { use_average_seq: false, seq_dep_file: '../oxDNA2_average_sequence_parameters.txt' } : {}), interaction_type: interaction, ...(v.protein_present ? { parfile: 'anm.par' } : {}), temperature: '296K', salt_concentration: Number(v.salt_concentration), topology: 'topology.top', device: String(v.device) }
   const stages = [
     { name: '1_mc_relax', purpose: 'Clear local clashes with mutual base-pair traps', ...shared,
       sim_type: 'MC', backend: 'CPU', steps: Number(v.mc_steps), ensemble: 'NVT', delta_translation: 0.1,
@@ -89,6 +90,11 @@ export function oxdnaStagePlan(values = {}) {
     stage.fix_diffusion = false
     if (stage.sim_type === 'MD') stage.dt = Math.min(stage.dt, 0.0001)
   }
+  if (v.cpd_present) for (const stage of resolved) {
+    if (stage.sim_type === 'MC') stage.backend = 'CPU'
+    stage.interaction_type = 'CpdDNA2'
+    if (stage.sim_type === 'MD') stage.dt = Math.min(stage.dt, 0.0001)
+  }
   return resolved
 }
 
@@ -110,7 +116,8 @@ export function oxdnaWizardPayload(values, targetFields = {}) {
 
 export function oxdnaConfigDocument(values, targetFields = {}) {
   const payload = oxdnaWizardPayload(values, targetFields)
-  const target = ['# NADOC oxDNA job', `execution_target = ${payload.execution_target || 'local'}`,
+  const target = ['# NADOC oxDNA job',
+    ...(values.cpd_present ? ['# Experimental isomer-specific CPD model; local CPU/CUDA; melting thermodynamics unvalidated.'] : []), `execution_target = ${payload.execution_target || 'local'}`,
     `engine_variant = ${payload.engine_variant}`,
     ...(payload.partition ? [`partition = ${payload.partition}`] : []),
     ...(payload.runpod_gpu_key ? [`runpod_gpu_key = ${payload.runpod_gpu_key}`] : []),
@@ -141,15 +148,18 @@ export function oxdnaProductionDefaults(overrides = {}) { return { ...PRODUCTION
 export function validateOxdnaProductionWizard(values = {}) {
   const v = oxdnaProductionDefaults(values)
   const errors = {}
+  if (v.backend != null && !['CPU', 'CUDA'].includes(v.backend)) errors.backend = 'Choose CPU or CUDA.'
+  if (thermalError(v.thermal_ramp)) errors.thermal_ramp = thermalError(v.thermal_ramp)
   if (!v.parentJobId) errors.parentJobId = 'Choose a completed oxDNA job to continue from.'
   const range = (key, min, max, message) => {
     const n = Number(v[key])
     if (!Number.isFinite(n) || n < min || (max != null && n > max)) errors[key] = message
   }
   // Bounds match RunRequest (backend/api/routes_oxdna.py): steps 1e3-2e8, steps_per_frame 1-2e8.
-  range('steps', 1000, 200_000_000, 'Production steps must be between 1,000 and 200,000,000.')
+  if (!v.thermal_ramp) range('steps', 1000, 200_000_000, 'Production steps must be between 1,000 and 200,000,000.')
   range('steps_per_frame', 1, 200_000_000, 'Steps/frame must be between 1 and 200,000,000.')
   const [stage] = oxdnaProductionStagePlan(v)
+  if (v.thermal_ramp && stage.thermostat === 'no') errors.thermostat = 'Thermal ramps require a thermostat.'
   if (!['bussi', 'john', 'brownian', 'langevin', 'no'].includes(stage.thermostat))
     errors.thermostat = 'Choose a supported thermostat.'
   if (['john', 'brownian', 'langevin'].includes(stage.thermostat)
@@ -167,7 +177,7 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
   const v = oxdnaProductionDefaults(values)
   const stage = {
     name: '1_production', purpose: 'Sample from the relaxed structure', sim_type: 'MD',
-    backend: parentJob?.backend ?? null, device: parentJob?.device ?? null,
+    backend: v.backend ?? parentJob?.backend ?? null, device: parentJob?.device ?? null,
     salt_concentration: parentJob?.salt_concentration ?? null,
     temperature: '296K', dt: 0.005, thermostat: 'bussi', diff_coeff: null,
     refresh_vel: true, bussi_tau: 1000, newtonian_steps: 53,
@@ -180,7 +190,8 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
   }
   const overrides = v.stage_overrides?.['1_production'] || {}
   if ('diff_coeff' in overrides || stage.thermostat !== 'langevin') delete stage.gamma_trans
-  return [stage]
+  if (v.thermal_ramp) stage.print_energy_every = overrides.print_energy_every ?? null
+  return thermalStages(stage, v.thermal_ramp)
 }
 
 /** Payload sent to POST /oxdna/jobs/{parentId}/run. Deliberately excludes field/surface/anchors —
@@ -188,7 +199,9 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
  *  time in oxdna_jobs_panel.js, exactly as the (removed) Full Sim button already did. */
 export function oxdnaProductionPayload(values) {
   const v = oxdnaProductionDefaults(values)
-  return { steps: Number(v.steps), steps_per_frame: Number(v.steps_per_frame),
+  return { steps: Number(v.thermal_ramp ? thermalConfig(v.thermal_ramp).block_steps : v.steps), steps_per_frame: Number(v.steps_per_frame),
+    ...(v.backend ? { backend: v.backend } : {}),
+    ...(v.thermal_ramp ? { thermal_ramp: thermalConfig(v.thermal_ramp) } : {}),
     ...(Object.keys(v.stage_overrides || {}).length ? { stage_overrides: structuredClone(v.stage_overrides) } : {}),
   }
 }

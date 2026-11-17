@@ -581,6 +581,8 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Compiles and executes the native NAMD electrode harness.
+    "test_compiled_electrode_forces_match_slab_confinement_and_springs",
     # November 14 FAST: two cold recipe replay workers plus edit/undo/redo
     # take 5.89s. Keep independent-process provenance coverage in slow+headless.
     "test_generated_branch_cold_replay_edit_and_undo",

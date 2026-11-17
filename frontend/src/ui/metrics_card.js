@@ -27,8 +27,7 @@ import {
 } from './metric_export_modal.js'
 import { initResourceMonitor } from './resource_monitor.js'
 
-// Card metric key ↔ short DOM-id token. MD adds RMSD, energy, and pressure; oxDNA keeps the
-// original geometry-only set because its metrics endpoint does not emit NAMD scalars.
+// Card metric key ↔ short DOM-id token; engine bindings add their scalar metrics.
 const BASE_METRICS = [
   { key: 'twist', tok: 'twist' },
   { key: 'curvature', tok: 'curve' },
@@ -38,7 +37,7 @@ const BASE_METRICS = [
 const POLL_MS = 400
 
 export function initMetricsCard({
-  idPrefix, api, getSelectedJob = null, getJobs = null, extraMetrics = [],
+  idPrefix, api, getSelectedJob = null, getJobs = null, extraMetrics = [], selectionEvent = null,
 } = {}) {
   const card = document.getElementById(`${idPrefix}-card`)
   if (!card) return { refresh() {} }
@@ -71,12 +70,13 @@ export function initMetricsCard({
     }
   }
 
-  // Per-scope cache of the last completed run result (all configured measurements).
-  const _cache = { latest: null, chain: null }
+  // Cache each job/scope separately; independently generated metrics merge within it.
+  const _cache = {}
   let _runningMetric = null            // the metric key whose Generate is in flight
   let _pollTimer = null
 
   const _scope = () => (scopeChain?.checked ? 'chain' : 'latest')
+  const _cacheKey = () => `${_activeJobId()}:${_scope()}`
 
   function _activeJobId() {
     const sel = getSelectedJob?.()
@@ -114,7 +114,7 @@ export function initMetricsCard({
 
   function _updateButtons() {
     const busy = _runningMetric != null
-    const result = _cache[_scope()]
+    const result = _cache[_cacheKey()]
     for (const { key } of metrics) {
       const row = rows[key]
       const ready = !!(result?.ready && _hasMetricData(result, key))
@@ -137,14 +137,14 @@ export function initMetricsCard({
     _setStatus(row, 'Starting…')
     let start
     try {
-      start = await api.start(jobId, { scope: _scope() })
+      start = await api.start(jobId, { scope: _scope(), ...metrics.find(m => m.key === metricKey)?.request })
     } catch (e) {
       _fail(row, 'Could not start: ' + (e?.message || 'error')); return
     }
-    _poll(start.metrics_id, metricKey)
+    _poll(start.metrics_id, metricKey, jobId)
   }
 
-  function _poll(runId, metricKey) {
+  function _poll(runId, metricKey, jobId) {
     const row = rows[metricKey]
     const tick = async () => {
       let st
@@ -167,13 +167,15 @@ export function initMetricsCard({
         _setStatus(row, result?.reason || 'No data produced.', '#d29922')
         _updateButtons(); return
       }
-      _cache[result.scope || _scope()] = result
+      const cacheKey = `${jobId}:${result.scope || _scope()}`
+      _cache[cacheKey] = { ..._cache[cacheKey], ...result }
       _setBar(row, 1)
       const n = result[metricKey]?.temporal?.per_frame?.length || 0
-      const logSamples = METRIC_META[metricKey]?.source === 'namd-log'
+      const logSource = METRIC_META[metricKey]?.source
+      const logSamples = ['namd-log', 'oxdna-log'].includes(logSource)
       const sampled = !logSamples && result.sampling === 'uniform' && result.frames_raw > n
       const frameText = logSamples
-        ? `${n} NAMD log samples`
+        ? `${n} ${logSource === 'oxdna-log' ? 'oxDNA energy' : 'NAMD log'} samples`
         : sampled
           ? `${n} uniformly sampled frames spanning ${result.frames_raw} total frames`
           : `${n} frames`
@@ -183,9 +185,9 @@ export function initMetricsCard({
       } else {
         _setStatus(rows[metricKey], `No ${METRIC_META[metricKey]?.label?.toLowerCase() || metricKey} samples found.`, '#d29922')
       }
-      // The single pass produced every metric — reflect that on the other rows too.
-      for (const { key } of metrics) if (key !== metricKey && _cache[_scope()]?.[key]) {
-        if (!rows[key].status.textContent || rows[key].status.dataset.stale) {
+      // Reflect other metrics included in this response (energy may be generated alone).
+      for (const { key } of metrics) if (key !== metricKey && result?.[key]) {
+        if (rows[key].status && (!rows[key].status.textContent || rows[key].status.dataset.stale)) {
           _setStatus(rows[key], _hasMetricData(result, key)
             ? 'Ready (computed with the last run).'
             : `No ${METRIC_META[key]?.label?.toLowerCase() || key} samples found.`,
@@ -205,7 +207,7 @@ export function initMetricsCard({
   }
 
   function _display(metricKey) {
-    const result = _cache[_scope()]
+    const result = _cache[_cacheKey()]
     if (!result?.ready) return
     openMetricGraphPopup({
       metric: metricKey, result, scope: result.scope || _scope(),
@@ -214,7 +216,7 @@ export function initMetricsCard({
   }
 
   async function _export(metricKey) {
-    const result = _cache[_scope()]
+    const result = _cache[_cacheKey()]
     if (!result?.ready) return
     const choice = await openMetricExportModal()
     if (!choice) return
@@ -240,11 +242,12 @@ export function initMetricsCard({
   }
   scopeLatest?.addEventListener('change', _updateButtons)
   scopeChain?.addEventListener('change', _updateButtons)
+  if (selectionEvent) window.addEventListener(selectionEvent, _updateButtons)
   _updateButtons()
 
   /** Called by the panel when the design changes → cached results are stale. */
   function refresh() {
-    _cache.latest = null; _cache.chain = null
+    for (const key of Object.keys(_cache)) delete _cache[key]
     for (const { key } of metrics) {
       _setBar(rows[key], null)
       if (rows[key].status) rows[key].status.dataset.stale = '1'

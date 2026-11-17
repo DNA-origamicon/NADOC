@@ -416,3 +416,22 @@ def test_detached_pipe_creation_failure_releases_the_claim(tmp_path, detached_fi
     replacement = runtime.claim(job.job_dir(tmp_path))
     assert replacement is not None
     replacement.close()
+
+
+def test_idle_reservation_handoff_starts_new_generation_without_old_stop(tmp_path, detached_fixture):
+    job, module = detached_fixture
+    directory = job.job_dir(tmp_path)
+    lease = runtime.claim(directory)
+    old_generation = lease.generation
+    assert runtime.request_stop(directory)
+    lease.close()
+    with runtime.idle_stop_update(directory, old_generation) as acquired:
+        assert acquired
+        process = runtime.launch_detached(job, tmp_path, module, tmp_path)
+    try:
+        _wait_until(lambda: (directory / 'entered.json').exists())
+        assert runtime.generation(directory) != old_generation
+    finally:
+        (directory / 'release').touch()
+        process.wait(timeout=5)
+    assert process.returncode == 0

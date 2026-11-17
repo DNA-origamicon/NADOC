@@ -64,7 +64,7 @@ def try_terminate():
         except Exception as e:
             log(f"runpodctl exc {e}")
     if KILL_KEY and POD_ID:
-        url = f"https://rest.runpod.io/v1/pods/{POD_ID}"
+        url = f"https://api.runpod.io/v2/pods/{POD_ID}"
         try:
             req = urllib.request.Request(url, method="DELETE",
                 headers={"Authorization": f"Bearer {KILL_KEY}", "User-Agent": "curl/8.5.0"})

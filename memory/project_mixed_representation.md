@@ -14,6 +14,29 @@ beads, binding cylinders — are CLOSED, and the suspected photo-export bug was 
 photo-mode/override interaction, per-region extra bases, a test gap, and in-app verification —
 real, but none of them silently wrong geometry.
 
+## Atomistic base contacts (2026-11-14)
+
+Representation Options has a session checkbox for cyan hydrogen-bond and amber
+base-stacking dashed overlays. The common atomistic renderer automatically shows
+contacts involving a single selected base in Ball & Stick / Stick. Clearing or
+broadening selection restores the checkbox preference. Geometry detection is a
+separate pure module; it reads named standard-base atoms, live instance positions,
+and visibility, without molecular edits. Coordinate updates recompute contacts;
+unchanged state reuses the overlay. See [criteria and limits](../docs/base_interactions.md).
+Cross-renderer contacts and the assembly shared GPU batch are not covered by this
+common-renderer overlay. `main.js` LOC delta 0.
+Validation: 10,628 frontend tests passed (one skipped); 97 final focused tests
+passed; the read-only sequenced-duplex browser regression passed and its Stick
+close-up was inspected. Lint passed. Smoke: 22 passed, two skipped, two failures
+matching ISSUE-180 (Honeycomb/Square request capture). Test-owned workspace files,
+project stores, credentials and Playwright output were removed and checked after
+teardown. The pre-existing legacy fixture project history (f16cfa15…) was preserved;
+the smoke fixture load updated its history, so it is not disposable test scratch.
+Evidence: `.development-artifacts/base-interactions-{vitest,focused,browser,smoke,lint}.log`
+and `.development-artifacts/base-interactions-review.png`. MV-69 retains the
+real-pointer/subjective dense-view review debt.
+
+
 ## Strand-layer Close Session correction (2026-11-12)
 
 Visibility-controller subscribers run before the independent display owner.

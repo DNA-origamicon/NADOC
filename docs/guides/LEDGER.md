@@ -53,7 +53,7 @@ this table deliberately does not freeze a potentially stale “current” badge.
 | Selection and Navigation | planned | — | — | Not created |
 | **Simulation and Analysis** | | | | |
 | Simulation Workspace | planned | — | — | Not created |
-| oxDNA | planned | — | — | Not created |
+| oxDNA | partial | 2026-11-15T21:31:26-07:00 | 2026-11-15T21:43:06-07:00 | [cadnano-local-oxdna](cadnano-local-oxdna/README.md): Import a cadnano part and assign scaffold and staple sequences; Configure and complete local staged oxDNA relaxation; Create and launch local production from the completed relaxation |
 | mrDNA | planned | — | — | Not created |
 | CanDo FEM | planned | — | — | Not created |
 | SNUPI FEM | planned | — | — | Not created |

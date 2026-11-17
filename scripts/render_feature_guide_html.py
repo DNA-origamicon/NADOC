@@ -15,6 +15,9 @@ def render(guide_id='extrude'):
     manifest = json.loads((source / 'manifest.json').read_text())
     verification = json.loads((source / 'verification.json').read_text()) if (source / 'verification.json').exists() else {}
     downloads = ''.join(f'<a href="{escape(guide_id)}/{escape(name, quote=True)}" download>{escape(name)}</a>' for name in verification.get('additional_examples', {}))
+    if (source / '6hb84-cadnano.json').exists():
+        downloads += f'<a href="{escape(guide_id)}/6hb84-cadnano.json" download>Download cadnano input</a>'
+        downloads += f'<a href="{escape(guide_id)}/simulation-verification.json">Local simulation verification</a>'
     download_links = f'<p class="links">{downloads}</p>\n' if downloads else ''
     sections = guide['sections']
     nav = ''.join(f'<a href="#chapter-{i}">{escape(s["title"])}</a>'
@@ -77,7 +80,7 @@ footer{{margin-top:50px;color:#aab9ca}}.skip{{position:absolute;left:-9999px}}.s
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Verify the HTML matches the current captured guide')
-    parser.add_argument('--guide', choices=['extrude', 'bend', 'twist', 'sweep', 'polymerization', 'feature-log'], default='extrude')
+    parser.add_argument('--guide', choices=['extrude', 'bend', 'twist', 'sweep', 'polymerization', 'feature-log', 'cadnano-local-oxdna'], default='extrude')
     args = parser.parse_args()
     output = REPO / GUIDES / f'{args.guide}.html'
     html = render(args.guide)

@@ -308,7 +308,7 @@ class TestAutoconnect:
         self._key_file(monkeypatch, tmp_path)
 
         def handler(req):
-            if req.url.path.endswith("/networkvolumes"):
+            if req.url.path.endswith("/network-volumes"):
                 return httpx.Response(
                     200, json=[{"id": VOLUME, "name": "namd", "size": 60}]
                 )
@@ -325,7 +325,7 @@ class TestAutoconnect:
         self._key_file(monkeypatch, tmp_path)
 
         def handler(req):
-            if req.url.path.endswith("/networkvolumes"):
+            if req.url.path.endswith("/network-volumes"):
                 return httpx.Response(
                     200,
                     json=[
@@ -386,7 +386,7 @@ class TestSetupWizard:
 
     def test_volumes_are_listed_for_the_dropdown(self, client, monkeypatch):
         def handler(req):
-            if req.url.path.endswith("/networkvolumes"):
+            if req.url.path.endswith("/network-volumes"):
                 return httpx.Response(
                     200,
                     json=[

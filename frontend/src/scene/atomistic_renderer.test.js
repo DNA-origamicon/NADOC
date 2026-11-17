@@ -140,7 +140,7 @@ describe('atomistic_renderer stick representation', () => {
     expect(bondCylinderScaleY(scene)).toBeCloseTo(0.15, 5)
   })
 
-  it('keeps the ball-and-stick atom selection surface without rendering balls', () => {
+  it('retains atom identities without rendering or picking invisible balls', () => {
     const scene = new THREE.Scene()
     const ar = initAtomisticRenderer(scene)
     ar.setMode('stick')
@@ -168,15 +168,15 @@ describe('atomistic_renderer stick representation', () => {
       { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy_k: 0 },
     ])).toHaveLength(2)
 
-    // Click picking uses the same BALL_RADIUS hit target as ball-and-stick.
+    // Click picking uses the visible cylinder.
     const raycaster = new THREE.Raycaster(
-      new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1),
+      new THREE.Vector3(0.03, 0, 1), new THREE.Vector3(0, 0, -1),
     )
     expect(ar.raycastPick(raycaster)?.atom.serial).toBe(0)
     ar.dispose()
   })
 
-  it('highlights selected sticks through the shared atomistic color resolver', () => {
+  it('outlines selected sticks while preserving their colors', () => {
     const scene = new THREE.Scene()
     const ar = initAtomisticRenderer(scene)
     ar.setMode('stick')
@@ -198,7 +198,8 @@ describe('atomistic_renderer stick representation', () => {
     const other = new THREE.Color()
     _bondMesh(scene).getColorAt(0, selected)
     _bondMesh(scene).getColorAt(1, other)
-    expect(selected.getHex()).toBe(0xffffff)
+    expect(selected.getHex()).not.toBe(0xffffff)
+    expect(ar.selectionHighlightEntries().some(e => e.instMesh.name === 'atomBonds' && e.id === 0)).toBe(true)
     expect(other.getHex()).not.toBe(0xffffff)
     ar.dispose()
   })

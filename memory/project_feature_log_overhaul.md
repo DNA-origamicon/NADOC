@@ -9,6 +9,16 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 
 ## Current state and navigation
 
+November15 guide prerequisite: bounded ordinary caDNAno uploads now call the
+existing pinned `cadnano-import` command, retaining original source bytes and
+F1 instead of beginning with an unrecorded imported snapshot. Optional import
+relaxation uses the existing recorded fitting path. Oversize/out-of-contract
+uploads keep the legacy path with an explicit unverified history response;
+failed recorded construction does not retry legacy conversion. Focused coverage:
+`tests/test_ordinary_cadnano_recording.py` verifies exact source bytes, publication,
+saved/reopened replay, scope exclusions and failure atomicity. This does not
+change the importer’s molecular geometry or broaden its qualification envelope.
+
 November4 All Origami pipeline: `tools.design_archive.shared_pipeline` now builds
 D003 from Fig.S71 plus Tables S2/S4 using 1,680 native construction commands from
 an empty root, followed by recorded detection and rigid poses for four 22-helix

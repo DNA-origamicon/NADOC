@@ -7,11 +7,13 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 const providers = new WeakMap()
 export function registerSilhouetteHighlights(scene, provider) {
-  providers.set(scene, provider)
-  return () => { if (providers.get(scene) === provider) providers.delete(scene) }
+  let callbacks = providers.get(scene)
+  if (!callbacks) providers.set(scene, callbacks = new Set())
+  callbacks.add(provider)
+  return () => { callbacks.delete(provider) }
 }
 export function renderSilhouetteHighlights(renderer, scene, camera, pixelScale = 1) {
-  providers.get(scene)?.(renderer, camera, pixelScale)
+  for (const provider of providers.get(scene) ?? []) provider(renderer, camera, pixelScale)
 }
 
 function visibleSurface(mesh) {
@@ -27,26 +29,32 @@ function visibleSurface(mesh) {
 }
 
 export class SilhouetteHighlight {
-  constructor() {
+  constructor({ depthJump = null, exteriorOnly = false, occlusionScene = null } = {}) {
+    this.depthJump = depthJump
+    this.occlusionScene = occlusionScene
+    this.occlusionTarget = null
     this.scene = new THREE.Scene()
     this.proxies = new Map()
     this.target = new THREE.WebGLRenderTarget(1, 1, { depthTexture: new THREE.DepthTexture(1, 1) })
     this.material = new THREE.ShaderMaterial({
       transparent: true, depthTest: false, depthWrite: false,
-      uniforms: { depth: { value: this.target.depthTexture }, resolution: { value: new THREE.Vector2() },
+      uniforms: { depth: { value: this.target.depthTexture }, sceneDepth: { value: null }, occlusion: { value: occlusionScene ? 1 : 0 }, resolution: { value: new THREE.Vector2() },
         near: { value: 0.1 }, far: { value: 1000 }, perspective: { value: 1 },
-        pixelScale: { value: 1 }, jump: { value: 0.03 }, color: { value: new THREE.Color() }, strength: { value: 1 } },
+        exteriorOnly: { value: exteriorOnly ? 1 : 0 }, pixelScale: { value: 1 }, jump: { value: 0.03 }, color: { value: new THREE.Color() }, strength: { value: 1 } },
       vertexShader: 'varying vec2 uvOut; void main(){ uvOut=uv; gl_Position=vec4(position.xy,0.,1.); }',
       fragmentShader: `
         #include <packing>
-        uniform sampler2D depth;
+        uniform sampler2D depth, sceneDepth;
+        uniform float occlusion;
         uniform vec2 resolution;
-        uniform float near, far, perspective, jump, strength, pixelScale;
+        uniform float near, far, perspective, jump, strength, pixelScale, exteriorOnly;
         uniform vec3 color;
         varying vec2 uvOut;
-        float eye(vec2 uv) {
-          float d = texture2D(depth, clamp(uv, vec2(0.), vec2(1.))).x;
+        float eyeDepth(float d) {
           return perspective > .5 ? -perspectiveDepthToViewZ(d, near, far) : -orthographicDepthToViewZ(d, near, far);
+        }
+        float eye(vec2 uv) {
+          return eyeDepth(texture2D(depth, clamp(uv, vec2(0.), vec2(1.))).x);
         }
         void main() {
           float center = eye(uvOut), closest = center;
@@ -56,6 +64,8 @@ export class SilhouetteHighlight {
             closest = min(closest, eye(uvOut + vec2(float(x),float(y))*pixelScale/resolution));
           }
           float edge = smoothstep(jump, jump*2., center-closest);
+          if (exteriorOnly > .5 && texture2D(depth, uvOut).x < 1.) edge = 0.;
+          if (occlusion > .5 && closest > eyeDepth(texture2D(sceneDepth, uvOut).x) + jump) edge = 0.;
           gl_FragColor = vec4(color, edge * min(strength, 1.));
           #include <colorspace_fragment>
         }`,
@@ -72,13 +82,13 @@ export class SilhouetteHighlight {
       if (!groups.has(source)) groups.set(source, new Set())
       if (entry.instMesh) groups.get(source).add(entry.id)
     }
-    if (!groups.size) return
-    const bounds = new THREE.Box3(), matrix = new THREE.Matrix4(), point = new THREE.Vector3()
     for (const [source, proxy] of this.proxies) {
       if (!groups.has(source) || proxy.geometry !== source.geometry || proxy.count !== source.count) {
         this.scene.remove(proxy); proxy.dispose?.(); this.proxies.delete(source)
       }
     }
+    if (!groups.size) return
+    const bounds = new THREE.Box3(), matrix = new THREE.Matrix4(), point = new THREE.Vector3()
     for (const [source, ids] of groups) {
       source.updateWorldMatrix(true, false)
       let proxy = this.proxies.get(source)
@@ -116,7 +126,7 @@ export class SilhouetteHighlight {
     const u = this.material.uniforms
     u.resolution.value.copy(size); u.near.value = camera.near; u.far.value = camera.far
     u.perspective.value = camera.isPerspectiveCamera ? 1 : 0
-    u.jump.value = Math.max(bounds.getSize(point).length() * 0.03, 0.003)
+    u.jump.value = this.depthJump ?? Math.max(bounds.getSize(point).length() * 0.03, 0.003)
     u.color.value.set(color); u.strength.value = intensity
     u.pixelScale.value = pixelScale
     const oldTarget = renderer.getRenderTarget(), oldAuto = renderer.autoClear
@@ -126,6 +136,13 @@ export class SilhouetteHighlight {
       renderer.shadowMap.autoUpdate = false
       renderer.autoClear = true
       renderer.setClearColor(0, 0)
+      if (this.occlusionScene) {
+        this.occlusionTarget ??= new THREE.WebGLRenderTarget(1, 1, { depthTexture: new THREE.DepthTexture(1, 1) })
+        this.occlusionTarget.setSize(size.x, size.y)
+        u.sceneDepth.value = this.occlusionTarget.depthTexture
+        renderer.setRenderTarget(this.occlusionTarget)
+        renderer.render(this.occlusionScene, camera)
+      }
       renderer.setRenderTarget(this.target)
       renderer.render(this.scene, camera)
       renderer.setRenderTarget(oldTarget)
@@ -140,6 +157,6 @@ export class SilhouetteHighlight {
   }
   dispose() {
     for (const proxy of this.proxies.values()) proxy.dispose?.()
-    this.proxies.clear(); this.target.dispose(); this.material.dispose(); this.quad.dispose()
+    this.proxies.clear(); this.occlusionTarget?.dispose(); this.target.dispose(); this.material.dispose(); this.quad.dispose()
   }
 }

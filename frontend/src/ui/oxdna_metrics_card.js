@@ -12,8 +12,9 @@ import { initMetricsCard, METRIC_META } from './metrics_card.js'
 
 export function initOxdnaMetricsCard({ getSelectedJob = null, getJobs = null } = {}) {
   return initMetricsCard({
-    idPrefix: 'oxdna-metrics',
+    idPrefix: 'oxdna-metrics', selectionEvent: 'nadoc:oxdna-job-selected',
     api: { start: startOxdnaMetrics, poll: getOxdnaMetricsRun },
+    extraMetrics: [{ key: 'oxdna_energy', tok: 'energy', request: { metric: 'oxdna_energy' } }],
     getSelectedJob, getJobs,
   })
 }

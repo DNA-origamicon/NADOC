@@ -46,6 +46,44 @@ Validation: 10,535 frontend tests and the app workflow passed; lint passed. Smok
 retains two ISSUE-180 failures (22 passed/two skipped). Test artifacts removed;
 compact results: `.development-artifacts/spreadsheet-multiselect/validation.json`.
 
+## Atomistic click geometry (2026-11-14)
+
+The shared design atomistic renderer now tests the displayed spheres and bond
+cylinders: VDW uses spheres, Ball & Stick uses both, and Stick uses cylinders
+only. Hidden Stick atom instances remain available for lasso/glow bookkeeping,
+but are no longer click proxies. Bond hits resolve to the endpoint on the hit
+half of the live cylinder, preserving existing nucleotide/strand selection.
+The picker checks ancestor visibility, instance alpha and clipping planes, and
+refreshes cached bounds after live instance-matrix changes. Global and region
+override selection already route through this renderer; hidden Full geometry
+remains excluded by their existing selection-manager paths. This change does
+not alter the separate shared-assembly instance bounding-box picker.
+
+## Representation-aware selection highlighting (2026-11-14)
+
+Committed non-surface atomistic selection outlines live atom/bond silhouettes;
+selection never replaces their strand, CPK, base or simulation-scalar colors.
+`selection_highlight.js` matches canonical references; `SilhouetteHighlight`
+reads current instance/world matrices each rendered frame, including same-size
+MD updates and representation rebuilds. Its scene registry supports concurrent
+annotation and atomistic providers. The atom outline paints outside the selected
+surface, preserving the surface color itself.
+
+The coarse glow compositor filters every pool against representation/visibility;
+whole-design visibility also controls already-created coarse glow meshes.
+For atomistic selections, presentation selection is a local ping/export target
+without a second painted halo:
+its atomistic positions come from live selected instances, not native CG beads.
+Prepared viewers retain their presentation halo. Cluster/group corners use actual
+rendered instances, with atomistic surface tint disabled. Stick never highlights
+its detached private sphere proxies. Explicit bond/crossover refs select covalent
+cylinders (physical endpoint atoms in VDW), preserving insert-copy/extra-base IDs.
+
+The earlier color-based fix and passing tests missed the duplicate presentation
+halo and incorrectly accepted white selected atoms. ISSUE-201's follow-up checks
+use the real 2hb_2xT / P3 Alpine / Display MD / S1 case, and color-preservation plus
+live-transform regressions. See the fix log for final validation.
+
 ## Current model
 
 ```js

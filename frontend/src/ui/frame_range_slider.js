@@ -1,3 +1,4 @@
+import { createTrajectoryMarker } from './trajectory_temperature_marker.js'
 /**
  * frame_range_slider.js — one bar carrying a trajectory keyframe's start, end and
  * currently-previewed frame.
@@ -243,11 +244,7 @@ export function initFrameRangeSlider({
       if (_playhead != null) _playhead = Math.min(_playhead, hi)
       ticks.innerHTML = ''
       for (const m of markerPositions(markers, _n)) {
-        const t = document.createElement('div')
-        t.title = `${m.label}${m.stage_name ? ` (${m.stage_name})` : ''}`
-        t.style.cssText =
-          `position:absolute;top:0;left:${m.pct}%;width:1px;height:100%;` +
-          `transform:translateX(-0.5px);background:${_C.tick}`
+        const t = createTrajectoryMarker(m, _C.tick)
         ticks.appendChild(t)
       }
       _render()

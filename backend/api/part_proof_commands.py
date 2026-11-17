@@ -325,6 +325,16 @@ def dependencies(kind, params):
                             frozenset({PART_TOPOLOGY, particle}), barrier=True,
                             imported_sources=sources if contract["imports"] else frozenset())
     if kind == "photoproduct-relax" or (kind == "photoproduct-create" and params.get("method") != "preflight"):
+        if kind == "photoproduct-create" and params.get("conversion_version") in (2, 3):
+            if params["conversion_version"] == 2:
+                from backend.core.part_cpd_conversion import ConversionCommand
+            else:
+                from backend.core.part_cpd_conversion_isomers import ConversionCommand
+            try:
+                ConversionCommand.model_validate(params)
+            except ValueError:
+                return Dependencies(known=False)
+            return Dependencies(frozenset({PART_TOPOLOGY}), frozenset({PART_TOPOLOGY}), barrier=True)
         if params.get("conversion_version") != 1:
             return Dependencies(known=False)
         from backend.core.part_cpd_contract import parse_command
@@ -441,6 +451,12 @@ def _execute_candidate(kind, design, params, *, expensive):
     if design.group_organization is not None:
         from backend.api.part_group_organization_gate import require_native_command
         require_native_command(kind, params)
+    if kind == "photoproduct-create" and params.get("conversion_version") in (2, 3):
+        if params["conversion_version"] == 2:
+            from backend.core.part_cpd_conversion import build
+        else:
+            from backend.core.part_cpd_conversion_isomers import build
+        return build(design, params)
     if "_connection_organization" in params:
         from backend.api.part_connection_organization import execute as organized_connection
         return organized_connection(kind, design, params,

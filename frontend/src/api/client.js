@@ -3117,8 +3117,8 @@ function _vizOpts(opts, fn) {
   if (signal != null && !(signal instanceof AbortSignal)) {
     throw new TypeError(`${fn}: opts.signal must be an AbortSignal, got ${typeof signal}.`)
   }
-  if (scope !== 'lineage' && scope !== 'job') {
-    throw new TypeError(`${fn}: opts.scope must be 'lineage' or 'job', got ${JSON.stringify(scope)}.`)
+  if (scope !== 'lineage' && scope !== 'job' && scope !== 'thermal' && !/^thermal:[1-9]\d*_thermal$/.test(scope)) {
+    throw new TypeError(`${fn}: opts.scope must be 'lineage', 'job', 'thermal', or a thermal stage, got ${JSON.stringify(scope)}.`)
   }
   return { align, signal, scope }
 }
@@ -3207,6 +3207,7 @@ export const getOxdnaStrain = (id, opts) => {
 }
 /** Graphs & Metrics card: start a background twist/curvature/base-pairing compute for a
  *  job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getOxdnaMetricsRun`. */
+export const skipOxdnaStage = (id, body) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/skip-stage`, body)
 export const startOxdnaMetrics   = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/metrics/start`, body)
 /** Poll a Graphs & Metrics run → {state, progress, eta_s, frames_done, frames_total, result?}. */
 export const getOxdnaMetricsRun  = (runId)       => _oxdnaJSON('GET',  `/oxdna/metrics/${runId}`)

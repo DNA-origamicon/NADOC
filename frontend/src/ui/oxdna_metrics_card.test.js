@@ -29,7 +29,7 @@ const IDS = {
   'oxdna-metrics-scope-latest': 'input',
   'oxdna-metrics-scope-chain': 'input',
 }
-for (const tok of ['twist', 'curve', 'bp']) {
+for (const tok of ['twist', 'curve', 'bp', 'energy']) {
   IDS[`oxdna-metrics-${tok}-gen`] = 'button'
   IDS[`oxdna-metrics-${tok}-display`] = 'button'
   IDS[`oxdna-metrics-${tok}-export`] = 'button'
@@ -107,4 +107,23 @@ describe('initOxdnaMetricsCard', () => {
     chain.checked = true; chain.dispatchEvent(new Event('change'))
     expect(disp.disabled).toBe(true)
   })
+})
+
+
+it('energy generates independently and cannot display a different selected job', async () => {
+  let selected = 'job123'
+  start.mockResolvedValue({ metrics_id: 'e1' })
+  poll.mockResolvedValue({ state: 'done', result: { ready: true, scope: 'latest', jobs: ['job123'],
+    oxdna_energy: { temporal: { per_frame: [-1, -2] } } } })
+  initOxdnaMetricsCard({ getSelectedJob: () => ({ job_id: selected }) })
+  document.getElementById('oxdna-metrics-energy-gen').click()
+  const display = document.getElementById('oxdna-metrics-energy-display')
+  await vi.waitFor(() => expect(display.disabled).toBe(false))
+  expect(start).toHaveBeenCalledWith('job123', { scope: 'latest', metric: 'oxdna_energy' })
+  expect(document.getElementById('oxdna-metrics-energy-status').textContent).toContain('2 oxDNA energy samples')
+  display.click()
+  expect(openPopup.mock.calls[0][0].metric).toBe('oxdna_energy')
+  selected = 'another-job'
+  window.dispatchEvent(new CustomEvent('nadoc:oxdna-job-selected'))
+  expect(display.disabled).toBe(true)
 })

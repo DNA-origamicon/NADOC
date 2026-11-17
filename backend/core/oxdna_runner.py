@@ -712,6 +712,12 @@ def prepare_oxdna_job(
         info["mobile_gold"] = manifest
         job.backend = "CUDA"
     from backend.physics.oxdna_attachments import attachment_text, FILENAME
+    from backend.physics.oxdna_cpd import prepare as prepare_cpd
+    cpd = prepare_cpd(design, jd, specs)
+    if cpd:
+        job.backend = cpd["backend"]
+        job.run_config = {**(job.run_config or {}), "cpd": cpd, "backend": job.backend}
+        info["cpd"] = cpd
     (jd / FILENAME).unlink(missing_ok=True)
     (jd / FILENAME).write_text(attachment_text(jd))
     # Self-contained design snapshot for health checks (decoupled from live state).
@@ -1003,7 +1009,7 @@ def job_overall_fraction(
     n = len(job.stages)
     if not n:
         return 0.0
-    done = sum(1 for s in job.stages if s.status == "done")
+    done = sum(1 for s in job.stages if s.status in ("done", "skipped"))
     idx = job.current_stage_idx
     stage_frac = 0.0
     if 0 <= idx < n and idx < len(specs):
@@ -1036,7 +1042,7 @@ def job_progress(
     """Return overall + current-stage progress fractions + an ETA + a live health
     snapshot for the panel."""
     n = len(job.stages)
-    done = sum(1 for s in job.stages if s.status == "done")
+    done = sum(1 for s in job.stages if s.status in ("done", "skipped"))
     idx = job.current_stage_idx
     stage_frac = 0.0
     eta_seconds: float | None = None
@@ -1520,6 +1526,8 @@ def _archive_partial_outputs(stage_dir: Path) -> list[str]:
         while (stage_dir / f"{stem}.r{n}.{suffix}").exists():
             n += 1
         dst = stage_dir / f"{stem}.r{n}.{suffix}"
+        from backend.core.oxdna_temperature_markers import archive_temperature_input
+        archive_temperature_input(stage_dir, dst.name)
         src.rename(dst)
         archived.append(dst.name)
     return archived
@@ -1687,6 +1695,8 @@ def _halve_dt_and_restart(
     # Leaving a resume's completed_steps behind would add phantom progress on top of a
     # run that begins at step 0 (a 53 %-banked value made a 20 %-done rerun read 63 %).
     job.stages[idx].completed_steps = 0
+    from backend.core.oxdna_thermal_ramp import restart_plateau
+    restart_plateau(job, workspace_dir, specs, idx)
     _reset_stage_outputs(job.stage_dir(workspace_dir, specs[idx].name))
     job.current_stage_idx = idx
     _persist_specs(job, workspace_dir, specs)
@@ -1809,6 +1819,23 @@ async def run_job(
         stage_dir = job.stage_dir(workspace_dir, spec.name)
         stage_dir.mkdir(parents=True, exist_ok=True)
 
+        # Recover a completed native block whose controller was interrupted before
+        # recording its completion. Retain native checkpoint and numerical health checks.
+        from backend.core.oxdna_thermal_ramp import recovered_boundary_ready
+        if spec.thermal_ramp and recovered_boundary_ready(job, workspace_dir, spec, design):
+            from backend.core.oxdna_thermal_ramp import advance
+            decision = advance(job, workspace_dir, specs, idx, design)
+            _persist_specs(job, workspace_dir, specs)
+            if decision == "done":
+                job.stages[idx].status = "done"
+                job.current_stage_idx = idx + 1
+                idx += 1
+            job.save(workspace_dir)
+            if decision == "failed":
+                return
+            start_idx = idx
+            continue
+
         conf = _starting_conf(job, workspace_dir, specs, idx, start_idx)
         is_resume = conf == (stage_dir / "last_conf.dat").resolve()
         if is_resume:
@@ -1919,6 +1946,10 @@ async def run_job(
             if spec.interaction != "DNA2GOLD" or spec.backend != "CUDA" or spec.sim_type != "MD":
                 raise ValueError("Mobile gold cannot fall back to DNA-only or CPU dynamics")
             spec.gold_file = str((jd / "mobile_gold.dat").resolve())
+        from backend.physics.oxdna_cpd import stage_input as cpd_stage_input
+        cpd_input = cpd_stage_input(jd, spec)
+        from backend.core.oxdna_thermal_ramp import prepare_attempt
+        spec = prepare_attempt(spec, job, workspace_dir, idx)
         input_path.write_text(
             render_stage_input(
                 spec,
@@ -1928,7 +1959,7 @@ async def run_job(
                 parfile_name=parfile,
                 sequence_parameters_name=str(jd / "oxDNA2_average_sequence_parameters.txt")
                     if (jd / "oxDNA2_average_sequence_parameters.txt").exists() else None,
-            )
+            ) + cpd_input
         )
 
         logger.info(
@@ -2080,11 +2111,14 @@ async def run_job(
             topology_path=topo,
             dnanalysis_bin=None if (is_hybrid or is_peg_job or is_gold_job) else find_dnanalysis(),
             salt_concentration=spec.salt_concentration,
+            temperature=spec.temperature,
             # Surface capture strands are appended AFTER the design walk; without this
             # the reader mistakes them for a leading protein block and every geometric
             # metric is computed on the wrong particles (see run_oxdna_health_check).
             n_trailing_extra=capture_bead_count(job),
         )
+        from backend.core.oxdna_thermal_ramp import check_thermal_health
+        res = check_thermal_health(res, job, workspace_dir, spec)
         steps_per_s = spec.steps / elapsed
         sample = _health_sample(spec.name, spec.kind, res, steps_per_s)
         job.health_samples.append(sample)
@@ -2198,7 +2232,7 @@ async def run_job(
         # without this the job would finish "done" with a blown-apart structure that
         # display / autorefine then measures.  Treat it exactly like a crash blow-up:
         # halve dt and re-run from the relaxed seed; fail clearly once the budget is out.
-        if spec.kind in _BLOWUP_EXTENT_KINDS and _structure_blew_up(stage_dir, conf):
+        if not spec.thermal_ramp and spec.kind in _BLOWUP_EXTENT_KINDS and _structure_blew_up(stage_dir, conf):
             if job.production_retries < job.max_production_retries:
                 logger.info(
                     "[%s] %s completed but the structure blew up (extent > %.1f× "
@@ -2306,6 +2340,16 @@ async def run_job(
                 )
                 continue
 
+        from backend.core.oxdna_thermal_ramp import advance
+        decision = advance(job, workspace_dir, specs, idx, design)
+        if decision != "done":
+            _persist_specs(job, workspace_dir, specs)
+            job.save(workspace_dir)
+            if decision == "failed":
+                return
+            start_idx = idx
+            continue
+
         job.stages[idx].status = "done"
         job.current_stage_idx = idx + 1
         job.save(workspace_dir)
@@ -2328,6 +2372,8 @@ def start_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -
         return
     from backend.core.oxdna_submodel import preflight
     preflight(job, workspace_dir, specs)
+    from backend.core.oxdna_thermal_ramp import require_full_system
+    require_full_system(any(s.thermal_ramp for s in specs), job.submodel)
     job.save(workspace_dir)
     (job.job_dir(workspace_dir) / _STOP_MARKER).unlink(missing_ok=True)
     runtime.launch_detached(
@@ -2439,7 +2485,7 @@ def reconcile_oxdna_status(
 
     interrupted = False
     for idx, st in enumerate(job.stages):
-        if st.status == "done":
+        if st.status in ("done", "skipped"):
             continue
         sdir = job.stage_dir(workspace_dir, st.name)
         expected = expected_energy_lines(specs[idx])
@@ -2458,13 +2504,15 @@ def reconcile_oxdna_status(
                 and "END OF THE SIMULATION, everything went OK!" in log_tail
                 and stage_completed_steps(sdir, specs[idx]) >= specs[idx].steps
             )
+        if specs[idx].thermal_ramp:
+            complete = (job.run_config or {}).get("thermal_progress", {}).get(st.name, {}).get("decision") == "done"
         if complete and st.status != "failed":
             st.status = "done"
         else:
             interrupted = True
             break
 
-    if all(s.status == "done" for s in job.stages):
+    if all(s.status in ("done", "skipped") for s in job.stages):
         job.status = OxdnaStatus.completed
         job.current_stage_idx = len(job.stages)
         job.error = None
@@ -2472,7 +2520,7 @@ def reconcile_oxdna_status(
         # The runner died partway through a stage that never finished on disk.
         job.status = OxdnaStatus.stopped
         job.current_stage_idx = next(
-            (i for i, s in enumerate(job.stages) if s.status not in ("done",)),
+            (i for i, s in enumerate(job.stages) if s.status not in ("done", "skipped")),
             len(job.stages),
         )
     else:

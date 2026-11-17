@@ -22,6 +22,26 @@ can be fully automatic, and interruptible (spot) pods become viable.
 Related: [[alpine-cluster-submission]] (the remote seam this extends — read its Resume
 model block), [[md-job-system]] (the local job system), [[project_water_shell_carve]].
 
+November 16, 2026: migrated the provider boundary to REST v2
+(`https://api.runpod.io/v2`). Pod reads/deletion, paginated pod/volume lists,
+non-expiring creation, and Secure Cloud GPU stock use v2. The internal launch
+specification and UI response fields remain stable; the adapter translates GPU,
+CUDA, mount, cost, status and direct-SSH fields. `ERROR` is terminal but still
+requires deletion. GPU candidate lists are attempted client-side in priority order.
+Balance and `terminateAfter` creation deliberately retain GraphQL because the
+current v2 schema lacks those capabilities; both use Bearer headers. Spot pods
+are retired by RunPod and explicitly rejected before creation (the main executor
+already disabled them). Independent watchdogs remain required; the provider
+expiry hint is not a verified billing guarantee. Standalone deadman deletion URLs
+also use v2. Read-only account checks succeeded for pods, volumes, catalog and
+balance; no paid provisioning/simulation validation was performed.
+Validation: `just test-smart` selected FAST (20,945 passed, 90 skipped);
+FULL remains deferred without a test session. `just test-frontend`: 10,643 passed,
+1 skipped. The 50 focused route tests were skipped by the active-oxDNA resource
+guard; no browser/paid launch verification was performed.
+Sources: https://docs.runpod.io/api-reference-v2/migrate-from-v1 and
+https://api.runpod.io/v2/openapi.json.
+
 November 12, 2026: the shared RunPod status card refreshes pods and balance every
 15 seconds while mounted and connected, independently of job selection/polling.
 Previously stopping then deleting the final job could freeze a stale billing

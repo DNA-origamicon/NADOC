@@ -1,3 +1,25 @@
+# Four-isomer oxDNA workflow — 2026-11-16
+
+User authorized extending the cis-syn-I workflow to cis-anti-I, trans-syn-I/II.
+All four use separate NAMD-derived CPU models, including mixed-isomer packages.
+Three new examples have complete v3 authoring history and pass independent replay;
+The original cis-syn v2 pins/example remain valid. Placement and phase constants are unchanged.
+
+Each new isomer completed relaxation, equilibration, 1m production and a separate
+1m continuation. Normal health gates/retries retained (one retry for cis-anti-I
+and trans-syn-I, two for trans-syn-II). Force/torque errors <2.7e-8; all six
+production trajectories readable, finite and orthonormal. Four browser assignment,
+create/edit/copy cases passed and were visually inspected; artifacts cleaned.
+Evidence `.development-artifacts/cpd-oxdna-isomers-v1/native/results.json` and
+[workflow, job IDs, source data and limits](../docs/oxdna_cpd.md).
+
+Still exploratory, local CPU DNA only: conditional covariance fits from two 20 ns
+NAMD replicas plus an exposed third comparison. Relative Hessian fit errors:
+cis-syn 0.217, cis-anti 0.571, trans-syn-I 0.458, trans-syn-II 0.186. Larger errors
+are explicit model limitations; no validated relative Tm ranking or thermal fit.
+Remote/hybrid/CUDA CPD deployment remains separate work. ISSUE-202 fixes a queued
+background-analysis/deleted-job race exposed by browser cleanup, not physics.
+
 # Current CPD priority — 2026-11-04
 
 Managed-start follow-up: the first builder/direct-engine smoke missed memory

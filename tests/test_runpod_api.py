@@ -167,7 +167,7 @@ class TestNetworkVolumes:
 
     def test_lists_volumes(self):
         def handler(req):
-            assert req.url.path.endswith("/networkvolumes")
+            assert req.url.path.endswith("/network-volumes")
             return httpx.Response(
                 200,
                 json=[
@@ -268,7 +268,7 @@ class TestClient:
         assert gql_input["terminateAfter"] == "2026-08-10T00:00:00Z"
         assert gql_input["gpuTypeId"] == "g"
         assert gql_input["minCudaVersion"] == rp.DEFAULT_ALLOWED_CUDA[0]
-        assert "api_key=key" in seen["url"]
+        assert "api_key" not in seen["url"]
 
     def test_401_is_a_clear_message_not_a_stack_trace(self):
         async def go():
@@ -411,7 +411,7 @@ class TestClient:
             await c.aclose()
 
         _run(go())
-        assert deleted == ["/v1/pods/p1"], "pod must be terminated on the happy path"
+        assert deleted == ["/v2/pods/p1"], "pod must be terminated on the happy path"
 
     def test_pod_context_manager_terminates_when_the_body_raises(self):
         """THE test. If the job blows up mid-run, the pod still dies. Without this a
@@ -428,7 +428,7 @@ class TestClient:
 
         with pytest.raises(ZeroDivisionError):
             _run(go())
-        assert deleted == ["/v1/pods/p1"], (
+        assert deleted == ["/v2/pods/p1"], (
             "pod must be terminated even when the body raises"
         )
 
@@ -563,7 +563,7 @@ class TestAPodThatNeverProvisionsSTILLBILLS:
 
         async def go():
             async with client.pod(
-                {"x": 1}, wait_timeout_s=0.0, on_created=lambda p: booked.append(p.id)
+                PAYLOAD, wait_timeout_s=0.0, on_created=lambda p: booked.append(p.id)
             ):
                 pass  # pragma: no cover — wait_for_ssh must raise before we get here
 
@@ -591,7 +591,7 @@ class TestAPodThatNeverProvisionsSTILLBILLS:
 
         async def go():
             async with client.pod(
-                {"x": 1}, on_created=lambda p: seen.update(id=p.id, rate=p.cost_per_hr)
+                PAYLOAD, on_created=lambda p: seen.update(id=p.id, rate=p.cost_per_hr)
             ):
                 pass
 
@@ -620,14 +620,14 @@ class TestAPodThatNeverProvisionsSTILLBILLS:
 
         async def go():
             async with client.pod(
-                {"x": 1},
+                PAYLOAD,
                 on_created=lambda _pod: (_ for _ in ()).throw(RuntimeError("ledger failed")),
             ):
                 pass
 
         with pytest.raises(RuntimeError, match="ledger failed"):
             asyncio.run(go())
-        assert terminated == ["/v1/pods/P-CALLBACK"]
+        assert terminated == ["/v2/pods/P-CALLBACK"]
 
 
 class TestNeverRentAHostThatCannotRunTheImage:
@@ -683,12 +683,12 @@ class TestHandoffAcrossAReload:
         client = self._client(deleted)
 
         async def go():
-            async with client.pod({"name": "nadoc-x"}):
+            async with client.pod({**PAYLOAD, "name": "nadoc-x"}):
                 raise asyncio.CancelledError()
 
         with pytest.raises(asyncio.CancelledError):
             asyncio.run(go())
-        assert deleted == ["/v1/pods/p1"], "the default MUST stay destroy-on-unwind"
+        assert deleted == ["/v2/pods/p1"], "the default MUST stay destroy-on-unwind"
 
     def test_handoff_spares_the_pod_on_the_unwind(self):
         deleted: list[str] = []
@@ -696,7 +696,7 @@ class TestHandoffAcrossAReload:
         runpod_api.set_handoff(True)
 
         async def go():
-            async with client.pod({"name": "nadoc-x"}):
+            async with client.pod({**PAYLOAD, "name": "nadoc-x"}):
                 raise asyncio.CancelledError()
 
         with pytest.raises(asyncio.CancelledError):
@@ -821,3 +821,97 @@ def test_noncapacity_error_does_not_try_other_cards(monkeypatch):
             await client.aclose()
 
     asyncio.run(exercise())
+
+
+class TestRestV2:
+    def test_create_wire_and_direct_ssh(self):
+        def handler(req):
+            assert str(req.url) == 'https://api.runpod.io/v2/pods'
+            assert req.headers['Authorization'] == 'Bearer key'
+            body = json.loads(req.content)
+            assert body == {
+                'name': 'n', 'image': DEFAULT_IMAGE, 'cloud': 'COMMUNITY',
+                'gpu': {'id': 'g', 'count': 1, 'allowedCudaVersions': rp.DEFAULT_ALLOWED_CUDA},
+                'disk': 30, 'ports': ['22/tcp'], 'startSsh': True,
+                'mounts': {'network': [{'volumeId': VOLUME, 'path': '/workspace'}]},
+            }
+            return httpx.Response(201, json={
+                'id': 'p', 'status': 'RUNNING', 'cost': 0.42,
+                'ssh': {'proxy': {'host': 'wrong', 'port': 22},
+                        'direct': {'host': '1.2.3.4', 'port': 1234}},
+            })
+        async def go():
+            c = _client(handler)
+            try:
+                return await c.create_pod(PAYLOAD)
+            finally:
+                await c.aclose()
+        pod = _run(go())
+        assert pod_is_ready(pod)
+        assert ssh_endpoint(pod) == ('1.2.3.4', 1234)
+        assert pod.cost_per_hr == 0.42
+
+    def test_lists_all_pages(self):
+        def handler(req):
+            cursor = req.url.params.get('cursor')
+            return httpx.Response(200, json={
+                'pods': [{'id': cursor or 'first', 'status': 'EXITED'}],
+                'pagination': {'hasNextPage': cursor is None, 'nextCursor': 'second'},
+            })
+        async def go():
+            c = _client(handler)
+            try:
+                return await c.list_pods()
+            finally:
+                await c.aclose()
+        assert [p.id for p in _run(go())] == ['first', 'second']
+
+    def test_error_is_terminal_but_still_needs_destruction(self):
+        pod = parse_pod({'id': 'p', 'status': 'ERROR', 'ssh': {'direct': None}})
+        assert pod.is_terminated and not pod.is_destroyed
+        assert not pod_is_ready(pod)
+
+    def test_spot_is_rejected_before_any_request(self):
+        async def go():
+            c = _client(lambda req: pytest.fail('must not rent on-demand for spot request'))
+            try:
+                await c.create_pod({**PAYLOAD, 'interruptible': True})
+            finally:
+                await c.aclose()
+        with pytest.raises(RunpodError, match='no longer offers spot'):
+            _run(go())
+
+    def test_v2_retries_next_gpu_only_for_capacity(self):
+        requested = []
+
+        def handler(req):
+            gpu = json.loads(req.content)['gpu']['id']
+            requested.append(gpu)
+            if gpu == 'first':
+                return httpx.Response(409, json={'title': 'Insufficient capacity'})
+            return httpx.Response(201, json={'id': 'p', 'status': 'PROVISIONING'})
+
+        async def go():
+            c = _client(handler)
+            try:
+                return await c.create_pod({**PAYLOAD, 'gpuTypeIds': ['first', 'second']})
+            finally:
+                await c.aclose()
+        assert _run(go()).id == 'p'
+        assert requested == ['first', 'second']
+
+    def test_repeated_pagination_cursor_fails_instead_of_hanging(self):
+        def handler(req):
+            return httpx.Response(200, json={
+                'networkVolumes': [],
+                'pagination': {'hasNextPage': True, 'nextCursor': 'same'},
+            })
+
+        async def go():
+            c = _client(handler)
+            try:
+                await c.list_network_volumes()
+            finally:
+                await c.aclose()
+        with pytest.raises(RunpodError, match='invalid pagination'):
+            _run(go())

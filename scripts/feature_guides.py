@@ -141,6 +141,14 @@ def render_guide(steps, feature):
              '[Download the example](example.nadoc) · [Construction verification](verification.json) ·',
              '[Capture and source metadata](manifest.json) · [UX findings](../UX_LEDGER.md)', '',
              '## Scope', '', *[f'- {s}' for s in feature['covered_workflows']], '']
+    if feature.get('example_family') == 'cadnano':
+        lines.extend(['## Example files', '',
+            'Keep this family together to preserve the complete upstream construction and conversion:', '',
+            '- [cadnano input](6hb84-cadnano.json)',
+            '- [Original NADOC source with its construction history](source.nadoc)',
+            '- [Imported and sequenced NADOC example](example.nadoc)',
+            '- [Exact export compatibility review](export-review.json)',
+            '- [Local simulation verification](simulation-verification.json)', ''])
     if feature.get('example_family') == 'polymer':
         lines.extend(['## Example files', '', 'Keep each assembly beside its source part:', '',
             *[f'- [{name}]({name})' for name in ('__e2e__6hb-straight.nadoc', '__e2e__6hb-circle-unit.nadoc', '__e2e__6hb-linear-polymer.nass', '__e2e__6hb-circular-polymer.nass')], ''])

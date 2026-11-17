@@ -191,7 +191,7 @@ async def run(root):
                     "import pathlib,time,urllib.request,urllib.error\n"
                     + "key=pathlib.Path('/root/cpd-kill-key').read_text().strip()\n"
                     + f"deadline={datetime.fromisoformat(deadline.replace('Z', '+00:00')).timestamp()!r}\n"
-                    + f"url='https://rest.runpod.io/v1/pods/{pod.id}'\n"
+                    + f"url='https://api.runpod.io/v2/pods/{pod.id}'\n"
                     + "pathlib.Path('/workspace/cpd_budget5/guard_armed').write_text('armed')\n"
                     + "terminal=None\n"
                     + "while True:\n"
