@@ -12,6 +12,53 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
+- Fixed-dwell thermal reporting (2026-11-17, ISSUE-207): always compute observable
+  stability; `gate_enabled: false` advances after numerical health checks even
+  when `stability_status` is `not_demonstrated`. Never substitute a fake stability
+  pass for gate-off mode. Real cis-anti GPU job 60694a597e17 completed 13 × 5M-step
+  plateaus, 25–85°C, with zero numerical retries. Only 60°C passed its energy
+  diagnostic; 83% endpoint pair retention at 85°C means no observed bulk melt.
+  Event-driven stage/failure/stall monitor: `scripts/watch_oxdna_ramp.py`.
+  Evidence: `.development-artifacts/cpd-melt-ramp-20261117/fixed-dwell/`.
+
+- CPD CUDA execution (2026-11-16, ISSUE-206): custom DNA2 CUDA kernels preserve
+  the fitted CPD springs, retain adjacent backbone FENE, replace reacted-pair
+  interactions, and evaluate nonadjacent welds independently of neighbor lists.
+  Stable-ID mapping survives sorting; edge strand-end charges refresh after sorting.
+  MC remains CPU; MD/production/thermal plateaus retain selected CUDA. Frozen
+  packages carry separately checked CUDA plugin/build hashes. Legacy CPU parents
+  can seed GPU production; idle CPD jobs can change remaining stages through
+  `/cpd-backend` with checkpoint/gate preservation and recorded old specifications.
+  The wizard exposes production backend selection. See `docs/oxdna_cpd.md`.
+
+- Thermal gate recovery (2026-11-16, ISSUE-205): fixed-tail checks previously
+  discarded accumulated evidence on every extension. Version 2 grows trailing
+  windows with completed blocks (bounded at 1,000 samples/window), preserving
+  drift/mean/ESS thresholds and resetting old-version pass streaks. Explicit
+  `POST /start` body `thermal_max_steps` extends only an exhausted gate, records
+  the prior verdict/cap and resumes the next block without resetting outputs.
+
+- Thermal ramps (2026-11-16): Production wizard toggle and copied-job editor;
+  local full-system heating/cooling, optional energy/geometric-pairing stability
+  windows with autocorrelation sample-count gate, consecutive passes and hard
+  dwell cap. Runner extends checkpoints; copies/retries reset evidence and
+  reconciliation cannot bypass a gate. `backend/core/oxdna_thermal_ramp.py` owns
+  schedule/decisions; per-attempt seeds prevent repeated noise across blocks.
+  Native CPD gated heating and fixed-dwell cooling completed. See [workflow and limitations](../docs/oxdna_setup.md#temperature-ramps-and-observable-stability-gates).
+  Stability is not thermodynamic equilibration; CPD Tm ranking remains unvalidated.
+  Job lists label ramps `Tm Run N` (production numbering per design). The shared
+  `oxdna_thermal_job` model/renderer expands real temperature stages with live
+  completed/running/queued and interruption states; expansion survives polling.
+  ISSUE-204 fixes dropped thermal settings at wizard submission. Selectable
+  `25C - Run N` children use `thermal:<stage>` scope; the parent uses `thermal`
+  scope, excluding ancestors. All metadata, preview and streamed-frame requests
+  share that selection. Previously created ordinary jobs need editing/recreation.
+  Playback markers carry recorded target temperatures and inclusive displayed-frame
+  ranges in both oxDNA and animation scrubbers. `oxdna_temperature_markers.py`
+  reads executed inputs; resumed attempts preserve `input.rN.txt`. Unknown legacy
+  archives and the design seed remain unlabeled. Metadata and sampled payload
+  boundaries are tested together; tooltips support hover and keyboard focus.
+
 - Fixed-shell production startup (2026-11-10): job 52d968f5e2cc inherited an
   immutable 1.037145-unit bond (native 129–130, source 720–721) from capped relax;
   uncapped FENE rejected it. Installer v2 adds SubmodelDNA2: omit fixed–fixed

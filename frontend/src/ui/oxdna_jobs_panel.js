@@ -1,3 +1,5 @@
+import { initThermalSelection } from './oxdna_thermal_selection.js'
+import { isThermalRun, thermalRunNumbers } from './oxdna_thermal_job.js'
 import { docKey } from '../shared/doc_id.js'
 import { mergeCreatingJobs } from '../api/sim_job_creation.js'
 import { store } from '../state/store.js'
@@ -555,7 +557,7 @@ export function productionRunAnchors(elements = {}) {
  *  No lightning-bolt icon: the [E] tag denotes the electric field instead. */
 export function runRowLabel(job, index) {
   const tags = runIndicatorTags(job)
-  return `Run ${index}${tags ? ' ' + tags : ''}`
+  return `${isThermalRun(job) ? 'Tm Run' : 'Run'} ${index}${tags ? ' ' + tags : ''}`
 }
 
 /** Pure: hover title for a run child describing its added elements. */
@@ -700,6 +702,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
   const trajFullToggle = document.getElementById('oxdna-jobs-traj-full-toggle')
   const trajInterval = document.getElementById('oxdna-jobs-traj-interval')
   const trajStatus    = document.getElementById('oxdna-jobs-traj-status')
+  const thermalSelection = initThermalSelection({ stopTrajectory: () => _setTrajOff(), host: document.getElementById('oxdna-jobs-viz-body') })
   const trajLoadProgress = document.getElementById('oxdna-jobs-traj-load-progress')
   const trajControls  = document.getElementById('oxdna-jobs-traj-controls')
   const trajPlay      = document.getElementById('oxdna-jobs-traj-play')
@@ -1812,7 +1815,9 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     const relaxNo = relaxIndexMap(_jobs)
     return {
       engine: 'oxdna',
+      thermalNumbers: thermalRunNumbers(_jobs),
       selectedId: _selectedId,
+      selectedThermalStage: thermalSelection.stageFor(_selectedId),
       hierarchical: true,
       displayName: (job) => relaxRowLabel(job, relaxNo.get(job.job_id)),
       childLabel: runRowLabel,
@@ -1843,7 +1848,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     _listSig = sig
     renderJobList(listEl, buildJobListModel(jobs, ctx), {
       onClick: (jobId) => {
-        if (jobId === _selectedId && !_lammpsMode) _deselectJob()
+        if (jobId === _selectedId && !_lammpsMode && !thermalSelection.stageFor(jobId)) _deselectJob()
         else _selectJob(jobId, { confirmTrajUnload: true })
       },
       onWarning: (jobId) => {
@@ -1851,6 +1856,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
         if (job) void restoreSubmittedDesign({ job, rollFn: api.rollOxdnaJobDesign, refetch: _fetchJobs })
       },
       onContextMenu: (jobId, event) => _openJobRowMenu(jobId, event),
+      onThermalSelect: (jobId, thermalStage) => _selectJob(jobId, { confirmTrajUnload: true, thermalStage }),
       emptyText: 'No oxDNA jobs for this design yet.',
       dimColor: _C.dim,
       legendState: _legend,
@@ -1920,7 +1926,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     return pending
   }
 
-  async function _performSelectJob(jobId, { confirmTrajUnload = false } = {}) {
+  async function _performSelectJob(jobId, { confirmTrajUnload = false, thermalStage = null } = {}) {
     const job = _jobs.find(j => j.job_id === jobId)
     if (!job) return false
     if (_selectedId && _selectedId !== jobId) {
@@ -1957,6 +1963,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
       _setTrajOff()
     }
     const controlsChanged = _controlsJobId !== jobId || _controlsSignature !== _settingsSignature(_jobSettings.overlay(job))
+    if (!thermalSelection.set(job, thermalStage)) return false
     _selectedId = jobId
     void submodel?.select('oxdna', jobId)
     const epoch = ++selectionEpoch
@@ -2388,7 +2395,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // full shows only this job's own frames, unstrided.  Both are locked while a live
     // session is running (shared overlay).
     if (!_trajBusy) {
-      const ok = !liveOn && hasTrajectory(job)
+      const ok = !liveOn && thermalSelection.hasTrajectory(job, hasTrajectory)
       for (const t of [trajToggle, trajFullToggle]) {
         if (!t) continue
         t.disabled = !ok
@@ -2470,6 +2477,8 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // anchors).  Each is optional — with none enabled this is a plain production.
     const el = getRunElements?.() || {}
     const body = { steps, steps_per_frame: stepsPerFrame }
+    if (wizardPayload?.backend) body.backend = wizardPayload.backend
+    if (wizardPayload?.thermal_ramp) body.thermal_ramp = structuredClone(wizardPayload.thermal_ramp)
     if (wizardPayload?.stage_overrides) body.stage_overrides = wizardPayload.stage_overrides
     if (el.field?.enabled && el.field.field_pN > 0) {
       body.field = { field_pN: el.field.field_pN, dir: el.field.dir }
@@ -2727,7 +2736,8 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
   async function _refreshTraj(scope = 'lineage') {
     if (storageUnavailable(_selectedJob())) return
     if (!_selectedId || !oxdnaDisplay) return
-    const full = scope === 'job'
+    scope = thermalSelection.scope(_selectedJob(), scope)
+    const full = scope !== 'lineage'
     const interval = Number(trajInterval?.value ?? 1)
     if (full && (!Number.isSafeInteger(interval) || interval < 1 || interval > 100_000_000)) {
       showToast('Frame interval must be a positive whole number.', 'warn')
@@ -2821,7 +2831,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     if (!_selectedId) {
       toggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return
     }
-    if (!hasTrajectory(_selectedJob())) {
+    if (!thermalSelection.hasTrajectory(_selectedJob(), hasTrajectory)) {
       toggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
     }
     oxdnaLive?.stop()   // mutually exclusive with the live overlay
@@ -3306,10 +3316,11 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // Select a job in this panel's list (highlight the row + populate every card) exactly
     // as a row click does. Refetches first if the job isn't in the list yet (a job the
     // poll hasn't picked up).
-    selectJob: async (jobId) => {
+    getSelectedThermalStage: () => thermalSelection.stageFor(_selectedId),
+    selectJob: async (jobId, { thermalStage = null } = {}) => {
       if (!jobId) return
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
-      return _selectJob(jobId, { confirmTrajUnload: true })
+      return _selectJob(jobId, { confirmTrajUnload: true, thermalStage })
     },
     copyJob: _copyJob,
     openJobSettings: async (jobId) => {

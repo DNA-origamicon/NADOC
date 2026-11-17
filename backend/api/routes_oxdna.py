@@ -42,7 +42,7 @@ import tempfile
 from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -58,6 +58,12 @@ from backend.core.oxdna_job import (
     new_oxdna_job,
     random_oxdna_seed,
 )
+from backend.core.oxdna_thermal_ramp import (
+    ThermalRamp, apply_edit_hardware, configure_child, require_full_system,
+    reset_copy, validate_edit,
+)
+from backend.core.oxdna_cpd_backend import CpdBackendRequest, change_backend
+from backend.core.oxdna_thermal_resume import ThermalResumeRequest, extend_budget
 from backend.core.oxdna_protocol import (
     apply_stage_overrides,
     constrain_fixed_core_stages,
@@ -421,6 +427,8 @@ class SurfaceElement(SurfaceGeometry):
 
 
 class RunRequest(BaseModel):
+    backend: Literal["CPU", "CUDA"] | None = None
+    thermal_ramp: ThermalRamp | None = None
     submodel: SubmodelSelection | None = None
     run_dir: Optional[str] = None
     """A consolidated production run: unbiased MD plus any combination of an electric
@@ -779,12 +787,16 @@ def _composite_inputs(job: OxdnaJob, scope: str = "lineage", stride: int | None 
     reference the field display uses, NOT the job's conf.dat (a field child's
     conf.dat is the parent's drifted relaxed structure, off-origin)."""
     from backend.core.models import Design
+    from backend.core.oxdna_temperature_markers import trajectory_temperature_c
+    from backend.core.oxdna_thermal_scope import thermal_stage_names
+
+    selected_stages = thermal_stage_names(job, scope)
 
     if stride is not None and not 1 <= stride <= 100_000_000:
         raise HTTPException(422, "Frame interval must be a positive integer.")
     jd = job.job_dir(_workspace())
     ws = _workspace()
-    chain = [job] if scope == "job" else _lineage_jobs(job)
+    chain = [job] if scope != "lineage" else _lineage_jobs(job)
     stages: list = []
     run_no = 0
     for j in chain:
@@ -794,6 +806,8 @@ def _composite_inputs(job: OxdnaJob, scope: str = "lineage", stride: int | None 
         first_of_job = True
         field = _job_field(j)
         for st in j.stages:
+            if selected_stages is not None and st.name not in selected_stages:
+                continue
             files = _stage_trajectories(j.stage_dir(ws, st.name))
             for k, traj in enumerate(files):
                 label = st.name if len(files) == 1 else f"{st.name} (part {k + 1})"
@@ -801,7 +815,7 @@ def _composite_inputs(job: OxdnaJob, scope: str = "lineage", stride: int | None 
                 if first_of_job and not is_root:
                     marker = f"→ {st.kind} {run_no}"
                     first_of_job = False
-                stages.append((label, st.kind, traj, marker, field, scope != "job", stride))
+                stages.append((label, st.kind, traj, marker, field, scope == "lineage", stride, trajectory_temperature_c(traj)))
     if not stages:
         return None, [], None
     snap = jd / "design.json"
@@ -898,10 +912,6 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         captured_input = oxdna_preparation_capture.capture_for_request(body)
     design = (captured_input.design if captured_input is not None
               else design_state.get_or_404().without_reference_geometry())
-    if design.photoproduct_junctions:
-        # The provisional CPD plugin is a CPU interaction; resolve this before
-        # GPU admission and persist the actual backend in the managed job.
-        body = body.model_copy(update={"backend": "CPU"})
     from backend.core.streptavidin import require_coating_simulation_support
     try:
         from backend.physics.oxdna_mobile_gold import has_mobile_gold
@@ -1358,6 +1368,7 @@ async def copy_oxdna_job(job_id: str, body: Optional[OxdnaRunLocation] = None) -
     copied_config = deepcopy(source.run_config) if source.run_config else None
     if copied_config is not None:
         copied_config["seed"] = copied_seed
+    copied_specs = reset_copy(copied_specs, copied_config)
     copied = new_oxdna_job(
         design_name=source.design_name,
         stages=[spec.to_status() for spec in copied_specs],
@@ -1471,6 +1482,8 @@ def _rebuild_continuation_settings(job, updates):
     from pydantic import ValidationError
     recorded = job.run_config or {}
     merged = {**recorded, **updates}
+    if merged.get("thermal_ramp") and updates.get("execution_target", job.execution_target) != "local":
+        raise HTTPException(422, "Thermal ramps currently require the local managed runner.")
     deposition = merged.get("surface_deposition", recorded.get("kind") == "surface_deposition")
     if not isinstance(deposition, bool):
         raise HTTPException(422, "surface_deposition must be a boolean.")
@@ -1491,7 +1504,8 @@ def _rebuild_continuation_settings(job, updates):
             # Existing stage settings are restored from stages_spec below when
             # the protocol is unchanged. Deposition stage names cannot be applied
             # to the new single-stage production protocol when toggling it off.
-            settings.pop("stage_overrides", None)
+            if "thermal_ramp" not in merged:
+                settings.pop("stage_overrides", None)
             settings["anchor_stiff"] = merged.get("production_anchor_stiff", DEFAULT_ANCHOR_STIFF)
             settings["seed"] = seed
             request = RunRequest.model_validate(settings)
@@ -1506,7 +1520,7 @@ def _rebuild_continuation_settings(job, updates):
         target.archive_path = directory
         prepared = prepare(job.parent_job_id, request, target=target)
         specs = load_stage_specs(Path(directory))
-        if recorded.get("kind") == prepared.run_config.get("kind"):
+        if recorded.get("kind") == prepared.run_config.get("kind") and not (recorded.get("thermal_ramp") or "thermal_ramp" in updates):
             old_specs = {s.name: s for s in load_stage_specs(jd)}
             for index, spec in enumerate(specs):
                 previous = old_specs.get(spec.name)
@@ -1522,11 +1536,12 @@ def _rebuild_continuation_settings(job, updates):
             spec.backend = job.backend
             spec.device = job.device
             spec.salt_concentration = job.salt_concentration
+        apply_edit_hardware(prepared, job, updates, specs)
         (Path(directory) / "stages_spec.json").write_text(json.dumps([asdict(s) for s in specs], indent=2))
         prepared.stages = [s.to_status() for s in specs]
         prepared.run_config["surface_deposition"] = deposition
         prepared.run_config["autostart"] = False
-        if recorded.get("kind") == prepared.run_config.get("kind") and "stage_overrides" in recorded:
+        if recorded.get("kind") == prepared.run_config.get("kind") and "stage_overrides" in recorded and "stage_overrides" not in updates:
             prepared.run_config["stage_overrides"] = deepcopy(recorded["stage_overrides"])
         prepared.run_config["steps"] = merged.get("steps", 2_000_000)
         prepared.run_config["production_anchor_stiff"] = merged.get("production_anchor_stiff", recorded.get("anchor_stiff", DEFAULT_ANCHOR_STIFF))
@@ -1559,6 +1574,9 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
         raise HTTPException(422, "surface_deposition must be a boolean.")
     mode_changed = "surface_deposition" in updates and updates["surface_deposition"] != deposition
     forces_changed = any(key in updates and updates[key] != recorded.get(key) for key in force_keys)
+    if updates.get("thermal_ramp") is not None or recorded.get("thermal_ramp"):
+        validate_edit(job, updates)
+        return _rebuild_continuation_settings(job, updates).to_dict()
     if mode_changed or (
         job.parent_job_id and recorded.get("kind") in {"run", "surface_deposition"} and forces_changed
     ):
@@ -1635,9 +1653,6 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
         specs = assign_stage_seeds(specs, seed)
         from backend.physics.oxdna_cpd import inherit as inherit_cpd
         inherit_cpd(job.job_dir(_workspace()), job.job_dir(_workspace()), specs)
-        if any(spec.interaction == "CpdDNA2" for spec in specs):
-            backend = "CPU"
-            updates["backend"] = "CPU"
         (job.job_dir(_workspace()) / "stages_spec.json").write_text(
             json.dumps([asdict(spec) for spec in specs], indent=2), encoding="utf-8"
         )
@@ -1691,8 +1706,6 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
     design = _load_snapshot_design(job.job_dir(_workspace()))
     if design is None:
         raise HTTPException(409, "This job has no frozen design snapshot and cannot be edited exactly.")
-    if design.photoproduct_junctions:
-        body.backend = "CPU"
     relax_has_forces = bool(
         body.surface or body.anchors or body.surface_anchors or body.surface_strands
     )
@@ -1877,14 +1890,25 @@ async def get_oxdna_progress(job_id: str) -> dict:
 def _submodel_preflight(job, specs):
     from backend.core.oxdna_submodel import preflight
     try:
-        return preflight(job, _workspace(), specs)
+        specs = preflight(job, _workspace(), specs)
+        require_full_system(any(s.thermal_ramp for s in specs), job.submodel)
+        return specs
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/oxdna/jobs/{job_id}/cpd-backend")
+@simulation_runtime.start_request(lambda: _workspace(), "oxdna_jobs", busy_message="Stop the CPD job before changing its backend.")
+async def change_oxdna_cpd_backend(job_id: str, body: CpdBackendRequest) -> dict:
+    try:
+        return change_backend(_load_job(job_id), _workspace(), body.backend).to_dict()
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/oxdna/jobs/{job_id}/start")
 @simulation_runtime.start_request(lambda: _workspace(), "oxdna_jobs")
-async def start_oxdna_job(job_id: str) -> dict:
+async def start_oxdna_job(job_id: str, body: ThermalResumeRequest | None = None) -> dict:
     job = _load_job(job_id)
     if is_running(job_id):
         return {"ok": True, "message": "Job already running"}
@@ -1915,6 +1939,13 @@ async def start_oxdna_job(job_id: str) -> dict:
         except (KeyError, OSError, ValueError) as exc:
             raise HTTPException(400, f"Cannot extend surface approach: {exc}") from exc
     specs = _submodel_preflight(job, specs)
+    if body is not None:
+        try:
+            specs = extend_budget(job, specs, body.thermal_max_steps)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        from backend.core.oxdna_runner import _persist_specs
+        _persist_specs(job, _workspace(), specs)
     job.status = OxdnaStatus.running
     job.error = None
     job.save(_workspace())
@@ -2277,6 +2308,8 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
 
     ws = _workspace()
     pjd = parent.job_dir(ws)
+    from backend.core.oxdna_submodel import selected as selected_box
+    require_full_system(body.thermal_ramp, body.submodel.box if body.submodel is not None else selected_box(pjd))
     design = _load_snapshot_design(pjd)
     if design is None:
         raise HTTPException(
@@ -2335,7 +2368,7 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         absolute_forces=bool(
             wall_in or ordinary_anchors or surface_anchors or cap_particles
         ),
-        backend=parent.backend,
+        backend=body.backend or parent.backend,
         device=parent.device,
         salt_concentration=parent.salt_concentration,
         steps_per_frame=body.steps_per_frame,
@@ -2356,6 +2389,8 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         stage = apply_stage_overrides([stage], body.stage_overrides)[0]
     except (TypeError, ValueError) as exc:
         raise HTTPException(422, f"Invalid production stage override: {exc}") from exc
+    if body.thermal_ramp and stage.thermostat == "no":
+        raise HTTPException(422, "Thermal ramps require a thermostat.")
     stage = assign_stage_seeds([stage], job_seed)[0]
     from backend.physics.oxdna_protein import has_proteins
 
@@ -2380,7 +2415,7 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         stages=[stage.to_status()],
         n_nucleotides=parent.n_nucleotides,
         device=parent.device,
-        backend=parent.backend,
+        backend=body.backend or parent.backend,
         salt_concentration=parent.salt_concentration,
         random_seed=job_seed,
         design_source_path=parent.design_source_path,
@@ -2491,7 +2526,8 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
             stream.write("\n" + peg_terminal_field_text(cap["spec"], field_in))
     _inherit_submodel_selection(pjd, cjd, body.submodel)
 
-    (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
+    specs = configure_child(child, stage, body.thermal_ramp)
+    (cjd / "stages_spec.json").write_text(json.dumps([asdict(s) for s in specs], indent=2))
     child.status = OxdnaStatus.queued
     if target is None:
         child.save(ws)
@@ -3359,7 +3395,7 @@ async def get_oxdna_trajectory(
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
     # <= 0 disables the stride entirely — see _aligned_downsampled_frames._keep_for.
-    budget = 0 if scope == "job" else _SPARSE_FRAME_CAP
+    budget = 0 if scope != "lineage" else _SPARSE_FRAME_CAP
 
     cancelled = threading.Event()
 
@@ -3459,7 +3495,7 @@ async def get_oxdna_trajectory_bin(
     design, stages, ref = _composite_inputs(job, scope, stride)
     if not stages:
         return Response(status_code=204)
-    budget = 0 if scope == "job" else _SPARSE_FRAME_CAP
+    budget = 0 if scope != "lineage" else _SPARSE_FRAME_CAP
     cancelled = threading.Event()
 
     class _TrajectoryCancelled(Exception):
@@ -3764,7 +3800,7 @@ async def get_oxdna_trajectory_meta(job_id: str, scope: str = "lineage", stride:
     design, stages, _ = _composite_inputs(job, scope, stride)
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
-    budget = 0 if scope == "job" else _SPARSE_FRAME_CAP
+    budget = 0 if scope != "lineage" else _SPARSE_FRAME_CAP
     result = await run_in_threadpool(composite_trajectory_meta, design, stages, budget)
     return {"ready": result["n_frames"] > 0, **result}
 
@@ -3810,7 +3846,7 @@ async def oxdna_frames_atomistic(
         stages,
         ref,
         body.frame_indices,
-        max_frames=(0 if scope == "job" else _SPARSE_FRAME_CAP),
+        max_frames=(0 if scope != "lineage" else _SPARSE_FRAME_CAP),
         align=align,
         n_trailing_extra=_capture_bead_count(job),
         trailing_extra_strand_length=_capture_strand_length(job),
@@ -3847,7 +3883,7 @@ async def oxdna_frames_surface(
         body.grid_spacing,
         body.radius_inflate,
         body.smooth,
-        max_frames=(0 if scope == "job" else _SPARSE_FRAME_CAP),
+        max_frames=(0 if scope != "lineage" else _SPARSE_FRAME_CAP),
         align=align,
         detail=body.detail,
         n_trailing_extra=_capture_bead_count(job),

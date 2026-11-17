@@ -1,3 +1,4 @@
+import { createTrajectoryMarker } from './trajectory_temperature_marker.js'
 /**
  * oxDNA trajectory player — play/pause + scrub-slider controller for the
  * composite trajectory (relaxation + all production runs).
@@ -37,7 +38,8 @@ import { interpolationNeighbors } from '../scene/trajectory_interpolation.js'
  * Returns [{frame, label, kind, pct}] with pct ∈ [0,100] (frame / (n-1)).
  */
 export function markerPositions(markers, nFrames) {
-  if (!Array.isArray(markers) || !nFrames || nFrames < 2) return []
+  if (!Array.isArray(markers) || !nFrames) return []
+  if (nFrames === 1) return markers.filter(m => Number.isFinite(m.temperature_c) && m.frame === 0).map(m => ({ ...m, pct: 0 }))
   return markers.map((m) => ({
     ...m,
     pct: Math.max(0, Math.min(100, (m.frame / (nFrames - 1)) * 100)),
@@ -219,12 +221,7 @@ export function initOxdnaTrajectoryPlayer({
     if (!markersEl) return
     markersEl.innerHTML = ''
     for (const m of markerPositions(_markers, _n)) {
-      const tick = document.createElement('div')
-      tick.title = `${m.label}${m.stage_name ? ` (${m.stage_name})` : ''}`
-      tick.style.cssText =
-        `position:absolute;top:0;left:${m.pct}%;width:2px;height:100%;` +
-        `transform:translateX(-1px);background:${_MARKER_COLOR[m.kind] || '#cdd9e5'};` +
-        `pointer-events:auto;cursor:help`
+      const tick = createTrajectoryMarker(m, _MARKER_COLOR[m.kind] || '#cdd9e5')
       markersEl.appendChild(tick)
     }
   }

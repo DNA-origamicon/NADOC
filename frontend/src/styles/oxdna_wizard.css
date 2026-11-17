@@ -1,0 +1,58 @@
+/* oxDNA uses compact parameter rows; NAMD's provenance columns and fixed row
+   heights do not apply here. Keep these rules scoped to this dialog. */
+.modal--oxdna-wizard .wizard-field {
+  grid-template-columns: minmax(120px, 1fr) minmax(100px, 180px) auto;
+  min-height: 0;
+  gap: 6px 10px;
+  padding: 12px 0;
+  align-items: center;
+}
+.modal--oxdna-wizard .wizard-source { margin-bottom: 12px; }
+.modal--oxdna-wizard .wizard-field__help { margin: 0; }
+.modal--oxdna-wizard .wizard-field__unit { font-size: var(--text-xs); }
+.modal--oxdna-wizard .wizard-field > .select { grid-column: 2 / -1; }
+
+.oxdna-thermal {
+  min-width: 0;
+  margin: 16px 0;
+  padding: 12px 16px 16px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-canvas);
+}
+.oxdna-thermal legend {
+  padding: 0 6px;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.oxdna-thermal__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 4px 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  cursor: pointer;
+}
+.oxdna-thermal__toggle > .checkbox { flex: 0 0 14px; margin: 3px 0 0; }
+.oxdna-thermal__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 6px 20px;
+  margin: 12px 0 16px;
+}
+.oxdna-thermal__grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.oxdna-thermal__field { display: grid; grid-row: span 3; grid-template-rows: subgrid; align-self: stretch; gap: 6px; min-width: 0; }
+.oxdna-thermal__label { color: var(--color-text-primary); font-size: var(--text-sm); line-height: 1.4; }
+.oxdna-thermal__field > .input { width: 100%; min-width: 0; box-sizing: border-box; }
+.oxdna-thermal__help { margin: 6px 0 0; color: var(--color-text-muted); font-size: var(--text-xs); line-height: 1.5; }
+.oxdna-thermal__heading { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--color-border-default); color: var(--color-text-primary); font-size: var(--text-sm); font-weight: 600; }
+
+@media (max-width: 600px) {
+  .oxdna-thermal { padding: 10px 12px 12px; }
+  .oxdna-thermal__grid, .oxdna-thermal__grid--three { grid-template-columns: minmax(0, 1fr); }
+  .modal--oxdna-wizard .wizard-field { grid-template-columns: minmax(0, 1fr) minmax(90px, 120px) auto; }
+}

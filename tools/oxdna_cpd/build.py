@@ -50,8 +50,13 @@ def build(source, library, output):
 if __name__ == "__main__":
     root = Path.home() / ".local/share/nadoc/engines/oxdna"
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cpu-only", action="store_true", help="Explicitly build CPU-only support")
     parser.add_argument("--source", type=Path, default=root / "source")
     parser.add_argument("--library", type=Path, default=root / "current/lib")
     parser.add_argument("--output", type=Path, default=root / "cpd-v1")
     args = parser.parse_args()
-    print(json.dumps(build(args.source, args.library, args.output), indent=2))
+    manifest = build(args.source, args.library, args.output)
+    if not args.cpu_only:
+        from build_cuda import build_cuda
+        manifest = build_cuda(args.source, args.library, args.output)
+    print(json.dumps(manifest, indent=2))

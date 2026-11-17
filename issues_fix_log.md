@@ -1,5 +1,72 @@
 # Issues fix log
 
+## ISSUE-207 — Fixed-dwell stability reporting and real CPD ramp (2026-11-17)
+
+Fixed dwell now evaluates stability and records `gate_enabled: false` plus an
+honest `stability_status`; an unsettled observable no longer masquerades as a
+stability pass. Completion remains independent of that diagnostic. Regression
+checks cover a fully melted state, failed stability with successful fixed dwell,
+and event-driven terminal/stall notifications. No main.js task changes.
+
+Real job 60694a597e17 completed all 13 CUDA plateaus, 25–85°C, 5M steps each,
+65M total, at 02:58:57 America/Denver on November 17. Zero native failures or
+numerical retries; finite energies and all checkpoints/target inputs verified.
+Trajectory API exposes 6,500 frames and 13 markers. Only 60°C passed its energy
+stability diagnostic; 12 plateaus remain unconverged by that criterion. Endpoint
+pair retention was 83% at 85°C, so the expected 40–60°C bulk melt was not observed.
+The earlier adaptive run remains stopped with its evidence intact (25°C passed
+at 67M, 30°C at 3M before the user selected fixed dwell).
+
+Validation: FAST 20,957 passed / 90 skipped; 23 thermal + 4 monitor focused passed.
+Aggregate 185.90s, zero per-test timing violators; broad FULL suite remains deferred.
+Receipt and per-stage CSV: `.development-artifacts/cpd-melt-ramp-20261117/fixed-dwell/`.
+
+## ISSUE-206 — CUDA CPD interaction and managed GPU thermal ramps (2026-11-16)
+
+Added checked-build CUDA DNA2 kernels with permanent CPD forces/body torques,
+reacted-pair exclusions and preserved backbone FENE. Frozen CUDA hashes accompany
+the original model; CPU parents can create GPU continuations. Removed forced-CPU
+job/edit rules, exposed production backend, and recorded idle-job backend changes.
+Build, audit, benchmark and full-ramp scripts are reusable. Main.js task delta: 0.
+Validation: `.development-artifacts/cpd-cuda-force-audit.json`,
+`cpd-cuda-ramp-validation.json`, `cpd-cuda-benchmark.json` and final receipt.
+The 96-nt user checkpoint measured 2.90× CPU throughput with managed edge lists.
+Stopped ramp 175f1c31fdd9 now uses CUDA for remaining MD; its 17M-step checkpoint,
+stage statuses and gate configuration are preserved. It remains stopped.
+
+
+## ISSUE-205 — Accumulate thermal evidence and resume exhausted sampling (2026-11-16)
+
+Gate v2 grows three trailing windows deterministically with completed blocks,
+bounded at 1,000 samples/window, retaining the original tolerances and ESS floor.
+Pass streaks cannot mix gate versions. Explicit start-request budget extensions
+preserve failed verdicts and all outputs, advance the step target by one block,
+and resume the same temperature. Tests cover correlated stationary evidence,
+continued drift rejection, preserved outputs and saved/reloaded resume metadata.
+Main.js task LOC delta: 0. Receipt: `.development-artifacts/thermal-gate-repair.json`.
+
+
+
+## ISSUE-204 — Preserve ramp submission and select temperature trajectories (2026-11-16)
+
+Forwarded the wizard's thermal settings through the production submit handler.
+Temperature children now select actual managed stages, with matching timeline
+markers and streamed frame ranges. Parent selection loads the full ramp. The
+browser regression exercises wizard submission rather than only fabricated list
+entries; focused backend tests include resumed segments and exclude ancestors.
+Task changes to main.js: 0 lines. Validation receipt:
+`.development-artifacts/thermal-selection-validation.json`.
+
+
+## ISSUE-203 — Visually verify and format the thermal wizard (2026-11-16)
+
+Replaced raw inputs and inherited tall rows with themed controls, adjacent
+checkbox labels and grouped responsive fields. Inspected rendered desktop,
+narrow and small-window views; input alignment and bounds are checked in the
+existing browser workflow. Main.js LOC delta: 0. Review receipt:
+`.development-artifacts/thermal-ramp-layout-review.json`.
+
+
 ## ISSUE-202 — Skip background work for deleted jobs (2026-11-16)
 
 MD and oxDNA background analysis now stop when their queued job has been deleted.

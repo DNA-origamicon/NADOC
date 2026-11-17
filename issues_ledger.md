@@ -1,5 +1,64 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-207 — Fixed-dwell thermal runs must report actual stability (2026-11-17)
+
+The cis-anti GPU ramp exhausted its energy gate at 25°C; the native blocks were
+healthy. User selected fixed dwell with convergence reported separately. Fixed
+dwell previously substituted `passed: true` without measuring stability. Evaluate
+the observables in both modes, but only gate adaptive runs. Preserve dissociation
+with no retained-pair floor; keep genuine numerical health checks. Add event-driven
+stage/failure/stall alerts for the real 13-temperature production validation.
+
+## ISSUE-206 — CPD jobs had no CUDA execution path (2026-11-16)
+
+The CPU-only plugin and forced backend in preparation/edit/continuation paths
+prevented GPU thermal ramps. Implement CUDA permanent welds, frozen package
+capability checks, explicit backend selection and idle-job migration. Numerical
+audits cover every isomer, adjacent/nonadjacent welds, edge/matrix lists and
+actual particle sorting. Four full 13-temperature native workflow checks completed.
+Small-system performance is measured independently from execution correctness.
+
+
+## ISSUE-205 — Extended thermal sampling kept a fixed statistical tail (2026-11-16)
+
+User job 175f1c31fdd9 stopped at its first 25°C plateau after 10M healthy steps.
+Energy drift/spread passed the final original check, but two 20-sample windows
+had ESS below 10. Every extension discarded all but 60 observations, so additional
+sampling did not accumulate statistical power. Growing-window checks retain more
+evidence without relaxing thresholds; explicit budget extension preserves the
+checkpoint and failed checks. Historical data still do not justify acceptance.
+
+
+
+## ISSUE-204 — Wizard drops thermal settings before creating production jobs (2026-11-16)
+
+- Symptom: enabling a ramp in the wizard still creates an ordinary production row.
+- Cause: `_launchProduction` rebuilt the request from steps and stage overrides,
+  omitting `thermal_ramp`. Earlier UI checks toggled the wizard and separately
+  rendered mocked ramp jobs, so they missed the actual submission boundary.
+- Fix: preserve the ramp in POST /run. Render selectable temperature children with
+  production run numbers, queued/running spinners and complete/error states. Scope
+  all metadata, paginated coordinates and reconstruction requests to the selected
+  real stage, or to the parent's whole thermal ramp. Preserve resumed segments.
+- Regression: browser submits the wizard, asserts POST payload and Tm Run 2 tree,
+  advances statuses, then loads parent → 30C child → parent. Backend tests verify
+  scope membership, frame counts and marker equivalence. Existing ordinary jobs
+  are not relabeled as ramps.
+
+
+## ISSUE-203 — Thermal-ramp wizard controls inherit incompatible field layout (2026-11-16)
+
+- [x] Visual inspection showed 142 px field rows, distant checkbox labels and
+  unstyled white inputs. The shared three-column layout reserved space for
+  provenance that these controls do not have.
+- [x] Use themed input/select primitives and a scoped, responsive thermal card;
+  group schedule, sampling and stability fields. Subgrid aligns input rows when
+  labels wrap. Keep checkbox labels beside their controls.
+- Visually inspected at 1440, 760 and 480 px widths. Browser checks cover bounds,
+  checkbox spacing and aligned inputs. Screenshots are temporary and cleaned;
+  compact evidence: `.development-artifacts/thermal-ramp-layout-review.json`.
+
+
 ## ISSUE-202 — Deferred trajectory analysis outlives deleted jobs (2026-11-16)
 
 - [x] CPD browser cleanup exposed queued background analysis loading job.json

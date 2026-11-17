@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { OxdnaWizardDriver } from './helpers/oxdna_wizard_driver.js'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const name = '__e2e__cpd_oxdna'
+const name = `__e2e__cpd_oxdna_${process.pid}`
 const isomers = ['cis-syn', 'cis-anti-I', 'trans-syn-I', 'trans-syn-II']
 const jobs = new Set()
 
@@ -61,7 +61,8 @@ for (const isomer of isomers) test(`assign ${isomer}, inspect atoms, create and 
   await expect(page.getByLabel('3D CPD selection preview')).toBeVisible()
   const converted = page.waitForResponse(r => r.url().endsWith('/photoproducts/convert'))
   await button.click()
-  expect((await converted).ok()).toBe(true)
+  const conversion = await converted
+  expect(conversion.ok(), await conversion.text()).toBe(true)
   await expect(button).toBeHidden()
   await expect.poll(() => page.evaluate(() => window.__nadocTest.scene.getObjectByName('cpdSlabBonds')?.count)).toBe(2)
   const design = await page.evaluate(() => window.__nadocTest.store.getState().currentDesign)
@@ -78,7 +79,7 @@ for (const isomer of isomers) test(`assign ${isomer}, inspect atoms, create and 
   await page.locator('#oxdna-jobs-new-btn').click()
   const driver = new OxdnaWizardDriver(page)
   await driver.tab('Parameters & options')
-  await expect(driver.modal.locator('[data-oxdna-field="backend"]')).toHaveValue('CPU')
+  await expect(driver.modal.locator('[data-oxdna-field="backend"]')).toHaveValue('CUDA')
   await driver.tab('Full configuration')
   await expect(driver.modal.locator('.oxdna-wizard-config')).toContainText('interaction_type = CpdDNA2')
   const created = page.waitForResponse(r => new URL(r.url()).pathname === '/api/oxdna/jobs' && r.request().method() === 'POST')
@@ -86,16 +87,16 @@ for (const isomer of isomers) test(`assign ${isomer}, inspect atoms, create and 
   const response = await created
   expect(response.ok(), await response.text()).toBe(true)
   const job = await response.json(); jobs.add(job.job_id)
-  expect(job.backend).toBe('CPU')
+  expect(job.backend).toBe('CUDA')
   const directory = path.join(root, 'workspace/oxdna_jobs', job.job_id)
   const manifest = JSON.parse(await readFile(path.join(directory, 'cpd_manifest.json'), 'utf8'))
   expect(manifest.endpoints[0].particles).toEqual([6, 7])
   expect(manifest.endpoints[0].stereochemistry).toBe(isomer)
   const edited = await request.put(`/api/oxdna/jobs/${job.job_id}/settings`, { data: { backend: 'CUDA' } })
   expect(edited.ok(), await edited.text()).toBe(true)
-  expect((await edited.json()).backend).toBe('CPU')
+  expect((await edited.json()).backend).toBe('CUDA')
   const stages = JSON.parse(await readFile(path.join(directory, 'stages_spec.json'), 'utf8'))
-  expect(stages.every(s => s.backend === 'CPU' && s.interaction === 'CpdDNA2')).toBe(true)
+  expect(stages.every(s => s.backend === (s.sim_type === 'MC' ? 'CPU' : 'CUDA') && s.interaction === 'CpdDNA2')).toBe(true)
   const copied = await request.post(`/api/oxdna/jobs/${job.job_id}/copy`, { data: {} })
   expect(copied.ok(), await copied.text()).toBe(true)
   const copy = (await copied.json()).job; jobs.add(copy.job_id)

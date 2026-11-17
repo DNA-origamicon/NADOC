@@ -444,3 +444,124 @@ protein renderer no longer holds the final-configuration pose during playback.
 Existing trajectories already contain the required beads; reopen the trajectory
 after refreshing the application. This display correction does not alter the
 simulation or repair attachments in older runs.
+
+## Temperature ramps and observable-stability gates
+
+In **Dynamics → oxDNA → New job → Production**, select a completed relaxation
+(or production continuation), then enable **Thermal ramp**. Start/end temperatures
+are in °C; the positive increment works for heating or cooling and always includes
+the endpoint. The Summary shows every plateau. Disable the stability checkbox for
+fixed dwell, or set sampling-block steps and maximum steps per temperature for
+adaptive dwell. The current implementation uses the **local, full-system runner**;
+a simulation submodel box must be disabled. Ordinary CPU/CUDA physics and frozen
+CPD models are inherited from the parent. CPD supports local CPU or CUDA MD with its smaller timestep; choose GPU (CUDA)
+in the production wizard to continue a CPU-relaxed parent on the GPU. No authored topology or molecular geometry changes.
+
+Thermal jobs appear as **Tm Run 1**, **Tm Run 2**, etc., using the production run
+number within each design. Expand the arrow to see selectable **25C - Run 2**,
+**30C - Run 2**, etc. Queued and running temperatures have spinning indicators;
+completed, failed, stopped, and paused steps have their own status labels.
+The parent reports the whole job's status, including an early failure while later
+temperatures remain queued. Expansion and temperature selection survive polling.
+
+Select the parent and load a trajectory to view all temperatures in that ramp.
+Select a temperature child to load only that stage, including its resumed segments.
+Changing between the parent and children unloads the previous trajectory. Both
+trajectory radio options honor the thermal selection; the label above the controls
+states which temperatures will load. Unstarted children remain selectable, but
+their trajectory controls stay disabled until a stage has started.
+
+The wizard's production-submit path now preserves `thermal_ramp`. Jobs previously
+created through the faulty path were ordinary production jobs; they are not
+retroactively relabeled. Re-enable the ramp in an editable queued job or recreate it.
+
+Trajectory playback and animation timelines show temperature ticks at recorded
+stage boundaries. Hover or focus a tick to see the target temperature in °C and
+the following frame range (using the player's frame numbering). These are saved
+thermostat setpoints, not instantaneous measured temperatures. Downsampling keeps
+the ticks aligned with the displayed frames. The design-reference seed and older
+archived attempts without a saved input have no temperature label. New resumed
+attempts preserve their input alongside archived frames.
+
+The optional gate compares potential energy per particle and, by default, the
+geometric fraction of designed base pairs. It checks three equal-sized trailing
+windows at each block boundary: the range of window means and full-window linear drift
+must each lie below the selected absolute tolerance. Every window also needs the
+selected effective sample count, estimated from positive autocorrelations up to
+the first nonpositive lag. Each extension grows the window by its configured
+initial sample count, up to 1,000 observations per window, so longer sampling
+can accumulate independent evidence. Window growth depends only on completed
+blocks, never on searching for a passing result. Two consecutive passing block
+boundaries are required by default; their overlapping evidence is not independent.
+The original short-window drift and mean-spread checks also remain active, so
+larger windows cannot conceal a recent shift.
+The pairing metric is a base-site distance proxy, not a native hydrogen-bond
+energy measurement. Disable it for systems without designed complementary pairs.
+A low pairing fraction can pass: actual melting is allowed.
+
+Defaults: 25–85 °C in 5 °C increments, one million steps per block, ten million
+maximum steps per temperature, initially 20 samples/window, ten minimum effective samples,
+energy tolerance 0.02 oxDNA units/particle, pairing tolerance 0.02. Maximum dwell
+must be a whole number of blocks. Output cadence is increased as necessary to
+provide at least three windows per block; the preview includes that output cost.
+The maximum applies to a valid sampling attempt; numerical-instability retries
+have the separate existing production retry budget and reset the gate evidence.
+
+The runner extends a plateau from its checkpoint, preserving velocities within
+that temperature, and refreshes velocities when changing temperature. Each resumed
+native process gets a reproducible seed derived from its job, stage, banked steps
+and retry number, recorded in `thermal_attempt_<steps>_retry<N>.json`, so sampling
+blocks do not repeat the same noise sequence. Stop/resume
+retains sampled steps; restart reconciliation cannot treat an unchecked native
+completion as a passed gate. Copies start with fresh gate evidence. Generated
+plateaus are edited through `thermal_ramp`, and shared physics through
+`stage_overrides.1_production`, rather than individual generated stage rows.
+Queued/copied production jobs also expose the toggle in **Edit settings**.
+
+In adaptive (gated) mode, if the maximum dwell is exhausted, the job fails with an explicit unsettled
+plateau message and does **not** advance temperature. Inspect recorded settings
+(`thermal_progress`), `thermal_check.json`, and the per-block
+`thermal_check_<steps>.json` files for window means, drift, effective sample
+counts and the decision. All trajectories and energies remain available for
+analysis. An exhausted gate can be resumed without discarding outputs through
+`POST /api/oxdna/jobs/{id}/start` with `{"thermal_max_steps": 20000000}`.
+The new cap must exceed the previous cap and allow all required consecutive
+passes. This explicit extension preserves the previous verdict in
+`thermal_budget_changes`, keeps velocities/checkpoints and all sampled segments,
+and starts the next block at the same temperature. It changes neither tolerances
+nor the required effective sample count. Gate version 2 records growing windows;
+a pass streak from version 1 is not counted toward version 2 acceptance.
+Longer sampling or independent runs may be needed; loosening a gate
+changes its meaning and is not evidence of physical convergence.
+
+With **fixed dwell**, each plateau advances after its configured steps and numerical
+health checks. Stability is still measured: `thermal_check.json` records
+`gate_enabled: false`, the actual energy/optional-pairing metrics, and
+`stability_status: passed` or `not_demonstrated`. Missing statistical evidence or
+observable drift does not fail a fixed-dwell job and is never relabeled as a
+convergence pass. Neither mode imposes a minimum retained-pair fraction on thermal
+production or rejects expansion merely because strands dissociate. Invalid
+checkpoints, nonfinite energy and overstretched covalent backbones remain errors.
+
+`scripts/watch_oxdna_ramp.py JOB_DIRECTORY AUDIT_DIRECTORY` watches filesystem
+commit events without completion polling, journals block verdicts, and alerts on
+each completed temperature, numerical retry, terminal failure/completion, or a
+worker that stops updating for 20 minutes. It audits this CPD GPU melt workflow
+and preserves separate numerical-completion and stability results.
+
+Observable stability is a heuristic, **not proof of global thermodynamic
+equilibrium**, and a thermal ramp alone does not validate melting temperatures.
+Compare independent replicas and heating/cooling histories before interpreting
+relative CPD effects. Rare transitions or metastable plateaus can escape these
+checks. For thermodynamic sampling context, see the upstream
+[oxDNA umbrella-sampling tutorial](https://lorenzo-rovigatti.github.io/oxDNA/umbrella_sampling.html).
+
+For explicitly authorized native workflow checks, an existing managed parent can
+be used without constructing another design:
+
+```bash
+uv run python -m scripts.validate_oxdna_thermal_ramp PARENT_JOB_ID WORKSPACE \
+  --config '{"start_c":25,"end_c":30,"step_c":5,"gate":false,"block_steps":10000}'
+```
+
+This tests execution; these short runs do not establish melting thermodynamics.

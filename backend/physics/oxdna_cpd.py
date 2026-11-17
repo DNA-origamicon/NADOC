@@ -128,7 +128,8 @@ def configure(specs):
                 "CPD interaction cannot be combined with a different particle interaction model"
             )
         spec.interaction = "CpdDNA2"
-        spec.backend = "CPU"
+        if spec.sim_type == "MC":
+            spec.backend = "CPU"
         if spec.sim_type == "MD":
             spec.dt = min(spec.dt, 0.0001)
 
@@ -243,7 +244,7 @@ def prepare(design, directory, specs):
         "model": model["model"],
         "qualification": model["qualification"],
         "endpoints": endpoints,
-        "backend": "CPU",
+        "backend": "CUDA" if any(s.backend == "CUDA" for s in specs) else "CPU",
         "maximum_dt": 0.0001,
         "model_sha256": hashlib.sha256(model_raw).hexdigest(),
         "interaction_sha256": hashlib.sha256(
@@ -256,6 +257,9 @@ def prepare(design, directory, specs):
     manifest["topology_sha256"] = hashlib.sha256(
         (directory / "topology.top").read_bytes()
     ).hexdigest()
+    from backend.physics.oxdna_cpd_cuda import add_cuda, wants_cuda
+    if wants_cuda(specs):
+        add_cuda(directory, manifest, plugin)
     (directory / "cpd_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
 
@@ -271,6 +275,14 @@ def inherit(parent, child, specs):
     if parent.resolve() != child.resolve():
         shutil.copytree(parent / "cpd_plugin", child / "cpd_plugin", dirs_exist_ok=True)
     configure(specs)
+    from backend.physics.oxdna_cpd_cuda import add_cuda, verify_cuda, wants_cuda
+    if wants_cuda(specs):
+        manifest = json.loads((child / 'cpd_manifest.json').read_text())
+        if not manifest.get('cuda_plugin_sha256'):
+            add_cuda(child, manifest, plugin_directory())
+            manifest['backend'] = 'CUDA'
+            (child / 'cpd_manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
+        verify_cuda(child, manifest)
 
 
 def verify(directory):
@@ -290,6 +302,11 @@ def verify(directory):
         != manifest["plugin_sha256"]
     ):
         raise ValueError("Frozen CPD native plugin changed")
+    if manifest.get('cuda_plugin_sha256'):
+        from backend.physics.oxdna_cpd_cuda import verify_cuda, digest
+        verify_cuda(directory, manifest)
+        if digest(directory / 'cpd_plugin/cuda_build.json') != manifest.get('cuda_build_sha256'):
+            raise ValueError('Frozen CPD CUDA build record changed')
     return manifest
 
 
@@ -306,4 +323,7 @@ def stage_input(directory, spec):
         return ""
     verify(directory)
     configure([spec])
+    if spec.backend == 'CUDA':
+        from backend.physics.oxdna_cpd_cuda import verify_cuda
+        verify_cuda(directory, verify(directory))
     return f"\nplugin_search_path = {(directory / 'cpd_plugin').resolve()}\ncpd_file = {(directory / 'cpd.dat').resolve()}\n"

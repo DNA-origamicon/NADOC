@@ -20,7 +20,15 @@ def plugin(tmp_path, monkeypatch):
     directory = tmp_path / "plugin"
     directory.mkdir()
     (directory / "CpdDNA2.so").write_bytes(b"test-only package payload; not executed")
-    (directory / "build.json").write_text("{}")
+    import hashlib
+    from pathlib import Path
+    (directory / 'CUDACpdDNA2.so').write_bytes(b'test-only CUDA payload; not executed')
+    sources=Path(__file__).resolve().parents[1]/'tools/oxdna_cpd'
+    digest=lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+    (directory / "build.json").write_text(json.dumps({
+        'cuda_plugin_sha256':digest(directory/'CUDACpdDNA2.so'),
+        'cuda_source_sha256':digest(sources/'CUDACpdDNA2.cu'),
+        'cuda_builder_sha256':digest(sources/'build_cuda.py')}))
     monkeypatch.setattr(cpd, "plugin_directory", lambda: directory)
     return directory
 
@@ -49,13 +57,13 @@ def test_frozen_weld_survives_production_and_copy(design, plugin, tmp_path):
     isomer = design.photoproduct_junctions[0].stereochemistry
     assert manifest["endpoints"][0]["stereochemistry"] == isomer
     assert (parent / "cpd_model.json").read_bytes() == cpd.MODELS[isomer].read_bytes()
-    assert all(s.backend == "CPU" and s.interaction == "CpdDNA2" for s in stages)
+    assert all(s.backend == ("CPU" if s.sim_type == "MC" else "CUDA") and s.interaction == "CpdDNA2" for s in stages)
     child = tmp_path / "child"
     child.mkdir()
     (child / "topology.top").write_bytes((parent / "topology.top").read_bytes())
     production = build_production_stage(backend="CUDA")
     cpd.inherit(parent, child, [production])
-    assert production.backend == "CPU" and production.dt == 0.0001
+    assert production.backend == "CUDA" and production.dt == 0.0001
     assert not production.external_forces
     for name in cpd.FILES:
         assert (parent / name).read_bytes() == (child / name).read_bytes()
@@ -177,3 +185,42 @@ def test_model_identity_mismatch_is_rejected(design, plugin, tmp_path, monkeypat
     monkeypatch.setattr(cpd, "MODELS", {isomer: cpd.MODELS[other]})
     with pytest.raises(ValueError, match="identity"):
         cpd.prepare(design, tmp_path, build_relaxation_stages())
+
+
+def test_gpu_backend_change_preserves_checkpoint_and_gate(design, plugin, tmp_path):
+    from dataclasses import asdict
+    from backend.core.oxdna_job import new_oxdna_job, OxdnaJob, OxdnaStatus
+    from backend.core.oxdna_cpd_backend import change_backend
+    from backend.physics.oxdna_interface import write_topology
+    from backend.core.oxdna_runner import load_stage_specs
+    specs=[build_production_stage(backend='CPU')]
+    job=new_oxdna_job('CPD switch',[s.to_status() for s in specs],backend='CPU',run_config={'thermal_progress':{'preserved':True}})
+    job.status=OxdnaStatus.stopped;job.save(tmp_path)
+    jd=job.job_dir(tmp_path);write_topology(design,jd/'topology.top')
+    cpd.prepare(design,jd,specs)
+    (jd/'stages_spec.json').write_text(json.dumps([asdict(s) for s in specs]))
+    checkpoint=jd/'checkpoint-sentinel';checkpoint.write_bytes(b'unchanged')
+    change_backend(job,tmp_path,'CUDA')
+    loaded=OxdnaJob.load(job.job_id,tmp_path)
+    assert loaded.backend=='CUDA' and loaded.status==OxdnaStatus.stopped
+    assert loaded.run_config['thermal_progress']=={'preserved':True}
+    assert loaded.run_config['backend_changes'][0]['from']=='CPU'
+    assert load_stage_specs(jd)[0].backend=='CUDA'
+    assert cpd.verify(jd)['cuda_plugin_sha256']
+    assert checkpoint.read_bytes()==b'unchanged'
+    change_backend(loaded,tmp_path,'CUDA')
+    assert len(loaded.run_config['backend_changes'])==1
+    loaded.status=OxdnaStatus.running
+    with pytest.raises(ValueError,match='Stop'):
+        change_backend(loaded,tmp_path,'CPU')
+
+
+def test_missing_or_tampered_gpu_plugin_never_falls_back(design, plugin, tmp_path):
+    from backend.physics.oxdna_interface import write_topology
+    write_topology(design,tmp_path/'topology.top')
+    specs=[build_production_stage(backend='CUDA')]
+    cpd.prepare(design,tmp_path,specs)
+    (tmp_path/'cpd_plugin/CUDACpdDNA2.so').write_bytes(b'corrupt')
+    with pytest.raises(ValueError,match='CUDA plugin changed'):
+        cpd.stage_input(tmp_path,specs[0])
+    assert specs[0].backend=='CUDA'

@@ -311,9 +311,20 @@ describe('oxDNA production wizard model', () => {
 
 it('shows the actual permanent CPD model and integration limit', () => {
   const values = { cpd_present: true, backend: 'CUDA', stage_overrides: { '2_md_relax': { dt: 0.005, backend: 'CUDA' } } }
-  expect(oxdnaWizardPayload(values).backend).toBe('CPU')
+  expect(oxdnaWizardPayload(values).backend).toBe('CUDA')
   const stages = oxdnaStagePlan(values)
-  expect(stages.every(s => s.backend === 'CPU' && s.interaction_type === 'CpdDNA2')).toBe(true)
+  expect(stages.every(s => s.backend === (s.sim_type === 'MC' ? 'CPU' : 'CUDA') && s.interaction_type === 'CpdDNA2')).toBe(true)
   expect(stages.filter(s => s.sim_type === 'MD').every(s => s.dt === 0.0001)).toBe(true)
   expect(oxdnaConfigDocument(values)).toContain('melting thermodynamics unvalidated')
+})
+
+it('allows a GPU thermal continuation from a CPU parent and preserves explicit CPU selection', () => {
+  const values = { parentJobId: 'cpu-parent', backend: 'CUDA', thermal_ramp: {
+    start_c: 25, end_c: 35, step_c: 5, gate: false, block_steps: 10000,
+    max_steps: 100000, window_samples: 20, min_effective_samples: 10, consecutive_passes: 2,
+    energy_tolerance: .02, pairing_tolerance: .02, check_pairing: true,
+  } }
+  expect(oxdnaProductionPayload(values).backend).toBe('CUDA')
+  expect(oxdnaProductionStagePlan(values, { backend: 'CPU' }).every(s => s.backend === 'CUDA')).toBe(true)
+  expect(oxdnaProductionPayload({ ...values, backend: 'CPU' }).backend).toBe('CPU')
 })

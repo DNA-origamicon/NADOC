@@ -1,3 +1,5 @@
+import '../styles/oxdna_wizard.css'
+import { thermalControls } from './oxdna_thermal_ramp.js'
 import { temperatureControl, updateTemperatureControl, oxdnaTemperature, oxdnaTemperatureOverrides } from './job_temperature.js'
 import { showWizardJobId } from './job_wizard_identity.js'
 import { createButton, createModal, createInput, createSelect, el } from './primitives/index.js'
@@ -159,10 +161,23 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
         mode === 'production' ? oxdnaProductionStagePlan(values) : oxdnaStagePlan(values), value); renderSettings(); renderConfig(); paintValidation() },
     })] })
     panels.settings.replaceChildren(el('h3', { text: 'Production run' }), grid)
+    if (values.thermal_ramp) grid.querySelector('.wizard-temperature').remove()
+    const backend = createSelect({ size: 'sm' })
+    backend.dataset.oxdnaField = 'backend'
+    for (const [value, label] of [['CUDA', 'GPU (CUDA)'], ['CPU', 'CPU']]) {
+      const option = document.createElement('option'); option.value = value; option.textContent = label; backend.append(option)
+    }
+    values.backend ??= 'CUDA'
+    backend.value = values.backend
+    backend.addEventListener('change', () => { values.backend = backend.value; renderConfig(); paintValidation() })
+    grid.append(el('label', { className: 'wizard-field', children: [
+      el('span', { className: 'wizard-field__label', text: 'Execution backend' }), backend,
+    ] }))
     for (const field of PRODUCTION_FIELDS) {
       const input = createInput({ size: 'sm', type: field.type, min: field.min, step: field.step, value: values[field.key] })
       input.dataset.oxdnaField = field.key
       input.value = values[field.key]
+      if (field.key === 'steps' && values.thermal_ramp) { input.disabled = true; input.title = 'The thermal ramp controls steps per temperature.' }
       input.addEventListener('input', () => {
         values[field.key] = Number(input.value)
         renderConfig(); paintValidation()
@@ -174,6 +189,9 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       ] }))
     }
     settingsStageTable = el('div', { className: 'wizard-stages' })
+    panels.settings.append(thermalControls(values.thermal_ramp, config => {
+      values.thermal_ramp = config; renderSettings(); renderConfig(); paintValidation()
+    }))
     panels.settings.append(settingsEstimate, el('h3', { text: 'Simulation parameters' }), settingsStageTable)
     renderConfig()
   }
@@ -228,17 +246,18 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
   /** Preview the same stage settings that will be sent with the new job. */
   function renderProductionConfig() {
     const parentJob = getJobs().find(j => j.job_id === parentJobId) || {}
-    const [stage] = oxdnaProductionStagePlan(values, parentJob)
-    updateTemperatureControl(panels.settings, oxdnaTemperature([stage]))
-    stageSummary.textContent = `1 stage · ${stage.steps.toLocaleString()} scheduled steps`
-      + ` · ${outputEstimate([stage])}`
-    renderActiveStageTable([stage])
-    const lines = [
-      `continue_from = ${parentJob.job_id || '(none selected)'}`,
-      ...Object.entries(stage).filter(([key, value]) => key !== 'purpose' && value != null)
-        .map(([key, value]) => `${key} = ${value}`),
-    ]
-    configPre.textContent = `# ${stage.name}: ${stage.purpose}\n${lines.join('\n')}`
+    const stages = oxdnaProductionStagePlan(values, parentJob)
+    updateTemperatureControl(panels.settings, oxdnaTemperature(stages))
+    const maxSteps = stages.length * (values.thermal_ramp?.gate ? values.thermal_ramp.max_steps : stages[0].steps)
+    stageSummary.textContent = values.thermal_ramp
+      ? `${stages.length} stages · up to ${maxSteps.toLocaleString()} steps · ${outputEstimate(stages.map(s => ({ ...s, steps: values.thermal_ramp.gate ? values.thermal_ramp.max_steps : s.steps })))}`
+      : `1 stage · ${stages[0].steps.toLocaleString()} scheduled steps · ${outputEstimate(stages)}`
+    renderActiveStageTable(stages)
+    configPre.textContent = `continue_from = ${parentJob.job_id || '(none selected)'}\n`
+      + (values.thermal_ramp ? `# thermal_ramp = ${JSON.stringify(values.thermal_ramp)}\n` : '')
+      + stages.map(stage => `# ${stage.name}: ${stage.purpose}\n` + Object.entries(stage)
+        .filter(([key, value]) => key !== 'purpose' && value != null)
+        .map(([key, value]) => `${key} = ${value}`).join('\n')).join('\n\n')
   }
 
   function displayValue(value) {
@@ -321,7 +340,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       ] }))] })
     const body = el('tbody')
     for (const key of keys) {
-      const editable = EDITABLE_STAGE_FIELDS.has(key)
+      const editable = !values.thermal_ramp && EDITABLE_STAGE_FIELDS.has(key)
         && !(mode === 'production' && ['backend', 'device', 'salt_concentration', 'external_forces'].includes(key))
       body.append(el('tr', { children: [
         el('th', { className: 'param', children: [document.createTextNode(ROW_LABELS[key] || key),
@@ -414,7 +433,8 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
         }
         values.parentJobId = parentJobId
         values.inherited_parameters = { ...(parents.find(job => job.job_id === parentJobId)?.continuation_parameters || {}) }
-        const select = el('select', { attrs: { 'aria-label': 'Continue from' } })
+        const select = createSelect({ size: 'sm' })
+        select.setAttribute('aria-label', 'Continue from')
         const parentLabels = getParentLabels()
         for (const job of parents) {
           select.append(el('option', {
@@ -624,7 +644,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       } })
       derivedEditor.value = JSON.stringify(editable, null, 2)
       const thermostatControls = el('div', { className: 'wizard-grid' })
-      for (const stage of editable.stages.filter(stage => stage.kind !== 'mc' && !stage.name.includes('mc_relax'))) {
+      for (const stage of editable.stages.filter(stage => !editable.thermal_ramp && stage.kind !== 'mc' && !stage.name.includes('mc_relax'))) {
         const overrides = { ...(editable.inherited_parameters || {}), ...(editable.stage_overrides?.[stage.name] || {}), ...stage }
         const change = (key, value) => {
           try {
@@ -664,9 +684,23 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
           el('span', { text: `${stage.name} diffusion coefficient` }), diffusion,
         ] }))
       }
+      const thermalMount = el('div')
+      const drawThermal = () => {
+        const current = JSON.parse(derivedEditor.value)
+        thermalMount.replaceChildren(thermalControls(current.thermal_ramp, config => {
+          try {
+            const updated = JSON.parse(derivedEditor.value)
+            updated.thermal_ramp = config
+            derivedEditor.value = JSON.stringify(updated, null, 2)
+            thermostatControls.hidden = !!config
+            drawThermal()
+          } catch { derivedError.textContent = 'Correct the configuration JSON before editing the thermal ramp.'; derivedError.hidden = false }
+        }))
+      }
+      if (kind === 'run') drawThermal()
       readOnlyPanel.replaceChildren(
         el('div', { className: 'wizard-note', text: 'Edit runtime, engine, target, or stage parameters below. The copied topology and force layout remain frozen.' }),
-        thermostatControls, derivedError, derivedEditor,
+        thermalMount, thermostatControls, derivedError, derivedEditor,
       )
       paint(); modal.open()
       return

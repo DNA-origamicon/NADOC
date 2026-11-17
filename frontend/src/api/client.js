@@ -3104,8 +3104,8 @@ function _vizOpts(opts, fn) {
   if (signal != null && !(signal instanceof AbortSignal)) {
     throw new TypeError(`${fn}: opts.signal must be an AbortSignal, got ${typeof signal}.`)
   }
-  if (scope !== 'lineage' && scope !== 'job') {
-    throw new TypeError(`${fn}: opts.scope must be 'lineage' or 'job', got ${JSON.stringify(scope)}.`)
+  if (scope !== 'lineage' && scope !== 'job' && scope !== 'thermal' && !/^thermal:[1-9]\d*_thermal$/.test(scope)) {
+    throw new TypeError(`${fn}: opts.scope must be 'lineage', 'job', 'thermal', or a thermal stage, got ${JSON.stringify(scope)}.`)
   }
   return { align, signal, scope }
 }

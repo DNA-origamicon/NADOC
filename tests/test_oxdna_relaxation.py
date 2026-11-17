@@ -6924,3 +6924,50 @@ def test_job_scope_selects_only_own_files_without_design_seed(design, geometry, 
     _, stages, alignment_ref = routes._composite_inputs(job, 'job')
     assert len(stages) == 1 and stages[0][2] == traj and stages[0][5] is False
     assert alignment_ref == ref  # Alignment origin remains unchanged.
+
+
+def test_temperature_markers_meta_matches_sampled_frames(design, geometry, tmp_path):
+    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_meta
+    ref, cold, hot = (tmp_path/name for name in ('ref.dat','cold.dat','hot.dat'))
+    _write_traj(design, geometry, ref, 1)
+    _write_traj(design, geometry, cold, 8)
+    _write_traj(design, geometry, hot, 12)
+    for seed in (True, False):
+        stages = [('1_thermal','production',cold,None,None,seed,None,25),
+                  ('2_thermal','production',hot,None,None,False,None,35)]
+        full = composite_trajectory(design, stages, ref, max_frames=7)
+        meta = composite_trajectory_meta(design, stages, max_frames=7)
+        assert full['markers'] == meta['markers']
+        assert full['stages'] == meta['stages']
+        assert meta['markers'][0]['frame'] == int(seed)
+        assert meta['markers'][-1]['end_frame'] == full['n_frames']-1
+        assert [m['temperature_c'] for m in meta['markers']] == [25,35]
+
+
+def test_thermal_scope_selects_all_or_one_temperature_and_resume_files(design, geometry, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from backend.api import routes_oxdna as routes
+    from backend.core.oxdna_health import composite_trajectory_meta, composite_trajectory
+    folder=tmp_path/'ramp';folder.mkdir()
+    (folder/'design.json').write_text(design.model_dump_json())
+    ref=folder/'design_ref.dat'
+    write_configuration(design,geometry,ref,box_nm=80.0)
+    for i in (1,2):
+        stage=folder/f'{i}_thermal';stage.mkdir()
+        (stage/'input.txt').write_text(f'T = {298.15+(i-1)*5}K\n')
+        _write_traj(design,geometry,stage/'trajectory.dat',2)
+    _write_traj(design,geometry,folder/'1_thermal'/'trajectory.r1.dat',2)
+    (folder/'1_thermal'/'input.r1.txt').write_text('T = 298.15K\n')
+    job=SimpleNamespace(parent_job_id='parent',run_config={'thermal_ramp':{'start_c':25}},efield=None,
+        job_dir=lambda _:folder,stage_dir=lambda _,name:folder/name,
+        stages=[SimpleNamespace(name=f'{i}_thermal',kind='production') for i in (1,2)])
+    monkeypatch.setattr(routes,'_workspace',lambda:tmp_path)
+    monkeypatch.setattr(routes,'_design_ref_conf',lambda *_:ref)
+    monkeypatch.setattr(routes,'_lineage_jobs',lambda _: (_ for _ in ()).throw(AssertionError('ancestor traversal')))
+    for scope,count,temperatures in [('thermal',6,[25,25,30]),('thermal:1_thermal',4,[25,25]),('thermal:2_thermal',2,[30])]:
+        _,stages,alignment_ref=routes._composite_inputs(job,scope)
+        full=composite_trajectory(design,stages,alignment_ref,max_frames=0)
+        meta=composite_trajectory_meta(design,stages,max_frames=0)
+        assert meta['n_frames']==full['n_frames']==count
+        assert meta['markers']==full['markers']
+        assert [m['temperature_c'] for m in meta['markers']]==temperatures

@@ -2,8 +2,8 @@
 
 NADOC provides separate provisional interactions for **cis-syn-I** (`cis-syn`),
 **cis-anti-I**, **trans-syn-I**, and **trans-syn-II**. Select two thymines, choose
-**Convert to CPD…**, select the isomer, and create an oxDNA relaxation. Local managed jobs select the CPU
-interaction automatically. The weld persists through equilibration, production,
+**Convert to CPD…**, select the isomer, and create an oxDNA relaxation. Local managed jobs use CPU Monte Carlo followed by the selected CPU or CUDA
+molecular-dynamics backend. GPU is the default for new jobs. The weld persists through equilibration, production,
 copied jobs, and continuations; it is not a temporary relaxation restraint.
 
 This is an experimental structural model. Successful job execution and numerical
@@ -46,13 +46,14 @@ oxDNA monovalent salt parameter. Thermal ranking requires additional validation.
 
 ## Execution and reproducibility
 
-The CPU plugin supports both ordinary adjacent TT and non-backbone weld
+The CPU and CUDA plugins support both ordinary adjacent TT and non-backbone weld
 connections without repurposing backbone neighbours. Additional bonded-pair
 bookkeeping keeps nonadjacent welds active independently of neighbour-list
 cutoffs. Both forces and body-frame torques derive from the same potential.
 MD uses a maximum timestep of 0.0001 reduced units for this stiff interaction.
 
-The standard engine installer builds the plugin. For an existing engine:
+The standard engine installer builds both plugins (requires CUDA/nvcc for GPU).
+Use `--cpu-only` only when intentionally installing CPU-only support. For an existing engine:
 
 ```sh
 python tools/oxdna_cpd/build.py
@@ -64,8 +65,34 @@ Each endpoint record identifies its isomer. A job containing different isomers
 freezes a model bundle and writes the appropriate springs for each pair.
 Continuation and copy routes inherit those inputs. Unsupported isomers and
 incompatible interaction models are rejected instead of silently dropping CPDs.
-This initial implementation targets local CPU DNA jobs, not CUDA, LAMMPS,
-protein/PEG/gold hybrids, or remote plugin deployment.
+The supported workflow is local CPU/CUDA DNA jobs. LAMMPS, protein/PEG/gold
+hybrids and remote plugin deployment remain unsupported. All four fitted isomers
+and mixed-isomer packages use the same CUDA kernel with their frozen parameters.
+GPU sorting resolves stable particle IDs each force evaluation; welds are
+evaluated regardless of neighbor-list cutoffs. Both matrix and edge lists are
+supported. CPD MD retains its maximum timestep of 0.0001.
+
+Production wizard **Execution backend → GPU (CUDA)** can start from a completed
+CPU parent. The child retains the parent model/topology and attaches a separately
+hash-verified CUDA implementation; it does not repeat relaxation. Copies and
+settings edits preserve GPU selection. A missing or modified GPU plugin is an
+explicit error, never a silent CPU fallback.
+
+For an existing stopped/failed CPD job, `POST /api/oxdna/jobs/{id}/cpd-backend`
+with `{"backend":"CUDA"}` changes the remaining MD stages and records their prior
+specifications in `run_config.backend_changes`. Checkpoints, trajectories, ramp
+gates, progress, seed and timestep are preserved. This does not start the job;
+use Resume afterward. Active jobs must be stopped before changing backend.
+
+Managed GPU inputs use edge lists, including every CPD thermal plateau. The
+checkpoint benchmark must use the same mode: matrix lists are substantially
+slower for small systems. Run `scripts/benchmark_oxdna_cpd_cuda.py` for CPU/CUDA
+wall-time comparisons; throughput depends on system size and hardware.
+On the RTX 3080 Ti, the existing 96-nucleotide cis-anti checkpoint completed
+100,000 steps in 6.56 s on CUDA versus 19.03 s on CPU (2.90×, including startup).
+All four isomers completed 13 GPU plateaus from 25–85°C at 10,000 steps/plateau;
+these bounded checks establish execution, not thermal equilibration or Tm accuracy.
+Receipts: `.development-artifacts/cpd-cuda-{benchmark,force-audit,ramp-validation}.json`.
 
 `scripts/validate_oxdna_cpd.py OUTPUT --isomer ISOMER` authors a duplex through real editor
 commands, assigns the selected isomer, publishes through the agent structure guard, checks
@@ -207,3 +234,21 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
 Only request `just test-session` when a broad/full sweep is actually needed.
 ```
+
+### Thermal ramps
+
+The production wizard now supports local heating/cooling plateaus with optional
+energy and geometric base-pairing stability gates. Frozen isomer parameters and
+CPD timestep limits carry through every temperature. See the
+[thermal-ramp workflow and limitations](oxdna_setup.md#temperature-ramps-and-observable-stability-gates).
+Operational gate acceptance is not validation of relative melting-temperature
+predictions; the CPD thermodynamic limitations above still apply.
+
+Native workflow evidence (2026-11-16): a cis-syn duplex completed 25→26 °C with
+two passing 200,000-step blocks at each temperature. This execution check used
+50 samples/window, minimum effective count 5, energy tolerance 0.1 and pairing
+tolerance 0.2—deliberately explicit test settings, not a validation of default
+tolerances or melting accuracy. Stricter/shorter runs stopped at their 26 °C caps
+without advancing. A copied job completed fixed-dwell 26→25 °C, preserving frozen
+CPD physics and resetting gate history. Compact results are retained in
+`.development-artifacts/thermal-ramp-validation.json`.

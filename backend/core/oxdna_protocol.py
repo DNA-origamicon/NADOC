@@ -104,6 +104,8 @@ class OxdnaStageSpec:
     print_conf_interval_override: int | None = None
     print_energy_every_override: int | None = None
 
+    thermal_ramp: dict | None = None
+
     def to_status(self) -> OxdnaStageStatus:
         return OxdnaStageStatus(name=self.name, kind=self.kind, steps=self.steps)
 
