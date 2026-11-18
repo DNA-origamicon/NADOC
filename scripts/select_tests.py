@@ -119,6 +119,9 @@ FULL_TRIGGER_SUBSTRINGS = (
 # Order matters (first hit classifies the file). Everything here has a narrow,
 # well-understood blast radius contained within the listed area(s).
 LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("flexible_network", ("headless",)),
+    ("flexible_contact", ("headless",)),
+    ("routes_flexible_segments", ("headless",)),
     ("chudoba", ("oxdna",)),
     ("assembly_flatten", ("cando",)),
     ("oxdna", ("oxdna",)),

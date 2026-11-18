@@ -1,5 +1,110 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-220 — Generic refusal on large constrained Move/Rotate Apply (2026-11-17)
+
+- **Status:** diagnosis open; failure reporting corrected. Saved JJ_Hinge accepts successive X requests of 55°, 65°, and 90° in an isolated app, clearing pending poses and appending one feature per Apply. Constraints project these requests to X=19.772/19.820/19.868°, so an accepted pose above 50° is not demonstrated. The user's exact failing editing state has not been reproduced.
+- **Change:** the atomic placement endpoint propagates its request-local HTTP/adoption error to Apply; organized moves opt into the same behavior. History-loading refusals are explicit. Pending poses remain intact on failure; no automatic retry or history branching.
+- **Next:** capture the specific refusal on the user's failing state; do not treat these successful isolated requests as proof the original defect is resolved.
+
+
+## ISSUE-219 — Intermittent tether option after M/select; slow coupled preview (2026-11-17)
+
+- **Status:** fixed; 10,696 frontend tests passed / 1 skipped, smoke 24 passed / 2 skipped, lint passed. JJ GPU Full-frame benchmark: all 120 updates below 200 ms, maximum 171.8 ms.
+- **Cause:** two selection subscribers could attach the same cluster concurrently; gate requests could finish out of order, and waiting-mode options were built before gate discovery finished. Coupled preview repeatedly rebuilt derived display layers and allocated contact geometry inside projection loops.
+- **Fix:** coalesce and invalidate asynchronous cluster attachments, reject stale gate responses, and refresh options after discovery. Reuse solver geometry and gradients, refit a conservative rod contact hierarchy, continue unfinished projection within a 60 ms per-update budget, publish the coupled preview in one display transaction, and update only affected cones/slab connectors.
+- **Coverage:** delayed gate discovery, superseded requests, cancellation, atomic display publication, contact invariance, and JJ keyboard M then selection with delayed network replies. Performance acceptance and broad results are recorded with the fix receipt.
+
+## ISSUE-218 — Tether collision preview treats flexible neighbors as fixed barriers (2026-11-17)
+
+- **Status:** fixed; full frontend 10,688 passed / 1 skipped, smoke 24 passed / 2 skipped, actual JJ rendered-preview/reversal/Cancel test passed.
+- **Cause:** direct ssDNA constraints pinned every neighboring anchor, and the contact guard could only clip the selected pose. Flexible small clusters never received a coupled solve; monotonically tightened contact bounds also opposed reversal.
+- **Fix:** gate-approved flexible components share a rigid-body tether/contact projection with the largest body fixed. Smaller bodies yield by translation and rotation, with all-part duplex obstacles. All participating poses use the existing atomic preview/Apply/Cancel transaction. Contact bounds remain fixed during each gesture. The checkbox wraps beside its label.
+- **Coverage:** yielding, reversal, immovable anchor, external obstacles, large-step barrier crossing, missing-anchor/gate fallback and follower preview capture. Real JJ app and broad validation results are recorded in the task receipt.
+
+## ISSUE-217 — Numeric Move/Rotate bypasses tether projection (2026-11-17)
+
+- **Status:** fixed while adding tethered collision detection.
+- **Cause:** numeric `setTransform` painted and queued the requested pose directly;
+  only the pointer change handler armed/projected tethers and swung movable links.
+- **Fix:** both paths share drag-start snapshots, project the same tether/link
+  constraints and pass all moving bodies through the optional contact guard.
+  Movable links use their pending pose when another drag begins in the same tool.
+- **Validation:** pure contact/controller and panel tests; JJ app exercise and
+  broad frontend/smoke results tracked in the current task receipt.
+
+
+## ISSUE-216 — Smoke fixture setup races asynchronous File > New (2026-11-17)
+
+- [x] Broad smoke exposes assembly fixture waiting for absent rendered beads
+  despite a populated backend, and Square creation checking a request after a
+  fixed 500 ms instead of awaiting it.
+- [x] Wait for the browser's named new document before fixture mutation, then
+  await explicit design/geometry refresh instead of an unacknowledged broadcast.
+- [x] Square creation awaits the actual POST as the Honeycomb case already does.
+- [x] Affected assembly-exit, Square-create and close-session cases pass in an
+  isolated temporary workspace with one worker and unchanged test timeouts.
+
+
+## ISSUE-215 — Undo during Move/Rotate contaminates displayed positions (2026-11-17)
+
+- [x] Inspect saved JJ_Hinge: F19, identity cluster poses, no nucleotide transforms,
+  deformation or atomistic override; do not rewrite the user's legacy source.
+- [x] Identify missing preview cancellation before cluster-only Undo/Redo deltas
+  capture live renderer positions and commit those into the geometry cache.
+- [x] Shared API boundary awaits cancellation/restoration for part and assembly
+  Undo/Redo, covering menu, keyboard and programmatic calls; restoration failure
+  prevents the history request.
+- [x] Repair panel distinguishes recipe verification from viewport state and
+  offers display-only regeneration, including stale cached-coordinate reporting.
+- [x] Full JJ app regression exposed a second bug: whole-helix history deltas
+  ignore partial/shared ownership. These cases now regenerate native geometry
+  instead of composing or caching invalid whole-helix deltas.
+- [x] Verify full JJ preview/Undo/Redo/display recovery in app, frontend suite,
+  smoke console/teardown gates and artifact cleanup.
+
+
+## ISSUE-214 — Twelve-tether hinge stalls in soft contact relaxation (2026-11-17)
+
+- [x] Reproduced JJ_Hinge failure after marking its final two-base scaffold run.
+- [x] Replace false rounded-end clashes with conservative flat-cylinder bounds;
+  stabilize nearly parallel segment distances.
+- [x] Repair initial contacts, then enforce contact inequalities during tether
+  closure (SLSQP); retain independent native checks and atomic rejection.
+- [x] Actual JJ app run closes all 12 tethers without detected duplex contacts;
+  four views inspected, full-refresh coordinate parity confirmed.
+- [x] Geometry Cluster 2 offers and selects Constrained (tethers).
+- [x] Focused network/contact regressions and recorded save/replay checks pass.
+- [ ] Atomistic, ssDNA/overhang and continuous-path collision certification remain
+  outside the paired-duplex contact model.
+
+## ISSUE-213 — Joint flexible relaxation permits rigid-body overlaps (2026-11-17)
+
+- [x] User's saved retry closes all 11 tethers but has 28 inter-body capsule
+  overlaps (2 nm duplex diameter; maximum penetration 1.835 nm).
+- [x] Read-only numeric benchmark compares simultaneous contact penalties,
+  contact continuation and constrained SLSQP; largest participating body fixed.
+  Continuation recovers closure and clearance within 0.001 nm from both the
+  saved jumble and the recorded pre-Relax state. Direct SLSQP trials fail.
+- [x] User-authorized production integration: staged capsule contacts, independent
+  native-geometry clearance and fixed-body verification before atomic commit;
+  exact pose replay and contact diagnostics in the feature log.
+- [ ] Full obstacle/ssDNA coverage and continuous collision prevention remain
+  follow-on work; successful endpoint clearance is not a noncrossing-path proof.
+
+
+## ISSUE-212 — Relax all breaks tethers solved earlier (2026-11-17)
+
+- [x] Saved JJ_Hinge confirms 3/11 tethers remain overstretched; two worsen.
+- [x] Replace independent pair solves with one rigid network solve, fixing the
+  largest participating cluster per component and allowing translation/rotation.
+- [x] Check every final contour and the fixed reference in actual posed geometry;
+  reject nonconvergence without partial commit or false success.
+- [x] Add the missing versioned Relax replay contract with explicit poses and
+  solver diagnostics; save/reopen, independent replay and undo/redo regressions.
+- [x] 48 focused backend checks, 3 dedicated browser checks and frontend suite
+  pass. Smoke retains the independently tracked Square New Part assertion,
+  ISSUE-180; relaxation checks and assembly exit pass.
+
 ## ISSUE-211 — Comparable fixed-duration thermal ramps (2026-11-17)
 
 Reduce the default from 50M to 10M steps per temperature and remove adaptive
@@ -504,6 +609,11 @@ files carry all the state a cold session needs.
 
 
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
+
+- November 17 flexible-network validation reproduces Square `lattice_type`
+  undefined at `smoke.spec.js:200`: 23 passed, two skipped, one failed.
+  Dedicated network browser checks: three passed. New Part code is unchanged.
+  Evidence: `.development-artifacts/flexible-network-smoke.log`.
 
 - November 14 annotation-branch validation reproduced both recorded failures:
   Honeycomb request timeout and Square `lattice_type` undefined. Smoke: 22 passed,

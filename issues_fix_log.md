@@ -1,5 +1,219 @@
 # Issues fix log
 
+## 2026-11-17 — ISSUE-220: expose placement Apply rejection details
+
+Corrected error reporting, not yet the user's unreproduced rejection. Apply now
+receives the request-local HTTP or adoption failure instead of a generic null
+receipt; pending poses remain intact. Existing ordinary group callers retain
+their null-return contract. In-app JJ requests 55/65/90° projected to
+19.772/19.820/19.868° and committed all queued poses exactly, with one feature per
+Apply. Seeking an earlier history stage reproduced a genuine refusal: the toast
+now names the latest-history requirement and all pending poses survive.
+
+Validation: 982 frontend files, 10,699 passed / 1 skipped; isolated app regression
+passed; lint passed; memory hygiene 0 errors / 18 warnings. No source design saved
+or altered. Receipt: `.development-artifacts/tether-apply-validation.json`.
+Original user-specific trigger remains open pending its detailed rejection.
+
+
+## 2026-11-17 — ISSUE-219: reliable tether discovery and bounded live preview
+
+Coalesced concurrent selection attachments, rejected superseded gate replies, and refreshed pivot options when asynchronous discovery finishes. The exact M-before-selection path passes with a delayed API reply. Coupled previews now publish one display transaction; contact math reuses scratch storage, a refitted bounds hierarchy finds candidate pairs, and follower membership is captured once per gesture. Interactive solves retain unfinished work under a 60 ms budget, discard it on reversal, and publish only contact/tether-valid poses. Discrete numeric edits retain their complete iteration budget.
+
+GPU app verification on JJ_Hinge (RTX 2080 SUPER, Full representation): 60 updates at the recorded relaxed pose measured median/p95/max **116.4/163.2/168.2 ms**; 60 at the current saved pose measured **145.4/166.3/171.8 ms**. Timings include `gl.finish()` after each frame, after shader warm-up. All-part contact and tether checks, follower yielding, fixed largest cluster, rendered anchor positions and Cancel restoration passed. The original file was not saved or rewritten. Discrete +5-degree numeric input remains slower (565.5 ms including gesture setup); the <200 ms acceptance target is repeated drag updates. Software rasterizers failed the full-frame target and are not counted as GPU evidence.
+
+Reproduce using the isolated smoke workspace runner with `NADOC_TETHER_CONFIG=playwright.tether.config.js`; WSL GPU configuration used `GALLIUM_DRIVER=d3d12`. The browser config retains cleanup and isolated ports. `main.js` shrank by 28 lines. Validation: 982 frontend files, 10,696 passed / 1 skipped; smoke 24 passed / 2 skipped; code lint passed; memory hygiene 0 errors / 18 warnings. Results and source hash: `.development-artifacts/tether-preview-validation.json`. Subjective pointer feel remains MV-70.
+
+## 2026-11-17 — ISSUE-218: compliant flexible neighbors during Move/Rotate
+
+Coupled the whole eligible flexible component for tethered previews, pinning its largest cluster and allowing smaller neighbors to translate and rotate under tether/contact constraints. Collisions remain optional; tether compliance remains active with detection off. All-part static barriers still participate. Bounded incremental requests prevent blocked steps accumulating into a jump through an obstacle. Existing preview transactions carry all follower poses through Apply/Cancel/Undo. Corrected the checkbox/label row layout. `main.js` LOC delta 0; subjective pointer feel remains MV-70.
+
+## 2026-11-17 — ISSUE-217: numeric tether motion and collision barriers
+
+[x] Numeric fields now share tether projection and movable-link solving with
+pointer dragging. Added a default-on Move/Rotate collision toggle, all-part
+paired-duplex obstacles (including loose/unowned bundles), joint clamping of
+active/linker poses, bounded motion sampling and monotonic overlap escape.
+Final poses continue through the existing atomic recorded Apply transaction.
+No `main.js` changes (LOC delta 0). Pointer feel remains MV-70.
+
+
+## ISSUE-216 — Await smoke fixture creation and display refresh (2026-11-17)
+
+Smoke setup treated welcome dismissal / a fixed 500 ms delay as creation
+completion and fired an unacknowledged broadcast before waiting for rendered
+beads. Await the actual File > New response and browser document adoption, then
+explicitly await design/geometry refresh after fixture authoring. Square creation
+awaits its POST, matching the existing Honeycomb test. Production behavior and
+test timeouts are unchanged. Final isolated one-worker rerun: all 3 affected
+smoke cases pass (assembly-exit, Square-create, close-session); see ISSUE-215.
+
+
+## ISSUE-215 — History cancels previews and respects partial cluster ownership (2026-11-17)
+
+JJ_Hinge's saved F19 source has identity cluster transforms and no nucleotide
+poses, deformation or atomistic override. The observed jumble is disposable
+render/geometry-cache state, absent from its feature history. Two bugs combined:
+Undo/Redo did not cancel the local Move/Rotate preview, and cluster-only history
+deltas transformed entire helices for domain/base-selected clusters, then wrote
+those wrong visual positions into the derived nucleotide cache. Initial app
+regression after cancellation alone still measured a 16.8195 nm discrepancy.
+
+All part/assembly Undo/Redo API entry points now await preview cancellation and
+restoration before sending a history request. Partial/base-selected and shared
+helix ownership uses native geometry regeneration instead of whole-helix deltas;
+segmented axes and all nucleotide placements are resolved together. Disjoint
+whole-helix history retains its fast path. No authored topology, constants or
+transform semantics changed. `main.js` LOC delta: 0.
+
+Repair now explicitly distinguishes recipe verification from viewport state.
+Refresh displayed geometry cancels the draft, rebuilds from published geometry
+and reports corrected cached nucleotide coordinates without adding a feature or
+changing authored data. Recipe success no longer implies a viewport check.
+
+Focused frontend: 105 tests passed. Actual JJ app test passes: nonzero preview,
+menu Undo, nonzero preview, keyboard Redo, then preview + repair display refresh.
+All rendered backbone coordinates agree with fresh native regeneration within
+0.001 nm; feature counts 19 -> 20 (Relax) -> 19 -> 20 -> 20 (display recovery).
+Post-Undo and post-recovery screenshots inspected. Original SHA256 unchanged;
+no legacy derivative saved. Temporary captures, workspace hosts and browser
+reports cleaned. Receipt: `.development-artifacts/undo-preview-verification.json`.
+Broad frontend: 974 files pass, 10,666 tests passed / 1 skipped (512.68 s).
+Lint and diff whitespace checks pass. Initial broad smoke: 22 passed / 2 skipped,
+2 fixture timing failures (ISSUE-216); real-design console and close-session gates
+passed. After explicit fixture synchronization, shared-workspace reruns reached
+save/read calls but hit existing 60 s limits. Final affected smoke run uses one
+worker and an isolated temporary workspace: assembly exit 15.5 s, Square creation
+7.6 s, close-session 34.9 s; all 3 pass with unchanged timeouts. No broad rerun
+was needed after these test-only fixture changes. Temporary workspace, reports,
+credentials and test project stores were removed and cleanup verified.
+
+
+## ISSUE-214 — Hard contact constraints and flat duplex ends (2026-11-17)
+
+JJ_Hinge with all 12 marked tethers failed the v1 soft-contact solve. Rounded
+capsule ends also invented three initial clashes across genuine axial gaps
+between short hinge duplexes. The new flat-ended cylinder bounds preserve radial
+clearance and add exact axial support-plane separation, with 0.167 nm terminal
+padding. Cross-product closest-point math avoids nearly parallel cancellation.
+
+The v2 solve repairs initial overlap, then uses SLSQP contact inequalities while
+minimizing tether overstretch. No changes to 1.18 nm contours, cluster ownership,
+topology, pinning or atomic acceptance. Actual native geometry remains the final
+acceptance authority; absolute transforms replay through the existing command.
+
+Actual app: F19 -> F20, 12/12 lengths <= 1.18 nm, zero overstretch, contact
+penetration 1.86e-13 nm (zero overlaps), largest cluster fixed. Four Full views
+inspected and full geometry refresh matches rendered coordinates exactly.
+Geometry Cluster 2's Constrained (tethers) option appears and selects successfully.
+Source hash unchanged; temporary captures, host/project/session/credential/report
+artifacts cleaned. No new legacy structure published. Focused checks: 10 network
+and 8 contact tests pass, including guarded save/reopen/replay and atomic failure.
+The local full-model regression is explicitly slow (12.62 s).
+main.js LOC delta: 0. Evidence:
+`.development-artifacts/jj-twelve-app-verification.json`.
+
+Validation: FAST **21,067 passed / 19 skipped**, 494.70 s pytest / 498 s guard
+wall time; lint passes. Aggregate timing warning only: zero per-test violators,
+slowest 4.56 s. Reviewed the timing report, shared isolation fixtures and the
+leading oxDNA/build/immutable-apply modules: varied orchestration, geometry and
+replay work; no identified shared accidental wait warrants unrelated changes.
+No tests were relegated merely for ranking slowest. The measured 12.62 s full-JJ
+regression is registered in `_SLOW_TESTS` with headless area/source routing;
+collection confirms it remains available as slow+headless. Small network/contact
+fixtures remain fast. No timing budgets changed; no redundant broad rerun.
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+
+## ISSUE-213 — Staged duplex contacts in flexible-network Relax (2026-11-17)
+
+The user authorized the successful staged-contact method after comparing joint
+penalties, constrained fitting and expand/reclose variants. Relax all and Relax
+connected flexible network now solve tether and inter-body duplex-capsule
+constraints jointly, keeping the largest participating body fixed per component.
+Five contact weights (0.1, 0.3, 1, 3, 10) repair initially overlapping poses;
+already-slack tethers do not bypass contact checking. The contact math and
+ownership-aware native-axis extraction live in `flexible_contacts.py`.
+
+Both contour excess and capsule penetration must be <= 0.001 nm. Actual native
+posed geometry is independently remeasured inside the atomic recorded mutation;
+bad clearance or movement of fixed-body capsules rejects without changing
+history, revision or undo. Feature metadata records initial/final contacts,
+scope/limitations, model radius and stage settings. Absolute-pose replay remains
+unchanged, preserving old features and deterministic independent replay.
+
+Read-only production solve on saved JJ_Hinge: 28 initial overlaps become zero,
+all 11 tethers close (maximum excess 0.000187992 nm; capsule penetration
+0.000001347 nm), Geometry Cluster 1 stays fixed, 91.99 seconds. Source SHA256
+unchanged. No legacy derivative is authored or published. Focused network tests:
+9 passed / 1 historical-source skip, including guard publication/reopen/replay,
+undo/redo, slack-but-overlapping repair, infeasibility, and atomic rejection of
+falsely optimistic clearance reports.
+
+Coverage is participating clusters' paired duplex axes only. ssDNA/overhangs,
+nonparticipating obstacles, intra-body clashes and continuous collision-free
+trajectories remain follow-on work. `main.js` LOC delta: 0.
+
+Validation: `just test-smart` selected FAST, 20,986 passed / 20 skipped. Its
+timing guard flagged the pre-existing mock-job extension-display integration
+test at 5.64 s; required slow-test triage identified bundle construction/export,
+stage subprocesses and display parsing. Focused rerun passed (3.41 s call).
+Registered that test in `_SLOW_TESTS` with the existing oxDNA area routing;
+verified slow collection retains it. No budget/guard changes. The remaining
+tests in the measured broad run were <= 4.84 s; broad timing was not rerun
+solely for this classification change.
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+Two dedicated browser cases pass (ordinary and deleted-slot flexible regions),
+checking solver/contact diagnostics, fixed poses, flexible rendering and undo.
+Inspected the ordinary relaxed Full view. Temporary captures, both __e2e__ host
+files, their project stores, bridge credentials and session/output paths verified
+absent after teardown. Lint and diff whitespace checks pass.
+
+## ISSUE-212 — Joint flexible-network solve with a fixed largest cluster (2026-11-17)
+
+The old pairwise Relax all leaves three JJ_Hinge tethers at 7.785, 5.892 and
+6.940 nm against 1.18 nm contours; successive pair solves undo previous closure.
+The shared backend kinematic solve now minimises all positive contour violations
+jointly, fixing the largest participating rigid cluster in each connected
+component and giving other bodies translation/rotation freedom. Exact-base and
+domain membership participate in the size calculation. Slack remains free.
+
+The existing Relax API accepts scope requests, independently checks final posed
+anchor distances and the fixed reference, and commits only converged, current-
+revision results. App and headless authoring share this path. The feature stores
+explicit absolute poses, solver settings, fixed IDs and actual final per-tether
+measurements. Its new proof contract replays poses without rerunning optimisation.
+Pose-only recording preserves topology and avoids pending-ligation retries.
+
+Validation: 48 focused backend tests pass, including recorded import/mark/relax,
+guarded publication, saved/reopened independent replay, undo/redo, rollback,
+rotation composition and the optional read-only JJ_Hinge numeric regression.
+That regression closes all 11 tethers to within 0.001 nm with Geometry Cluster 1
+fixed. The legacy source has no recipe root and was not modified or republished.
+Three browser checks pass: ordinary and deleted-slot two-base relaxation plus
+read-only JJ_Hinge rendering. Screenshots inspected and removed; test workspace
+files and dedicated bridge credentials verified absent after teardown.
+
+Frontend: 10,560 passed / one skipped across 959 files; final focused controller
+and client checks: 18 passed. Lint and diff whitespace checks pass.
+Smoke: 23 passed / two skipped / existing ISSUE-180 Square New Part request
+assertion fails (`lattice_type` undefined). No New Part changes.
+
+`just test-smart`: FAST, 20,978 passed / 19 skipped. Aggregate timing warning
+(510 seconds pytest wall time, no individual budget violators); required triage
+found broad suite volume and existing mock lifecycle/replay work, with no reason
+to reclassify tests or alter guards. Deferred output:
+
+> DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+> session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+`main.js` LOC Δ: 0.
+
 ## ISSUE-211 — Fixed-duration thermal ramps (2026-11-17)
 
 Reduced the default from 50M to 10M steps per temperature. The wizard exposes

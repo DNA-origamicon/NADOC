@@ -1,29 +1,8 @@
-"""Headless ssDNA flexible-segment relax — a faithful Python port of the
-frontend PBD constraint solver.
+"""Single-body PBD drag solver and adapter to the joint flexible network solve.
 
-The in-app *Relax flexible segments* command pulls the rigid leaves of a hinge
-together until every unpaired-ssDNA scaffold tether is taut at its contour
-length ("free until taut"). That minimisation runs **in the browser**
-(``frontend/src/scene/cluster_gizmo.js`` — ``relaxSsdna`` /
-``_projectSsdnaConstraints`` / ``_maxSsViolation``), so a headless script (or an
-AI design pipeline) could *apply* a relax via ``POST /design/flexible-relax`` but
-could not *compute* one.  This module closes that gap: it re-implements the exact
-position-based-dynamics solver in Python so a headless relax matches what the
-user sees in the app.
-
-Three-Layer Law: this is **display/pose-layer only**.  It moves
-``cluster_transforms`` (rigid poses); it NEVER touches the strand graph, helices,
-crossovers, or flexible-segment *marks*.  The relaxed geometry is read from the
-geometry kernel; nothing is written back to topology.
-
-Faithful-port reference (cite when editing): the solver math mirrors
-``cluster_gizmo.js`` lines ~808-887 (``_projectSsdnaConstraints`` / candidate
-position / ``_maxSsViolation``) and ~905-957 (``relaxSsdna`` convergence loop);
-the orchestration (group by cluster pair → move the smaller cluster →
-translate-only for a lone tether → Gauss-Seidel sweep) mirrors
-``frontend/src/scene/flex_relax.js`` ``relaxFlexible``.  The pure solver is also
-pinned for JS↔Python parity in ``tests/test_flexible_relax.py`` against the
-golden the vitest ``flexible_relax_solver.test.js`` produces from the same fixture.
+The legacy single-body math is retained for drag parity tests. Relax commands use
+flexible_network.solve_design_network, shared by the app and headless authoring.
+All results are rigid poses; topology and flexible marks remain unchanged.
 """
 
 from __future__ import annotations
@@ -37,12 +16,11 @@ from backend.core.design_geometry import _geometry_for_design
 from backend.core.models import Design, FlexibleAnchor
 
 # Solver constants — IDENTICAL to cluster_gizmo.js (_SS_GAIN, _SS_ITERS,
-# _SS_RELAX_OUTER, _SS_RELAX_EPS) and flex_relax.js (_SS_RELAX_TOL).
+# _SS_RELAX_OUTER, _SS_RELAX_EPS). Network closure has its own tolerance.
 _SS_GAIN = 0.6
 _SS_ITERS = 6
 _SS_RELAX_OUTER = 80
 _SS_RELAX_EPS = 1e-3  # nm — converged when max violation below this
-_SS_RELAX_TOL = 0.05  # nm — overstretch beyond contour that counts as "needs relax"
 
 
 # ── Pure PBD solver (port of relaxSsdna + _projectSsdnaConstraints) ─────────────
@@ -150,7 +128,7 @@ def relax_cluster_pose(
     return new_translation, new_rotation, residual, True
 
 
-# ── Orchestration (port of flex_relax.js relaxFlexible) ─────────────────────────
+# ── Geometry resolution and compatibility adapter ────────────────────────────
 
 
 def _geom_index(design: Design) -> dict:
@@ -178,115 +156,14 @@ def _anchor_world_pos(
     return geom_index.get((helix_id, anchor.bp_index, anchor.direction.value))
 
 
-def _cluster_bead_count(geom_index: dict, design: Design, cluster_id: str) -> int:
-    ct = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
-    if ct is None:
-        return 0
-    hids = set(ct.helix_ids)
-    return sum(1 for (h, _bp, _d) in geom_index if h in hids)
-
-
 def compute_relax_transforms(
     design: Design,
     *,
     scope: str = "all",
     conn_id: Optional[str] = None,
 ):
-    """Compute the relaxed pose for every overstretched flexible-connected pair.
+    """Compatibility wrapper for the shared joint network solver."""
+    from backend.core.flexible_network import solve_design_network
 
-    Returns ``(transforms, residual_remains)`` where ``transforms`` is a list of
-    ``{"cluster_id", "pivot", "translation", "rotation"}`` (the absolute new
-    poses, one per moved cluster — ready for ``POST /design/flexible-relax``), and
-    ``residual_remains`` flags that some tether is still overstretched after the
-    sweep budget.  Pure read of the design (does not mutate the input); the
-    headless wrapper commits the result through the route.
-    """
-    conns_all = list(design.flexible_connections or [])
-    if not conns_all:
-        return [], False
-
-    def pair_key(a: str, b: str):
-        return tuple(sorted([a, b]))
-
-    if scope == "one":
-        conn = next((c for c in conns_all if c.id == conn_id), None)
-        if conn is None:
-            return [], False
-        pairs = [pair_key(conn.cluster_a_id, conn.cluster_b_id)]
-    else:
-        pairs = list({pair_key(c.cluster_a_id, c.cluster_b_id) for c in conns_all})
-        pairs.sort()
-
-    work = design
-    moved: dict[str, dict] = {}
-    residual_remains = False
-    max_sweeps = 8 if scope == "all" else 2
-
-    for _sweep in range(max_sweeps):
-        progressed = False
-        for pk in pairs:
-            conns = [
-                c
-                for c in (work.flexible_connections or [])
-                if pair_key(c.cluster_a_id, c.cluster_b_id) == pk
-            ]
-            if not conns:
-                continue
-            ca, cb = pk
-            geom = _geom_index(work)
-            cnt_a = _cluster_bead_count(geom, work, ca)
-            cnt_b = _cluster_bead_count(geom, work, cb)
-            moving = ca if cnt_a <= cnt_b else cb
-            translate_only = len(conns) == 1
-
-            tethers = []
-            for c in conns:
-                on_a = c.cluster_a_id == moving
-                m_anchor = c.anchor_a if on_a else c.anchor_b
-                f_anchor = c.anchor_b if on_a else c.anchor_a
-                pM0 = _anchor_world_pos(geom, work, m_anchor)
-                pF = _anchor_world_pos(geom, work, f_anchor)
-                if pM0 is None or pF is None:
-                    continue
-                tethers.append((pM0, pF, c.contour_length_nm))
-            if not tethers:
-                continue
-
-            overstretched = any(
-                float(np.linalg.norm(pM0 - pF)) > contour + _SS_RELAX_TOL
-                for (pM0, pF, contour) in tethers
-            )
-            if not overstretched:
-                continue
-
-            ct = next(c for c in work.cluster_transforms if c.id == moving)
-            new_tr, new_rot, residual, did_move = relax_cluster_pose(
-                ct.pivot,
-                ct.translation,
-                ct.rotation,
-                tethers,
-                translate_only=translate_only,
-            )
-            if did_move:
-                new_cts = [
-                    c.model_copy(
-                        update={"translation": list(new_tr), "rotation": list(new_rot)}
-                    )
-                    if c.id == moving
-                    else c
-                    for c in work.cluster_transforms
-                ]
-                work = work.copy_with(cluster_transforms=new_cts)
-                moved[moving] = {
-                    "cluster_id": moving,
-                    "pivot": list(ct.pivot),
-                    "translation": list(new_tr),
-                    "rotation": list(new_rot),
-                }
-                progressed = True
-            if residual > _SS_RELAX_TOL:
-                residual_remains = True
-        if not progressed:
-            break
-
-    return list(moved.values()), residual_remains
+    result = solve_design_network(design, scope=scope, conn_id=conn_id)
+    return result["transforms"], not result["converged"]

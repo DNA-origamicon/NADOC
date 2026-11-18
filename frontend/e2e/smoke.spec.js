@@ -183,12 +183,7 @@ test.describe('File > New Part dialog', () => {
   })
 
   test('Create with Square lattice fires API with SQUARE lattice type', async ({ page }) => {
-    let capturedBody = null
-    page.on('request', req => {
-      if (req.method() === 'POST' && /\/api\/design(\?|$)/.test(req.url())) {
-        capturedBody = req.postDataJSON()
-      }
-    })
+    const apiCall = page.waitForRequest(req => req.method() === 'POST' && /\/api\/design(\?|$)/.test(req.url()))
 
     await openDropdownAndClick(page, 'File', 'menu-file-new')
     await page.click('input[name="new-lattice-type"][value="SQUARE"]')
@@ -196,8 +191,7 @@ test.describe('File > New Part dialog', () => {
     await modalOf(page).getByRole('button', { name: 'Create' }).click()
 
     await expect(page.locator('#new-design-modal-body')).not.toBeVisible()
-    await page.waitForTimeout(500) // let request fire
-    expect(capturedBody?.lattice_type).toBe('SQUARE')
+    expect((await apiCall).postDataJSON()?.lattice_type).toBe('SQUARE')
   })
 })
 
