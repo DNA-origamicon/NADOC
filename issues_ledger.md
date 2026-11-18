@@ -1,5 +1,12 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-229 — Explicit oxDNA DNA concentration and readable units (2026-11-18)
+
+[x] Added total DNA strand concentration beside temperature/salt throughout the
+wizard. Translate molarity into simulation volume, preserve inherited boxes when
+blank, and show resolved conditions in saved settings. Visual review found CSS
+capitalization changing µM into ΜM; preserve unit case in recorded field labels.
+
 ## ISSUE-228 — Full geometry overlays native atoms after oxDNA Off (2026-11-18)
 
 Select a job, switch to atomistic, show oxDNA positions, then select Off. Native

@@ -26,6 +26,8 @@ oxDNA output is Physical-layer only; it never mutates Design topology.
 
 from __future__ import annotations
 
+from backend.core.oxdna_concentration import apply_job_concentration, configuration_box, validate_source_concentration
+
 from backend.api.simulation_submodel import SubmodelSelection, read_selection, save_selection
 
 from backend.core import simulation_runtime
@@ -253,6 +255,7 @@ def _apply_oxdna_run_dir(job, run_dir: Optional[str]) -> None:
 
 
 class CreateOxdnaJobRequest(BaseModel):
+    dna_concentration_uM: float | None = Field(None, gt=0, allow_inf_nan=False, description="Total DNA strand concentration in micromolar; null preserves automatic/inherited box")
     submodel: SubmodelSelection | None = None
     run_dir: Optional[str] = None
     execution_target: str = Field("local", pattern="^(local|alpine|runpod)$")
@@ -427,6 +430,7 @@ class SurfaceElement(SurfaceGeometry):
 
 
 class RunRequest(BaseModel):
+    dna_concentration_uM: float | None = Field(None, gt=0, allow_inf_nan=False, description="Total DNA strand concentration in micromolar; null preserves automatic/inherited box")
     backend: Literal["CPU", "CUDA"] | None = None
     thermal_ramp: ThermalRamp | None = None
     submodel: SubmodelSelection | None = None
@@ -501,6 +505,7 @@ def resolve_oxdna_field_api(field: FieldElement) -> dict:
 
 
 class SurfaceDepositionRequest(BaseModel):
+    dna_concentration_uM: float | None = Field(None, gt=0, allow_inf_nan=False, description="Total DNA strand concentration in micromolar; null preserves automatic/inherited box")
     run_dir: Optional[str] = None
     surface: SurfaceElement
     surface_anchors: list[AnchorRef] = Field(min_length=1)
@@ -1106,6 +1111,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         # Advanced / Hard surface / Anchors cards with what the run used.
         run_config={
             "kind": "relax",
+            "dna_concentration_uM": body.dna_concentration_uM,
             "backend": body.backend,
             "interaction_type": body.interaction_type,
             "engine_variant": body.engine_variant,
@@ -1353,6 +1359,10 @@ async def get_oxdna_job(job_id: str) -> dict:
 
     job = _load_job(job_id)
     d = job.to_dict()
+    try:
+        d["box_conditions"] = configuration_box(job.job_dir(_workspace()))[1]
+    except (OSError, ValueError, IndexError):
+        pass
     from dataclasses import asdict
     d["stage_specs"] = [asdict(spec) for spec in load_stage_specs(job.job_dir(_workspace()))]
     d["can_seed_production"] = _can_seed_production(job, _workspace())
@@ -1582,6 +1592,11 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             "Only prepared jobs that have not been submitted or started can be edited.",
         )
     recorded = dict(job.run_config or {})
+    if "dna_concentration_uM" in updates:
+        try:
+            configuration_box(job.job_dir(_workspace()), updates["dna_concentration_uM"])
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
     force_keys = {"surface", "anchors", "surface_anchors", "surface_strands", "field"}
     deposition = recorded.get("surface_deposition", recorded.get("kind") == "surface_deposition")
     if "surface_deposition" in updates and not isinstance(updates["surface_deposition"], bool):
@@ -1608,7 +1623,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             "execution_target", "kind", "partition", "runpod_budget_usd",
             "runpod_gpu_key", "runpod_quoted_rate_usd_per_hour", "runpod_volume_id",
             "salt_concentration", "seed", "slurm_resources", "stage_overrides",
-            "stages", "steps", "surface_deposition",
+            "stages", "steps", "surface_deposition", "dna_concentration_uM",
         }
         def _frozen_value(key: str, value):
             value = deepcopy(value)
@@ -1703,6 +1718,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
         }
         if len(specs) == 1:
             job.run_config["steps"] = specs[0].steps
+        apply_job_concentration(job, job.job_dir(_workspace()), job.run_config.get("dna_concentration_uM"))
         job.save(_workspace())
         return job.to_dict()
 
@@ -1764,6 +1780,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
         # saved settings and the runnable input files untouched.
         with tempfile.TemporaryDirectory(prefix=".oxdna-settings-", dir=jd.parent) as directory:
             staged = deepcopy(job)
+            staged.run_config = {**recorded, "dna_concentration_uM": body.dna_concentration_uM}
             staged.archived = True
             staged.archive_path = directory
             try:
@@ -1825,6 +1842,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             job.run_config["surface"] = persisted_wall(job.run_config["surface"], forces_info["wall"])
         old_count = ((recorded.get("surface_strands") or {}).get("built") or {}).get("n_beads", 0)
         job.n_nucleotides += int((built_capture or {}).get("n_beads", 0)) - int(old_count)
+    apply_job_concentration(job, job.job_dir(_workspace()), body.dna_concentration_uM)
     job.save(_workspace())
     return job.to_dict()
 
@@ -2333,6 +2351,8 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     if relaxed_conf is None:
         raise HTTPException(400, "No relaxed configuration to seed the run from.")
 
+    validate_source_concentration(pjd, relaxed_conf, body.dna_concentration_uM)
+
     # Resolve the enabled elements into the writer's input dicts.
     field_in = None
     efield_rec = None
@@ -2548,6 +2568,7 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     shutil.copy2(sequence_file, cjd / sequence_file.name)
     specs = configure_child(child, stage, body.thermal_ramp)
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(s) for s in specs], indent=2))
+    apply_job_concentration(child, cjd, body.dna_concentration_uM)
     child.status = OxdnaStatus.queued
     if target is None:
         child.save(ws)
@@ -2735,6 +2756,7 @@ def _prepare_surface_deposition_job(job_id: str, body: SurfaceDepositionRequest,
     (cjd / "stages_spec.json").write_text(
         json.dumps([asdict(stage) for stage in stages], indent=2), encoding="utf-8"
     )
+    apply_job_concentration(child, cjd, body.dna_concentration_uM)
     child.status = OxdnaStatus.queued
     if target is None:
         child.save(ws)

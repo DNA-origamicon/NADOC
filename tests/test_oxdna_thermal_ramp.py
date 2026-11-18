@@ -19,7 +19,7 @@ def stage():
 @pytest.mark.parametrize("start,end,step,expected", [(25, 36, 5, [25, 30, 35, 36]), (36, 25, 5, [36, 31, 26, 25]), (25, 25, 5, [25]), (25.4, 25.7, .1, [25.4, 25.5, 25.6, 25.7])])
 def test_schedule(start, end, step, expected):
     cfg = ThermalRamp(start_c=start, end_c=end, step_c=step)
-    assert cfg.block_steps == 2_000_000_000 and not cfg.gate
+    assert cfg.block_steps == 100_000_000 and not cfg.gate
     assert sampling_cadence(cfg) == 50_000
     assert cfg.temperatures() == pytest.approx(expected)
     specs = ramp_stages(replace(stage(), interaction="CpdDNA2", dt=0.0001, forces_file="frozen.txt", external_forces=True), cfg)
@@ -263,7 +263,7 @@ def test_literature_defaults_render_sequence_dependent_inputs_and_allow_override
     assert preset.salt_concentration == .5 and preset.sequence_dependent
     custom = apply_stage_overrides([preset], {preset.name: {'salt_concentration': .3, 'dt': .002}})[0]
     plateaus = ramp_stages(custom, cfg)
-    assert all(s.steps == 2_000_000_000 and s.salt_concentration == .3 and s.dt == .002 for s in plateaus)
+    assert all(s.steps == 100_000_000 and s.salt_concentration == .3 and s.dt == .002 for s in plateaus)
     source = AVERAGE_SEQUENCE_PATH.with_name('oxDNA2_sequence_dependent_parameters.txt')
     text = render_stage_input(plateaus[0], 'topology.top', 'conf.dat')
     assert f'seq_dep_file = {source}' in text

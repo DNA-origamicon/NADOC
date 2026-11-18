@@ -1728,6 +1728,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     api: {
       fetchHardware: () => api.optimizeMdHardware('0'),
       getOxdnaAvailable: () => api.oxdnaAvailable(),
+      getOxdnaJob: id => api.getOxdnaJob(id),
       fetchAvailability: opts => api.getClusterAvailability(opts),
       getSlurmPreview: body => api.getSlurmPreview(body),
       getRunpodJobPreview: body => api.getRunpodJobPreview(body),
@@ -1736,6 +1737,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
       fsApi: api,
     },
     getInitialValues: () => ({
+      dna_strand_count: getCurrentDesign?.()?.strands?.length,
       protein_present: Boolean(getCurrentDesign?.()?.protein_attachments?.some(a => a.visible !== false)
         || getCurrentDesign?.()?.nanoparticles?.some(p => p.oxdna_fixed_core)),
       cpd_present: Boolean(getCurrentDesign?.()?.photoproduct_junctions?.length),
@@ -2476,7 +2478,8 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // Compose the run from the independently-enabled elements (field / surface /
     // anchors).  Each is optional — with none enabled this is a plain production.
     const el = getRunElements?.() || {}
-    const body = { steps, steps_per_frame: stepsPerFrame }
+    const body = { steps, steps_per_frame: stepsPerFrame,
+      ...(wizardPayload?.dna_concentration_uM != null ? {dna_concentration_uM:wizardPayload.dna_concentration_uM} : {}) }
     if (wizardPayload?.backend) body.backend = wizardPayload.backend
     if (wizardPayload?.thermal_ramp) body.thermal_ramp = structuredClone(wizardPayload.thermal_ramp)
     if (wizardPayload?.stage_overrides) body.stage_overrides = wizardPayload.stage_overrides

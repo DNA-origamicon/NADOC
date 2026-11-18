@@ -13,7 +13,7 @@ class ThermalRamp(BaseModel):
     start_c: float = Field(25, gt=-273.15, le=200)
     end_c: float = Field(85, gt=-273.15, le=200)
     step_c: float = Field(5, gt=0, le=200)
-    block_steps: int = Field(2_000_000_000, ge=1000, le=10_000_000_000)
+    block_steps: int = Field(100_000_000, ge=1000, le=10_000_000_000)
     # Read old saved protocols, but never serialize or honor adaptive controls.
     max_steps: int | None = Field(None, exclude=True)
     gate: bool = Field(False, exclude=True)

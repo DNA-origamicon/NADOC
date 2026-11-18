@@ -1,5 +1,23 @@
 # Issues fix log
 
+## ISSUE-229 — DNA concentration controls and simulation volume (2026-11-18)
+
+Added µM total DNA strands controls for relaxation, production, thermal ramps and
+queued edits. Exported DNA strand counts determine cubic box volume; proteins and
+PEG do not count. Coordinates remain unchanged. Validate source fit before
+creating continuation jobs or applying queued edits; preserve parent inputs.
+Persist resolved concentration/count/box metadata through copies and ramps, with
+readable saved settings. Blank keeps automatic/inherited boxes. Corrected recorded
+label capitalization so µM remains µM. Documented total-strand versus per-species
+conventions and the limits of interpreting heating ramps as equilibrium melting.
+
+Validation: backend fast suite 21,002 passed / 90 skipped; frontend 10,691 passed /
+one skipped. Browser workflow covers create, ramp, edit and recorded settings,
+including narrow layout. Full backend suite remains deferred by test-session
+policy. Final smoke/cleanup details in
+.development-artifacts/oxdna-concentration-20261118.json. No user jobs or molecular
+documents changed; main.js LOC delta for this feature: 0.
+
 ## ISSUE-228 — Exclusive native representation after oxDNA Off (2026-11-18)
 
 Restores native scene ownership before restoring the native atomistic/surface

@@ -91,3 +91,10 @@
   .modal--oxdna-wizard .oxdna-conditions, .oxdna-thermal__grid--conditions { grid-template-columns: minmax(0, 1fr); }
 }
 .modal--oxdna-wizard .oxdna-thermal .wizard-salt { grid-row: span 3; grid-template-rows: subgrid; }
+
+/* Concentration is a volume setting shared by every stage. */
+.modal--oxdna-wizard .wizard-dna-concentration { grid-column: 1 / -1; }
+.modal--oxdna-wizard .wizard-dna-concentration input { max-width: 260px; }
+
+/* Capitalizing µ changes the unit glyph; preserve scientific labels verbatim. */
+.modal--oxdna-wizard .oxdna-recorded-fields dt { text-transform: none; }

@@ -9,7 +9,7 @@ from backend.core.oxdna_thermal_ramp import ThermalRamp, ramp_stages
 
 @pytest.mark.parametrize('banked,rows,expected', [(0,3500,.0875), (1000000000,3500,.5875)])
 def test_thermal_progress_respects_energy_cadence_and_restart_bank(tmp_path, banked, rows, expected):
-    specs = ramp_stages(build_production_stage(), ThermalRamp())
+    specs = ramp_stages(build_production_stage(), ThermalRamp(block_steps=2_000_000_000))
     assert expected_energy_lines(specs[0]) == 40000
     assert expected_energy_lines(replace(specs[0],steps=1000000000)) == 20000
     job = new_oxdna_job('progress fixture', [s.to_status() for s in specs])
