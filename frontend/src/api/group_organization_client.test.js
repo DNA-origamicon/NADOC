@@ -117,3 +117,25 @@ it('ordinary cluster batch adopts matching geometry through one revision-checked
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ placements, expected_revision: 7 })
   expect(store.getState().currentGeometry).toBe(result.nucleotides)
 })
+
+it('cluster Apply reports the request-specific rejection and retains the design', async () => {
+  const before = store.getState().currentDesign
+  vi.stubGlobal('fetch', vi.fn(async () => response({ detail: {
+    code: 'historical_cursor', message: 'Return to the latest history stage before applying movement.',
+  } }, 409)))
+  await expect(client.commitClusterPoses([])).rejects.toThrow('Return to the latest history stage')
+  expect(store.getState().currentDesign).toBe(before)
+})
+
+it('organized Apply can request an actionable failure without changing ordinary null callers', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => response({ detail: 'Movement source has changed.' }, 409)))
+  await expect(client.groupOrganizationCommand('placements-update', {}, { throwOnFailure: true }))
+    .rejects.toThrow('Movement source has changed.')
+})
+
+it('Apply during history loading explains the refusal without sending a move', async () => {
+  store.setState({ featureSeekPending: true })
+  const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+  await expect(client.commitClusterPoses([])).rejects.toThrow('Wait for the selected history stage')
+  expect(fetch).not.toHaveBeenCalled()
+})

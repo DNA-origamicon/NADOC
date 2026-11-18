@@ -73,6 +73,9 @@ export function initMoveRotatePanel({
   const _mrJaSection     = document.getElementById('mr-joint-angle-section')
   const _mrSnapChk       = document.getElementById('mr-snap-45')
   const _mrFrameSel      = document.getElementById('mr-frame-sel')
+  document.getElementById('mr-tether-collisions')?.addEventListener('change', event => {
+    clusterGizmo.setCollisionDetection?.(event.target.checked)
+  })
   let   _mrPivotIsJoint  = false
   let   _mrAssemblyCtx   = null
   let   _proteinController = null
@@ -171,7 +174,18 @@ export function initMoveRotatePanel({
     return null
   }
 
-  function _mrSetPivotOptions(joints, clusterId = null) {
+  let pivotOptionsRequest=0
+  function _mrSetPivotOptions(joints, clusterId = null, refresh = true) {
+    const request=++pivotOptionsRequest
+    if(refresh && clusterId && flexRelax.refreshFlexGates) {
+      const design=store.getState().currentDesign
+      void flexRelax.refreshFlexGates().then(()=>{
+        const state=store.getState()
+        if(request!==pivotOptionsRequest || state.currentDesign!==design ||
+            !state.translateRotateActive || state.activeClusterId!==clusterId || history.active())return
+        _mrSetPivotOptions(state.currentDesign?.cluster_joints?.filter(j=>j.cluster_id===clusterId)??[],clusterId,false)
+      })
+    }
     if (!_mrPivotSel) return
     // Preserve the current selection across a rebuild. A pivot-point change round-trips
     // to the server, whose fresh design makes cluster_joints a new array reference →

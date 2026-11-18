@@ -1,3 +1,4 @@
+import { createClusterPreview } from './scene/cluster_preview.js'
 import { createFlexibleSegmentActions } from './ui/flexible_segment_actions.js'
 import { createAuthoringDisplay } from './scene/authoring_display.js'
 import { initDetachedSidebars } from './ui/detached_sidebars.js'
@@ -4352,39 +4353,10 @@ async function main() {
     getAnimContext: () => animPanel?.getKeyframeContext?.() ?? null,
   })
 
+  const clusterPreview = createClusterPreview({ renderer: designRenderer, getBluntEnds: () => bluntEnds,
+    getJoints: () => jointRenderer, overhangLocations, selectionManager })
   const clusterGizmo    = initClusterGizmo(
-    store, controls,
-    (helixIds, centerVec, dummyPos, incrRotQuat, domainIds) => {
-      const helixCtrl = designRenderer.getHelixCtrl()
-      helixCtrl?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat, domainIds)
-      // Blunt-end rings + labels: domainIds filters to only the strand-domain
-      // ends owned by the moved subset (sub-cluster mode); without filtering
-      // it covers every blunt end on the helix (full-cluster mode).
-      bluntEnds?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat, domainIds)
-      // Joint indicators + overhang locations don't yet support sub-cluster
-      // partitioning — skip them for split-domain clusters to avoid moving
-      // elements that belong to the un-moved partition.
-      if (!domainIds?.length) jointRenderer?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
-      if (!domainIds?.length) overhangLocations.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
-      // Keep crossover arcs, xb beads, and extension beads in sync with the moved cluster.
-      selectionManager.refreshBaseGlow()   // flexibleArcs just rebuilt its meshes; re-resolve base-pool glow (no-op when empty)
-      // Extra-base beads now live in crossoverConnections group — rebuilt on full scene rebuild.
-      // DEBUG — log once per frame so you can see cone state during a drag
-      designRenderer.refreshClusterSelection()
-      helixCtrl?.logConeDebug('LIVE-FRAME')
-    },
-    (helixIds, domainIds, append = false) => {
-      // `append` = add these beads to the existing base snapshot instead of clearing it —
-      // needed when a drag captures MULTIPLE bodies (the dragged cluster + movable-link
-      // bodies), so the second capture doesn't wipe the first (which froze the main cluster).
-      const helixCtrl = designRenderer.getHelixCtrl()
-      helixCtrl?.captureClusterBase(helixIds, domainIds, append)
-      bluntEnds?.captureClusterBase(helixIds, append, domainIds)
-      if (!domainIds?.length) jointRenderer?.captureClusterBase(helixIds, append)
-      if (!domainIds?.length) overhangLocations.captureClusterBase(helixIds, append)
-      // DEBUG — snapshot the bead positions at drag-start before any transform
-      helixCtrl?.logConeDebug('DRAG-START')
-    },
+    store, controls, clusterPreview.paint, clusterPreview.capture,
     (translation, quaternion) => {
       _clusterDirty = true
       const [rx, ry, rz] = quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
@@ -4394,7 +4366,7 @@ async function main() {
         _mrSetJointAngle(extractJointAngleDeg(quaternion, activeJoint))
       }
     },
-    api,
+    api, { previewFrame: clusterPreview.frame },
   )
   // Phase 4 — per-sub-domain rotation gizmo DISABLED 2026-05-11.
   // The gizmo's gold/cyan rings used to attach in the main 3D scene whenever

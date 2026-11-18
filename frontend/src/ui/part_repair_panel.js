@@ -10,6 +10,7 @@ import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
 import './part_repair_panel.css'
 import { createFeatureHistoryFeedback } from '../features/feature_history_feedback.js'
+import { refreshPublishedDisplay } from '../features/display_recovery.js'
 
 const targetKey = target => JSON.stringify([target.feature_id, target.child_id ?? null])
 const publishedLabels = { unchecked: 'Published geometry: not checked', checking: 'Checking published geometry',
@@ -50,6 +51,8 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
   const status = el('p', { attrs: { role: 'status', 'aria-live': 'polite' } })
   const issues = el('div', { className: 'part-repair__issues' }), proposal = el('ol', { className: 'part-repair__proposal' })
   const changes = el('p', { className: 'part-repair__muted' })
+  const displayStatus = el('p', { className: 'part-repair__muted', attrs: { role: 'status' },
+    text: 'Recipe checks verify authored data, not the current viewport. Refresh displayed geometry to discard a stale preview and rebuild the display without changing the recipe.' })
   const selector = el('select', { attrs: { 'aria-label': 'Feature to repair' } })
   const showError = value => { localError = value?.message ?? String(value); error.textContent = localError }
   const clearNotice = () => { localError = ''; note = ''; error.textContent = '' }
@@ -152,6 +155,14 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     }
   }
   const buttons = {
+    display: createButton({ label: 'Refresh displayed geometry', size: 'sm', onClick: async () => {
+      buttons.display.disabled = true
+      try {
+        const result = await refreshPublishedDisplay({ store, api })
+        displayStatus.textContent = `Display rebuilt from published geometry; recipe unchanged. ${result.previewCancelled ? 'Move/Rotate preview cancelled. ' : ''}${result.correctedNucleotides} cached nucleotide positions corrected.`
+      } catch (failure) { showError(failure) }
+      finally { buttons.display.disabled = false }
+    } }),
     check: createButton({ label: 'Check published recipe', size: 'sm', onClick: () => { clearNotice(); return controller.check() } }),
     inspect: createButton({ label: 'Reload saved proposal', size: 'sm', onClick: async () => { clearNotice(); dirty = false; await controller.inspect() } }),
     save: createButton({ label: 'Save proposal', onClick: () => mutate('save') }),
@@ -203,6 +214,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     else if (next.result?.repair?.not_evaluated?.length) changes.textContent = `${next.result.repair.not_evaluated.length} later feature(s) were not evaluated after the failure.`
     else changes.textContent = note
     buttons.check.disabled = busy || !current || publicationPending
+    buttons.display.disabled = busy || publicationPending
     buttons.inspect.disabled = busy || publicationPending
     buttons.save.disabled = busy || !editable || !dirty || !actions.length
     buttons.rebase.disabled = busy || !editable || !next.draft || (dirty && !actions.length)
@@ -219,7 +231,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
   }
   const launcher = createButton({ label: 'repair', size: 'sm', className: 'fl-log-action', onClick: () => open() })
   const body = el('div', { className: 'part-repair', children: [status,
-    el('div', { className: 'part-repair__tools', children: [buttons.check, buttons.inspect] }), error, issues,
+    el('div', { className: 'part-repair__tools', children: [buttons.check, buttons.inspect, buttons.display] }), displayStatus, error, issues,
     el('label', { children: ['Feature inputs', selector] }), editor.root,
     el('h3', { text: 'Proposed input changes' }), proposal, changes,
     el('div', { className: 'part-repair__tools', children: [buttons.compare] }), comparisonHost] })
