@@ -1,20 +1,23 @@
-"""Duplex-axis capsule clearance for rigid flexible-network fitting.
+"""Conservative finite-duplex cylinder clearance for rigid network fitting.
 
 Geometric endpoint clearance only: excludes ssDNA/overhangs and intra-body
 contacts. Does not claim atomistic sterics or a collision-free motion path.
 """
 import numpy as np
 from scipy.spatial.transform import Rotation
-from backend.core.constants import HELIX_RADIUS_NM
+from backend.core.constants import HELIX_RADIUS_NM, DSDNA_RISE_PER_BP_NM
 
 def segment_distances(p, q, r, s):
     """Exact finite segment distance, including parallel/degenerate segments."""
     u, v, w = q-p, s-r, p-r
     dot = lambda a, b: np.einsum('ij,ij->i', a, b)
-    a, b, c, d, e = dot(u, u), dot(u, v), dot(v, v), dot(u, w), dot(v, w)
-    den = a*c-b*b
-    t = np.divide(b*e-c*d, den, out=np.zeros_like(a), where=den > 1e-12)
-    z = np.divide(a*e-b*d, den, out=np.zeros_like(a), where=den > 1e-12)
+    a, c = dot(u, u), dot(v, v)
+    # Avoid subtracting nearly equal O(length**4) terms for parallel duplexes.
+    # Cross products also keep finite-difference derivatives stable as they turn.
+    normal = np.cross(u, v)
+    den = dot(normal, normal)
+    t = np.divide(dot(np.cross(v, w), normal), den, out=np.zeros_like(a), where=den > 1e-12)
+    z = np.divide(dot(np.cross(u, w), normal), den, out=np.zeros_like(a), where=den > 1e-12)
     interior = np.linalg.norm(w+t[:, None]*u-z[:, None]*v, axis=1)
     interior[(den <= 1e-12) | (t < 0) | (t > 1) | (z < 0) | (z > 1)] = np.inf
 
@@ -40,6 +43,38 @@ def capsule_gaps(p, q, r, s, diameter):
     near = gap <= 0
     gap[near] = segment_distances(p[near], q[near], r[near], s[near])-diameter
     return gap
+
+
+def cylinder_gaps(p, q, r, s, diameter):
+    """Conservative separation bounds for finite, flat-ended duplex cylinders.
+
+    Capsules bound radial separation; axial support planes additionally certify
+    clear ends. Each axis extends half a base-pair rise beyond its terminal sites.
+    A positive bound guarantees separation; unrecognized separating directions
+    can only cause conservative false contacts, never false clearance.
+    """
+    pad = DSDNA_RISE_PER_BP_NM / 2
+    separation = np.maximum(np.maximum(np.minimum(p, q)-np.maximum(r, s),
+                                       np.minimum(r, s)-np.maximum(p, q)), 0)
+    gap = np.linalg.norm(separation, axis=1)-diameter-2*pad
+    near = gap <= 0
+    gap[near] = _cylinder_overlap_bounds(p[near], q[near], r[near], s[near], diameter, pad)
+    return gap
+
+
+def _cylinder_overlap_bounds(p, q, r, s, diameter, pad):
+    u, v = q-p, s-r
+    lu, lv = np.linalg.norm(u, axis=1), np.linalg.norm(v, axis=1)
+    a = np.divide(u, lu[:, None], out=np.zeros_like(u), where=lu[:, None] > 1e-12)
+    b = np.divide(v, lv[:, None], out=np.zeros_like(v), where=lv[:, None] > 1e-12)
+    gap = capsule_gaps(p-pad*a, q+pad*a, r-pad*b, s+pad*b, diameter)
+    cosine = np.clip(np.abs(np.einsum('ij,ij->i', a, b)), 0, 1)
+    radial_support = diameter/2 * np.linalg.norm(np.cross(a, b), axis=1)
+    delta = (r+s-p-q)/2
+    along_a = np.abs(np.einsum('ij,ij->i', delta, a)) - (lu/2+pad) - (lv/2+pad)*cosine - radial_support
+    along_b = np.abs(np.einsum('ij,ij->i', delta, b)) - (lv/2+pad) - (lu/2+pad)*cosine - radial_support
+    valid = (lu > 1e-12) & (lv > 1e-12)
+    return np.where(valid, np.maximum.reduce([gap, along_a, along_b]), gap)
 
 
 
@@ -98,11 +133,12 @@ class Contacts:
             mask = self.masks[k]
             for points in (p, q):
                 points[mask] = Rotation.from_rotvec(rv).apply(points[mask]-self.centers[k])+self.centers[k]+shift
-        return capsule_gaps(p[self.ia], q[self.ia], p[self.ib], q[self.ib], 2*HELIX_RADIUS_NM)
+        return cylinder_gaps(p[self.ia], q[self.ia], p[self.ib], q[self.ib], 2*HELIX_RADIUS_NM)
 
     def report(self, x):
         gap = self.gaps(x)
-        return dict(model='duplex-axis-capsules-v1', radius_nm=HELIX_RADIUS_NM,
+        return dict(model='duplex-flat-cylinder-bounds-v1', radius_nm=HELIX_RADIUS_NM,
+                    axial_padding_nm=DSDNA_RISE_PER_BP_NM/2,
                     capsule_count=len(self.capsules), pair_count=len(gap),
                     max_penetration_nm=float(max(0., -gap.min())) if len(gap) else 0.,
                     overlap_count=int(np.count_nonzero(gap < -.001)), tolerance_nm=.001,

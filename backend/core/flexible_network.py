@@ -1,6 +1,6 @@
 """Joint rigid-body kinematics for flexible tethers (no topology or atom changes).
 
-Minimise contour and duplex-contact violations over all bodies simultaneously. Each connected
+Minimise contour violations subject to duplex clearance over all bodies. Each connected
 component fixes its largest participating rigid cluster; overlapping organizational
 clusters that own no tether endpoint are not bodies in this problem. Slack is free.
 """
@@ -75,19 +75,17 @@ def solve_network(bodies, connections, *, max_nfev=1000, capsules=None):
     initial_contacts = contacts.report(x)
     before = lengths(x)
     evaluations = 0
+    settings = dict(method='trf', max_nfev=max_nfev, motion_penalty=1e-6,
+                    ftol=1e-10, xtol=1e-10, gtol=1e-10)
+    if capsules is not None:
+        settings = dict(method='SLSQP', maxiter=min(max_nfev, 500), ftol=1e-12,
+                        motion_penalty=1e-10, contact_constraint='gap >= 0')
     if len(edges) and (np.max(before - contour) > TOLERANCE_NM or initial_contacts['overlap_count']):
-        # Contact continuation repairs intersecting starts without making slack
-        # tethers taut. Accept only both final inequalities, never an optimizer
-        # success flag. Pure anchor callers retain the legacy numerical contract.
+        # Repair intersecting starts, then impose contact inequalities while
+        # closing tethers. Pure anchor callers retain their numerical contract.
         if capsules is not None:
-            for weight in (.1, .3, 1., 3., 10.):
-                def residual(v):
-                    return np.r_[np.minimum(contour-lengths(v), 0),
-                                 weight*np.minimum(contacts.gaps(v), 0), 1e-5*v]
-                result = least_squares(residual, x, max_nfev=min(max_nfev, 150),
-                                       ftol=1e-9, xtol=1e-9, gtol=1e-9)
-                x = result.x
-                evaluations += result.nfev
+            from backend.core.flexible_contact_solve import solve_contact_constrained
+            x, evaluations, settings = solve_contact_constrained(lengths, contacts, contour, x, max_nfev)
         else:
             result = least_squares(lambda v: np.r_[np.maximum(lengths(v)-contour, 0), 1e-6*v],
                                    x, max_nfev=max_nfev, ftol=1e-10, xtol=1e-10, gtol=1e-10)
@@ -112,15 +110,10 @@ def solve_network(bodies, connections, *, max_nfev=1000, capsules=None):
     return dict(transforms=transforms, fixed_cluster_ids=sorted(pinned),
                 connections=diagnostics, max_excess_nm=maximum,
                 converged=maximum <= TOLERANCE_NM and clearance['max_penetration_nm'] <= TOLERANCE_NM, evaluations=evaluations,
-                tolerance_nm=TOLERANCE_NM, solver='rigid-flex-staged-contact-v1' if capsules is not None else 'rigid-flex-network-v1',
+                tolerance_nm=TOLERANCE_NM, solver='rigid-flex-staged-contact-v2' if capsules is not None else 'rigid-flex-network-v1',
                 contacts=clearance, initial_contacts=initial_contacts,
                 cluster_sizes={k: bodies[k]['size'] for k in ids},
-                settings=dict(method='trf', max_nfev=min(max_nfev, 150) if capsules is not None else max_nfev,
-                              motion_penalty=1e-5 if capsules is not None else 1e-6,
-                              contact_weights=[.1, .3, 1., 3., 10.] if capsules is not None else [],
-                              ftol=1e-9 if capsules is not None else 1e-10,
-                              xtol=1e-9 if capsules is not None else 1e-10,
-                              gtol=1e-9 if capsules is not None else 1e-10))
+                settings=settings)
 
 
 def solve_design_network(design, *, scope='all', conn_id=None):

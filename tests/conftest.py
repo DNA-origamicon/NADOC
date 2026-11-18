@@ -581,6 +581,8 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Full 12-tether JJ_Hinge constrained solve: 12.62 s; small fixtures stay fast.
+    "test_local_jj_hinge_numeric_regression_is_read_only",
     # Compiles and executes the native NAMD electrode harness.
     "test_compiled_electrode_forces_match_slab_confinement_and_springs",
     # November 14 FAST: two cold recipe replay workers plus edit/undo/redo
@@ -1110,7 +1112,7 @@ def _slow_area_for(module: str) -> str:
     """Map a slow test's module (bare filename, no .py) to one area marker.
     First match wins; order matters (oxdna before headless so the oxDNA
     headless-build file lands in oxdna, not headless)."""
-    if module in {"test_part_routing_large_history", "test_extrusion_auto_routing_history", "test_vr_frame_audit", "test_vr_view_transport"}:
+    if module in {"test_flexible_network", "test_part_routing_large_history", "test_extrusion_auto_routing_history", "test_vr_frame_audit", "test_vr_view_transport"}:
         return "headless"
     if module in {"test_assembly_flatten", "test_assembly_simulation_parity"}:
         return "cando"

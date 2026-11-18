@@ -70,7 +70,7 @@ function makeDeps(overrides = {}) {
     instanceGizmo: { detach: vi.fn() },
     assemblyRenderer: { rebuild: vi.fn(async () => {}), rebuildLinkers: vi.fn() },
     assemblyJointRenderer: { rebuild: vi.fn() },
-    api: { skipNextResponseDelta: vi.fn(), editFeature: vi.fn(async () => {}), seekFeatures: vi.fn(async () => {}) },
+    api: { registerHistoryPreviewCanceller: vi.fn(), skipNextResponseDelta: vi.fn(), editFeature: vi.fn(async () => {}), seekFeatures: vi.fn(async () => {}) },
     moveRotatePanel: { setAssemblyCtx: vi.fn(), setSessionMode: vi.fn() },
     mrPanel: document.getElementById('__mrPanel'),
     mrPivotSel: document.getElementById('__mrPivotSel'),
@@ -641,6 +641,18 @@ describe('initTranslateRotateTool — confirm', () => {
 })
 
 describe('initTranslateRotateTool — cancel', () => {
+  it('restores and discards a live preview at the shared history boundary without committing', async () => {
+    const ctx = makeDeps({ state: { currentGeometry: [{}], currentHelixAxes: { a: 1 } } })
+    ctx.deps.setActive(true)
+    ctx.deps.setClusterDirty(true)
+    initTranslateRotateTool(ctx.deps)
+    await ctx.deps.api.registerHistoryPreviewCanceller.mock.calls[0][0]()
+    expect(ctx.active).toBe(false)
+    expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalled()
+    expect(ctx.jointRenderer.rebuild).toHaveBeenCalled()
+    expect(ctx.clusterGizmo.commitPendingTransforms).not.toHaveBeenCalled()
+    expect(ctx.helixCtrl.commitClusterPositions).not.toHaveBeenCalled()
+  })
   it('inactive → no-op', async () => {
     const ctx = makeDeps()
     const t = initTranslateRotateTool(ctx.deps)

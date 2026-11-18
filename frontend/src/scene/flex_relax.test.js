@@ -138,6 +138,18 @@ describe('initFlexRelax factory', () => {
     expect(flex.hasGate('c1')).toBe(false)
   })
 
+  it('coalesces concurrent gate fetches and ignores a stale document response',async()=>{
+    const flex=makeFlex(), resolvers=[]
+    api.getFlexibleConnections.mockImplementation(()=>new Promise(resolve=>resolvers.push(resolve)))
+    const a=flex.refreshFlexGates(), same=flex.refreshFlexGates()
+    expect(same).toBe(a)
+    store.setState({currentDesign:makeDesign({id:'new'})})
+    const b=flex.refreshFlexGates()
+    resolvers[1]({gates:{c1:{gate:true}},connections:[]});await b
+    resolvers[0]({gates:{},connections:[]});await a
+    expect(flex.hasGate('c1')).toBe(true)
+  })
+
   it('buildSsdnaPayload uses the refreshed connections + current design + live entries', async () => {
     const entries = [
       { nuc: { helix_id: 'h1', bp_index: 5, direction: 'fwd' }, pos: 'PM' },

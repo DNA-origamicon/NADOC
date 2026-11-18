@@ -108,7 +108,7 @@ def test_recorded_network_relax_reopens_replays_undoes(tmp_path, monkeypatch):
         response = flexible_relax(FlexibleRelaxBody(scope='all'))
         result = response['relaxation']
         assert result['converged']
-        assert result['solver'] == 'rigid-flex-staged-contact-v1'
+        assert result['solver'] == 'rigid-flex-staged-contact-v2'
         assert result['contacts']['max_penetration_nm'] <= .001
         assert result['transforms']
         after = state.get_or_404()
@@ -179,14 +179,16 @@ def test_local_jj_hinge_numeric_regression_is_read_only():
     if not path.exists():
         pytest.skip('Local JJ_Hinge diagnostic source unavailable')
     raw = path.read_bytes()
-    if hashlib.sha256(raw).hexdigest() != '124d17dcb985ae9ec6aba26ac0657e190e33f94c2cd0b4c2836c800cc5ebf0a5':
+    if hashlib.sha256(raw).hexdigest() != '999bd567db350ac8ada5de559815e630f7c0204d1d8e6bf0b2e2d4a3fe9db303':
         pytest.skip('Local JJ_Hinge source has changed since this regression')
     design = Design.model_validate_json(raw)
-    if len(design.flexible_connections) != 11:
+    if len(design.flexible_connections) != 12:
         pytest.skip('User has edited the local diagnostic source')
     result = solve_design_network(design)
     assert result['converged']
-    assert len(result['connections']) == 11
+    assert len(result['connections']) == 12
+    assert result['contacts']['max_penetration_nm'] <= .001
+    assert result['contacts']['model'] == 'duplex-flat-cylinder-bounds-v1'
     assert result['max_excess_nm'] < .001
     assert not set(result['fixed_cluster_ids']) & {t['cluster_id'] for t in result['transforms']}
     assert hashlib.sha256(path.read_bytes()).digest() == hashlib.sha256(raw).digest()

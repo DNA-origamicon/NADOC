@@ -234,7 +234,7 @@ def flexible_relax(body: FlexibleRelaxBody) -> dict:
             # optimizer predictions (native coordinates may have lower precision).
             result["max_excess_nm"] = max((c["excess_nm"] for c in selected.values()), default=0.)
             params["relaxation"]["max_excess_nm"] = result["max_excess_nm"]
-            if result.get('solver') == 'rigid-flex-staged-contact-v1':
+            if result.get('solver') in {'rigid-flex-staged-contact-v1', 'rigid-flex-staged-contact-v2'}:
                 from backend.core.flexible_contacts import Contacts, design_capsules
                 ids = set(result['cluster_sizes'])
                 capsules = design_capsules(updated, ids)

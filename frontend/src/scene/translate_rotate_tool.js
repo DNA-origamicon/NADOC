@@ -1,3 +1,4 @@
+import { createClusterAttachment } from './cluster_attachment.js'
 import * as THREE from 'three'
 import { quatToEulerDeg } from './rotation_math.js'
 import { showToast } from '../ui/toast.js'
@@ -784,11 +785,23 @@ export function initTranslateRotateTool(deps) {
     if (cancelRestoreCursor !== null) await api.seekFeatures(cancelRestoreCursor)
   }
 
+  // Menu, keyboard and programmatic history requests share this API boundary.
+  // Await restoration BEFORE a cluster-only delta captures its visual base.
+  const unregisterHistoryPreview = api.registerHistoryPreviewCanceller?.(async () => {
+    const attachmentController = _moveRotatePanel.getProteinController?.()
+    if (attachmentController?.isAttached?.()) await attachmentController.cancel()
+    else if (proteinGizmo?.isAttached()) await proteinGizmo.cancel()
+    else if (nucleotideTransformTool?.isActive()) await nucleotideTransformTool.cancel()
+    await _cancelTranslateRotateTool()
+  })
+  if (import.meta.hot) import.meta.hot.dispose(() => unregisterHistoryPreview?.())
+
   // Attach the gizmo across `groupIds` as one rigid body and switch the panel into
   // group mode (dropdowns disabled, fields show the group delta = 0). Shared by tool
   // activation and the live multi-select subscriber, so a group can be entered either
   // by pressing `t` with a multi-selection OR by adding a cluster while the tool is open.
   async function _showClusterGroup(groupIds, clusters) {
+    moveEpoch++ // invalidate an outstanding single-cluster attach
     for (const id of groupIds) await _refreshClusterPivotForAttach(id)
     clusterGizmo.attachGroup(groupIds, scene, camera, canvas)
     _removeToolPickListeners({ preserveGroupPickMode: true })   // group mode has no joint picking
@@ -809,13 +822,17 @@ export function initTranslateRotateTool(deps) {
   // attach() re-sets activeClusterId → the main.js active-cluster subscriber repopulates
   // the number boxes / pivot options / centroid constraint (it early-outs while a group
   // is active, so it only runs once we're back in single mode).
-  async function _showClusterSingle(clusterId, clusters) {
+  const attachLatestCluster=createClusterAttachment(()=>({design:store.getState().currentDesign?.id,
+    epoch:moveEpoch,active:getActive()}))
+  function _showClusterSingle(clusterId, clusters) {
+    return attachLatestCluster(clusterId,async currentRequest=>{
     _moveRotatePanel.setSessionMode?.('cluster')
     if (_mrPivotSel) _mrPivotSel.disabled = false
     document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
     _mrRefreshCurrentSelection?.()
     canvas.addEventListener('pointerdown', _onToolPickPointerDown)   // dedup by the browser
     await _refreshClusterPivotForAttach(clusterId)
+    if(!currentRequest())return
     clusterGizmo.attach(clusterId, scene, camera, canvas)
     // The menu can open in waiting mode, which has never fetched tether gates.
     // Retargeting must refresh them too; the active-cluster subscriber above
@@ -823,10 +840,11 @@ export function initTranslateRotateTool(deps) {
     const designId = store.getState().currentDesign?.id
     await _flexRelax.refreshFlexGates()
     const current = store.getState()
-    if (!getActive() || current.activeClusterId !== clusterId ||
+    if (!currentRequest() || current.activeClusterId !== clusterId ||
         current.currentDesign?.id !== designId || clusterGizmo.isGroupActive?.()) return
     const joints = current.currentDesign?.cluster_joints?.filter(j => j.cluster_id === clusterId) ?? []
     _mrSetPivotOptions(joints, clusterId)
+    })
   }
 
   // Selection→tool bridge: opening/re-targeting/closing the tool in response to cluster
@@ -840,7 +858,7 @@ export function initTranslateRotateTool(deps) {
     const { action, clusterId } = decideSelectionAction({
       newSel:          canonicalSelection(newState).primary,
       toolActive:      getActive(),
-      activeClusterId: newState.activeClusterId,
+      activeClusterId: clusterGizmo.isActive?.() === false ? null : newState.activeClusterId,
       mode: {
         assemblyActive: newState.assemblyActive,
         unfoldActive:   newState.unfoldActive,
@@ -870,7 +888,7 @@ export function initTranslateRotateTool(deps) {
     } else if (groupIds.length === 1) {
       // Re-attach single only if we were a group (or somehow point elsewhere) — otherwise
       // the gizmo is already on this cluster (e.g. the promote seed) and re-attaching flickers.
-      if (clusterGizmo.isGroupActive?.() || groupIds[0] !== newState.activeClusterId) {
+      if (clusterGizmo.isActive?.() === false || clusterGizmo.isGroupActive?.() || groupIds[0] !== newState.activeClusterId) {
         await _showClusterSingle(groupIds[0], clusters)
       }
     }

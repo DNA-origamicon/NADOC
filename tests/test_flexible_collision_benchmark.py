@@ -2,6 +2,7 @@
 import numpy as np
 
 from experiments.flexible_collision_benchmark import capsule_gaps, segment_distances
+from backend.core.flexible_contacts import cylinder_gaps
 
 
 def test_segment_distance_crossing_parallel_endpoint_and_points():
@@ -21,6 +22,17 @@ def test_segment_distance_invariant_under_common_rigid_motion():
     rotation = Rotation.from_rotvec([.7, -.4, 1.2])
     moved = np.array([rotation.apply(p)+[10, -30, 5] for p in points])
     np.testing.assert_allclose(segment_distances(*points), segment_distances(*moved), atol=1e-12)
+
+
+def test_nearly_parallel_segments_retain_their_interior_closest_points():
+    # Their xy projections cross halfway along the segments. The Gram
+    # determinant a*c-b*b rounds to zero despite a nonzero crossing angle.
+    p = np.array([[0., 0., 0.]])
+    q = np.array([[100., 0., 0.]])
+    r = np.array([[0., -5e-7, 1e-9]])
+    s = np.array([[100., 5e-7, 1e-9]])
+    np.testing.assert_allclose(segment_distances(p, q, r, s), [1e-9], atol=1e-12)
+    np.testing.assert_allclose(segment_distances(s, r, q, p), [1e-9], atol=1e-12)
 
 
 def test_segment_distances_against_independent_bounded_minimization():
@@ -43,6 +55,27 @@ def test_broad_phase_preserves_all_penetrations_and_feasible_pairs():
     accelerated = capsule_gaps(*points, 2)
     np.testing.assert_allclose(np.minimum(accelerated, 0), np.minimum(exact, 0))
     np.testing.assert_array_equal(accelerated >= 0, exact >= 0)
+
+
+def test_flat_duplex_ends_clear_without_hiding_side_or_crossing_contacts():
+    p = np.array([[0., 0., 0.], [0., 0., 0.], [-2., 0., 0.]])
+    q = np.array([[0., 0., 4.], [0., 0., 4.], [2., 0., 0.]])
+    r = np.array([[0., 0., 5.002], [1.5, 0., 0.], [0., -2., 0.]])
+    s = np.array([[0., 0., 9.002], [1.5, 0., 4.], [0., 2., 0.]])
+    assert capsule_gaps(p, q, r, s, 2)[0] < -.99
+    np.testing.assert_allclose(cylinder_gaps(p, q, r, s, 2), [.668, -.5, -2], atol=1e-12)
+    # A single paired site retains a conservative sphere, not a zero-size axis.
+    np.testing.assert_allclose(cylinder_gaps(p[:1], p[:1], r[1:2], r[1:2], 2), [-.5])
+
+
+def test_cylinder_contacts_invariant_under_rigid_motion():
+    from scipy.spatial.transform import Rotation
+    rng = np.random.default_rng(484)
+    points = rng.normal(size=(4, 100, 3))
+    rotation = Rotation.from_rotvec([.7, -.4, 1.2])
+    moved = np.array([rotation.apply(p)+[10, -30, 5] for p in points])
+    np.testing.assert_allclose(np.minimum(cylinder_gaps(*points, 2), 0),
+                               np.minimum(cylinder_gaps(*moved, 2), 0), atol=1e-12)
 
 
 def test_expansion_separates_bodies_without_scaling_them_or_moving_root():

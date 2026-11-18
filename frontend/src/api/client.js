@@ -1,4 +1,6 @@
 import { flexRangeQuery } from '../ui/md_flex_range.js'
+import { cancelHistoryPreview } from './history_preview.js'
+export { registerHistoryPreviewCanceller, cancelHistoryPreview } from './history_preview.js'
 import { createRecoverySerializer } from './recovery_serializer.js'
 const _serializeRecovery = createRecoverySerializer()
 import { sequenceActivity } from '../ui/sequence_activity.js'
@@ -111,10 +113,10 @@ export const assetOperationAPI = createAssetOperationRequests({ store, request: 
   syncDesign: _syncFromDesignResponse, showProgress: showAssetOperationProgress, saves: _assetSaves })
 export const groupOrganizationCommand = createGroupOrganizationEndpoint({ store, request: _request,
   syncDesign: _syncFromDesignResponse, getDocId, currentRevision: currentRevisionWatermark,
-  documentRequests: _documentRequests })
+  documentRequests: _documentRequests, formatError: errorDetailToMessage })
 export const commitClusterPoses = createClusterPoseEndpoint({ store, request: _request,
   syncDesign: _syncFromDesignResponse, getDocId, currentRevision: currentRevisionWatermark,
-  documentRequests: _documentRequests })
+  documentRequests: _documentRequests, formatError: errorDetailToMessage })
 const _extensionEndpoints = createExtensionEndpoints({
   getDesign: () => store.getState().currentDesign, getRevision: currentRevisionWatermark,
   getDocId, documentRequests: _documentRequests, request: _request, syncDesign: _syncFromDesignResponse,
@@ -1201,6 +1203,7 @@ async function _applyGetDesignResponse(json, metadataOnly) {
  * Returns null if nothing to undo (404 from server).
  */
 export async function undo({ onCommitted, deferGeometry = false } = {}) {
+  await cancelHistoryPreview()
   const trace = beginOperationTiming('Undo', { requestPath: '/design/undo' })
   const scope = _documentRequests.capture()
   const source = store.getState().currentDesign
@@ -1231,6 +1234,7 @@ export async function undo({ onCommitted, deferGeometry = false } = {}) {
  * Returns null if nothing to redo (404 from server).
  */
 export async function redo({ onCommitted, deferGeometry = false } = {}) {
+  await cancelHistoryPreview()
   const trace = beginOperationTiming('Redo', { requestPath: '/design/redo' })
   const scope = _documentRequests.capture()
   const source = store.getState().currentDesign
@@ -5000,11 +5004,13 @@ export async function getLinkerGeometry() {
 }
 
 export async function undoAssembly() {
+  await cancelHistoryPreview()
   const json = await _request('POST', '/assembly/undo')
   return _syncFromAssemblyResponse(json)
 }
 
 export async function redoAssembly() {
+  await cancelHistoryPreview()
   const json = await _request('POST', '/assembly/redo')
   return _syncFromAssemblyResponse(json)
 }

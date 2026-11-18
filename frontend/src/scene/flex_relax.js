@@ -55,13 +55,27 @@ export function initFlexRelax({ store, api, designRenderer, isTranslateRotateAct
   // they get the "Constrained (tethers)" option even with no ssDNA flexible-segment marks.
   let _connTetherClusters = []
 
-  async function refreshFlexGates() {
-    try {
-      const info = await api.getFlexibleConnections()
-      _flexGates = info?.gates ?? {}
-      _flexConnections = info?.connections ?? []
-      _connTetherClusters = info?.connection_tether_clusters ?? []
-    } catch { _flexGates = {}; _flexConnections = []; _connTetherClusters = [] }
+  let gateRequest=0, inFlight=null, gateDesign=null
+  function refreshFlexGates() {
+    const design=store.getState().currentDesign
+    if(inFlight?.design===design)return inFlight.promise
+    const request=++gateRequest
+    if(gateDesign!==design){_flexGates={};_flexConnections=[];_connTetherClusters=[]}
+    const promise=(async()=>{
+      try {
+        const info=await api.getFlexibleConnections()
+        if(request!==gateRequest || store.getState().currentDesign!==design)return
+        _flexGates=info?.gates??{}
+        _flexConnections=info?.connections??[]
+        _connTetherClusters=info?.connection_tether_clusters??[]
+        gateDesign=design
+      } catch {
+        // A late failure must not erase a newer successful response.
+        if(request===gateRequest && gateDesign!==design){_flexGates={};_flexConnections=[];_connTetherClusters=[]}
+      } finally {if(inFlight?.request===request)inFlight=null}
+    })()
+    inFlight={design,request,promise}
+    return promise
   }
 
   /** True when the cluster's ssDNA flexible-segment gate is open. */
@@ -102,6 +116,7 @@ export function initFlexRelax({ store, api, designRenderer, isTranslateRotateAct
     return {
       connections,
       links: linkDescs,
+      network: { connections: _flexConnections, gates: _flexGates },
       resolveWorldPos: makeWorldPosResolver(designRenderer.getBackboneEntries?.() ?? []),
     }
   }

@@ -1,3 +1,10 @@
+Validation follow-up (November 17, 12-tether fix): FAST 21,067 passed / 19 skipped;
+lint passes. Aggregate timing warning (498 s) has zero per-test violators, maximum
+4.56 s. Required triage found no shared accidental wait in reviewed leading
+modules/fixtures. Full-JJ 12.62 s test is centrally registered slow+headless and
+collection verified. FULL sweep remains deferred in `.nadoc-slow-pending` because
+no test-dedicated session is open. See ISSUE-214 for exact guard message.
+
 ---
 name: ssdna-flexible-segments
 description: "Flexible ssDNA segments — mark unpaired runs flexible → fixed-length arc between EXISTING clusters → real-time \"ssDNA constrained\" cluster drag (free until taut). Replaced the auto-cut \"ball joint\" approach. Shipped 2026-05-30."
@@ -9,6 +16,22 @@ metadata:
 
 # Flexible ssDNA segments + real-time "ssDNA constrained" drag
 
+Latest (2026-11-17, ISSUE-219): M-before-selection uses coalesced attachments and
+request-scoped gate discovery; delayed replies refresh pivot options without
+reviving a cancelled/superseded tool. Live coupled solves use reusable geometry,
+a refitted rod-contact hierarchy, and 60 ms continuation slices; only validated
+poses publish. Reversal discards obsolete work. One display transaction covers
+all bodies. Numeric edits retain the complete solve budget. JJ GPU full-frame
+120-update benchmark max 171.8 ms; see fix log and task receipt for scope.
+
+Apply diagnostic follow-up (ISSUE-220): null receipts previously hid the server's
+specific rejection behind “Pending movement has been retained.” Atomic moves now
+propagate request-local error details; organized placement Apply opts into the
+same behavior. Pending poses and publication guards remain intact. Isolated
+JJ_Hinge successive X requests 55/65/90 projected to 19.772/19.820/19.868°
+and committed; poses above 50° were not reached. The user's original failure
+is not reproduced; do not describe it as fixed or as an angle-limit defect.
+
 ## Topic navigation and current boundaries
 
 Reorganized October 17, 2026. Read the retained contracts here, then only the
@@ -18,6 +41,99 @@ or authorization; current user instructions and `CLAUDE.md` take precedence.
 Mark a contiguous run of UNPAIRED beads as a flexible tether. Each marked run bridging two **existing** clusters becomes a fixed-contour-length `FlexibleConnection`. The move/rotate tool gains an **"ssDNA constrained"** pivot option (enabled only when every inter-cluster connection from the selected cluster is flexible); dragging the cluster is clamped per-frame so no tether exceeds its contour length ("free until taut"), and the segment renders as a fixed-length geometric arc. Display-layer only — NEVER mutates topology. Plan: `~/.claude/plans/we-want-to-create-indexed-pancake.md`.
 
 **REPLACED the earlier auto-cut "ball joint" approach** (mark beads → derive new arms → Powell solve). The user found that paradigm wrong. Rigid arms are now the user's OWN clusters; no auto-cut, no solver, no new clusters. (Old `ball_joint_arms.py`/`ball_joint_solve.py` deleted; `ClusterRigidTransform.kind` removed.)
+
+## November 17, 2026 — compliant tether motion and collision toggle
+
+Move/Rotate exposes **Detect collisions during tethered motion**, default ON.
+The checkbox and its wrapping label share a horizontal row. Numeric inputs and
+pointer changes use the same constrained preview path (ISSUE-217).
+
+For gate-approved flexible components with at least three clusters, the new
+`tether_network_solver.js` solves all connected rigid bodies together. The largest
+cluster is pinned; smaller bodies translate and rotate preferentially under tether
+and duplex-contact corrections. `tether_network_motion.js` resolves exact ownership,
+starts from current pending poses, captures all follower previews and queues their
+absolute poses in the existing atomic Apply transaction. Cancel/Undo discard the
+whole preview. Unsupported mixed/overhang components retain the earlier solver.
+
+All paired duplex axes in the part participate as contact geometry. Geometry
+outside the eligible flexible component remains a fixed obstacle. The coupled
+solver checks follower/anchor, follower/driver and follower/follower contacts,
+using the existing conservative 1 nm radius / 0.167 nm flat-end padding. Contact
+OFF disables contacts while retaining coupled tether compliance. Sampling advances
+at most 0.25 nm of requested driver axis displacement, with 200 steps and 600 projection passes per edit;
+blocked steps cannot accumulate into an unchecked jump. Projection corrections
+are iterative, so this is not exact continuous collision detection.
+
+Both contact and tether residuals must be within 0.001 nm of their initial valid
+bounds; initially invalid geometry cannot worsen. Contact bounds are fixed for a
+gesture rather than tightened after every step, avoiding the old monotonic
+stop-only ratchet (ISSUE-218). Initial overlaps are tolerated, not repaired by this
+tool. These are duplex contact bounds, not atomic sterics or ssDNA self-avoidance.
+The toggle applies to tether-constrained part motion, not free group movement or
+assembly instance transforms. No topology, contour or native molecular placement
+rules change. Main.js LOC delta 0. Subjective pointer feel remains MV-70.
+
+Real JJ app verification: increase and reverse Cluster 2's X rotation through the
+actual numeric field, contact toggle ON/OFF, unchanged largest cluster, all
+17,926 inter-owner duplex pairs and all 12 flexible connections checked. With
+contacts ON, additional penetration was 0.000626 nm and added tether stretch
+0.000857 nm; reversal stayed below 0.0001 nm for both. Followers yielded and
+Cancel restored every displayed backbone position within 1e-6 nm. With contacts
+OFF, tether compliance remained active while penetration reached 1.1795 nm.
+The requested +5-degree edit advanced X from 19.580 to 19.772 degrees under the
+work cap (2.05 seconds in headless Chromium); reversal reached 17.734 degrees
+(1.04 seconds). This is local constrained projection, not a global motion planner
+or a guarantee that every requested angle is reachable. Rendered anchor coordinates
+agreed with queued transforms to 1.12e-13 nm. Pointer responsiveness
+and crowded motion feel remain MV-70. Full frontend suite: 979 files, 10,688 passed / 1 skipped.
+Isolated smoke: 24 passed / 2 skipped. Cleanup verified; receipt:
+`.development-artifacts/compliant-motion-verification.json`.
+Full view/toggle visually inspected; no
+saved derivative of this legacy design was created. Source SHA256 unchanged:
+`74c416cf56d157df29587df6b60323086ebe9b80d45cdc4ea40317682fc44ada`.
+
+## November 17, 2026 — twelve-tether contact-constrained closure (current)
+
+The user marked the remaining two bases on h_XY_5_5 (135–136 FORWARD).
+All 12 tethers are now present and both large clusters pass the constrained-move
+gate. The v1 soft contact schedule fails on this state: 10.245 nm maximum
+overstretch and 1.804 nm capsule penetration. More starting poses and penalty
+schedules did not establish acceptance. No contour lengths or topology changed.
+
+Two corrections now ship as `rigid-flex-staged-contact-v2`:
+- Finite duplex cylinders have flat ends, padded by half the native bp rise
+  (0.167 nm). Rounded capsules falsely reported 0.998 nm penetration between
+  three pairs of consecutive hinge duplexes whose terminal axis sites are
+  1.002 nm apart. Radial capsules plus exact axial support-plane bounds certify
+  separation conservatively; they may retain false contacts, never certify an
+  intersecting cylinder pair as clear. Degenerate single-site primitives retain
+  conservative spheres. Closest-segment math uses cross products to avoid the
+  nearly-parallel Gram-determinant cancellation.
+- A contact-repair least-squares initialization handles overlapping starts.
+  SLSQP then minimizes tether overstretch subject to contact gaps >= 0.
+  This replaces the v1 tradeoff between tether and contact residual penalties.
+  Largest-cluster pinning, all-tether/native-contact acceptance, atomic failure,
+  explicit-pose history and replay remain unchanged.
+
+Actual app verification on source SHA256
+`999bd567db350ac8ada5de559815e630f7c0204d1d8e6bf0b2e2d4a3fe9db303`:
+F19 (mark) -> F20 (Relax), all 12 lengths <= 1.18 nm, maximum excess 0,
+maximum contact-bound penetration 1.86e-13 nm, zero overlaps. Geometry Cluster 1
+fixed. Front/side/top/oblique Full views inspected: open hinge, no visible
+inter-bundle duplex intersections. Full geometry refetch changes rendered
+backbone coordinates by exactly zero. Geometry Cluster 2's real Move/Rotate
+panel offers and selects Constrained (tethers). This checks availability, not
+a new network-following drag algorithm.
+
+Focused network tests: 10 passed, including recorded publication/reopen/replay,
+atomic rejection, initial overlap repair and the updated local 12-tether numeric
+regression (12.62 s; explicitly slow). Contact geometry tests: 8 passed.
+Source remains unchanged; no legacy derivative published. Both browser capture
+directories, host parts/project stores, credentials/session/output paths removed.
+Compact app evidence: `.development-artifacts/jj-twelve-app-verification.json`.
+Coverage remains paired rigid duplexes only, not ssDNA, overhangs, atomistic
+sterics or continuous collision-free motion.
 
 ## November 17, 2026 — actual JJ_Hinge app verification
 
