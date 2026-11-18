@@ -435,7 +435,7 @@ class RunRequest(BaseModel):
     field, a hard surface, and anchor traps (each independent/optional).  Branches a
     child job seeded from the relaxed parent so runs can be fanned out + compared."""
 
-    steps: int = Field(2_000_000, ge=1000, le=200_000_000)
+    steps: int = Field(2_000_000, ge=1000, le=10_000_000_000)
     stage_overrides: dict[str, dict] = Field(default_factory=dict)
     # Steps between trajectory frames (oxDNA's print_conf_interval).  Absolute, not a
     # fraction of `steps`, so a longer run gives a LONGER trajectory rather than a
@@ -1276,7 +1276,7 @@ async def list_oxdna_jobs() -> list[dict]:
 
 _CONTINUATION_PARAMETERS = (
     "temperature", "dt", "thermostat", "diff_coeff", "gamma_trans",
-    "refresh_vel", "bussi_tau", "newtonian_steps",
+    "refresh_vel", "bussi_tau", "newtonian_steps", "salt_concentration",
 )
 
 
@@ -1289,6 +1289,16 @@ def _continuation_parameters(job, workspace, stage_name=None):
     if source is None:
         return {}
     return {key: getattr(source, key) for key in _CONTINUATION_PARAMETERS}
+
+
+def _can_seed_production(job, workspace):
+    """Stopped jobs may branch only after the writer has exited and saved a frame."""
+    if job.status not in (OxdnaStatus.completed, OxdnaStatus.stopped):
+        return False
+    if is_running(job.job_id):
+        return False
+    conf, _ = _latest_relaxed_conf(job, workspace)
+    return conf is not None and conf.is_file() and conf.stat().st_size > 0
 
 
 def _inherit_continuation_parameters(stages, job, workspace, stage_name=None, *, deposition=False):
@@ -1314,7 +1324,8 @@ def _list_oxdna_jobs() -> tuple[list[dict], list]:
     to_warm: list = []
     for j in jobs:
         d = j.to_dict()
-        if j.status == OxdnaStatus.completed:
+        d["can_seed_production"] = _can_seed_production(j, ws)
+        if d["can_seed_production"]:
             d["continuation_parameters"] = _continuation_parameters(j, ws)
         d.update(legacy_job_status(_job_fingerprint(j), current_fp, engine="oxdna"))
         if d.get("status") == "running":
@@ -1342,7 +1353,10 @@ async def get_oxdna_job(job_id: str) -> dict:
 
     job = _load_job(job_id)
     d = job.to_dict()
-    if job.status == OxdnaStatus.completed:
+    from dataclasses import asdict
+    d["stage_specs"] = [asdict(spec) for spec in load_stage_specs(job.job_dir(_workspace()))]
+    d["can_seed_production"] = _can_seed_production(job, _workspace())
+    if d["can_seed_production"]:
         d["continuation_parameters"] = _continuation_parameters(job, _workspace())
     d.update(legacy_job_status(_job_fingerprint(job), _current_design_fingerprint(), engine="oxdna"))
     return d
@@ -1460,7 +1474,7 @@ def _copy_child_parameters(parent_dir, child_dir, specs, *, missing_only=False):
     for name in required:
         if not (parent_dir / name).is_file():
             raise HTTPException(409, f"Parent simulation parameter file is missing: {name}")
-    for name in required | {"oxDNA2_average_sequence_parameters.txt", "design_ref.dat"}:
+    for name in required | {"oxDNA2_average_sequence_parameters.txt", "oxDNA2_sequence_dependent_parameters.txt", "design_ref.dat"}:
         source = parent_dir / name
         if source.is_file() and (not missing_only or not (child_dir / name).exists()):
             shutil.copy(source, child_dir / name)
@@ -2298,9 +2312,9 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     mobile_gold = (parent.run_config or {}).get("mobile_gold")
     if mobile_gold and (body.field or body.surface or body.anchors or body.surface_anchors or body.surface_strands):
         raise HTTPException(400, "Mobile gold production currently supports free solution without additional field/surface/anchor elements")
-    if is_running(job_id) or parent.status != OxdnaStatus.completed:
+    if not _can_seed_production(parent, _workspace()):
         raise HTTPException(
-            400, "A production run requires a completed oxDNA job."
+            400, "A production run requires a completed or stopped oxDNA job with a saved configuration and no active worker."
         )
     _assert_job_current(parent)
     if find_oxdna() is None:
@@ -2375,10 +2389,13 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     )
     allowed = {
         "temperature", "dt", "thermostat", "diff_coeff", "refresh_vel",
-        "bussi_tau", "newtonian_steps", "max_backbone_force",
+        "bussi_tau", "newtonian_steps", "max_backbone_force", "salt_concentration", "sequence_dependent",
         "max_backbone_force_far", "min_bp_retained", "print_energy_every",
     }
     _inherit_continuation_parameters([stage], parent, ws, _stage)
+    if body.thermal_ramp:
+        from backend.core.oxdna_thermal_ramp import literature_stage_defaults
+        stage = literature_stage_defaults(stage)
     overrides = body.stage_overrides.get(stage.name, {})
     if "diff_coeff" in overrides or ("thermostat" in overrides and overrides["thermostat"] != "langevin"):
         stage.gamma_trans = None
@@ -2416,7 +2433,7 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         n_nucleotides=parent.n_nucleotides,
         device=parent.device,
         backend=body.backend or parent.backend,
-        salt_concentration=parent.salt_concentration,
+        salt_concentration=stage.salt_concentration,
         random_seed=job_seed,
         design_source_path=parent.design_source_path,
         project_id=parent.project_id,
@@ -2526,6 +2543,9 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
             stream.write("\n" + peg_terminal_field_text(cap["spec"], field_in))
     _inherit_submodel_selection(pjd, cjd, body.submodel)
 
+    from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_PATH
+    sequence_file = AVERAGE_SEQUENCE_PATH.with_name("oxDNA2_sequence_dependent_parameters.txt")
+    shutil.copy2(sequence_file, cjd / sequence_file.name)
     specs = configure_child(child, stage, body.thermal_ramp)
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(s) for s in specs], indent=2))
     child.status = OxdnaStatus.queued

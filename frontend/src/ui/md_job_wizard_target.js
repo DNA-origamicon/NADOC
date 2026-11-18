@@ -165,8 +165,7 @@ export function initWizardTargetStep({
       <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Write this run to</div>
       <div id="wiz-target-rundir"></div>
       <div style="font-size:10px;color:#6e7681;margin-top:6px;line-height:1.5">
-        A NAMD run writes multi-GB trajectories. Point this at a roomy volume to keep
-        them off the system disk.
+        Trajectories can be large. Choose a folder with enough free space.
       </div>
     `
     const dirMount = box.querySelector('#wiz-target-rundir')

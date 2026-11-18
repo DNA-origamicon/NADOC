@@ -14,7 +14,7 @@ test('wizard creates a Tm tree whose parent and children load the requested temp
   await page.route(`**/api/oxdna/jobs/${parent.job_id}/run`, async r=>{
     const body=r.request().postDataJSON(); payloads.push(body)
     expect(body.backend).toBe('CUDA')
-    expect(body.thermal_ramp).toMatchObject({start_c:25,end_c:35,step_c:5,block_steps:10000000})
+    expect(body.thermal_ramp).toMatchObject({start_c:25,end_c:35,step_c:5,block_steps:2000000000})
     job.run_config={kind:'run',...body}; jobs.push(job)
     await r.fulfill({json:job})
   })
@@ -90,10 +90,26 @@ test('wizard creates a Tm tree whose parent and children load the requested temp
   await expect(group.locator('.thermal-job-state .nadoc-spinner')).toHaveCount(3)
   await group.getByRole('button',{name:/25C - Run 2/}).click()
   await expect(page.locator('#oxdna-jobs-traj-full-toggle')).toBeDisabled()
+  await expect(page.locator('#simulate-jobs-status')).toContainText('25 °C · queued · 0% · 0 / 1,000,000 steps')
   job.status='running';job.stages[0].status='done';job.stages[1].status='running';job.current_stage_idx=1
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed')))
   await expect(group.locator('[data-status="completed"]')).toHaveCount(1)
   await expect(group.locator('[data-status="running"]')).toHaveCount(1)
+  job.progress_fraction = .5 // one finished plateau + half the current plateau / three
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed')))
+  await group.getByRole('button',{name:/30C - Run 2/}).click()
+  await expect(page.locator('#simulate-jobs-status')).toContainText('30 °C · running · 50% · 500,000 / 1,000,000 steps')
+  await expect(page.locator('#simulate-jobs-progress .bar')).toHaveCSS('width', /.+/)
+  expect(await page.locator('#simulate-jobs-progress .bar').evaluate(el=>el.style.width)).toBe('50%')
+  await group.getByRole('button',{name:/25C - Run 2/}).click()
+  await expect(page.locator('#simulate-jobs-status')).toContainText('25 °C · completed · 100% · 1,000,000 / 1,000,000 steps')
+  await group.getByRole('button',{name:/35C - Run 2/}).click()
+  await expect(page.locator('#simulate-jobs-status')).toContainText('35 °C · queued · 0% · 0 / 1,000,000 steps')
+  await row.click()
+  await expect(page.locator('#simulate-jobs-status')).toContainText('1,500,000 / 3,000,000 steps')
+
+  // Restore a child selection so the later parent click exercises trajectory scope switching.
+  await group.getByRole('button',{name:/25C - Run 2/}).click()
   job.status='failed';job.stages[1].status='failed'
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed')))
   await expect(group.locator('[data-status="failed"]')).toHaveCount(1)

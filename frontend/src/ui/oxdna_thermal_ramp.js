@@ -1,9 +1,12 @@
 import { createInput, el } from './primitives/index.js'
 
 export const THERMAL_DEFAULTS = Object.freeze({ start_c: 25, end_c: 85, step_c: 5,
-  block_steps: 10_000_000 })
+  block_steps: 2_000_000_000 })
 
 // Old saved ramp settings may contain adaptive controls; do not submit them again.
+export const THERMAL_PHYSICS_DEFAULTS = Object.freeze({ dt: 0.005, thermostat: 'brownian',
+  diff_coeff: 2.5, newtonian_steps: 100, sequence_dependent: true })
+
 export function thermalConfig(config) {
   return Object.fromEntries(Object.keys(THERMAL_DEFAULTS).map(key =>
     [key, config?.[key] ?? THERMAL_DEFAULTS[key]]))
@@ -16,7 +19,7 @@ export function thermalError(config) {
     if (!Number.isFinite(Number(c[key]))) return `${key} must be finite.`
   if (Math.min(c.start_c, c.end_c) <= -273.15 || Math.max(c.start_c, c.end_c) > 200) return 'Temperatures must be above −273.15 °C and at most 200 °C.'
   if (c.step_c <= 0 || c.step_c > 200 || Math.ceil(Math.abs(c.end_c - c.start_c) / c.step_c - 1e-10) > 100) return 'Choose a positive increment producing at most 101 plateaus.'
-  if (!Number.isInteger(c.block_steps) || c.block_steps < 1000 || c.block_steps > 200_000_000) return 'Steps per temperature must be a whole number from 1,000 to 200,000,000.'
+  if (!Number.isInteger(c.block_steps) || c.block_steps < 1000 || c.block_steps > 10_000_000_000) return 'Steps per temperature must be a whole number from 1,000 to 10,000,000,000.'
   return null
 }
 
@@ -43,7 +46,7 @@ export function thermalStages(stage, config) {
   }))
 }
 
-export function thermalControls(config, onChange) {
+export function thermalControls(config, onChange, { salt } = {}) {
   const root = el('fieldset', { className: 'oxdna-thermal', attrs: { 'data-thermal-controls': '' } })
   const checkbox = (label, checked, change, key) => {
     const input = el('input', { className: 'checkbox', attrs: { type: 'checkbox', 'data-thermal-field': key } })
@@ -72,6 +75,12 @@ export function thermalControls(config, onChange) {
   root.append(note('Heat or cool through temperature plateaus after relaxation. Runs locally with full-system dynamics.'),
     fields([['start_c', 'Start (°C)'], ['end_c', 'End (°C)'], ['step_c', 'Increment (°C)']], 'oxdna-thermal__grid--three'),
     fields([['block_steps', 'Steps per temperature']]))
+  if (salt) {
+    const temperatures = root.querySelector('.oxdna-thermal__grid--three')
+    temperatures.classList.add('oxdna-thermal__grid--conditions')
+    temperatures.append(salt)
+  }
+  root.append(note('New ramps use sequence-dependent oxDNA2 and a Brownian thermostat. Salt defaults to the continued job’s saved concentration. Use the simulation parameter controls to change these settings for every temperature.'))
   root.append(note('Every temperature runs for this fixed number of steps. Energy data are recorded for metrics; they do not extend or stop a stage.'))
   return root
 }

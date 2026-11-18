@@ -13,7 +13,7 @@ class ThermalRamp(BaseModel):
     start_c: float = Field(25, gt=-273.15, le=200)
     end_c: float = Field(85, gt=-273.15, le=200)
     step_c: float = Field(5, gt=0, le=200)
-    block_steps: int = Field(10_000_000, ge=1000, le=200_000_000)
+    block_steps: int = Field(2_000_000_000, ge=1000, le=10_000_000_000)
     # Read old saved protocols, but never serialize or honor adaptive controls.
     max_steps: int | None = Field(None, exclude=True)
     gate: bool = Field(False, exclude=True)
@@ -216,3 +216,14 @@ def prepare_attempt(spec, job, workspace, idx):
                "retry": retry, "temperature": spec.temperature}
     (job.stage_dir(workspace, spec.name) / f"thermal_attempt_{consumed}_retry{retry}.json").write_text(json.dumps(receipt, indent=2))
     return replace(spec, seed=seed)
+
+
+def literature_stage_defaults(stage):
+    """New ramps only; fixed-duration adaptation of Soto et al. (2025).
+
+    Diffusion 2.5 is the standard oxDNA choice, not specified in that paper.
+    Explicit stage overrides are applied after this preset. Saved jobs keep specs.
+    """
+    return replace(stage, dt=0.005, thermostat="brownian", diff_coeff=2.5,
+                   gamma_trans=None, newtonian_steps=100,
+                   sequence_dependent=True)

@@ -65,6 +65,7 @@ class OxdnaStageSpec:
     dt: float = 0.002
     thermostat: str = "bussi"
     # John/Brownian require diffusion; Langevin accepts diffusion OR friction.
+    sequence_dependent: bool = False
     diff_coeff: float | None = None
     gamma_trans: float | None = None
     refresh_vel: bool = True
@@ -270,7 +271,7 @@ _STAGE_OVERRIDE_FIELDS = {
     "backend", "steps", "temperature", "salt_concentration", "device", "ensemble",
     "delta_translation", "delta_rotation", "dt", "thermostat", "bussi_tau",
     "newtonian_steps", "max_backbone_force", "max_backbone_force_far",
-    "external_forces", "min_bp_retained", "diff_coeff", "refresh_vel",
+    "external_forces", "min_bp_retained", "diff_coeff", "refresh_vel", "sequence_dependent",
 }
 _STAGE_OVERRIDE_ALIASES = {
     "print_conf_interval": "print_conf_interval_override",
@@ -445,7 +446,10 @@ def render_stage_input(
         # Pinned CUDA DNA2 omits the average-strength overrides in its initializer.
         # Upstream's equal-strength file reproduces the average model on both backends.
         lines.append("use_average_seq = false")
-        lines.append(f"seq_dep_file = {sequence_parameters_name or AVERAGE_SEQUENCE_PATH}")
+        parameters = Path(sequence_parameters_name or AVERAGE_SEQUENCE_PATH)
+        if spec.sequence_dependent:
+            parameters = parameters.with_name("oxDNA2_sequence_dependent_parameters.txt")
+        lines.append(f"seq_dep_file = {parameters}")
     if interaction == "DNA2GOLD":
         if spec.backend != "CUDA" or spec.sim_type != "MD" or not spec.gold_file or spec.refresh_vel or spec.thermostat not in ("langevin", "no"):
             raise ValueError("Mobile gold requires GPU MD and its persistent core model")
@@ -698,7 +702,7 @@ def build_surface_deposition_stages(
 
 def expected_energy_lines(spec: OxdnaStageSpec) -> int:
     """How many energy.dat lines a completed stage should produce (~progress denom)."""
-    print_energy_every = max(1, spec.steps // 100)
+    print_energy_every = spec.print_energy_every_override or max(1, spec.steps // 100)
     return max(1, spec.steps // print_energy_every)
 
 

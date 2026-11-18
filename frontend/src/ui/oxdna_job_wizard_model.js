@@ -1,4 +1,4 @@
-import { thermalError, thermalStages, thermalConfig } from './oxdna_thermal_ramp.js'
+import { thermalError, thermalStages, thermalConfig, THERMAL_PHYSICS_DEFAULTS } from './oxdna_thermal_ramp.js'
 // GPU default is user-authorized; further convergence and sampling checks are
 // required for DNA/protein and fixed gold/strep/DNA (TD-OXDNA-PHYSICS).
 const DEFAULTS = Object.freeze({
@@ -150,7 +150,7 @@ export function validateOxdnaProductionWizard(values = {}) {
   const errors = {}
   if (v.backend != null && !['CPU', 'CUDA'].includes(v.backend)) errors.backend = 'Choose CPU or CUDA.'
   if (thermalError(v.thermal_ramp)) errors.thermal_ramp = thermalError(v.thermal_ramp)
-  if (!v.parentJobId) errors.parentJobId = 'Choose a completed oxDNA job to continue from.'
+  if (!v.parentJobId) errors.parentJobId = 'Choose a completed or stopped oxDNA job with a saved configuration.'
   const range = (key, min, max, message) => {
     const n = Number(v[key])
     if (!Number.isFinite(n) || n < min || (max != null && n > max)) errors[key] = message
@@ -166,6 +166,7 @@ export function validateOxdnaProductionWizard(values = {}) {
       && !(stage.thermostat === 'langevin' && Number(stage.gamma_trans) > 0)
       && !(Number.isFinite(Number(stage.diff_coeff)) && Number(stage.diff_coeff) > 0))
     errors.diff_coeff = 'Enter a positive diffusion coefficient for the selected thermostat.'
+  if (stage.salt_concentration != null && !(Number.isFinite(Number(stage.salt_concentration)) && Number(stage.salt_concentration) > 0)) errors.salt_concentration = 'Salt concentration must be positive.'
   for (const key of ['dt', 'bussi_tau', 'newtonian_steps', 'print_energy_every']) {
     if (!(Number.isFinite(Number(stage[key])) && Number(stage[key]) > 0)) errors[key] = `${key} must be positive.`
   }
@@ -185,6 +186,7 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
     print_energy_every: Math.max(1, Math.floor(Number(v.steps) / 100)),
     ...(v.inherited_parameters || {}),
     ...(parentJob.continuation_parameters || {}),
+    ...(v.thermal_ramp ? THERMAL_PHYSICS_DEFAULTS : {}),
     ...(v.stage_overrides?.['1_production'] || {}),
     steps: Number(v.steps), print_conf_interval: Number(v.steps_per_frame),
   }
@@ -206,14 +208,14 @@ export function oxdnaProductionPayload(values) {
   }
 }
 
-/** Jobs eligible as a production "Continue from" parent: completed, and belonging to the current
+/** Jobs eligible as a production "Continue from" parent: completed or stopped with a saved configuration, and belonging to the current
  *  design (unless includeJobId names one already chosen — e.g. by the panel's selected-job seed —
  *  which must survive even if the part-path filter would otherwise drop it). Newest first. */
 export function oxdnaProductionParents(jobs, partPath, { includeJobId = null } = {}) {
   const norm = p => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '')
   const want = norm(partPath)
   return (jobs || [])
-    .filter(j => j?.status === 'completed')
+    .filter(j => j?.can_seed_production === true || (j?.can_seed_production == null && j?.status === 'completed'))
     .filter(j => !want || j.job_id === includeJobId || norm(j.design_source_path) === want)
     .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
 }

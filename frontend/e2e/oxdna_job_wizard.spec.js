@@ -45,6 +45,7 @@ test('oxDNA wizard exposes matching hardware targets and a complete three-step c
   await expect(wizard.locator('.oxdna-engine-options .wizard-preset')).toHaveCount(4)
   await expect(wizard.locator('.oxdna-engine-options')).toContainText('NADOC adaptive-memory')
   await expect(wizard.locator('.oxdna-engine-options')).toContainText('Protein-capable DNANM')
+  await wizard.locator('summary', { hasText: 'Engine build:' }).click()
   await wizard.locator('.oxdna-engine-options .wizard-preset', { hasText: 'NADOC adaptive-memory' }).click()
   const mdSteps = wizard.locator('[data-oxdna-field="md_relax_steps"]')
   await expect(mdSteps).toHaveValue('1000000')

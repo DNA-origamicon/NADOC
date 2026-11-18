@@ -451,7 +451,7 @@ In **Dynamics → oxDNA → New job → Production**, select a completed relaxat
 (or production continuation), then enable **Thermal ramp**. Start/end temperatures
 are in °C; the positive increment works for heating or cooling and always includes
 the endpoint. Set **Steps per temperature** once; every stage uses that fixed
-number of integration steps. The default is **10 million steps per temperature**.
+number of integration steps. The default is **2 billion steps per temperature**.
 The Summary shows every plateau and the exact total planned steps. The current implementation uses the **local, full-system runner**;
 a simulation submodel box must be disabled. Ordinary CPU/CUDA physics and frozen
 CPD models are inherited from the parent. CPD supports local CPU or CUDA MD with its smaller timestep; choose GPU (CUDA)
@@ -463,6 +463,12 @@ number within each design. Expand the arrow to see selectable **25C - Run 2**,
 completed, failed, stopped, and paused steps have their own status labels.
 The parent reports the whole job's status, including an early failure while later
 temperatures remain queued. Expansion and temperature selection survive polling.
+
+Selecting a temperature child also scopes the Jobs progress bar and status text
+to that temperature's percentage and completed/scheduled steps. Selecting the
+parent restores whole-series progress. A completed child remains 100% even
+while later temperatures are running; pending children show 0%. Stage progress
+uses the existing live reading and retains banked steps on resume.
 
 Select the parent and load a trajectory to view all temperatures in that ramp.
 Select a temperature child to load only that stage, including its resumed segments.
@@ -522,7 +528,42 @@ CSV includes each sample's time, potential energy per particle, temperature, sta
 and job ID, preserving duplicate resume/temperature boundary records. Pending stages
 without recorded energy are omitted. Generating metrics never changes the schedule.
 
-Defaults: 25–85 °C in 5 °C increments and **10,000,000 steps per temperature**.
+New thermal jobs use sequence-dependent oxDNA2 strengths, `dt=0.005`,
+`thermostat=brownian` and `newtonian_steps=100`. Salt concentration defaults to
+the saved stage of the continued job and can be changed in the wizard for every
+temperature.
+The diffusion coefficient is 2.5 (the standard oxDNA setting, not a value reported
+in the cited melting paper). Physics rows in the wizard are editable and apply
+uniformly to all temperatures. Explicit edits override the preset. Ordinary
+relaxation/production defaults and saved jobs retain their previous physics.
+The sequence parameter file is frozen with the job and selected in native input;
+legacy specs retain average strengths. The native file uses `use_average_seq=false`
+in both modes; the selected parameter file determines the actual strengths.
+
+This fixed-dwell preset is informed by Soto et al. (2025),
+https://doi.org/10.3389/fmolb.2025.1646428 : the reported longer-duplex equilibration
+scale is about 1 billion steps and roughly twice that near melting. Our uniform
+2-billion-step dwell is an adaptation, not a reproduction of their complete
+sampling/replicate protocol and not a guarantee of convergence. Assess the early
+settling portion separately from the later sampling portion offline. The 25–85°C
+range and 5°C spacing remain exploratory choices, not published universal values.
+
+A compact CPD-related control is the antiparallel duplex with strands written
+5′→3′: `GCGTTGCG` and `CGCAACGC`. Use 0.3 M monovalent salt to compare with
+Lim et al. (2022), https://doi.org/10.1093/nar/gkac082 . Their reference is 6 mM
+dsDNA concentration, approximately 70°C undamaged and 57°C with a central
+cis-syn TT lesion. The latter is not a target for cis-anti or every isomer.
+Sequence source: Kemmink et al. (1987), https://pubmed.ncbi.nlm.nih.gov/3028790/ .
+Run the undamaged duplex first. Concentration/box volume and single-duplex
+finite-size corrections must be matched before comparing an equilibrium Tm;
+the wizard does not currently set target strand concentration. The default
+minimum 50 nm cube gives one copy of each strand about 13.3 µM each
+(1 / (Avogadro constant × 50³ × 10⁻²⁴ litres)); it does not reproduce 6 mM.
+A one-way MD
+heating curve alone measures protocol-dependent loss of pairing. Compare
+independent seeds and distinguish local base-pair loss from duplex dissociation.
+
+Defaults: 25–85 °C in 5 °C increments and **2,000,000,000 steps per temperature**.
 The integration timestep is unchanged. Default energy-recording intervals remain
 at most 50,000 steps; explicit intervals are respected subject to exact duration
 divisibility. Each resumed process uses a reproducible seed derived from job,
@@ -534,7 +575,7 @@ New/copy/edit submissions omit retired adaptive controls. Older saved `gate: tru
 settings cannot enable adaptive progression in the updated runner. The retired
 `thermal_max_steps` resume request is rejected without altering the saved plan.
 An already-running detached worker retains the code/settings it loaded at launch;
-these changes do not shorten or restart an ongoing job. New jobs default to 10M;
+these changes do not shorten or restart an ongoing job. New jobs default to 2B;
 existing saved step counts remain unchanged unless explicitly edited/copied.
 
 `scripts/watch_oxdna_ramp.py JOB_DIRECTORY AUDIT_DIRECTORY` watches filesystem
@@ -552,3 +593,9 @@ uv run python -m scripts.validate_oxdna_thermal_ramp PARENT_JOB_ID WORKSPACE \
 ```
 
 This tests execution; these short runs do not establish melting thermodynamics.
+
+Wizard conditions: salt concentration is adjacent to temperature for relaxation,
+production and queued continuation edits, including field/surface-deposition
+jobs. Thermal ramps place salt beside the temperature schedule. The shared salt
+setting applies to all stages; new continuation defaults use the saved source
+stage. Engine build/installation details can be expanded separately.

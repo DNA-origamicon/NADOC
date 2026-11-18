@@ -597,6 +597,8 @@ def prepare_oxdna_job(
     jd.mkdir(parents=True, exist_ok=True)
     from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE, AVERAGE_SEQUENCE_PATH
     (jd / AVERAGE_SEQUENCE_FILE).write_bytes(AVERAGE_SEQUENCE_PATH.read_bytes())
+    sequence_file = AVERAGE_SEQUENCE_PATH.with_name("oxDNA2_sequence_dependent_parameters.txt")
+    (jd / sequence_file.name).write_bytes(sequence_file.read_bytes())
     if fixed_cores:
         (jd / 'nanoparticles.json').write_text(json.dumps({
             'model': 'fixed_gold_strep_dna_v2', 'gold_representation': 'external_exclusion_body',
@@ -1019,7 +1021,8 @@ def job_overall_fraction(
             # avoids re-reading the whole growing energy.dat each poll (see helper).
             stage_dir = job.stage_dir(workspace_dir, st.name)
             lines = _stage_energy_lines_fast(stage_dir)
-            live = lines / max(1, expected_energy_lines(specs[idx]))
+            live = lines / max(1, expected_energy_lines(replace(
+                specs[idx], steps=max(1, specs[idx].steps - (st.completed_steps or 0)))))
             if job.submodel:
                 from backend.core.oxdna_submodel import attempt_fraction
                 live = attempt_fraction(specs[idx], st.completed_steps, lines)
@@ -1056,7 +1059,8 @@ def job_progress(
             lines = _stage_energy_lines(stage_dir)
             # THIS attempt's fraction — the ETA rate must be derived from it alone,
             # since started_at is this attempt's start.
-            attempt_frac = min(1.0, lines / max(1, expected_energy_lines(specs[idx])))
+            attempt_frac = min(1.0, lines / max(1, expected_energy_lines(replace(
+                specs[idx], steps=max(1, specs[idx].steps - (st.completed_steps or 0))))))
             if job.submodel:
                 from backend.core.oxdna_submodel import attempt_fraction
                 attempt_frac = attempt_fraction(specs[idx], st.completed_steps, lines)

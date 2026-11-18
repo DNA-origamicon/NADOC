@@ -15,12 +15,12 @@ describe('thermal ramps', () => {
   })
   it('rejects unsafe bounds and matches exact budget cadence', () => {
     expect(thermalError(THERMAL_DEFAULTS)).toBeNull()
-    expect(THERMAL_DEFAULTS.block_steps).toBe(10_000_000)
+    expect(THERMAL_DEFAULTS.block_steps).toBe(2_000_000_000)
     expect(THERMAL_DEFAULTS.max_steps).toBeUndefined()
     expect(thermalCadence(THERMAL_DEFAULTS)).toBe(50_000)
     expect(thermalError({ ...THERMAL_DEFAULTS, gate: false, block_steps: 20000000 })).toBeNull()
     expect(thermalCadence({ ...THERMAL_DEFAULTS, gate: false }, 10000)).toBe(10000)
-    for (const bad of [{ step_c: 0 }, { start_c: NaN }, { block_steps: 999 }, { block_steps: 200000001 }, { block_steps: 1000.5 }])
+    for (const bad of [{ step_c: 0 }, { start_c: NaN }, { block_steps: 999 }, { block_steps: 10000000001 }, { block_steps: 1000.5 }])
       expect(thermalError({ ...THERMAL_DEFAULTS, ...bad })).toBeTruthy()
     const cadence = thermalCadence(THERMAL_DEFAULTS, 9876)
     expect(cadence).toBeLessThanOrEqual(9876)
@@ -64,4 +64,18 @@ it('strips obsolete gate controls from saved jobs and gives every temperature th
   const stages = oxdnaProductionStagePlan(values)
   expect(stages).toHaveLength(13)
   expect(stages.every(stage => stage.steps === 123000 && stage.purpose === 'Fixed temperature dwell')).toBe(true)
+})
+
+
+it('uses literature physics for new ramps and applies user edits uniformly', () => {
+  const values = { parentJobId: 'parent', thermal_ramp: { ...THERMAL_DEFAULTS },
+    inherited_parameters: { dt: .001, thermostat: 'bussi', newtonian_steps: 53 } }
+  const stages = oxdnaProductionStagePlan(values, { salt_concentration: .5 })
+  expect(stages.every(s => s.steps === 2_000_000_000 && s.dt === .005 && s.thermostat === 'brownian'
+    && s.newtonian_steps === 100 && s.diff_coeff === 2.5 && s.salt_concentration === .5 && s.sequence_dependent)).toBe(true)
+  values.stage_overrides = { '1_production': { salt_concentration: .3, dt: .002 } }
+  expect(oxdnaProductionStagePlan(values).every(s => s.salt_concentration === .3 && s.dt === .002)).toBe(true)
+  expect(oxdnaProductionPayload(values).stage_overrides).toEqual(values.stage_overrides)
+  values.stage_overrides['1_production'].salt_concentration = -1
+  expect(validateOxdnaProductionWizard(values).valid).toBe(false)
 })

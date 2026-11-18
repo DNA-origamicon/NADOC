@@ -40,6 +40,8 @@ export class OxdnaWizardDriver {
 
   async engine(label) {
     await this.tab('Parameters & options')
+    if (!await this.modal.locator('.oxdna-engine-options').isVisible())
+      await this.modal.locator('summary', { hasText: 'Engine build:' }).click()
     await this.modal.locator('.oxdna-engine-options .wizard-preset', { hasText: label }).click()
     return this
   }

@@ -1,5 +1,60 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-219 — Full geometry overlays native atoms after oxDNA Off (2026-11-18)
+
+Select a job, switch to atomistic, show oxDNA positions, then select Off. Native
+scene-ownership restoration re-enables the CG root after native heavy restoration
+has already hidden it. Restore ownership before applying the selected native
+representation. Cover both teardown and suspended display restoration.
+
+## ISSUE-218 — Consistent oxDNA conditions and wizard visual review (2026-11-17)
+
+Salt needs a visible control beside temperature for every wizard run type.
+Review creation, queued edits and recorded settings at desktop/narrow widths;
+remove the asymmetry between thermal and ordinary production and reduce engine
+information competing with the experiment's primary conditions.
+
+## ISSUE-217 — Thermal salt inheritance and visible editing (2026-11-17)
+
+The literature ramp preset overwrote parent salt with 0.1 M. Preserve salt from
+the saved continuation stage, expose a dedicated wizard field, and apply explicit
+user overrides uniformly across the ramp. Source switching updates inherited
+salt until an explicit override is provided; clearing restores inheritance.
+
+## ISSUE-216 — Stopped production runs missing from continuation picker (2026-11-17)
+
+Duplex Run 1 has a saved last configuration but status stopped, so completed-only
+filters in both wizard and production API reject it. Permit completed/stopped
+sources with a nonempty checkpoint after their writer exits; retain the source
+unchanged and label stopped choices as using the last saved frame.
+
+## ISSUE-215 — Raw thermal configuration in View/Edit Settings (2026-11-17)
+
+Running thermal jobs exposed nested configuration/metrics JSON as ordinary fields.
+Show a readable recorded schedule and saved simulation physics, and formatted
+controls for queued copies. Do not substitute new defaults for recorded settings.
+
+## ISSUE-214 — Thermal progress falsely reaches 100% (2026-11-17)
+
+Live duplex ramp e88bad894726 reported zero steps left at 25°C while native
+oxDNA was around 175M / 2B steps. expected_energy_lines ignored the explicit
+50k-step sampling interval and assumed approximately 100 samples per stage.
+Correct the denominator for explicit cadence and resumed remaining budgets;
+verify the existing detached scheduler survives API server reload unchanged.
+
+## ISSUE-213 — Selected temperature progress in the Jobs card (2026-11-17)
+
+Selecting a temperature child must show that stage's percentage and completed /
+scheduled steps beneath the unified progress bar. Keep parent selection scoped
+to the whole series; handle pending, done, stopped, failed and skipped stages.
+
+## ISSUE-212 — Literature-informed melting defaults (2026-11-17)
+
+Use fixed literature-scale dwell and explicit MD physics for new thermal jobs.
+Enable sequence-dependent strengths for sequence-specific controls, editable
+salt across all temperatures, and preserve existing job specifications. Document
+a published duplex benchmark and concentration/finite-size limitations.
+
 ## ISSUE-211 — Comparable fixed-duration thermal ramps (2026-11-17)
 
 Reduce the default from 50M to 10M steps per temperature and remove adaptive

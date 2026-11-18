@@ -1445,8 +1445,8 @@ export function initOxdnaDisplay({
    * fetched topology held (`_pendingTopoModel`) and both frame bakes. The next job frame
    * repaints from the held model in its usual single tick — no refetch, no flash.
    */
-  function releaseHeavyToDesign() {
-    if (!_heavyActive && _atomTopoJob === null) return
+  function releaseHeavyToDesign({ force = false } = {}) {
+    if (!force && !_heavyActive && _atomTopoJob === null) return
     getAtomisticRenderer?.()?.clearScalarColors?.()
     onRestoreDesignHeavy?.()
     _heavyActive = false
@@ -1482,8 +1482,8 @@ export function initOxdnaDisplay({
     onSurfaceStrands?.(null)
     nanoparticleRenderer?.clearOxdnaPoses?.()
     proteinRenderer?.clearOxdnaTransforms?.()
-    releaseHeavyToDesign()
     restoreDesignVisible?.()
+    releaseHeavyToDesign({ force: true })
     // KEPT: _traj, _jobId, _mode, _bakedAtom, _bakedSurf, _pendingTopoModel, _atomSerials.
   }
 
@@ -2518,8 +2518,10 @@ export function initOxdnaDisplay({
     onSurfaceStrands?.(null)   // drop the real strands → seed preview resumes
     nanoparticleRenderer?.clearOxdnaPoses?.()
     proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
-    _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
+    // Restore native scene ownership first: this can re-enable the CG root.
+    // The selected atomistic/surface representation must then set final visibility.
     restoreDesignVisible?.()
+    _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
     _rmsfResp = null
     _strainResp = null
     _photoproductResp = null

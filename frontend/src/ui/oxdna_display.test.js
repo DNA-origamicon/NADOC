@@ -2165,3 +2165,23 @@ it('reports a mapped preliminary response and retains edited scale bounds throug
   await pending
   expect(ctrl.coloringInfo()).toMatchObject({ lo: .2, hi: .8 })
 })
+
+for (const method of ['stopAndRestore','suspendToDesign']) {
+  for (const representation of ['full','vdw','ballstick','stick','surface']) {
+    it(`${method} restores only the selected ${representation} representation`, async () => {
+      let cgVisible=false, heavyVisible=representation!=='full'
+      const display=initOxdnaDisplay({
+        designRenderer:{applyFemPositions:vi.fn(),clearScalarColors:vi.fn()},
+        api:{getOxdnaDisplay:async()=>({ready:true,positions:[{helix_id:'h',bp_index:0,direction:'FORWARD',backbone_position:[0,0,0]}]})},
+        // The app's native-ownership callback re-enables the native design root.
+        restoreDesignVisible:()=>{cgVisible=true},
+        // Restoring the selected native representation owns its CG visibility.
+        onRestoreDesignHeavy:()=>{heavyVisible=representation!=='full';cgVisible=!heavyVisible},
+      })
+      await display.displayJob('job')
+      display[method]()
+      expect(display.isActive()).toBe(false)
+      expect({cgVisible,heavyVisible}).toEqual({cgVisible:representation==='full',heavyVisible:representation!=='full'})
+    })
+  }
+}

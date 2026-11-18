@@ -28,7 +28,10 @@ CG-to-atomistic handoff. Historical phases and experiments are in
   `oxdna_energy_series.py` owns read-only assembly; shared graph/card own rendering.
 
 - Fixed-duration ramps (2026-11-17, ISSUE-211) supersede the earlier adaptive
-  behavior: default 10M steps per temperature (one fifth of 50M). Wizard exposes
+  behavior. Subsequent literature preset (ISSUE-212) sets new ramps to 2B steps,
+  sequence-dependent DNA2, Brownian/100 steps, dt .005, diffusion 2.5; salt inherits the continued stage (ISSUE-217).
+  uniform physics edits are available in the wizard. Legacy specs stay unchanged.
+  Wizard exposes
   only start/end/increment and Steps per temperature. No gating, automatic
   extension, exponential fitting or stationarity pass is used during execution
   or manual skip. Complete energies and descriptive statistics are saved;

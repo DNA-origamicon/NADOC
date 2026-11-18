@@ -1,5 +1,7 @@
+import { saltControl, recordedStageConditions, recordedOptions } from './oxdna_conditions.js'
 import '../styles/oxdna_wizard.css'
 import { thermalControls, thermalConfig } from './oxdna_thermal_ramp.js'
+import { thermalRecordedSettings, thermalRecordedPhysicsEditor, preserveThermalPhysics } from './oxdna_thermal_settings.js'
 import { temperatureControl, updateTemperatureControl, oxdnaTemperature, oxdnaTemperatureOverrides } from './job_temperature.js'
 import { showWizardJobId } from './job_wizard_identity.js'
 import { createButton, createModal, createInput, createSelect, el } from './primitives/index.js'
@@ -22,7 +24,7 @@ const THERMOSTATS = [
 ]
 
 function thermostatSelect(value, stage, onChange, { unchanged = false } = {}) {
-  const select = el('select', { attrs: { 'aria-label': `Thermostat on ${stage}` } })
+  const select = el('select', { className: 'select select--sm', attrs: { 'aria-label': `Thermostat on ${stage}` } })
   if (unchanged) select.append(el('option', { text: 'Keep recorded thermostat', attrs: { value: '' } }))
   for (const [key, label, help] of THERMOSTATS) {
     select.append(el('option', { text: label, attrs: { value: key, title: help } }))
@@ -48,7 +50,6 @@ const FIELDS = [
     help: 'oxDNA2 improves major/minor-groove geometry and is NADOC’s default. oxDNA1 is available for reproducing legacy studies.' },
   { key: 'backend', label: 'MD backend', type: 'select', options: [['CUDA', 'CUDA (GPU)'], ['CPU', 'CPU']], local: true, help: 'MC is always CPU. This selects the backend for MD relaxation and equilibration.' },
   { key: 'device', label: 'CUDA device', type: 'text', local: true },
-  { key: 'salt_concentration', label: 'Salt concentration', unit: 'M', type: 'number', min: .01, step: .01 },
   { key: 'mc_steps', label: 'MC relaxation', unit: 'steps', type: 'number', min: 100, step: 1 },
   { key: 'md_relax_steps', label: 'MD relaxation', unit: 'steps', type: 'number', min: 100, step: 1 },
   { key: 'equil_steps', label: 'Equilibration', unit: 'steps', type: 'number', min: 100, step: 1 },
@@ -69,13 +70,14 @@ const EDITABLE_STAGE_FIELDS = new Set([
   'backend', 'steps', 'temperature', 'salt_concentration', 'device', 'ensemble',
   'delta_translation', 'delta_rotation', 'dt', 'thermostat', 'diff_coeff', 'refresh_vel', 'bussi_tau',
   'newtonian_steps', 'max_backbone_force', 'max_backbone_force_far',
-  'external_forces', 'min_bp_retained', 'print_conf_interval', 'print_energy_every',
+  'external_forces', 'min_bp_retained', 'print_conf_interval', 'print_energy_every', 'sequence_dependent',
 ])
 const ROW_LABELS = {
   sim_type: 'Simulation type', interaction_type: 'Force-field version', backend: 'Backend',
   steps: 'Steps', temperature: 'Temperature', salt_concentration: 'Salt concentration (M)',
   device: 'CUDA device', ensemble: 'Ensemble', delta_translation: 'MC translation delta',
   delta_rotation: 'MC rotation delta', dt: 'Time step', thermostat: 'Thermostat',
+  sequence_dependent: 'Sequence-dependent base strengths',
   diff_coeff: 'Diffusion coefficient', refresh_vel: 'Refresh velocities',
   use_average_seq: 'Use built-in average strengths', seq_dep_file: 'Sequence parameter file',
   bussi_tau: 'Bussi tau', newtonian_steps: 'Newtonian steps',
@@ -108,13 +110,25 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     settingsStageTable = null
     settingsEstimate = el('div', { className: 'wizard-note', attrs: { 'data-oxdna-output-estimate': '', 'aria-live': 'polite' } })
     if (mode === 'production') return renderProductionSettings()
-    const grid = el('div', { className: 'wizard-field-grid', children: [temperatureControl({
+    const conditions = el('div', { className: 'oxdna-conditions', children: [temperatureControl({
       value: oxdnaTemperature(mode === 'production' ? oxdnaProductionStagePlan(values) : oxdnaStagePlan(values)),
       help: 'Temperature for all stages of this job. Individual stage values remain editable below.',
       onChange: value => { values.stage_overrides = oxdnaTemperatureOverrides(values.stage_overrides,
         mode === 'production' ? oxdnaProductionStagePlan(values) : oxdnaStagePlan(values), value); renderSettings(); renderConfig(); paintValidation() },
-    })] })
-    panels.settings.replaceChildren(el('details', { attrs: { open: true }, children: [
+    }), saltControl({ value: mode === 'production' ? oxdnaProductionStagePlan(values)[0]?.salt_concentration : values.salt_concentration,
+      inherit: mode === 'production', onChange: value => {
+        if (mode === 'production') setStageValue('1_production', 'salt_concentration', value)
+        else {
+          values.salt_concentration = value
+          for (const stage of oxdnaStagePlan(values)) {
+            values.stage_overrides ||= {}
+            values.stage_overrides[stage.name] = { ...values.stage_overrides[stage.name], salt_concentration: value }
+          }
+          renderConfig(); paintValidation()
+        }
+      } })] })
+    const grid = el('div', { className: 'wizard-field-grid' })
+    panels.settings.replaceChildren(el('h3', { text: 'Temperature & salt' }), conditions, el('details', { children: [
       el('summary', { text: 'Engine versions & installation' }), engineDetails,
     ] }), el('h3', { text: 'Engine build' }), el('div', {
       className: 'oxdna-engine-options', children: ENGINE_VARIANTS.map(([value, label, explanation]) => {
@@ -148,20 +162,38 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
         field.help ? el('span', { className: 'wizard-field__help', text: field.help }) : null,
       ] }))
     }
+    const engines = panels.settings.querySelector('.oxdna-engine-options')
+    const heading = engines.previousElementSibling
+    const engineSection = el('details', { children: [el('summary', { text: `Engine build: ${ENGINE_VARIANTS.find(([key]) => key === values.engine_variant)?.[1] || 'Automatic'}` })] })
+    heading.replaceWith(engineSection)
+    engineSection.append(engines)
     settingsStageTable = el('div', { className: 'wizard-stages' })
     panels.settings.append(settingsEstimate, el('h3', { text: 'Stage parameters' }), settingsStageTable)
     renderConfig()
   }
 
   function renderProductionSettings() {
-    const grid = el('div', { className: 'wizard-field-grid', children: [temperatureControl({
+    const conditions = el('div', { className: 'oxdna-conditions', children: [temperatureControl({
       value: oxdnaTemperature(mode === 'production' ? oxdnaProductionStagePlan(values) : oxdnaStagePlan(values)),
       help: 'Temperature for all stages of this job. Individual stage values remain editable below.',
       onChange: value => { values.stage_overrides = oxdnaTemperatureOverrides(values.stage_overrides,
         mode === 'production' ? oxdnaProductionStagePlan(values) : oxdnaStagePlan(values), value); renderSettings(); renderConfig(); paintValidation() },
-    })] })
-    panels.settings.replaceChildren(el('h3', { text: 'Production run' }), grid)
-    if (values.thermal_ramp) grid.querySelector('.wizard-temperature').remove()
+    }), saltControl({ value: mode === 'production' ? oxdnaProductionStagePlan(values)[0]?.salt_concentration : values.salt_concentration,
+      inherit: mode === 'production', onChange: value => {
+        if (mode === 'production') setStageValue('1_production', 'salt_concentration', value)
+        else {
+          values.salt_concentration = value
+          for (const stage of oxdnaStagePlan(values)) {
+            values.stage_overrides ||= {}
+            values.stage_overrides[stage.name] = { ...values.stage_overrides[stage.name], salt_concentration: value }
+          }
+          renderConfig(); paintValidation()
+        }
+      } })] })
+    const grid = el('div', { className: 'wizard-field-grid' })
+    panels.settings.replaceChildren(el('h3', { text: 'Run conditions' }))
+    if (!values.thermal_ramp) panels.settings.append(conditions)
+    panels.settings.append(grid)
     const backend = createSelect({ size: 'sm' })
     backend.dataset.oxdnaField = 'backend'
     for (const [value, label] of [['CUDA', 'GPU (CUDA)'], ['CPU', 'CPU']]) {
@@ -189,9 +221,11 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       ] }))
     }
     settingsStageTable = el('div', { className: 'wizard-stages' })
-    panels.settings.append(thermalControls(values.thermal_ramp, config => {
+    const ramp = thermalControls(values.thermal_ramp, config => {
       values.thermal_ramp = config; renderSettings(); renderConfig(); paintValidation()
-    }))
+    }, { salt: saltControl({ value: oxdnaProductionStagePlan(values)[0]?.salt_concentration,
+      inherit: true, thermal: true, onChange: value => setStageValue('1_production', 'salt_concentration', value) }) })
+    panels.settings.insertBefore(ramp, grid)
     panels.settings.append(settingsEstimate, el('h3', { text: 'Simulation parameters' }), settingsStageTable)
     renderConfig()
   }
@@ -279,6 +313,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
   }
 
   function setStageValue(stage, key, value) {
+    if (mode === 'production' && values.thermal_ramp) stage = '1_production'
     if (mode === 'production' && ['steps', 'print_conf_interval'].includes(key)) {
       const field = key === 'steps' ? 'steps' : 'steps_per_frame'
       values[field] = value ?? oxdnaProductionDefaults()[field]
@@ -298,6 +333,9 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     else values.stage_overrides[stage][key] = value
     if (!Object.keys(values.stage_overrides[stage]).length) delete values.stage_overrides[stage]
     renderConfig(); paintValidation(); targetStep?.refreshSizing?.()
+    const salt = panels.settings.querySelector('[data-oxdna-salt]')
+    if (key === 'salt_concentration' && salt && document.activeElement !== salt)
+      salt.value = oxdnaProductionStagePlan(values)[0]?.salt_concentration ?? ''
   }
 
   function editStageCell(td, stage, key, value) {
@@ -340,8 +378,8 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       ] }))] })
     const body = el('tbody')
     for (const key of keys) {
-      const editable = !values.thermal_ramp && EDITABLE_STAGE_FIELDS.has(key)
-        && !(mode === 'production' && ['backend', 'device', 'salt_concentration', 'external_forces'].includes(key))
+      const editable = (!values.thermal_ramp || ['dt', 'thermostat', 'diff_coeff', 'newtonian_steps', 'salt_concentration', 'sequence_dependent'].includes(key)) && EDITABLE_STAGE_FIELDS.has(key)
+        && !(mode === 'production' && ['backend', 'device', 'external_forces'].includes(key))
       body.append(el('tr', { children: [
         el('th', { className: 'param', children: [document.createTextNode(ROW_LABELS[key] || key),
           editable ? el('button', { className: 'wizard-row-all', text: '⋯', attrs: {
@@ -349,7 +387,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
           }, on: { click: () => editEveryStage(key, stages) } }) : null] }),
         ...stages.map((stage, index) => {
           const present = stage[key] != null || (stage.sim_type === 'MD' && ['diff_coeff', 'max_backbone_force', 'max_backbone_force_far'].includes(key))
-          const overridden = Object.prototype.hasOwnProperty.call(values.stage_overrides?.[stage.name] || {}, key)
+          const overridden = Object.prototype.hasOwnProperty.call(values.stage_overrides?.[values.thermal_ramp ? '1_production' : stage.name] || {}, key)
           const changed = index > 0 && displayValue(stage[key]) !== displayValue(stages[index - 1][key])
           const classes = ['wizard-cell', !present ? 'wizard-cell--absent' : '', changed ? 'wizard-cell--changed' : '',
             overridden ? 'wizard-cell--overridden' : '', !editable || !present ? 'wizard-cell--locked' : ''].filter(Boolean)
@@ -414,7 +452,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     if (editJob) { sourceMount.replaceChildren(); return }   // editing an existing job's kind is fixed
     const modes = el('div', { className: 'wizard-modes', children: [
       modeButton('relax', 'Relaxation', 'Relax a fresh structure from its designed topology.'),
-      modeButton('production', 'Production', 'Continue from the final frame of a completed relaxation, production, or surface deposition.'),
+      modeButton('production', 'Production', 'Continue from the last saved frame of a completed or stopped oxDNA job.'),
     ] })
     const children = [modes]
     if (mode === 'production') {
@@ -423,7 +461,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
         parentJobId = null
         values.parentJobId = null
         children.push(el('div', { className: 'wizard-note', children: [
-          el('p', { text: 'No completed oxDNA job for this design yet. Finish a relaxation first; subsequent continuations can also start from completed production or surface-deposition jobs.' }),
+          el('p', { text: 'No saved continuation is available for this design. Complete a relaxation, or stop a run after it has saved a configuration.' }),
           createButton({ label: 'Set up a relaxation instead', variant: 'ghost', onClick: () => setMode('relax') }),
         ] }))
       } else {
@@ -432,13 +470,13 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
           onParentChange(parentJobId)
         }
         values.parentJobId = parentJobId
-        values.inherited_parameters = { ...(parents.find(job => job.job_id === parentJobId)?.continuation_parameters || {}) }
+        values.inherited_parameters = { salt_concentration: parents.find(job => job.job_id === parentJobId)?.salt_concentration, ...(parents.find(job => job.job_id === parentJobId)?.continuation_parameters || {}) }
         const select = createSelect({ size: 'sm' })
         select.setAttribute('aria-label', 'Continue from')
         const parentLabels = getParentLabels()
         for (const job of parents) {
           select.append(el('option', {
-            text: parentLabels.get(job.job_id) || job.design_name || job.job_id,
+            text: (parentLabels.get(job.job_id) || job.design_name || job.job_id) + (job.status === 'stopped' ? ' — stopped (last saved frame)' : ''),
             attrs: { value: job.job_id, title: `${job.design_name || 'Design'} — ${job.job_id}` },
           }))
         }
@@ -449,9 +487,9 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
         select.addEventListener('change', () => {
           parentJobId = select.value
           values.parentJobId = parentJobId
-          values.inherited_parameters = { ...(parents.find(job => job.job_id === parentJobId)?.continuation_parameters || {}) }
+          values.inherited_parameters = { salt_concentration: parents.find(job => job.job_id === parentJobId)?.salt_concentration, ...(parents.find(job => job.job_id === parentJobId)?.continuation_parameters || {}) }
           onParentChange(parentJobId)
-          renderConfig(); paintValidation()
+          renderSettings(); renderConfig(); paintValidation()
         })
         children.push(el('label', { className: 'wizard-field', children: [
           el('span', { className: 'wizard-field__label', text: 'Continue from' }), select,
@@ -619,7 +657,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
         config.surface_strands = { ...config.surface_strands }
         delete config.surface_strands.built
       }
-      const editable = {
+      let editable = {
         ...config,
         seed: job.random_seed ?? config.seed ?? null,
         execution_target: job.execution_target || config.execution_target || 'local',
@@ -636,6 +674,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
           name: stage.name, kind: stage.kind, steps: stage.steps,
         })),
       }
+      if (editable.thermal_ramp) editable = preserveThermalPhysics(editable, job)
       derivedError = el('div', { className: 'wizard-note oxdna-wizard-validation', attrs: { role: 'alert' } })
       derivedError.hidden = true
       derivedEditor = el('textarea', { className: 'oxdna-wizard-config', attrs: {
@@ -644,9 +683,9 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       } })
       if (editable.thermal_ramp) editable.thermal_ramp = thermalConfig(editable.thermal_ramp)
       derivedEditor.value = JSON.stringify(editable, null, 2)
-      const thermostatControls = el('div', { className: 'wizard-grid' })
+      const thermostatControls = el('div', { className: editable.thermal_ramp ? '' : 'wizard-grid' })
       for (const stage of editable.stages.filter(stage => !editable.thermal_ramp && stage.kind !== 'mc' && !stage.name.includes('mc_relax'))) {
-        const overrides = { ...(editable.inherited_parameters || {}), ...(editable.stage_overrides?.[stage.name] || {}), ...stage }
+        const overrides = { ...job.stage_specs?.find(spec => spec.name === stage.name), ...(editable.inherited_parameters || {}), ...(editable.stage_overrides?.[stage.name] || {}), ...stage }
         const change = (key, value) => {
           try {
             const current = JSON.parse(derivedEditor.value)
@@ -686,22 +725,67 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
         ] }))
       }
       const thermalMount = el('div')
+      const changeCondition = (key, value) => {
+        try {
+          const current = JSON.parse(derivedEditor.value)
+          if (value === undefined) return
+          if (key === 'salt_concentration') current.salt_concentration = value
+          current.stage_overrides ||= {}
+          for (const stage of current.stages || []) {
+            stage[key] = value
+            if (!current.thermal_ramp) {
+              current.stage_overrides[stage.name] ||= {}
+              current.stage_overrides[stage.name][key] = value
+            }
+          }
+          if (current.thermal_ramp) {
+            current.stage_overrides['1_production'] ||= {}
+            current.stage_overrides['1_production'][key] = value
+          }
+          derivedEditor.value = JSON.stringify(current, null, 2)
+          derivedError.hidden = true
+        } catch { derivedError.textContent = 'Correct the advanced configuration before editing conditions.'; derivedError.hidden = false }
+      }
       const drawThermal = () => {
         const current = JSON.parse(derivedEditor.value)
-        thermalMount.replaceChildren(thermalControls(current.thermal_ramp, config => {
+        const salt = saltControl({ value: current.salt_concentration, thermal: !!current.thermal_ramp,
+          onChange: value => changeCondition('salt_concentration', value) })
+        const conditions = el('div', { className: 'oxdna-conditions', children: [
+          temperatureControl({ value: oxdnaTemperature((current.stages || []).map(row => ({
+            ...job.stage_specs?.find(spec => spec.name === row.name),
+            ...current.inherited_parameters, ...current.stage_overrides?.[row.name], ...row,
+          }))), help: 'Applies to every stage.', onChange: value => changeCondition('temperature', `${value}K`) }), salt,
+        ] })
+        const ramp = kind === 'run' ? thermalControls(current.thermal_ramp, config => {
           try {
             const updated = JSON.parse(derivedEditor.value)
             updated.thermal_ramp = config
             derivedEditor.value = JSON.stringify(updated, null, 2)
-            thermostatControls.hidden = !!config
+            thermostatControls.hidden = !!config && !editable.thermal_ramp
             drawThermal()
-          } catch { derivedError.textContent = 'Correct the configuration JSON before editing the thermal ramp.'; derivedError.hidden = false }
-        }))
+          } catch { derivedError.textContent = 'Correct the advanced configuration before editing the thermal ramp.'; derivedError.hidden = false }
+        }, { salt: current.thermal_ramp ? salt : null }) : null
+        thermalMount.replaceChildren(...(current.thermal_ramp ? [ramp] : [conditions, ...(ramp ? [ramp] : [])]))
       }
-      if (kind === 'run') drawThermal()
+      drawThermal()
+      if (editable.thermal_ramp) thermostatControls.append(thermalRecordedPhysicsEditor(editable, (key,value) => {
+        if (value === undefined) return // An empty field keeps the recorded override.
+        try {
+          const current = JSON.parse(derivedEditor.value)
+          current.stage_overrides ||= {}
+          current.stage_overrides['1_production'] ||= {}
+          current.stage_overrides['1_production'][key] = value
+          if (key === 'salt_concentration') current.salt_concentration = value
+          if (key === 'thermostat') Object.assign(current.stage_overrides['1_production'],
+            oxdnaThermostatDefaults(value, current.stage_overrides['1_production'].diff_coeff))
+          derivedEditor.value = JSON.stringify(current, null, 2)
+          derivedError.hidden = true
+        } catch { derivedError.textContent = 'Correct the advanced configuration before editing parameters.'; derivedError.hidden = false }
+      }, { includeSalt: false }))
       readOnlyPanel.replaceChildren(
-        el('div', { className: 'wizard-note', text: 'Edit runtime, engine, target, or stage parameters below. The copied topology and force layout remain frozen.' }),
-        thermalMount, thermostatControls, derivedError, derivedEditor,
+        el('div', { className: 'wizard-note', text: 'Edit the run conditions below. Advanced configuration contains additional execution and stage settings.' }),
+        thermalMount, thermostatControls, derivedError,
+        el('details', { children: [el('summary', { text: 'Advanced configuration (JSON)' }), derivedEditor] }),
       )
       paint(); modal.open()
       return
@@ -784,8 +868,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       ] }),
       settings: el('section', { className: 'wizard-pane wizard-tabpanel', children: [
         el('h3', { text: 'Recorded parameters' }),
-        recordedFields(Object.entries(snapshot).filter(([key]) => !['job_id', 'execution_target', 'backend', 'device'].includes(key))
-          .map(([key, value]) => [ROW_LABELS[key] || key.replaceAll('_', ' '), value])),
+        ...(config.thermal_ramp ? [thermalRecordedSettings(job)] : [recordedFields(recordedOptions(Object.fromEntries(Object.entries(snapshot).filter(([key]) => !['job_id', 'execution_target', 'backend', 'device'].includes(key))))), recordedStageConditions(job)]),
       ] }),
       config: el('section', { className: 'wizard-pane wizard-tabpanel', children: [
         el('pre', { className: 'oxdna-wizard-config', text: JSON.stringify(snapshot, null, 2) }),
@@ -805,7 +888,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       recordedTabs[id] = el('button', { className: 'wizard-tab', text: label,
         attrs: { type: 'button', role: 'tab' }, on: { click: () => selectRecordedTab(id) } })
     }
-    selectRecordedTab('target')
+    selectRecordedTab(config.thermal_ramp ? 'settings' : 'target')
     readOnlyPanel.replaceChildren(
       el('div', { className: 'wizard-note', text: 'Read-only settings recorded for this job.' }),
       el('div', { className: 'wizard-tabbar', children: [

@@ -3317,6 +3317,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // as a row click does. Refetches first if the job isn't in the list yet (a job the
     // poll hasn't picked up).
     getSelectedThermalStage: () => thermalSelection.stageFor(_selectedId),
+    getSelectedProgress: jobId => jobId === _selectedId ? _progress : null,
     selectJob: async (jobId, { thermalStage = null } = {}) => {
       if (!jobId) return
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
@@ -3325,7 +3326,8 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     copyJob: _copyJob,
     openJobSettings: async (jobId) => {
       if (!_jobs.find(job => job.job_id === jobId)) await _fetchJobs()
-      const job = _jobs.find(item => item.job_id === jobId)
+      const cached = _jobs.find(item => item.job_id === jobId)
+      const job = await Promise.resolve(api.getOxdnaJob?.(jobId)).catch(() => null) || cached
       if (job) (oxdnaJobEditable(job) ? _wizard.openEditable(job) : _wizard.openReadOnly(job))
     },
     canEditJob: (jobId) => oxdnaJobEditable(_jobs.find(job => job.job_id === jobId)),

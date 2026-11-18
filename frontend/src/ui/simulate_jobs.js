@@ -29,6 +29,7 @@ import { sidebarPanelVisible } from './display_tab_policy.js'
 
 import { createOptimisticJobDeletion } from './simulation_job_deletion.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
+import { thermalStageProgress } from './oxdna_thermal_progress.js'
 import { getRunDir, mountDirectoryButton } from './run_location.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { thermalSkipAction, skipThermalStage } from './oxdna_thermal_skip.js'
@@ -841,6 +842,12 @@ export function initSimulateJobs({
 
   function _renderMaster() {
     const node = _selectedNode()
+    const stageProgress = thermalStageProgress(node, oxdnaPanel?.getSelectedThermalStage?.(),
+      oxdnaPanel?.getSelectedProgress?.(node?.job_id))
+    const progressNode = stageProgress || node
+    const progressText = stageProgress
+      ? `oxDNA · ${stageProgress.thermal_stage_label} · ${stageProgress.status} · ${masterStepText(stageProgress)}`
+      : masterStatusText(node)
     let transfer = node ? _endTransfers.get(node.job_id) : null
     const remoteName = node?.execution_target === 'runpod' ? 'RunPod' : 'Alpine'
     if (!transfer && node?.execution_target === 'runpod' && !nodeIsActive(node)) {
@@ -892,10 +899,10 @@ export function initSimulateJobs({
           : transfer?.phase === 'unverified' || transfer?.phase === 'interrupted'
             ? `Download incomplete locally${transfer.total_bytes ? ` · ${formatBytes(transfer.verified_bytes || 0)} / ${formatBytes(transfer.total_bytes)}` : ''}`
               + `${transfer.local_verification_error ? ` · ${transfer.local_verification_error}` : ''}. Retry to resume.` : ''
-    _setStatus(statusEl, transferText || masterStatusText(node),
+    _setStatus(statusEl, transferText || progressText,
       transfer ? (transfer.phase === 'done' ? _C.ok
         : ['unverified', 'interrupted', 'failed', 'cancelled'].includes(transfer.phase) ? _C.warn : _C.accent)
-        : node?.status === 'failed' ? _C.err : node && nodeIsActive(node) ? _C.warn : _C.dim)
+        : progressNode?.status === 'failed' ? _C.err : progressNode && nodeIsActive(progressNode) ? _C.warn : _C.dim)
     if (allocationEl) {
       const allocation = slurmAllocationText(node)
       allocationEl.textContent = allocation
@@ -908,18 +915,18 @@ export function initSimulateJobs({
         && node?.prep_progress?.measured === false
       progressBar.style.width = transfer
         ? `${transfer.phase === 'downloading' && !transfer.total ? 100 : ['done', 'processing'].includes(transfer.phase) ? 100 : transfer.pct || 0}%`
-        : `${node ? masterProgressPct(node) : 0}%`
+        : `${progressNode ? masterProgressPct(progressNode) : 0}%`
       progressBar.style.background = opaquePrep
         ? 'repeating-linear-gradient(135deg,#4a9eff 0,#4a9eff 8px,#245f9c 8px,#245f9c 16px)'
         : transfer?.phase === 'done' ? _C.ok
         : ['unverified', 'interrupted', 'failed', 'cancelled'].includes(transfer?.phase) ? _C.warn
         : transfer ? 'repeating-linear-gradient(135deg,#4a9eff 0,#4a9eff 8px,#2f6fae 8px,#2f6fae 16px)'
-          : node ? masterProgressColor(node) : _C.accent
+          : progressNode ? masterProgressColor(progressNode) : _C.accent
       progressBar.style.opacity = ['downloading', 'processing'].includes(transfer?.phase) ? '0.65' : '1'
       progressBar.style.backgroundSize = opaquePrep ? '32px 32px' : ''
       progressBar.style.animation = opaquePrep ? 'prep-progress-stripes 0.8s linear infinite' : ''
     }
-    if (progressWrap) progressWrap.title = transferText || (node ? masterProgressTooltip(node) : '')
+    if (progressWrap) progressWrap.title = transferText || (stageProgress ? progressText : node ? masterProgressTooltip(node) : '')
     if (detailEl) {
       // oxDNA-only note, gated to the oxDNA tab. Collapse the element when there's nothing to say,
       // so other engines don't get a blank gap under the bar.
