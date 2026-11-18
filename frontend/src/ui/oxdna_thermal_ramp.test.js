@@ -15,7 +15,7 @@ describe('thermal ramps', () => {
   })
   it('rejects unsafe bounds and matches exact budget cadence', () => {
     expect(thermalError(THERMAL_DEFAULTS)).toBeNull()
-    expect(THERMAL_DEFAULTS.block_steps).toBe(2_000_000_000)
+    expect(THERMAL_DEFAULTS.block_steps).toBe(100_000_000)
     expect(THERMAL_DEFAULTS.max_steps).toBeUndefined()
     expect(thermalCadence(THERMAL_DEFAULTS)).toBe(50_000)
     expect(thermalError({ ...THERMAL_DEFAULTS, gate: false, block_steps: 20000000 })).toBeNull()
@@ -71,7 +71,7 @@ it('uses literature physics for new ramps and applies user edits uniformly', () 
   const values = { parentJobId: 'parent', thermal_ramp: { ...THERMAL_DEFAULTS },
     inherited_parameters: { dt: .001, thermostat: 'bussi', newtonian_steps: 53 } }
   const stages = oxdnaProductionStagePlan(values, { salt_concentration: .5 })
-  expect(stages.every(s => s.steps === 2_000_000_000 && s.dt === .005 && s.thermostat === 'brownian'
+  expect(stages.every(s => s.steps === 100_000_000 && s.dt === .005 && s.thermostat === 'brownian'
     && s.newtonian_steps === 100 && s.diff_coeff === 2.5 && s.salt_concentration === .5 && s.sequence_dependent)).toBe(true)
   values.stage_overrides = { '1_production': { salt_concentration: .3, dt: .002 } }
   expect(oxdnaProductionStagePlan(values).every(s => s.salt_concentration === .3 && s.dt === .002)).toBe(true)

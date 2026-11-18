@@ -451,7 +451,7 @@ In **Dynamics → oxDNA → New job → Production**, select a completed relaxat
 (or production continuation), then enable **Thermal ramp**. Start/end temperatures
 are in °C; the positive increment works for heating or cooling and always includes
 the endpoint. Set **Steps per temperature** once; every stage uses that fixed
-number of integration steps. The default is **2 billion steps per temperature**.
+number of integration steps. The default is **100 million steps per temperature**.
 The Summary shows every plateau and the exact total planned steps. The current implementation uses the **local, full-system runner**;
 a simulation submodel box must be disabled. Ordinary CPU/CUDA physics and frozen
 CPD models are inherited from the parent. CPD supports local CPU or CUDA MD with its smaller timestep; choose GPU (CUDA)
@@ -563,7 +563,7 @@ A one-way MD
 heating curve alone measures protocol-dependent loss of pairing. Compare
 independent seeds and distinguish local base-pair loss from duplex dissociation.
 
-Defaults: 25–85 °C in 5 °C increments and **2,000,000,000 steps per temperature**.
+Defaults: 25–85 °C in 5 °C increments and **100,000,000 steps per temperature**.
 The integration timestep is unchanged. Default energy-recording intervals remain
 at most 50,000 steps; explicit intervals are respected subject to exact duration
 divisibility. Each resumed process uses a reproducible seed derived from job,
@@ -599,3 +599,40 @@ production and queued continuation edits, including field/surface-deposition
 jobs. Thermal ramps place salt beside the temperature schedule. The shared salt
 setting applies to all stages; new continuation defaults use the saved source
 stage. Engine build/installation details can be expanded separately.
+
+### DNA concentration and simulation volume
+
+The wizard includes **DNA concentration (µM total strands)** in the temperature/salt
+section for relaxation, production, thermal ramps and queued-job edits. This is
+`sum_s N_s / (N_A V)` over DNA strands in the exported topology, including DNA
+capture strands; protein and PEG particles are excluded. It is not nucleotide
+molarity, salt molarity, or assembled-complex molarity. For one copy each of two
+complementary strands, 12,000 µM total means 6 mM of each strand (6 mM
+duplex equivalents). Repeated strands count separately.
+
+An explicit `dna_concentration_uM` determines a cubic box:
+`L_nm = (N_DNA_strands * 1e30 / (N_A * concentration_uM))^(1/3)`.
+The app updates only the physical configuration's box header, never scaling
+coordinates or modifying the authored structure. Blank keeps automatic sizing for
+new relaxation jobs and the inherited box for continuations; clearing a queued
+ordinary job's field keeps its prepared box. A thermal protocol rebuild with a
+blank concentration inherits its parent's box. Requested concentration and actual
+strand count, concentration and box dimensions persist in `run_config.box_conditions`.
+Copies retain the box; every thermal plateau carries it through its checkpoint.
+Historical jobs can show box conditions calculated read-only from their input files.
+
+Preparation rejects a box smaller than the starting particle envelope plus a
+3 nm image gap, and rejects resizing configurations already spanning that gap
+at their old boundary. This avoids silently moving particles or breaking periodic
+contacts. The gap is a geometric preparation check, not a proof of negligible
+finite-size/electrostatic effects at every salt concentration. A smaller box does
+not add molecules or turn a one-way heating trajectory into an equilibrium Tm.
+
+Convention references: the [oxDNA.org submission form](https://oxdna.org/create)
+exposes salt concentration and accepts box size through the configuration file;
+no separate DNA-concentration control was found there (2026-11-18).
+The [oxDNA primer, section 6.1](https://www.frontiersin.org/journals/molecular-biosciences/articles/10.3389/fmolb.2021.693710/full)
+discusses total strand concentration and finite-size corrections, whereas
+[Lim et al. (2022)](https://academic.oup.com/nar/article-pdf/50/5/2480/42917779/gkac082.pdf)
+state their octamer benchmark as 6 mM dsDNA. The wizard explicitly labels total
+strands to make this factor-of-two distinction visible.

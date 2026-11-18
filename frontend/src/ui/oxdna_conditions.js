@@ -31,7 +31,14 @@ export function recordedStageConditions(job) {
 export function recordedOptions(config, prefix = '', depth = 0) {
   return Object.entries(config || {}).flatMap(([key,value]) => {
     if (['stages','stage_overrides','thermal_progress','inherited_parameters'].includes(key)) return []
-    const label = `${prefix}${key.replaceAll('_',' ')}`
+    if (key === 'box_conditions' && value) return [
+      ['DNA strand count', value.dna_strands],
+      ['Actual DNA concentration (µM total strands)', value.concentration_uM == null ? null : Number(value.concentration_uM.toPrecision(6))],
+      ['Box edges (nm)', value.box_nm?.map(n=>Number(n).toFixed(3)).join(' × ')],
+    ]
+    const label = key === 'dna_concentration_uM' ? 'Requested DNA concentration (µM total strands)'
+      : key === 'concentration_uM' ? `${prefix}DNA concentration (µM total strands)`
+        : `${prefix}${key.replaceAll('_',' ')}`
     if (Array.isArray(value)) return [[label, value.length <= 4 && value.every(v=>typeof v!=='object')
       ? value.join(', ') : `${value.length} entries — see Full configuration`]]
     if (value && typeof value === 'object') return depth < 2 ? recordedOptions(value,`${label} / `,depth+1)

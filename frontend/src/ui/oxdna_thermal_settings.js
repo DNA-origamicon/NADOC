@@ -23,6 +23,8 @@ export function thermalRecordedSettings(job) {
   ]))
   const spec = specs.find(s => s.name === rows[0]?.name)
   root.append(el('h3', { text: 'Recorded simulation parameters' }), fields([
+    ['DNA concentration (µM total strands)', (job.box_conditions || job.run_config?.box_conditions)?.concentration_uM ?? job.run_config?.dna_concentration_uM],
+    ['Box edges (nm)', (job.box_conditions || job.run_config?.box_conditions)?.box_nm?.map(n=>n.toFixed(3)).join(' × ')],
     ['Backend', spec?.backend ?? job.backend], ['Random seed', job.random_seed ?? job.run_config?.seed],
     ...PHYSICS.map(([key,label]) => [label, spec?.[key] ?? (key === 'salt_concentration' ? job.salt_concentration : null)]),
   ]))

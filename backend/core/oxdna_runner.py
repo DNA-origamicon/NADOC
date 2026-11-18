@@ -722,6 +722,9 @@ def prepare_oxdna_job(
         info["cpd"] = cpd
     (jd / FILENAME).unlink(missing_ok=True)
     (jd / FILENAME).write_text(attachment_text(jd))
+    from backend.core.oxdna_concentration import apply_concentration
+    if job.run_config is not None:
+        apply_concentration(jd, job.run_config, job.run_config.get("dna_concentration_uM"))
     # Self-contained design snapshot for health checks (decoupled from live state).
     (jd / "design.json").write_text(design.model_dump_json())
     (jd / "stages_spec.json").write_text(

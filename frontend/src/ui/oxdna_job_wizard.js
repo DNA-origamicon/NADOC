@@ -1,3 +1,4 @@
+import { concentrationControl } from './oxdna_concentration.js'
 import { saltControl, recordedStageConditions, recordedOptions } from './oxdna_conditions.js'
 import '../styles/oxdna_wizard.css'
 import { thermalControls, thermalConfig } from './oxdna_thermal_ramp.js'
@@ -106,6 +107,23 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
 
   function tabsForMode() { return mode === 'production' ? PRODUCTION_TABS : ALL_TABS }
 
+  const concentrationSources = new Map()
+  function dnaControl() {
+    const parent = mode === 'production' ? getJobs().find(j=>j.job_id===parentJobId) : null
+    const recorded = concentrationSources.get(parentJobId) || parent?.box_conditions || parent?.run_config?.box_conditions
+    if (parent && !recorded && api.getOxdnaJob && !concentrationSources.has(parentJobId)) {
+      const id = parentJobId
+      concentrationSources.set(id, null)
+      Promise.resolve(api.getOxdnaJob(id)).then(job => {
+        concentrationSources.set(id, job?.box_conditions || job?.run_config?.box_conditions || null)
+        if (mode === 'production' && parentJobId === id && !readOnly && !editJob) renderSettings()
+      }).catch(()=>{})
+    }
+    return concentrationControl({ value: values.dna_concentration_uM, inherit: mode === 'production',
+      strands: recorded?.dna_strands ?? (mode === 'relax' ? values.dna_strand_count : null), recorded,
+      onChange: value => { values.dna_concentration_uM=value; renderConfig(); paintValidation() } })
+  }
+
   function renderSettings() {
     settingsStageTable = null
     settingsEstimate = el('div', { className: 'wizard-note', attrs: { 'data-oxdna-output-estimate': '', 'aria-live': 'polite' } })
@@ -126,9 +144,9 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
           }
           renderConfig(); paintValidation()
         }
-      } })] })
+      } }), dnaControl()] })
     const grid = el('div', { className: 'wizard-field-grid' })
-    panels.settings.replaceChildren(el('h3', { text: 'Temperature & salt' }), conditions, el('details', { children: [
+    panels.settings.replaceChildren(el('h3', { text: 'Temperature, salt & DNA concentration' }), conditions, el('details', { children: [
       el('summary', { text: 'Engine versions & installation' }), engineDetails,
     ] }), el('h3', { text: 'Engine build' }), el('div', {
       className: 'oxdna-engine-options', children: ENGINE_VARIANTS.map(([value, label, explanation]) => {
@@ -189,7 +207,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
           }
           renderConfig(); paintValidation()
         }
-      } })] })
+      } }), dnaControl()] })
     const grid = el('div', { className: 'wizard-field-grid' })
     panels.settings.replaceChildren(el('h3', { text: 'Run conditions' }))
     if (!values.thermal_ramp) panels.settings.append(conditions)
@@ -223,7 +241,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     settingsStageTable = el('div', { className: 'wizard-stages' })
     const ramp = thermalControls(values.thermal_ramp, config => {
       values.thermal_ramp = config; renderSettings(); renderConfig(); paintValidation()
-    }, { salt: saltControl({ value: oxdnaProductionStagePlan(values)[0]?.salt_concentration,
+    }, { concentration: dnaControl(), salt: saltControl({ value: oxdnaProductionStagePlan(values)[0]?.salt_concentration,
       inherit: true, thermal: true, onChange: value => setStageValue('1_production', 'salt_concentration', value) }) })
     panels.settings.insertBefore(ramp, grid)
     panels.settings.append(settingsEstimate, el('h3', { text: 'Simulation parameters' }), settingsStageTable)
@@ -750,11 +768,15 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
         const current = JSON.parse(derivedEditor.value)
         const salt = saltControl({ value: current.salt_concentration, thermal: !!current.thermal_ramp,
           onChange: value => changeCondition('salt_concentration', value) })
+        const dna = concentrationControl({value:current.dna_concentration_uM, inherit:true,
+          recorded:job.box_conditions || current.box_conditions,
+          strands:(job.box_conditions || current.box_conditions)?.dna_strands,
+          onChange:value=>{const edited=JSON.parse(derivedEditor.value);edited.dna_concentration_uM=value;derivedEditor.value=JSON.stringify(edited,null,2)} })
         const conditions = el('div', { className: 'oxdna-conditions', children: [
           temperatureControl({ value: oxdnaTemperature((current.stages || []).map(row => ({
             ...job.stage_specs?.find(spec => spec.name === row.name),
             ...current.inherited_parameters, ...current.stage_overrides?.[row.name], ...row,
-          }))), help: 'Applies to every stage.', onChange: value => changeCondition('temperature', `${value}K`) }), salt,
+          }))), help: 'Applies to every stage.', onChange: value => changeCondition('temperature', `${value}K`) }), salt, dna,
         ] })
         const ramp = kind === 'run' ? thermalControls(current.thermal_ramp, config => {
           try {
@@ -764,7 +786,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
             thermostatControls.hidden = !!config && !editable.thermal_ramp
             drawThermal()
           } catch { derivedError.textContent = 'Correct the advanced configuration before editing the thermal ramp.'; derivedError.hidden = false }
-        }, { salt: current.thermal_ramp ? salt : null }) : null
+        }, { salt: current.thermal_ramp ? salt : null, concentration: current.thermal_ramp ? dna : null }) : null
         thermalMount.replaceChildren(...(current.thermal_ramp ? [ramp] : [conditions, ...(ramp ? [ramp] : [])]))
       }
       drawThermal()
@@ -797,6 +819,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     mode = 'relax'
     values = oxdnaWizardDefaults({
       ...(job.run_config || {}),
+      dna_strand_count: (job.box_conditions || job.run_config?.box_conditions)?.dna_strands,
       seed: job.random_seed ?? job.run_config?.seed,
     })
     targetStep.setChoice({
@@ -831,6 +854,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     }
     const snapshot = {
       ...config,
+      box_conditions: job.box_conditions || config.box_conditions,
       job_id: job.job_id,
       kind: config.kind || (job.parent_job_id ? 'run' : 'relax'),
       execution_target: job.execution_target || config.execution_target || 'local',

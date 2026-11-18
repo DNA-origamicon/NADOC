@@ -1,7 +1,7 @@
 import { createInput, el } from './primitives/index.js'
 
 export const THERMAL_DEFAULTS = Object.freeze({ start_c: 25, end_c: 85, step_c: 5,
-  block_steps: 2_000_000_000 })
+  block_steps: 100_000_000 })
 
 // Old saved ramp settings may contain adaptive controls; do not submit them again.
 export const THERMAL_PHYSICS_DEFAULTS = Object.freeze({ dt: 0.005, thermostat: 'brownian',
@@ -46,7 +46,7 @@ export function thermalStages(stage, config) {
   }))
 }
 
-export function thermalControls(config, onChange, { salt } = {}) {
+export function thermalControls(config, onChange, { salt, concentration } = {}) {
   const root = el('fieldset', { className: 'oxdna-thermal', attrs: { 'data-thermal-controls': '' } })
   const checkbox = (label, checked, change, key) => {
     const input = el('input', { className: 'checkbox', attrs: { type: 'checkbox', 'data-thermal-field': key } })
@@ -80,6 +80,7 @@ export function thermalControls(config, onChange, { salt } = {}) {
     temperatures.classList.add('oxdna-thermal__grid--conditions')
     temperatures.append(salt)
   }
+  if (concentration) root.insertBefore(el('div', {className:'oxdna-conditions',children:[concentration]}), root.querySelectorAll('.oxdna-thermal__grid')[1])
   root.append(note('New ramps use sequence-dependent oxDNA2 and a Brownian thermostat. Salt defaults to the continued job’s saved concentration. Use the simulation parameter controls to change these settings for every temperature.'))
   root.append(note('Every temperature runs for this fixed number of steps. Energy data are recorded for metrics; they do not extend or stop a stage.'))
   return root

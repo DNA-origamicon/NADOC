@@ -12,6 +12,15 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
+- Thermal ramps default to 100,000,000 fixed steps per temperature (2026-11-18); explicit values and saved jobs retain their recorded steps.
+
+- DNA concentration (2026-11-18): wizard temperature/salt section accepts µM
+  total DNA strands (not nucleotides or complexes). Explicit values resize only
+  the configuration box; blank retains auto/inherited sizing. Actual exported
+  strand count and volume persist as `box_conditions`; copies/ramps preserve
+  the box. Geometry-fit/boundary checks reject unsafe resizing without scaling
+  coordinates. See `docs/oxdna_setup.md` for convention and literature links.
+
 - Manual thermal skip (2026-11-17, ISSUE-210): parent and child context menus
   target the current plateau, with expected-stage guard. Detached controller stops
   the old owner, validates/recovers its checkpoint, persists `skipped`, then

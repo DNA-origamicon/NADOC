@@ -1,3 +1,4 @@
+import { concentrationError } from './oxdna_concentration.js'
 import { thermalError, thermalStages, thermalConfig, THERMAL_PHYSICS_DEFAULTS } from './oxdna_thermal_ramp.js'
 // GPU default is user-authorized; further convergence and sampling checks are
 // required for DNA/protein and fixed gold/strep/DNA (TD-OXDNA-PHYSICS).
@@ -46,6 +47,7 @@ export function validateOxdnaWizard(values = {}) {
       errors.diff_coeff = 'Enter a positive diffusion coefficient for each local-bath stage.'
     if (!(Number.isFinite(Number(stage.dt)) && Number(stage.dt) > 0)) errors.dt = 'Time step must be positive.'
   }
+  if (concentrationError(v.dna_concentration_uM)) errors.dna_concentration_uM = concentrationError(v.dna_concentration_uM)
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
@@ -107,6 +109,7 @@ export function oxdnaWizardPayload(values, targetFields = {}) {
   return { backend: v.backend, device: String(v.device), interaction_type: v.interaction_type,
     engine_variant: v.engine_variant,
     salt_concentration: Number(v.salt_concentration),
+    ...(v.dna_concentration_uM != null ? {dna_concentration_uM:v.dna_concentration_uM} : {}),
     mc_steps: Number(v.mc_steps), md_relax_steps: Number(v.md_relax_steps), equil_steps: Number(v.equil_steps),
     min_bp_retained: Number(v.min_bp_retained), max_relax_retries: Number(v.max_relax_retries),
     stage_overrides: v.stage_overrides || {},
@@ -119,6 +122,7 @@ export function oxdnaConfigDocument(values, targetFields = {}) {
   const target = ['# NADOC oxDNA job',
     ...(values.cpd_present ? ['# Experimental isomer-specific CPD model; local CPU/CUDA; melting thermodynamics unvalidated.'] : []), `execution_target = ${payload.execution_target || 'local'}`,
     `engine_variant = ${payload.engine_variant}`,
+    `# Total DNA strand concentration (µM): ${payload.dna_concentration_uM ?? 'automatic/inherited box'}`,
     ...(payload.partition ? [`partition = ${payload.partition}`] : []),
     ...(payload.runpod_gpu_key ? [`runpod_gpu_key = ${payload.runpod_gpu_key}`] : []),
     ...(payload.seed ? [`seed = ${payload.seed}`] : []),
@@ -170,6 +174,7 @@ export function validateOxdnaProductionWizard(values = {}) {
   for (const key of ['dt', 'bussi_tau', 'newtonian_steps', 'print_energy_every']) {
     if (!(Number.isFinite(Number(stage[key])) && Number(stage[key]) > 0)) errors[key] = `${key} must be positive.`
   }
+  if (concentrationError(v.dna_concentration_uM)) errors.dna_concentration_uM = concentrationError(v.dna_concentration_uM)
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
@@ -201,7 +206,7 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
  *  time in oxdna_jobs_panel.js, exactly as the (removed) Full Sim button already did. */
 export function oxdnaProductionPayload(values) {
   const v = oxdnaProductionDefaults(values)
-  return { steps: Number(v.thermal_ramp ? thermalConfig(v.thermal_ramp).block_steps : v.steps), steps_per_frame: Number(v.steps_per_frame),
+  return { ...(v.dna_concentration_uM != null ? {dna_concentration_uM:v.dna_concentration_uM} : {}), steps: Number(v.thermal_ramp ? thermalConfig(v.thermal_ramp).block_steps : v.steps), steps_per_frame: Number(v.steps_per_frame),
     ...(v.backend ? { backend: v.backend } : {}),
     ...(v.thermal_ramp ? { thermal_ramp: thermalConfig(v.thermal_ramp) } : {}),
     ...(Object.keys(v.stage_overrides || {}).length ? { stage_overrides: structuredClone(v.stage_overrides) } : {}),

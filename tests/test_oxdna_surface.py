@@ -1296,3 +1296,33 @@ def test_thermal_salt_inherits_saved_parent_stage_or_explicit_override(design, m
     child = response.json()
     assert child['salt_concentration'] == expected
     assert all(s.salt_concentration == expected for s in routes.load_stage_specs(tmp_path/'oxdna_jobs'/child['job_id']))
+
+
+@pytest.mark.parametrize("thermal", [False, True])
+def test_concentration_survives_run_ramp_edit_copy_and_rejects_bad_edit(design, monkeypatch, tmp_path, thermal):
+    from backend.core.oxdna_concentration import configuration_box
+    client, routes = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    parent_bytes = (parent.job_dir(tmp_path)/'conf.dat').read_bytes()
+    before_dirs=set((tmp_path/'oxdna_jobs').iterdir())
+    rejected=client.post(f'/api/oxdna/jobs/{parent.job_id}/run',json={'dna_concentration_uM':1e12})
+    assert rejected.status_code==422
+    assert set((tmp_path/'oxdna_jobs').iterdir())==before_dirs
+    # Large enough for this origami fixture; numerical duplex scale checked separately.
+    response = client.post(f'/api/oxdna/jobs/{parent.job_id}/run', json={
+        'dna_concentration_uM':1, **({'thermal_ramp':{'start_c':60,'end_c':80,'step_c':5,'block_steps':1000}} if thermal else {})})
+    assert response.status_code == 200, response.text
+    child=response.json(); cid=child['job_id']; directory=tmp_path/'oxdna_jobs'/cid
+    assert child['run_config']['box_conditions']['concentration_uM']==pytest.approx(1)
+    assert (parent.job_dir(tmp_path)/'conf.dat').read_bytes()==parent_bytes
+    before=(directory/'conf.dat').read_bytes()
+    rejected=client.put(f'/api/oxdna/jobs/{cid}/settings',json={'dna_concentration_uM':1e12})
+    assert rejected.status_code==422, rejected.text
+    assert (directory/'conf.dat').read_bytes()==before
+    updated=client.put(f'/api/oxdna/jobs/{cid}/settings',json={'dna_concentration_uM':2})
+    assert updated.status_code==200, updated.text
+    assert configuration_box(directory)[1]['concentration_uM']==pytest.approx(2)
+    copied=client.post(f'/api/oxdna/jobs/{cid}/copy',json={})
+    assert copied.status_code==200, copied.text
+    copy_id=copied.json()['job']['job_id']
+    assert configuration_box(tmp_path/'oxdna_jobs'/copy_id)[1]['concentration_uM']==pytest.approx(2)
