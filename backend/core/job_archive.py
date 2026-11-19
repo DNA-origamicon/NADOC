@@ -275,6 +275,9 @@ def _check_archive_preconditions(
     """Shared validation for moving a job directory. Raises on any problem."""
     if is_running(kind, job.job_id):
         raise ValueError("an archive operation is already in progress for this job")
+    from backend.core.solver_cluster import remote_pending
+    if remote_pending(job):
+        raise ValueError("Finish remote execution and result collection before moving this job")
     src = job.job_dir(workspace_dir)
     if not src.exists():
         raise FileNotFoundError(f"job folder not found: {src}")

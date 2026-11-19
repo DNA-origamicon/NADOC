@@ -40,12 +40,14 @@ const idPresent = (id) => HTML.includes(`id="${id}"`)
 // disabled: card absent today, with the conventional id it WOULD use + why.
 const CENSUS = {
   exp: {
+    cluster: { off: 'exp-cluster-card' },
     run: { on: 'exp-run' }, viz: { on: 'exp-viz' },
     efield: { off: 'exp-efield-toggle' }, anchors: { off: 'exp-anchors-toggle' },
     surface: { off: 'exp-surface-toggle' }, advanced: { off: 'exp-advanced-toggle' },
     metrics: { off: 'exp-metrics-toggle' }, joblist: { off: 'exp-jobs-list-toggle' },
   },
   oxdna: {
+    cluster: { on: 'oxdna-jobs-cluster-toggle' },
     run:        { on: 'oxdna-jobs-run-btn' },
     efield:     { on: 'efield-toggle' },
     anchors:    { on: 'oxdna-anchors-toggle' },
@@ -56,6 +58,7 @@ const CENSUS = {
     joblist:    { on: 'oxdna-jobs-list-toggle' },
   },
   mrdna: {
+    cluster: { on: 'mrdna-cluster-card' },
     run:        { on: 'mrdna-jobs-coarse-btn' },
     efield:     { on: 'mrdna-efield-toggle' },
     anchors:    { on: 'mrdna-anchors-toggle' },
@@ -66,6 +69,7 @@ const CENSUS = {
     joblist:    { on: 'mrdna-jobs-list-toggle' },
   },
   cando: {
+    cluster: { off: 'cando-cluster-card' },
     run:        { on: 'cando-jobs-coarse-btn' },
     efield:     { on: 'cando-efield-toggle' },
     anchors:    { on: 'cando-anchors-toggle' },
@@ -78,6 +82,7 @@ const CENSUS = {
   // ARCHIVED (2026-07-20): 'blade' is no longer in ENGINE_KEYS, so this census row is never
   // iterated. Kept for a one-line revive (re-add 'blade' to ENGINE_KEYS + the array below).
   blade: {
+    cluster: { off: 'blade-cluster-card' },
     run:        { on: 'blade-jobs-run-btn' },
     efield:     { off: 'blade-efield-toggle' },
     anchors:    { off: 'blade-anchors-toggle' },
@@ -88,6 +93,7 @@ const CENSUS = {
     joblist:    { on: 'blade-jobs-list-toggle' },
   },
   snupi: {
+    cluster: { on: 'snupi-cluster-card' },
     run:        { on: 'snupi-jobs-coarse-btn' },
     efield:     { on: 'snupi-efield-toggle' },
     anchors:    { on: 'snupi-anchors-toggle' },
@@ -98,6 +104,7 @@ const CENSUS = {
     joblist:    { on: 'snupi-jobs-list-toggle' },
   },
   namd: {
+    cluster: { on: 'md-jobs-cluster-toggle' },
     run:        { on: 'md-jobs-run-btn' },
     efield:     { on: 'md-efield-toggle' },
     anchors:    { on: 'md-anchors-toggle' },

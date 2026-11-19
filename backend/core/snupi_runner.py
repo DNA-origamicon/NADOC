@@ -192,7 +192,8 @@ def load_trajectory(job_dir: Path) -> Optional[dict]:
 def _estimate_seconds(job: SnupiJob) -> float:
     """Rough wall-clock estimate for the solve, scaled by system size + mode.
 
-    Only drives the progress bar (capped < 1.0 until the thread ends); the true
+    Used for rough resource-wizard planning and the progress bar (capped < 1.0
+    until the thread ends); the true
     completion signal is the runner thread finishing.  Reference: a 6HB/210
     (~1260 duplex nodes) nonlinear static solve ≈ 60 s; the linear preview ≈ a few s.
 
@@ -298,6 +299,12 @@ def job_progress(job: SnupiJob, workspace_dir: Path) -> dict:
     observed rate rather than from a wall-clock guess. Everything else — and a dynamics job that
     hasn't reported its first step yet — falls back to :func:`_estimate_seconds`.
     """
+    if job.execution_target in {"alpine", "runpod"}:
+        from backend.core.solver_cluster import progress
+        return progress(job, workspace_dir)
+    if job.dynamics:
+        from backend.core.solver_progress import dynamics_progress, load_receipt
+        return dynamics_progress(job, load_receipt(job.job_dir(workspace_dir)))
     stage = job.stages[0] if job.stages else None
     overall = 0.0
     eta_seconds: float | None = None
@@ -419,6 +426,7 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
         # actually moves, so a 60k-step run does ~100 tiny writes, not 120.
         _last = [-1.0]
         _phase_seen = [""]
+        _trajectory_clock = [None, None]
 
         def _progress(first, second, third=None) -> None:
             # predict_shape's structural phases report (phase, local_fraction,
@@ -441,14 +449,26 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
                 fraction = float(first)
                 phase = str(second)
                 info = third or {}
-            moved = fraction - _last[0] >= 0.01 or fraction >= 1.0
+            # Every reported dynamics counter matters, including a reset on retry.
+            moved = (job.dynamics and info.get("step") is not None) or fraction - _last[0] >= 0.01 or fraction >= 1.0
             new_phase = phase != _phase_seen[0]
             if not (moved or new_phase):
                 return
-            _last[0] = max(_last[0], fraction)
+            _last[0] = fraction if job.dynamics else max(_last[0], fraction)
             elapsed = time.monotonic() - t0
             rate = (info.get("step") or 0) / elapsed if elapsed > 0 else 0.0
             eta = (elapsed / fraction - elapsed) if fraction > 0.01 else None
+            if job.dynamics:
+                attempt = info.get('attempt', 0)
+                step = info.get('step')
+                if phase.startswith('trajectory') and step is not None:
+                    if _trajectory_clock[0] != attempt:
+                        _trajectory_clock[:] = [attempt, time.monotonic()]
+                    duration = time.monotonic() - _trajectory_clock[1]
+                    rate = step / duration if duration > 0 else 0.0
+                    eta = (info.get('n_steps', 60000) - step) / rate if rate > 0 else None
+                else:
+                    rate, eta = 0.0, None
             write_progress(
                 jd,
                 fraction,
@@ -551,13 +571,22 @@ def start_job(job: SnupiJob, workspace_dir: Path) -> None:
     only ``wait()``s to avoid a zombie and drops the fast-path registry entry — killing it (on
     reload) does NOT kill the detached solve.
     """
+    from backend.core.solver_resources import check_resources, check_snapshot_capacity
     if is_running(job.job_id, workspace_dir):
         return
-    runtime.launch_detached(
-        job, workspace_dir, "backend.core.snupi_worker", _REPO_ROOT,
-        on_spawn=lambda proc: _STARTED.update({job.job_id: proc.pid}),
-        on_exit=lambda: _STARTED.pop(job.job_id, None),
-    )
+    check_snapshot_capacity(job.job_dir(workspace_dir))
+    resources = check_resources("snupi", _load_snapshot_design(job.job_dir(workspace_dir)), job, workspace_dir)
+    if job.execution_target == "runpod":
+        from backend.core.solver_runpod import start
+        return start(job, workspace_dir, "snupi")
+    if job.execution_target == "alpine":
+        from backend.core.solver_cluster import start
+        return start(job, workspace_dir, "snupi")
+    if is_running(job.job_id, workspace_dir):
+        return
+    from backend.core.solver_resources import launch_reserved_detached
+    launch_reserved_detached(resources, job, workspace_dir,
+                             "backend.core.snupi_worker", _REPO_ROOT, _STARTED)
 
 
 @runtime.idle_stop_guard("snupi_jobs")
@@ -569,6 +598,8 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
         job = SnupiJob.load(job_id, workspace_dir)
     except Exception:  # noqa: BLE001
         return False
+    if job.execution_target != "local":
+        return False  # remote cancellation is asynchronous and owned by its provider route
     jd = job.job_dir(workspace_dir)
     stopped_generation = runtime.generation(jd)
     if runtime.known(jd):
@@ -606,6 +637,12 @@ def reconcile_snupi_status(job: SnupiJob, workspace_dir: Path) -> SnupiJob:
     (SIGKILLed, or the machine rebooted).  A live worker → unchanged.  Dead worker + cached
     ``display.json`` → ``completed``; dead worker + no cache → ``stopped``.  A worker that
     survives a ``uvicorn --reload`` stays alive (pid still valid) → left ``running`` correctly."""
+    if job.execution_target == "runpod":
+        from backend.core.solver_runpod import reconcile
+        return reconcile(job, workspace_dir, "snupi")
+    if job.execution_target == "alpine":
+        from backend.core.solver_cluster import reconcile
+        return reconcile(job, workspace_dir, "snupi")
     if job.status != SnupiStatus.running:
         return job
     jd = job.job_dir(workspace_dir)

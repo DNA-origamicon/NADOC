@@ -1,3 +1,4 @@
+import { initSolverClusterCard, remoteSolverStatus } from './solver_cluster_card.js'
 /**
  * mrDNA jobs panel — launch + monitor a managed coarse ARBD relaxation on the
  * currently-loaded design.  Sibling of oxdna_jobs_panel.js, simplified to the
@@ -117,6 +118,7 @@ export function buildMrdnaLaunchBody({
 
 /** Human status line for the detail block. */
 export function detailStatusText(job, progress) {
+  if (["alpine", "runpod"].includes(job?.execution_target) && job.status !== "completed") return `${remoteSolverStatus(job)}${job.error ? ` · ${job.error}` : ""}`
   if (!job) return ''
   switch (job.status) {
     case 'queued':    return 'Queued — preparing to run.'
@@ -307,14 +309,19 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     const missing = !_available?.mrdna ? 'mrDNA' : 'ARBD'
     window.dispatchEvent(new CustomEvent('nadoc:engine-availability', { detail: {
       engine: 'mrdna', ok, reason: `${missing} not installed.` } }))
-    if (coarseBtn) coarseBtn.disabled = !ok
-    if (fineBtn) fineBtn.disabled = !ok
+    _syncLaunchButtons()
   }
+
+  const _clusterCard = initSolverClusterCard({ mount: document.getElementById("mrdna-cluster-card"), engine: "mrdna", onChange: () => _syncLaunchButtons() })
 
   // ── Run (Coarse = fast/global shape; Fine = curvature via twist) ───────────────
   const FINE_DEFAULT_STEPS = 200000
   function _syncLaunchButtons() {
-    const disabled = _launching || !_available?.available || _jobs.some(mrdnaJobIsActive)
+    window.dispatchEvent(new CustomEvent('nadoc:engine-availability', { detail: {
+      engine: 'mrdna', ok: _clusterCard.isRemote() || !!_available?.available,
+      reason: _clusterCard.isRemote() ? '' : 'Local mrDNA or ARBD is not installed.',
+    } }))
+    const disabled = _launching || (!_clusterCard.isRemote() && !_available?.available) || _jobs.some(mrdnaJobIsActive)
     if (coarseBtn) coarseBtn.disabled = disabled
     if (fineBtn) fineBtn.disabled = disabled
   }
@@ -325,19 +332,8 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     coarseBtn && (coarseBtn.disabled = true)
     fineBtn && (fineBtn.disabled = true)
     try {
-    if (!(await confirmNoConcurrentJob())) return
-    if (!(await confirmGpuNotBusy())) return
-    optimisticId = `mrdna-launch-${Date.now()}`
-    window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
-      select: true,
-      node: {
-        engine: 'mrdna', job_id: optimisticId, status: 'preparing',
-        design_name: 'mrDNA', design_source_path: getWorkspacePath?.() || null,
-        progress_fraction: 0, phase: 'Preparing mrDNA inputs',
-        coarse_steps: Number(stepsInput?.value) || 100000, fine_steps: fineSteps,
-        stages: [{ name: fineSteps > 0 ? 'coarse + fine' : 'coarse', status: 'preparing' }],
-      },
-    } }))
+    if (!_clusterCard.isRemote() && !(await confirmNoConcurrentJob())) return
+    if (!_clusterCard.isRemote() && !(await confirmGpuNotBusy())) return
     const anchors = _anchorsCard.getAnchors()
     const fieldSpec = _efieldCard.getFieldSpec()
     const fieldOn = _efieldCard.isEnabled()
@@ -357,6 +353,20 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       device: deviceInput?.value, sourcePath: getWorkspacePath?.() || null,
       anchors, fieldSpec, fieldOn, surfaceSpec, surfaceOn,
     })
+    const execution = await _clusterCard.prepareLaunch(body_)
+    if (!execution) return
+    Object.assign(body_, execution)
+    optimisticId = `mrdna-launch-${Date.now()}`
+    window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
+      select: true,
+      node: {
+        engine: 'mrdna', job_id: optimisticId, status: 'preparing',
+        design_name: 'mrDNA', design_source_path: getWorkspacePath?.() || null,
+        progress_fraction: 0, phase: 'Preparing mrDNA inputs',
+        coarse_steps: Number(stepsInput?.value) || 100000, fine_steps: fineSteps,
+        stages: [{ name: fineSteps > 0 ? 'coarse + fine' : 'coarse', status: 'preparing' }],
+      },
+    } }))
     const job = await api.createMrdnaJob(body_)
     if (!job) {
       window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', {
@@ -372,6 +382,8 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     } }))
     optimisticId = null
     await _fetchJobs()
+    } catch (error) {
+      showToast(error.message || 'Failed to submit mrDNA job', { severity: 'error' })
     } finally {
       if (optimisticId) window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', {
         detail: { removeJobId: optimisticId },
@@ -465,6 +477,7 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
 
   function _renderDetail() {
     const job = _selectedJob()
+    _clusterCard.showJob(job)
     _syncDisplayModes()
     _syncDisplayStatus()
     if (!detail) return
@@ -652,5 +665,5 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected,
            // Drop the selection without touching the display (the unified Simulate list
            // routes its own click-the-selected-row-to-deselect here).
-           deselectJob: _deselectJob }
+           deselectJob: _deselectJob, dispose: () => _clusterCard.dispose() }
 }

@@ -67,6 +67,7 @@ class Partition:
     # whole-card resource remains represented by ``gres_type`` above for compatibility
     # with existing profiles and saved jobs.
     gpu_resources: list[GpuResource] = field(default_factory=list)
+    gpu_vram_gb: int = 0  # Whole-card nominal capacity; 0 means unverified.
 
     def gpu_resource(self, gres_type: str | None) -> GpuResource | None:
         """Resolve a typed GRES accepted by this partition."""
@@ -264,6 +265,7 @@ def alpine_profile() -> ClusterProfile:
                 mem_per_core_gb=3.75,
                 gpus=3,
                 gpu_model="NVIDIA A100",
+                gpu_vram_gb=40,
                 gres_type="a100-40gb",
                 allowed_qos=["gpu-normal", "gpu-long", "gpu-testing"],
                 gpu_resources=[
@@ -295,6 +297,7 @@ def alpine_profile() -> ClusterProfile:
                 mem_per_core_gb=3.75,
                 gpus=3,
                 gpu_model="NVIDIA L40",
+                gpu_vram_gb=48,
                 gres_type="l40",
                 allowed_qos=["gpu-normal", "gpu-long", "gpu-testing"],
             ),
@@ -309,6 +312,7 @@ def alpine_profile() -> ClusterProfile:
                 mem_per_core_gb=12.0,
                 gpus=4,
                 gpu_model="NVIDIA H200",
+                gpu_vram_gb=141,
                 gres_type="h200",
                 allowed_qos=["gpu-normal", "gpu-long"],
                 su_per_gpu_hour=370.4,
@@ -340,6 +344,7 @@ def alpine_profile() -> ClusterProfile:
                 mem_per_core_gb=12.0,
                 gpus=4,
                 gpu_model="NVIDIA RTX Pro 6000",
+                gpu_vram_gb=96,
                 gres_type="rtx_pro_6000",
                 allowed_qos=["gpu-normal", "gpu-long"],
                 su_per_gpu_hour=260.4,

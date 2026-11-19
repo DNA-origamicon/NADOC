@@ -42,6 +42,8 @@ from typing import Callable, List, Optional
 
 import numpy as np
 
+from backend.physics.trajectory_storage import allocate_samples
+
 # ── Unit system / physical constants (nm · pN · ns) ─────────────────────────────
 KBT_300 = 4.142  # pN·nm — thermal energy at 300 K (the paper's simulation temperature)
 DT_DEFAULT = 0.005  # ns = 5 ps (the paper's time step)
@@ -111,7 +113,8 @@ def gjf_integrate(
     )  # std of the integrated random impulse per step
 
     f = force_fn(q)
-    samples = []
+    samples = allocate_samples(q0, n_steps, n_equil, sample_every)
+    sample_index = 0
     for step in range(n_steps):
         beta = rng.standard_normal(q.shape) * sig
         dq = b * dt * v + b * dt * dt / (2.0 * m) * f + b * dt / (2.0 * m) * beta
@@ -120,14 +123,16 @@ def gjf_integrate(
         v = a * v + dt / (2.0 * m) * (a * f + f_new) + b / m * beta
         f = f_new
         if step >= n_equil and (step - n_equil) % sample_every == 0:
-            samples.append(q.copy())
+            samples[sample_index] = q
+            sample_index += 1
         if step % 500 == 0:
             if not np.isfinite(q).all():
                 raise _GJFDiverged(
                     f"GJF diverged at step {step} (dt={dt} too large for the stiffest mode)"
                 )
-            _report_progress(progress_cb, step, n_steps)
-    return np.array(samples), v
+            _report_progress(progress_cb, step + 1, n_steps)
+    _report_progress(progress_cb, n_steps, n_steps)
+    return samples, v
 
 
 def gjf_modified_integrate(
@@ -183,7 +188,8 @@ def gjf_modified_integrate(
     s_half = np.sqrt(gamma * kT * dt)  # std of one half-step impulse β
 
     acc = force_fn(q) / m  # a^t = M⁻¹F^t (accel); carried across steps
-    samples = []
+    samples = allocate_samples(q0, n_steps, n_equil, sample_every)
+    sample_index = 0
     for step in range(n_steps):
         b1 = s_half * rng.standard_normal(
             q.shape
@@ -209,10 +215,11 @@ def gjf_modified_integrate(
         q = q_new
         acc = acc_new
         if step >= n_equil and (step - n_equil) % sample_every == 0:
-            samples.append(q.copy())
+            samples[sample_index] = q
+            sample_index += 1
         if step % 500 == 0 and not np.isfinite(q).all():
             raise _GJFDiverged(f"modified GJF diverged at step {step} (dt={dt})")
-    return np.array(samples), v
+    return samples, v
 
 
 class _GJFDiverged(RuntimeError):
@@ -295,7 +302,8 @@ def gjf_integrate_operator_friction(
         bx = fric.apply_b_inv(x, dt)
         return bx - 0.5 * dt * fric.apply_Ztilde(bx)
 
-    samples = []
+    samples = allocate_samples(q0, n_steps, n_equil, sample_every)
+    sample_index = 0
     for step in range(n_steps):
         beta = fric.sample_beta(kT, dt, rng)
         qt = qt + fric.apply_b_inv(
@@ -307,14 +315,16 @@ def gjf_integrate_operator_friction(
         )
         ft = ft_new
         if step >= n_equil and (step - n_equil) % sample_every == 0:
-            samples.append(minv_half * qt)
+            samples[sample_index] = minv_half * qt
+            sample_index += 1
         if step % 500 == 0:
             if not np.isfinite(qt).all():
                 raise _GJFDiverged(
                     f"GJF diverged at step {step} (dt={dt} too large for the stiffest mode)"
                 )
-            _report_progress(progress_cb, step, n_steps)
-    return np.array(samples), minv_half * vt
+            _report_progress(progress_cb, step + 1, n_steps)
+    _report_progress(progress_cb, n_steps, n_steps)
+    return samples, minv_half * vt
 
 
 # ── Matrix (hydrodynamic) friction via a mass-weighted eigen-transform ──────────
@@ -411,14 +421,20 @@ def trajectory_rmsf(
         tol = singular.max() * max(rigid.shape) * np.finfo(float).eps
         basis = basis[:, singular > tol]
         disp = (frames - ref).reshape(len(frames), -1)
-        aligned = (disp - (disp @ basis) @ basis.T).reshape(frames.shape)
+        projected = (disp @ basis) @ basis.T
+        np.subtract(disp, projected, out=projected)
+        aligned = projected.reshape(frames.shape)
+        del disp
     else:
         aligned = np.empty_like(frames)
         for k, fr in enumerate(frames):
             fc = fr - fr.mean(axis=0)
             aligned[k] = fc @ _kabsch(fc, ref_c).T
     mean = aligned.mean(axis=0)
-    var = ((aligned - mean) ** 2).sum(axis=2).mean(axis=0)  # <|Δr_i|²> per node
+    aligned = aligned.astype(np.result_type(aligned.dtype, mean.dtype), copy=False)
+    aligned -= mean
+    np.square(aligned, out=aligned)
+    var = aligned.sum(axis=2).mean(axis=0)  # <|Δr_i|²> per node
     return np.sqrt(var)
 
 
@@ -771,10 +787,11 @@ def simulate_equilibrium(
 ) -> dict:
     """Run an equilibrium Langevin trajectory of ``design`` and return frames + trajectory RMSF.
 
-    ``dt`` (ns) defaults to ``None`` → auto-sized to 40% of the plain-GJF overdamped stability limit
-    ``2 γ_min / λ_max(K)`` (capped at :data:`DT_DEFAULT` = 5 ps for soft designs). The stiffest local
-    modes (12EI/L³ at the 0.34 nm bp spacing) cap plain-GJF at ~1–2 ps here; the paper's flat 5 ps
-    needs their MODIFIED GJF (half-time stepping + Simpson's rule, Supp Note 4) — a Phase-2 follow-up.
+    ``dt`` (ns) defaults to ``None``: plain GJF uses 0.8/omega_bound,
+    capped at DT_DEFAULT (5 ps), then rounded downward to two significant digits.
+    The mass-scaled absolute row bound is conservative and uses fixed work;
+    anchor traps and free-tail frequency limits remain included. Explicit dt and
+    the modified-GJF branch retain their existing behavior.
     The validation gate (trajectory RMSF == NMA RMSF) is dt-independent for any stable step, since GJF
     samples the exact Boltzmann configuration distribution regardless of Δt.
 
@@ -839,25 +856,36 @@ def simulate_equilibrium(
         SNUPI_DEFAULT_MGCL2_M,
     )
 
+    def _phase(frac: float, label: str, info: Optional[dict] = None) -> None:
+        if progress_cb is not None:
+            try:
+                progress_cb(frac, label, {"step": 0, "n_steps": n_steps, **(info or {})})
+            except Exception:  # progress is advisory
+                pass
+
+    _phase(0.0, "Building dynamics mesh")
     mesh = build_fem_mesh(design, material=material)
     n = len(mesh.nodes)
     X0 = np.array([node.position for node in mesh.nodes], dtype=float)
 
+    _phase(0.0, "Assembling dynamics stiffness")
     K, _ = assemble_global_stiffness(
         mesh, material=material, bp_registered_frame=(material == "snupi")
     )
-    K = K.tolil()
+    K = K.tocsr()
     # Loop/skip eigenstrain prestress — a self-equilibrated internal load, so it sets the MEAN
     # (equilibrium) shape without breaking the free-free fluctuation covariance (still k_BT·K⁻¹).
     f_ext = np.asarray(assemble_prestress_force(mesh, design), dtype=float)
     if with_electrostatics and material == "snupi":
-        from backend.physics.fem_solver import _snupi_es_params, _snupi_electro_sparse
+        from backend.physics.fem_solver import _snupi_es_params
+        from backend.physics.snupi_electro_vectorized import electro_sparse
 
         prm = _snupi_es_params(SNUPI_DEFAULT_MGCL2_M if mgcl2_M is None else mgcl2_M)
-        K_es, _f = _snupi_electro_sparse(
-            mesh, X0, prm, axial_only=True
+        _phase(0.0, "Assembling electrostatic stiffness")
+        K_es, _f = electro_sparse(
+            [node.helix_id for node in mesh.nodes], X0, prm, axial_only=True
         )  # PD tangent (matches NMA)
-        K = K + K_es.tolil()
+        K = K + K_es.tocsr()
     Kcsr = K.tocsr()
 
     M = assemble_mass_matrix(mesh, design)
@@ -919,6 +947,7 @@ def simulate_equilibrium(
     has_anchor = bool(np.any(k_anchor_diag))
 
     if dt is None:
+        _phase(0.0, "Calculating stable dynamics timestep")
         if modified_gjf:
             # The modified GJF (Simpson midpoint force) has a much wider stable region than plain GJF,
             # so start from the paper's flat 5 ps; the divergence-guarded retry below halves it only if
@@ -928,25 +957,22 @@ def simulate_equilibrium(
             # Plain GJF inherits Verlet's step limit dt < 2/ω_max; ω_max is the largest GENERALIZED
             # frequency √λ of (K, M). 0.8/ω_max ≈ 0.4·(2/ω_max) leaves a stability margin.
             from scipy.sparse import diags
-            from scipy.sparse.linalg import eigsh
+            from backend.physics.snupi_timestep import estimate_timestep
 
-            Md = diags(m_diag[: 6 * n]).tocsr()  # K is core-only; so is its mass metric
-            # Include the anchor trap: it is a stiff diagonal spring, so it can be the stiffest core
-            # mode and must enter ω_max or the step overshoots it (surfacing only as a divergence retry).
+            # Retain the existing tangent, anchor trap and tail frequency limit.
             K_dt = (
                 (Kcsr + diags(k_anchor_diag[: 6 * n])).tocsr() if has_anchor else Kcsr
             )
-            lam_g = float(
-                eigsh(K_dt, k=1, M=Md, which="LM", return_eigenvectors=False)[0]
+            sizing = estimate_timestep(
+                K_dt, m_diag[: 6 * n], dt_cap=DT_DEFAULT,
+                tail_omega_max=st.tail_omega_max(block) if block is not None else 0.0,
+                progress=lambda current, total, bound: _phase(
+                    0.0, "Calculating stable dynamics timestep",
+                    {"setup_iteration": current, "setup_iterations": total,
+                     "core_lambda_upper": bound},
+                ),
             )
-            omega_max = math.sqrt(max(lam_g, 1e-30))
-            if block is not None:
-                # The tails are not in K, so their stiffest mode is invisible to that eigensolve. A
-                # stiff ssDNA link (EA = 710 pN on a 0.68 nm bond) on a light nucleotide bead is
-                # comparable to the duplex core's stiffest mode, so it must enter the step sizing —
-                # otherwise a tail-driven instability only ever surfaces as a divergence retry.
-                omega_max = max(omega_max, st.tail_omega_max(block))
-            dt = min(DT_DEFAULT, 0.8 / omega_max)
+            dt = sizing["dt_ns"]
 
     if nonlinear_force:
         # Phase 2: the FULL nonlinear corotational internal force per step (exact under large rotations),
@@ -995,16 +1021,6 @@ def simulate_equilibrium(
                 f = f_ext - st.tail_internal_force(q, X0, block, _touched)
                 f[: 6 * n] -= core_int(q)
                 return f
-
-    # Progress: the friction build is a real, non-trivial phase (a dense O((6N)³) factorisation, or
-    # ~11 s even coarse at M13 scale), so give it its own slice of the bar rather than letting the
-    # panel sit at 0% through it. The trajectory then fills the rest.
-    def _phase(frac: float, label: str, info: Optional[dict] = None) -> None:
-        if progress_cb is not None:
-            try:
-                progress_cb(frac, label, info or {})
-            except Exception:  # pragma: no cover — progress is best-effort
-                pass
 
     Z = None
     coarse_fric = None
@@ -1145,6 +1161,7 @@ def simulate_equilibrium(
     if samples is None:
         raise _GJFDiverged("GJF failed to stabilise after halving dt 4×")
 
+    _phase(1.0, "Analyzing dynamics trajectory", {"step": n_steps, "attempt": _attempt_box[0]})
     disp_all = samples.reshape(len(samples), n_tot, 6)[
         :, :, :3
     ]  # translational disp per frame
@@ -1155,11 +1172,14 @@ def simulate_equilibrium(
     # bug the VoltronCore DISPLAY fix had to undo. The tails are reported separately.
     disp = disp_all[:, :n, :]
     frames = frames_all[:, :n, :]
-    rmsf = trajectory_rmsf(frames, X0[:n], linearized=not nonlinear_force)
     mean_u = np.zeros(6 * n, dtype=float)
     mean_u.reshape(n, 6)[:, :3] = disp.mean(
         axis=0
     )  # mean translational displacement per node
+    n_frame = len(samples)
+    # These views retain the full six-DOF trajectory until explicitly released.
+    del disp, disp_all, samples
+    rmsf = trajectory_rmsf(frames, X0[:n], linearized=not nonlinear_force)
     out = {
         "positions0": X0[:n],
         "frames": frames,
@@ -1167,7 +1187,7 @@ def simulate_equilibrium(
         "rmsf": rmsf,
         "helix_ids": [node.helix_id for node in mesh.nodes],
         "bp_indices": [node.global_bp for node in mesh.nodes],
-        "n_frame": int(len(samples)),
+        "n_frame": int(n_frame),
         "dt_ns": float(dt),
         "anchor_keys": [[hid, bp] for (hid, bp) in anchor_keys],
         "friction": (

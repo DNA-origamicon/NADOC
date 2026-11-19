@@ -1,3 +1,4 @@
+import { initSolverClusterCard, remoteSolverStatus } from './solver_cluster_card.js'
 /**
  * SNUPI FEM jobs panel — launch + monitor a native SNUPI shape prediction on the
  * currently-loaded design.  Sibling of cando_jobs_panel.js: SNUPI is the SAME in-process
@@ -37,6 +38,7 @@ import { initSnupiMetricsCard } from './snupi_metrics_card.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import * as api from '../api/client.js'
+import { renderSnupiDynamicsTimeline } from './snupi_stage_timeline.js'
 
 const POLL_MS = 1500
 export const SNUPI_LAUNCH_RESOURCE = Object.freeze({ usesGpu: false })
@@ -124,8 +126,7 @@ export function launchBlocked(launching, jobs, selectedJob) {
 /**
  * The SNUPI job a Stop button would act on: the one in flight, if any.
  *
- * The Stop button is ALWAYS rendered (under the run buttons) so the panel never reflows when a run
- * starts — it is merely disabled when this returns null. It targets the ACTIVE job rather than the
+ * The Stop button is visible only when this returns an active job. It targets the active job, not the
  * selected one: a freshly-launched run is what you want to stop, even if you have since clicked an
  * older completed run in the list.
  */
@@ -221,6 +222,7 @@ export function solveDetailText(progress) {
 
 /** Human status line for the detail block. */
 export function detailStatusText(job, progress) {
+  if (["alpine", "runpod"].includes(job?.execution_target) && job.status !== "completed") return `${remoteSolverStatus(job)}${job.error ? ` · ${job.error}` : ""}`
   if (!job) return ''
   switch (job.status) {
     case 'queued':    return 'Queued — preparing to solve.'
@@ -335,6 +337,8 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   }
 
   // Graphs & Metrics card — a child module reading the panel's job selection.
+  const _clusterCard = initSolverClusterCard({ mount: document.getElementById("snupi-cluster-card"), engine: "snupi", onChange: () => _updateLaunchButtons() })
+
   const _metricsCard = initSnupiMetricsCard({ getSelectedJob: _selectedJob })
 
   // Anchors + Electric-field cards — mimics of the oxDNA panel's, feeding the FEM solve
@@ -433,11 +437,13 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     _syncStopBtn()
   }
 
-  /** Stop is always present under the run buttons; greyed out (disabled) until a run is in flight.
-   *  The :disabled styling lives in index.html so the two states can't drift apart here. */
+  /** Only expose Stop while this document has an active SNUPI job. */
   function _syncStopBtn() {
     if (!stopBtn) return
-    stopBtn.disabled = !runningJob(_jobs)
+    const active = !!runningJob(_jobs)
+    stopBtn.disabled = !active
+    const row = document.getElementById('snupi-stop-row')
+    if (row) row.style.display = active ? 'flex' : 'none'
   }
 
   async function _launch(nonlinear) {
@@ -450,17 +456,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
       // a running oxDNA/NAMD job intercept Coarse/Fine clicks with an irrelevant
       // GPU-contention prompt, so no SNUPI request was submitted unless that hidden
       // prompt was explicitly accepted.
-      if (!(await confirmNoConcurrentJob(SNUPI_LAUNCH_RESOURCE))) return
-      optimisticId = `snupi-launch-${Date.now()}`
-      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
-        select: true,
-        node: {
-          engine: 'snupi', job_id: optimisticId, status: 'preparing',
-          nonlinear, design_name: 'SNUPI', design_source_path: getWorkspacePath?.() || null,
-          progress_fraction: 0, phase: 'Creating job',
-          stages: [{ name: nonlinear ? 'nonlinear' : 'linear', status: 'preparing' }],
-        },
-      } }))
+      if (!_clusterCard.isRemote() && !(await confirmNoConcurrentJob(SNUPI_LAUNCH_RESOURCE))) return
       const anchors = _anchorsCard.getAnchors()
       const fieldSpec = _efieldCard.getFieldSpec()
       const fieldOn = _efieldCard.isEnabled()
@@ -484,6 +480,19 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
         anchors: anchors.length ? anchors : null,
         field:   fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
       }
+      const execution = await _clusterCard.prepareLaunch(body_)
+      if (!execution) return
+      Object.assign(body_, execution)
+      optimisticId = `snupi-launch-${Date.now()}`
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
+        select: true,
+        node: {
+          engine: 'snupi', job_id: optimisticId, status: 'preparing',
+          nonlinear, design_name: 'SNUPI', design_source_path: getWorkspacePath?.() || null,
+          progress_fraction: 0, phase: 'Creating job',
+          stages: [{ name: nonlinear ? 'nonlinear' : 'linear', status: 'preparing' }],
+        },
+      } }))
       const job = await api.createSnupiJob(body_)
       if (!job) {
         window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', {
@@ -631,12 +640,13 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
 
   function _renderDetail() {
     const job = _selectedJob()
+    _clusterCard.showJob(job)
     _syncDisplayModes()
     if (!detail) return
     if (!job) { detail.style.display = 'none'; _syncDisplayStatus(); return }
     detail.style.display = ''
     if (detailStatus) detailStatus.textContent = detailStatusText(job, _progress)
-    if (timeline) timeline.textContent = stageChip(job)
+    if (timeline && !renderSnupiDynamicsTimeline(timeline, { ...job, ..._progress, status: job.status })) timeline.textContent = stageChip(job)
     if (summaryEl) {
       const html = formatSummary(job)
       summaryEl.style.display = html ? '' : 'none'
@@ -804,5 +814,5 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected,
            // Drop the selection without touching the display (the unified Simulate list
            // routes its own click-the-selected-row-to-deselect here).
-           deselectJob: _deselectJob }
+           deselectJob: _deselectJob, dispose: () => _clusterCard.dispose() }
 }

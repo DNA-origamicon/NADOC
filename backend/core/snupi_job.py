@@ -117,6 +117,8 @@ class SnupiJob:
     design_fingerprint: Optional[str] = None
     feature_log_position: Optional[int] = None
     # Archival parity with oxDNA/mrDNA/CanDo jobs (job_archive is kind-generic).
+    execution_target: str = "local"
+    remote: Optional[dict] = None
     archived: bool = False
     archive_path: Optional[str] = None
 

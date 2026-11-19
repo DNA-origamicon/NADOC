@@ -51,11 +51,12 @@ export const ENGINE_LABELS = {
 
 // The card universe (union across all panels), in unified-stack display order.
 export const CARD_KEYS = [
-  'run', 'joblist', 'advanced', 'anchors', 'efield', 'surface', 'viz', 'metrics',
+  'run', 'joblist', 'cluster', 'advanced', 'anchors', 'efield', 'surface', 'viz', 'metrics',
 ]
 
 export const CARD_LABELS = {
   run: 'Run',
+  cluster: 'Clusters',
   efield: 'Electric field',
   anchors: 'Anchors',
   surface: 'Hard surface',
@@ -83,6 +84,7 @@ export const ENGINE_CAPABILITIES = {
   exp: {
     label: ENGINE_LABELS.exp,
     cards: {
+      cluster: off('Exp uses the local screening model.'),
       run: on('exp-run'), viz: on('exp-viz'),
       joblist: off('Exp keeps one session-only screening result.'),
       advanced: off('The trained model defines its reference conditions.'),
@@ -96,6 +98,7 @@ export const ENGINE_CAPABILITIES = {
   oxdna: {
     label: ENGINE_LABELS.oxdna,
     cards: {
+      cluster: on('oxdna-jobs-cluster-toggle'),
       run: on('oxdna-jobs-run-btn'),
       efield: on('efield-toggle'),
       anchors: on('oxdna-anchors-toggle'),
@@ -115,6 +118,7 @@ export const ENGINE_CAPABILITIES = {
   mrdna: {
     label: ENGINE_LABELS.mrdna,
     cards: {
+      cluster: on('mrdna-cluster-card'),
       run: on('mrdna-jobs-coarse-btn'),
       efield: on('mrdna-efield-toggle'),
       anchors: on('mrdna-anchors-toggle'),
@@ -132,6 +136,7 @@ export const ENGINE_CAPABILITIES = {
   cando: {
     label: ENGINE_LABELS.cando,
     cards: {
+      cluster: off('CanDo uses the local FEM runner.'),
       run: on('cando-jobs-coarse-btn'),
       efield: on('cando-efield-toggle'),
       anchors: on('cando-anchors-toggle'),
@@ -149,6 +154,7 @@ export const ENGINE_CAPABILITIES = {
   blade: {
     label: ENGINE_LABELS.blade,
     cards: {
+      cluster: off('BLADE is archived and has no remote deployment adapter.'),
       run: on('blade-jobs-run-btn'),
       // A relax is a free (unrestrained) implicit-solvent run: there is no body-force term and
       // no Dirichlet BC in the OpenMM system we build, so an E-field or an anchor would be
@@ -170,6 +176,7 @@ export const ENGINE_CAPABILITIES = {
   snupi: {
     label: ENGINE_LABELS.snupi,
     cards: {
+      cluster: on('snupi-cluster-card'),
       run: on('snupi-jobs-coarse-btn'),
       efield: on('snupi-efield-toggle'),
       anchors: on('snupi-anchors-toggle'),
@@ -186,6 +193,7 @@ export const ENGINE_CAPABILITIES = {
   namd: {
     label: ENGINE_LABELS.namd,
     cards: {
+      cluster: on('md-jobs-cluster-toggle'),
       run: on('md-jobs-run-btn'),
       efield: on('md-efield-toggle'),
       anchors: on('md-anchors-toggle'),

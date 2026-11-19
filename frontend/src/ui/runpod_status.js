@@ -189,7 +189,7 @@ export function renderRunpodJobCost(job, state) {
  * @param {Function} deps.confirmImpl  async (message) => boolean, for the Terminate guard
  */
 export function initRunpodStatus({
-  mount, fetchImpl = fetch, onChange = () => {},
+  mount, fetchImpl = fetch, onChange = () => {}, preflightPath = "/api/runpod/preflight",
   confirmImpl = (msg) => Promise.resolve(globalThis.confirm?.(msg) ?? false),
 } = {}) {
   let _preflight = null
@@ -329,7 +329,7 @@ export function initRunpodStatus({
     _busy = true
     _render()
     try {
-      const res = await fetchImpl('/api/runpod/preflight', {
+      const res = await fetchImpl(preflightPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nAtoms ? { n_atoms: nAtoms } : {}),

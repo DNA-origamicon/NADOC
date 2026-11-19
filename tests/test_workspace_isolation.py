@@ -72,3 +72,23 @@ def test_startup_isolation_closes_handlers_and_restores_globals_after_failure(tm
     assert '"event": "private_failure"' in path.read_text()
     assert (main._WORKSPACE_DIR, assembly._WORKSPACE_DIR, alpine_operations._LOGGER,
             alpine_operations._PATH, os.environ.get("NADOC_WORKSPACE"), os.environ.get("NADOC_MEMORY_BUDGET_DIR")) == original
+
+
+def test_imported_job_routes_cannot_reconcile_outside_test_workspace(tmp_path, monkeypatch):
+    from backend.api import routes_jobs, routes_snupi, routes_mrdna
+    from backend.core.snupi_job import SnupiJob
+    from tests.workspace_isolation import isolated_startup_workspace
+
+    seen = []
+    def inspect_workspace(workspace):
+        seen.append(workspace)
+        assert workspace == tmp_path
+        return []
+    monkeypatch.setattr(SnupiJob, 'list_jobs', inspect_workspace)
+    original = [m._WORKSPACE_DIR for m in (routes_jobs, routes_snupi, routes_mrdna)]
+    with isolated_startup_workspace(tmp_path):
+        assert all(m._WORKSPACE_DIR == tmp_path for m in (routes_jobs, routes_snupi, routes_mrdna))
+        routes_jobs._collect_active()
+        routes_snupi._list_snupi_jobs()
+    assert len(seen) == 2
+    assert [m._WORKSPACE_DIR for m in (routes_jobs, routes_snupi, routes_mrdna)] == original

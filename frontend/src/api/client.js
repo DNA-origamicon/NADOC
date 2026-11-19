@@ -1,3 +1,4 @@
+import { showSolverResourceDenial } from '../ui/solver_resource_denial.js'
 import { flexRangeQuery } from '../ui/md_flex_range.js'
 import { cancelHistoryPreview } from './history_preview.js'
 export { registerHistoryPreviewCanceller, cancelHistoryPreview } from './history_preview.js'
@@ -2951,6 +2952,7 @@ async function _oxdnaJSONTransport(method, path, body = undefined, { signal, hea
   }
   if (!r.ok) {
     const json = await r.json().catch(() => null)
+    showSolverResourceDenial(path, json, r.status)
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     _emitRequestDiagnostic({
       phase: 'complete', id: diagnosticId, method, path,
@@ -5845,3 +5847,5 @@ export const getSimulationSubmodel = (engine, id) => _oxdnaJSON('GET', `/${engin
 export const saveSimulationSubmodel = (engine, id, box) => _oxdnaJSON('PUT', `/${engine}/jobs/${id}/submodel`, { box })
 
 export const estimateSimulationSubmodel = (id, box) => _oxdnaJSON('POST', '/oxdna/jobs/' + id + '/submodel-estimate', { box })
+
+export const estimateSolverResources = (engine, body) => _oxdnaJSON('POST', `/${engine}/resource-estimate`, body)

@@ -258,7 +258,7 @@ def parse_network_volume(data: dict[str, Any]) -> dict[str, Any]:
         "id": str(data.get("id", "")),
         "name": data.get("name") or "",
         "size_gb": size_gb,
-        "data_center_id": data.get("dataCenterId") or None,
+        "data_center_id": data.get("dataCenterId") or data.get("dataCenter") or None,
     }
 
 
@@ -574,6 +574,11 @@ class RunpodClient:
             "volumeMountPath": payload.get("volumeMountPath", "/workspace"),
         }
         gql_input = {k: v for k, v in gql_input.items() if v not in (None, "", [])}
+        # Solver jobs specify host RAM/CPU minima as well as the GPU type.
+        # GraphQL PodFindAndDeployOnDemandInput documents both fields.
+        for key in ("minMemoryInGb", "minVcpuCount"):
+            if key in payload:
+                gql_input[key] = int(payload[key])
         query = """
         mutation createPod($input: PodFindAndDeployOnDemandInput!) {
           podFindAndDeployOnDemand(input: $input) {

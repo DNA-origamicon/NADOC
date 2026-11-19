@@ -51,7 +51,7 @@ export function needsAssemblySimulation(path, method = 'GET') {
 }
 
 export function usesCompactSimulationProjection(path, method = 'GET') {
-  return method === 'POST' && /^\/(cando|snupi|exp)\/jobs$/.test(path.split('?')[0])
+  return method === 'POST' && (/^\/(cando|snupi|exp)\/jobs$/.test(path.split('?')[0]) || /^\/(snupi|mrdna)\/resource-estimate$/.test(path.split('?')[0]))
 }
 
 export function createAssemblySimulationContext() {

@@ -25,6 +25,7 @@ export function initRunpodGpuPicker({
   mount,
   fetchOptions = getRunpodGpuOptions,
   onSelect = () => {},
+  estimateNote = 'Compute estimates exclude startup, analysis and transfers. The job wizard includes your stage plan and a separate planning allowance.',
 } = {}) {
   let version = 0
   let _resp = null
@@ -45,7 +46,7 @@ export function initRunpodGpuPicker({
         rows
           ? `<div style="margin-top:6px;border:1px solid #30363d;border-radius:5px;overflow:hidden">
                ${gpuOptionsHeader()}
-               <div style="padding:5px 7px;font-size:10px;color:#8b949e">Compute estimates exclude startup, analysis and transfers. The job wizard includes your stage plan and a separate planning allowance.</div>
+               <div style="padding:5px 7px;font-size:10px;color:#8b949e">${estimateNote}</div>
                <div style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;
                  gap:1px;font-size:10px;padding:2px">${rows}</div>
              </div>`

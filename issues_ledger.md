@@ -1,5 +1,130 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-236 — Legacy BigO source cannot pass construction replay (2026-11-18)
+
+- **Status:** reconstructed through real editor commands; original source unchanged. User explicitly requested filling this legacy gap.
+- **Cause:** missing recipe root/random historic identities; modern automatic end-clearance rules produce 147 bp instead of the original 126 bp.
+- **Fix:** `scripts/rebuild_legacy_part.py` reconstructs the recorded scaffold through Helix Extend, Resize Ends, Nick and Place Crossovers; downstream original operations are rerun with positional selection mapping. Unsupported content or molecular mismatches refuse publication. No router rule or physical constant changes.
+- **Evidence:** `BigO-rebuilt.nadoc` passes publication/reopened audit (70 native commands) and full molecular-content comparison at float tolerance 1e-12. Companion receipt preserves original history/checksum. Two focused tests pass. Two-monomer `.nass` passes independent replay of Add Part + Polymerize Periodic and all upstream commands. Visual app check passed.
+- **Run:** real RunPod SNUPI coarse Langevin job `fe44cad5dfec` completed for `BigO-poly-2monomer.nass`; see retained timestep evidence directory for receipts.
+
+
+## ISSUE-235 — Duplex-link private gesture does not move auxiliary cluster (2026-11-18)
+
+- **Status:** open; unrelated existing failure discovered by the SNUPI optimization validation sweep; candidate solver patch was not installed.
+- **Repro:** `just test-focused 'tests/test_part_transform_gesture_contract.py::test_native_private_gesture_emits_complete_host_accepted_history[duplex-link-duplex-False]'`; fails both in FAST and alone.
+- **Observed:** line 267 expects some auxiliary translation/rotation/pivot change; all remain identical. No molecular/constraint changes attempted in the solver optimization task.
+- **Evidence:** `.development-artifacts/snupi-timestep-20261118/repository-failure.txt`. FAST: 21,167 passed, one failed, 19 skipped; FULL deferred by existing test-session gate.
+
+
+## ISSUE-234 — BigO-poly timestep sizing spends hours in default eigsh (2026-11-18)
+
+- **Status:** experimental CPU candidate installed at user request; before case `bebad41f65e7` stopped and pod termination confirmed. 34 installed numerical checks pass; source reconstructed under ISSUE-236; two-monomer RunPod validation completed as `fe44cad5dfec` (60000 steps, 0.13 ps, no retry, finite outputs, pod terminated).
+- **Cause:** plain GJF asks a generalized ARPACK eigensolve for machine precision without a practical work limit. Setup also builds scalar electrostatic triplet lists and repeatedly converts LIL/CSR matrices.
+- **Candidate:** mass-scaled positive-weight absolute row bound, fixed nine products, downward two-significant-digit timestep; chunked vectorized electrostatics and CSR retention. Explicit timesteps, physical constants, topology and integrator equations remain unchanged.
+- **Evidence:** `.development-artifacts/snupi-timestep-20261118/`. Full assembly: ~2 s timestep selection, 0.13 ps, integration begins ~47 s. Practical eigensolver comparator: 5.6 s, ~0.143 ps; conservative choice needs ~10% more steps for equal physical time. 34 numerical checks, BigO operator equivalence and 50-step full-assembly sanity check pass.
+- **GPU:** isolated plain-GJF float64 prototype ~5.9× warm speedup over 20 steps, identical noise, ~1e-16 relative state differences. Cold setup offsets short-run gains; no production GPU backend installed or hydrodynamic speedup claimed.
+- **Delivery:** installed bounded timestep and vectorized electrostatic modules; original probes and patch retained as evidence. No new molecular structures or saved jobs produced.
+
+
+## ISSUE-233 — Missing SNUPI activity spinner and stale solver cluster selection (2026-11-18)
+
+- **Status:** fixed; full frontend 10,743 passed / one skipped; 28 existing smoke checks plus corrected focused sidebar check passed; lint passed.
+- **Cause:** SNUPI absent from shared tab activity map; solver `showJob` rendered only status text and was called during polling rather than detail selection.
+- **Fix:** standard tab spinner for SNUPI; regression coverage for CanDo/mrDNA; detail selection restores provider and saved resources, with selected RunPod job information separate from live quotes. Same-job polls preserve next-run edits.
+- **Evidence:** `.development-artifacts/solver-sidebar-activity-20261118/checks.json`. Initial browser fixture failures were repaired; isolated scratch cleanup verified. No backend or live simulation changes.
+
+
+## ISSUE-232 — SNUPI dynamics timeline remains a single pending stage (2026-11-18)
+
+- **Status:** fixed; 15 focused checks, 10,737 frontend tests and all 28 browser smoke checks passed (one frontend test skipped).
+- **Cause:** the engine timeline rendered static job-stage metadata even though the progress stream already identified preparation, integration and analysis phases.
+- **Fix:** a shared frontend stage model maps actual worker phases to ordered stages; optional hydrodynamics and remote download follow the selected job. Integration carries the actual step count. Unknown/stale/terminal readings are explicit; no invented timings or setup percentages.
+- **Live job:** frontend-only deployment preserves ongoing RunPod job `bebad41f65e7`; no backend/worker restart.
+- **Evidence:** `.development-artifacts/snupi-stage-timeline-20261118/checks.json`.
+
+## ISSUE-231 — Test startup can reconcile live remote jobs through route aliases (2026-11-18)
+
+- **Status:** fixed; all four focused workspace-isolation tests pass.
+- **Observed:** broad validation marked live SNUPI job `bebad41f65e7` failed with “controller interrupted” while its API owner, remote process and telemetry remained active. No solver failure occurred.
+- **Cause:** the startup isolation fixture redirected assembly/main globals but previously imported engine/activity routes retained their real-workspace aliases. A separate test process has no entry in the live controller's in-memory registry.
+- **Fix:** redirect every already imported API workspace alias inside the test isolation context and restore each on exit. Regression exercises both activity collection and the SNUPI catalog against a temporary workspace.
+- **Recovery:** restored only this falsely failed job after independently verifying exact owner PID/start ticks, fresh telemetry, provider RUNNING state and the actual remote solver process. Evidence is in `.development-artifacts/snupi-runpod-progress-20261118/checks.json`.
+
+## ISSUE-230 — Remote SNUPI dynamics progress never reaches the frontend (2026-11-18)
+
+- **Status:** implemented; live RunPod setup telemetry verified. Completed Langevin trajectory is not yet confirmed.
+- **Cause:** the remote controller polled process status but did not retrieve worker progress; remote progress stayed zero. Generic UI step formatting could use the static 20-load-step setting or a weighted setup fraction for dynamics.
+- **Fix:** bounded, separate progress receipts; actual completed/planned dynamics counters; named indeterminate setup phases; integration-only rate/ETA with retry reset; explicit last-known labels when transport is stale. No physics/timestep changes.
+- **Live check:** BigO-poly job `bebad41f65e7` is listed with 60,000 planned steps and fresh setup phases. Previous job `4c9ec02f01e5` was stopped to deploy the change; provider confirms its pod is absent. Combined prior spend and replacement budget stay under $5.
+- **Evidence:** `.development-artifacts/snupi-runpod-progress-20261118/checks.json`.
+
+## ISSUE-229 — Idle SNUPI Stop button remains visible (2026-11-18)
+
+- **Status:** fixed; four factory tests and the real-app visibility check pass. Full frontend: 10,726 passed / one skipped; 26 other smoke checks passed.
+- **Cause:** the row was intentionally always displayed; only the button's disabled state followed active jobs.
+- **Fix:** hide the row initially and whenever the current document has no queued, preparing or running SNUPI job. Keep cancellation targeted at the active job even when an older completed result is selected.
+- **Checks:** factory regression covers active and terminal states; running-app smoke coverage checks computed visibility and enablement.
+
+## ISSUE-228 — Trajectory scheduling queue empty during broad sweep (2026-11-18)
+
+- **Status:** intermittent validation failure; isolated rerun passed. No production fix claimed.
+- **Observed:** `test_distinct_views_and_jobs_share_one_trajectory_slot` raised `ValueError: min() iterable argument is empty` in `memory_budget.TrajectoryActivity.try_acquire` during the SNUPI environment regression sweep.
+- **Validation:** isolated rerun passed (0.31 s call). This test does not execute the remote environment or archive path; recorded separately from the RunPod repair.
+- **Evidence:** `.development-artifacts/snupi-runpod-environment-20261118/checks.json`.
+
+## ISSUE-227 — Default SNUPI RunPod environment was never provisioned (2026-11-18)
+
+- **Status:** fixed; live BigO-poly coarse + RMSF job completed, downloaded and served through NADOC; provider confirmed all retry pods absent.
+- **Observed:** BigO-poly coarse job `b6b1359b377e` rented a pod, then failed because `/workspace/nadoc-solver-env/bin/python` did not exist. The default path was only checked, never installed.
+- **Follow-up:** the live retry exposed network-volume extraction failing on archived uid/gid restoration. Remote extraction now uses `--no-same-owner`; source contents remain identical. The next retry exposed missing scaffold sequence text files in the archive; all core sequence/runtime data are now included, with an extracted-package import regression test.
+- **Fix:** provision the default SNUPI CPU-worker environment on the persistent volume before preflight, inside the existing budget/watchdog lifecycle. Preserve custom paths and external mrDNA installations.
+- **Validation:** five environment, 17 archive/cluster and 16 lifecycle tests passed. Job `b958e97feeae` completed in 1129.96 s on a currently available RTX PRO 6000 host (75 GiB/eight CPUs), returning 424,144 finite positions and RMSF for 211,680 FEM nodes. Display/RMSF API reads passed. The original assembly and submitted snapshot hashes are unchanged. All three retry pods were terminated; recorded combined compute spend was $1.025, below the original $5 cap. Evidence: `.development-artifacts/snupi-runpod-environment-20261118/checks.json`.
+
+## ISSUE-226 — Resource-wizard button styling overrides hidden state (2026-11-18)
+
+- **Status:** fixed; verified in the browser.
+- **Repro:** Back was visible on the initial resource-selection step despite `hidden=true`; the shared button class's display rule outranked the browser's hidden rule. An unavailable refresh action had the same symptom.
+- **Fix:** scope an explicit hidden-state rule to the solver wizard. Use the standard extra-wide modal so availability/wait/completion columns fit without horizontal clipping on desktop.
+- **Validation:** browser assertions check initial hidden actions, review/back visibility and list width; temporary before/after captures inspected and removed by isolated-workspace cleanup.
+
+## ISSUE-225 — Native auto-break proof exceeds synchronous verification deadline in broad sweep (2026-11-18)
+
+- **Status:** intermittent validation failure; isolated rerun passed. No production fix claimed.
+- **Observed:** `test_native_auto_proof.py::test_auto_commands_and_upstream_length_edit[break]` hit HTTP 408 in `part_history_verification.checkpoint` during the second proof, after changing upstream length to 112 bp. This path does not use solver resource estimates or the GPU picker.
+- **Focused check:** the same test passed in isolation (0.11 s call). The verification deadline and test guards remain unchanged.
+- **Next:** investigate deadline sensitivity under the broad sweep separately from resource-selection work.
+- **Evidence:** `.development-artifacts/solver-resource-list-20261118/checks.json`.
+
+## ISSUE-224 — Solver wizard offered RunPod capacity outside the volume location (2026-11-18)
+
+- **Status:** fixed; live read-only availability verified, no paid retry performed.
+- **Repro:** SNUPI BigO-poly job `3869962f92e9` failed with `SUPPLY_CONSTRAINT` selecting A100 80GB PCIe, 75 GiB RAM and 8 CPUs. Global stock offered the GPU; the volume-scoped EU-RO-1 query returned no matching capacity. Job recorded no pod ID and zero spend.
+- **Cause:** solver picker checked global stock; REST network volumes now use `dataCenter`, while the parser recognized only `dataCenterId`.
+- **Fix:** accept both volume fields; scope stock/prices to volume and host requirements; recheck before review/rental; report supply races without automatic retry. Wizard and resource-denial actions use standard NADOC themed controls; reviewed settings remain immutable while availability is checked.
+- **Validation:** regional-query and lifecycle regression tests pass; broader UI/backend/app results recorded in the fix log.
+
+## ISSUE-223 — mrDNA Fine export stops at residue 100000 (2026-11-18)
+
+- **Status:** open; confirmed software export limit, not a host-memory failure.
+- **Repro:** optimized BigO-poly Fine capacity pilot generates a 424,144-particle fine PSF, then external `arbdmodel/submodule/model.py:102` asserts `data['resid'] < 1e5` while writing `mrdna_relax-1.pdb`; its last record is residue 99999. Fine ARBD never starts.
+- **Evidence:** `.development-artifacts/bigo-engine-capacity-20261118/mrdna-fine-review.json`, traceback/log and stage-1 PSF/partial PDB. Process RSS peaked at 4.17 GiB; no cgroup memory events. Source designs unchanged.
+- **Next:** implement a writer/reader-compatible large-system identifier encoding while preserving particle order, PSF/DCD/manifest identity and all coordinates. Do not simply remove the assertion or truncate/wrap identities. Then retry Fine GPU capacity. No production or external-checkout patch included in this benchmark campaign.
+
+## ISSUE-222 — Repair-draft fixture hits capture limit in broad sweep (2026-11-17)
+
+- **Status:** intermittent validation failure; isolated rerun passed. No production fix claimed.
+- **Observed:** `test_committed_draft_remains_pending_and_requires_explicit_new_expectation` failed during `controlled` fixture setup: draft creation returned HTTP 413 `draft_capture_limit`. CPU contention was present, but which capture budget was exceeded is not established.
+- **Evidence:** `.development-artifacts/solver-memory-round2-20261117/test-smart.log` and `capture-rerun.log` (1 passed). Capture guards and test classifications remain unchanged.
+- **Next:** distinguish wall-clock sensitivity from node/size budget exhaustion; keep separate from solver memory changes.
+
+## ISSUE-221 — Native duplex-link gesture test leaves auxiliary pose unchanged (2026-11-17)
+
+- **Status:** open; discovered during solver memory validation, reproduced with pre-change solver code. No gesture fix included in the memory optimization.
+- **Repro:** `just test-focused 'tests/test_part_transform_gesture_contract.py::test_native_private_gesture_emits_complete_host_accepted_history[duplex-link-duplex-False]'` fails at line 267: auxiliary translation, rotation, and pivot all remain equal to the original pose.
+- **Evidence:** `.development-artifacts/solver-memory-20261117/gesture-rerun.log`, `gesture-baseline.log`, and `baseline-gesture-module-proof.json`; original SNUPI and mrDNA adapter modules were injected for the baseline reproduction without modifying the working tree.
+- **Next:** diagnose native private gesture auxiliary propagation and its test contract; root cause is not yet established.
+
 ## ISSUE-220 — Generic refusal on large constrained Move/Rotate Apply (2026-11-17)
 
 - **Status:** diagnosis open; failure reporting corrected. Saved JJ_Hinge accepts successive X requests of 55°, 65°, and 90° in an isolated app, clearing pending poses and appending one feature per Apply. Constraints project these requests to X=19.772/19.820/19.868°, so an accepted pose above 50° is not demonstrated. The user's exact failing editing state has not been reproduced.

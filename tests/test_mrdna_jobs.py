@@ -204,6 +204,13 @@ def test_start_job_publishes_preparing_before_worker_runs(tmp_path, monkeypatch)
 
     import backend.core.mrdna_runner as runner
 
+    # This lifecycle test has no molecular snapshot or GPU; admission has its
+    # own count-only refusal/fit tests in test_solver_resources.py.
+    from contextlib import nullcontext
+    from backend.core import solver_resources
+    monkeypatch.setattr(solver_resources, "check_resources", lambda *args: None)
+    monkeypatch.setattr(solver_resources, "reserve_resources", lambda *args: nullcontext())
+
     entered = threading.Event()
     release = threading.Event()
 
@@ -307,6 +314,8 @@ def test_mrdna_create_and_lifecycle(monkeypatch, tmp_path):
         "mrdna_available",
         lambda: {"available": True, "mrdna": "/x", "arbd": "/y"},
     )
+    from backend.core import solver_resources
+    monkeypatch.setattr(solver_resources, "check_resources", lambda *args: None)
     monkeypatch.setattr(routes_mrdna, "start_job", lambda job, ws: None)
     design_state.set_design_silent(make_6hb_design())
 

@@ -34,6 +34,8 @@ Architecture notes
 
 from __future__ import annotations
 
+from backend.core.solver_progress import DYNAMICS_STEPS
+
 import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -3052,7 +3054,7 @@ def predict_shape(
     hydro_coarse_bp: Optional[int] = None,
     tails: bool = False,
     tail_max_nt: Optional[int] = None,
-    dynamics_steps: int = 60000,
+    dynamics_steps: int = DYNAMICS_STEPS,
     progress_cb=None,
 ) -> dict:
     """Predict the CanDo-style equilibrium shape + flexibility of ``design`` (Physical layer).

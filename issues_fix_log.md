@@ -1,5 +1,236 @@
 # Issues fix log
 
+## 2026-11-18 — ISSUE-234 / ISSUE-236: install bounded timestep and reconstruct BigO
+
+Stopped RunPod before case `bebad41f65e7`; exact pod `84j90s4fjgre6t`
+termination acknowledged and provider inventory empty. Installed conservative
+fixed-work timestep sizing, downward two-significant-digit rounding and vectorized
+electrostatic stiffness/CSR setup. GPU integration remains a prototype.
+
+Legacy BigO cannot directly pass native replay, and modern automatic routing
+changes its 126-bp repeat to 147 bp. Added `scripts/rebuild_legacy_part.py` to
+reconstruct the known scaffold with real Helix Extend, Resize Ends, Nick and
+Place Crossovers operations, then execute its downstream recorded commands.
+The saved `BigO-rebuilt.nadoc` independently replays 70 commands and matches all
+molecular topology, sequences, junctions, periodic identity and geometry (1e-12
+absolute float tolerance). The original source is unchanged; the `.rebuild.json`
+receipt retains its original log and checksum. Two-monomer assembly publication
+and reopened audit verify two commands, two instances, one joint and all upstream
+construction. Visual app load passed. Real job `fe44cad5dfec` launched on RunPod,
+coarse Langevin with 60000 steps, dt=0.13 ps, 14112 nodes, no retry. Completed
+in 470.78 s solver time; setup ~5 s, timestep selection within one log second.
+All 40 trajectory frames, display coordinates and RMSF are finite; results
+downloaded and exact pod terminated (provider inventory empty). Cost $0.09683.
+Frontend actual job row, RunPod choice, integration stage and measured 81.7%
+progress verified. Browser screenshots/profiles and 2.8 GB test scratch removed.
+
+Validation: installed timestep checks 34 passed; reconstruction checks 2 passed;
+lint and diff check passed. `test-smart` decision FAST: 21199 passed, 2 failed,
+19 skipped, 499.44 s pytest / 542 s guard wall time. Known ISSUE-235 duplex failure
+persists; seamless native-proof synchronous timeout passes in isolation (1 test).
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+Slow-test triage: no per-test violators; aggregate cost spread over 21220 tests,
+not evidence for arbitrarily relegating the slowest tests. No thresholds changed
+and no redundant broad rerun. Main.js LOC delta: 0.
+
+
+## 2026-11-18 — SNUPI candidate validation and slow-test triage
+
+Candidate numerical checks: 34 pass; BigO operator equivalence and full-assembly
+50-step/GPU probes pass. Lint passes. Repository FAST: 21,167 pass, one unrelated
+duplex-link failure (ISSUE-235), 19 skipped; FULL deferred without a test session.
+Joined-path generation/edit/two cold replays cost 5.32 s in the sweep and 6.04 s
+including setup alone. Registered that proof in `_SLOW_TESTS` / headless, keeping
+its existing area routing; slow collection confirms coverage. No budget raised.
+The unrelated deterministic failure remains; no subsequent green broad sweep or
+aggregate-budget recovery is claimed. Temporary owned pytest roots and probe logs
+were removed after checking for process references; candidate source/results remain.
+
+
+## 2026-11-18 — ISSUE-234: isolated SNUPI setup optimization candidate
+
+Preserved live RunPod baseline as requested. Implemented and benchmarked candidate
+modules outside API-watched paths: conservative fixed-work mass-scaled frequency
+bound, downward timestep rounding, vectorized electrostatic COO batches, CSR-only
+dynamics accumulation. BigO-poly reaches integration in ~47 s; 50 steps finish
+with finite outputs and no retry. BigO part operator relative error ~6.4e-21,
+identical masses. GPU plain-GJF pilot shows ~5.9× warm speedup with identical noise.
+These are short numerical/performance checks, not physical convergence evidence.
+Candidate patch, numerical tests, benchmark scripts and compact JSON results:
+`.development-artifacts/snupi-timestep-20261118/`. Production backend unchanged;
+patch intentionally unapplied to preserve the ongoing before case. Main.js LOC
+delta: 0. Full repository validation status is recorded in `checks.json`.
+
+
+## 2026-11-18 — ISSUE-233: solver activity and selected RunPod resources
+
+Added SNUPI to the shared NAMD-style tab spinner and tested preparation, running
+and terminal states for SNUPI/CanDo/mrDNA. SNUPI/mrDNA selection now updates the
+Clusters provider, restores saved settings and shows the selected pod, GPU,
+requested RAM/CPU, quote and budget. Repeated polls preserve user edits.
+Validation: 989 frontend files, 10,743 tests passed / one skipped; 28 existing
+smoke checks and the corrected focused sidebar check passed; lint and diff check
+passed. Browser fixture corrections use the app's existing panel instances.
+Evidence: `.development-artifacts/solver-sidebar-activity-20261118/checks.json`.
+Main.js LOC delta: 0. Browser scratch roots and temporary validation logs removed.
+
+
+## 2026-11-18 — ISSUE-232: separate SNUPI dynamics stages in the timeline
+
+The engine panel and unified job poll now share a phase-derived stage renderer.
+Mesh/stiffness preparation, stable timestep calculation, optional hydrodynamic
+friction, integration, analysis/save and remote preparation/download have separate
+rows. Dynamics steps belong to integration. Unknown/stale/terminal states are
+explicit, and no setup percentage or stage duration is invented. Existing worker
+telemetry supports the ongoing BigO-poly job without restarting its controller.
+NADOC theme colors and locale-formatted step counts are used throughout.
+
+Evidence: `.development-artifacts/snupi-stage-timeline-20261118/checks.json`.
+Main.js LOC delta: 0; no backend or simulation changes.
+Validation: 15 focused checks; full frontend 10,737 passed / one skipped;
+28 browser smoke checks, including the timeline transitions, passed. Lint passed.
+Temporary browser output and validation logs removed; cleanup verified.
+
+## 2026-11-18 — ISSUE-231: isolate imported simulation route workspace aliases
+
+Test startup isolation now redirects imported API workspace aliases as well as
+assembly/main globals. This prevents test-process reconciliation from marking a
+live RunPod controller interrupted. BigO-poly's live owner and remote process were
+verified, then its false failure label was repaired without renting another pod.
+A regression covers activity collection, SNUPI listing and alias restoration.
+
+## 2026-11-18 — ISSUE-230: actual SNUPI dynamics progress on RunPod
+
+Remote controllers now retrieve bounded worker progress separately from job
+metadata. The job API and shared progress bar show completed/planned dynamics
+steps, remaining steps and a rate measured during integration. Setup is
+indeterminate with named phases; retry counters reset, stale receipts are labelled
+and stale ETA is suppressed. Static load steps and weighted setup fractions no
+longer determine a dynamics percentage. No physics/timestep changes.
+
+Replacement BigO-poly job `bebad41f65e7` confirms live receipt transport and
+assembly-list association. Original job `4c9ec02f01e5` was stopped for deployment
+and its pod removed; old spend $0.531981 plus new cap $4.46 stays below $5.
+A completed Langevin trajectory is not yet confirmed. Main.js LOC delta: 0.
+Evidence: `.development-artifacts/snupi-runpod-progress-20261118/checks.json`.
+
+Validation: 11 progress backend, 33 remote lifecycle/bundle and four isolation
+checks passed. Full frontend: 10,731 passed / one skipped; browser smoke: 28
+passed. Backend FAST: 21,166 passed / 19 skipped, with existing ISSUE-221 gesture
+failure. FULL deferred by the session guard. Aggregate timing flag only (596 s;
+maximum individual test 4.78 s); no budgets/classifications changed. Lint passed.
+Temporary validation files and processes cleaned up; real managed job retained.
+
+## 2026-11-18 — ISSUE-229: hide idle SNUPI Stop
+
+Stop now appears only for queued/preparing/running jobs. It continues targeting the
+active job when an older completed result is selected. The HTML starts hidden;
+the panel synchronizes row visibility and button enablement together.
+
+Validation: four factory tests; full frontend 10,726 passed / one skipped; 26
+other smoke checks and the corrected Stop app check passed. Initial app fixture
+failures omitted the document association and left the welcome/relocated-controls
+host hidden; focused retry passes. Scratch cleanup verified; lint passed.
+Main.js LOC delta: 0. Evidence: `.development-artifacts/snupi-stop-langevin-20261118/checks.json`.
+
+A genuine BigO-poly Coarse + Langevin job was submitted through the standard
+assembly projection/create API as `4c9ec02f01e5` (RunPod, 75 GiB/eight CPUs,
+RTX 4090 host, $0.89/hour, $5 cap). The assembly-scoped list returns it with
+`dynamics=true`, `nonlinear=false`. At handoff it remains running in setup;
+completed trajectory/results are NOT confirmed. The source assembly is unchanged.
+The managed job, pod and budget watchdog remain active intentionally.
+
+## 2026-11-18 — ISSUE-227: SNUPI RunPod deployment repair
+
+The default RunPod interpreter path was never provisioned. SNUPI now installs
+and reuses a pinned Python 3.12 CPU-worker environment on the network volume,
+under the existing budget and independent watchdog. Custom interpreters and
+mrDNA/ARBD remain user-managed. Live retries also exposed archive extraction
+trying to restore local ownership and missing scaffold sequence files; extraction
+now retains remote ownership and packaging includes core sequence/runtime data.
+The packaged-worker import test runs without access to the original checkout.
+New attempts clear stale errors before provisioning.
+
+Validation: five environment tests, 17 cluster/archive tests, and 16 pod lifecycle
+tests passed; lint and diff checks passed. Backend FAST: 21,153 passed / 19 skipped,
+two unrelated failures (baseline ISSUE-221 and intermittent trajectory queue
+ISSUE-228; the latter passed its isolated rerun). FULL deferred. Timing triage
+found no per-test violations (maximum 4.70 s); the aggregate guard took 526 s.
+No budgets or test classifications changed. main.js LOC delta 0. Live job `b958e97feeae` completed BigO-poly coarse + RMSF in 1129.96 s:
+424,144 finite positions, 211,680 FEM nodes, RMSF 1.660–7.558 nm. Results downloaded
+and served through the display/RMSF APIs. Original assembly/snapshot unchanged.
+Provider confirmed all retry pods absent; combined recorded compute cost $1.025.
+Temporary test outputs were removed. Evidence:
+`.development-artifacts/snupi-runpod-environment-20261118/checks.json`.
+
+## 2026-11-18 — ISSUE-228: trajectory queue validation intake
+
+Recorded an empty scheduling queue failure during the broad sweep. The isolated
+rerun passed; no queue or scientific behavior change is claimed here.
+
+## 2026-11-18 — Solver resource comparison list and ISSUE-226
+
+SNUPI and mrDNA now offer scrollable, keyboard-selectable Alpine/RunPod resource
+rows with availability, estimated wait and estimated completion. Refresh uses
+the current allocation; unavailable or undersized resources remain visible with
+an explanation. Existing RAM/VRAM admission and final RunPod stock/price checks
+remain enforced for parts and assemblies. Timing uses the existing solver
+reference heuristic and general Alpine queue forecasts; unknown startup/wait
+stays explicit, with no claim of calibrated per-GPU performance.
+
+Fixed ISSUE-226: themed buttons no longer override the wizard's hidden state.
+The standard extra-wide modal fits all columns; temporary before/after captures
+were inspected. main.js LOC delta 0.
+
+Validation: 10 focused backend tests passed; full frontend 987 files,
+10,725 passed / one skipped. Six app checks passed, including both solvers,
+both providers and part/assembly submission. Backend FAST: 21,148 passed,
+19 skipped, two failures (baseline ISSUE-221 and intermittent ISSUE-225, whose
+isolated rerun passed). FULL deferred. No per-test timing violations; aggregate
+budget exceeded without changing classifications or budgets. Compact evidence:
+`.development-artifacts/solver-resource-list-20261118/checks.json`.
+Smoke: 26 passed, including console-error and teardown gates. Temporary browser
+workspaces, fixtures and credentials were removed and absence verified.
+
+## 2026-11-18 — ISSUE-225: native-proof timeout intake
+
+The resource-list backend sweep hit a synchronous verification HTTP 408 in the
+auto-break upstream-length test. Isolated rerun passed; recorded as intermittent
+proof-validation debt. No deadline, history proof, or molecular change.
+
+## 2026-11-18 — ISSUE-224: solver allocation availability and wizard styling
+
+SNUPI job `3869962f92e9` failed before pod creation because the chosen A100 PCIe
+was unavailable at the volume's EU-RO-1 location with 75 GiB RAM/8 CPUs, despite
+global stock. Corrected the REST datacenter-field parser and added volume/host
+scoped availability checks before review and rental, including clear supply-race
+errors and no automatic retries. Standard NADOC input/select/button primitives
+replace the wizard's unstyled fields/actions; number fields use the data font.
+The confirmation uses the exact reviewed allocation.
+
+Validation: 19 focused backend and 20 focused frontend tests passed. Full frontend:
+986 files, 10,720 passed, 1 skipped. App: all 3 checks passed, covering rendered
+colors/fonts/buttons and both solvers/providers on parts/assemblies. Backend FAST:
+21,146 passed, 19 skipped, existing ISSUE-221 failure; FULL deferred. Timing
+triage found zero per-test violations (maximum 4.31 s); aggregate guard time
+537 s. No test budgets/classifications changed. Lint passed; main.js LOC delta 0.
+Smoke: 26 passed. Temporary test workspaces, captures, logs and bridge credentials
+removed; compact results retained. No paid retry. Evidence:
+`.development-artifacts/solver-capacity-style-20261118/checks.json`.
+
+## 2026-11-18 — ISSUE-223: mrDNA Fine export-limit intake
+
+The optimized BigO pilot got past fine bead construction but hit the external PDB writer's residue-number assertion. Recorded the partial-output evidence and kept it separate from hardware limits. No fix claimed; remaining benchmark cases continue.
+
+## 2026-11-17 — ISSUE-222: capture-limit validation intake
+
+Broad memory-regression sweep hit a repair-draft capture limit during fixture setup; isolated reproduction passed. No fix or guard change. Evidence is retained in `solver-memory-round2-20261117`.
+
+## 2026-11-17 — ISSUE-221: intake only, baseline gesture failure
+
+Solver memory validation found the native duplex-link auxiliary-pose assertion failure. Focused reproduction also fails with the original solver modules. Recorded as unrelated baseline debt; no fix claimed. Evidence: `.development-artifacts/solver-memory-20261117/verification-review.json` and its linked baseline logs.
+
 ## 2026-11-17 — ISSUE-220: expose placement Apply rejection details
 
 Corrected error reporting, not yet the user's unreproduced rejection. Apply now

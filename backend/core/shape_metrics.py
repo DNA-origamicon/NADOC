@@ -289,25 +289,25 @@ def rmsf_from_ensemble(frames, *, align: bool = True) -> dict:
         raise ValueError("rmsf_from_ensemble: need >= 2 non-empty frames")
 
     keyed = [
-        {_dev_key(p): np.asarray(p["backbone_position"], float) for p in fr}
+        {_dev_key(p): p["backbone_position"] for p in fr}
         for fr in frames
     ]
     shared = _sorted_dev_keys(set.intersection(*(set(k) for k in keyed)))
     if not shared:
         raise ValueError("rmsf_from_ensemble: no nucleotide is present in every frame")
 
-    stacks = [np.array([kf[k] for k in shared]) for kf in keyed]  # each (N, 3)
-    if align:
-        ref = stacks[0]
-        aligned = [ref]
-        for S in stacks[1:]:
-            _R, Pa, _Qc, Qmean = _kabsch_superpose(S, ref)
-            aligned.append(Pa + Qmean)
-        stacks = aligned
-
-    A = np.stack(stacks, axis=0)  # (F, N, 3)
+    # One owned numeric stack; avoid per-site ndarray objects and duplicate stacks.
+    A = np.empty((len(keyed), len(shared), 3), dtype=float)
+    for i, kf in enumerate(keyed):
+        A[i] = [kf[k] for k in shared]
+        if align and i:
+            _R, Pa, _Qc, Qmean = _kabsch_superpose(A[i], A[0])
+            A[i] = Pa + Qmean
+    del keyed
     mean_pos = A.mean(axis=0)  # (N, 3)
-    rmsf = np.sqrt(((A - mean_pos) ** 2).sum(axis=2).mean(axis=0))  # (N,)
+    A -= mean_pos
+    np.square(A, out=A)
+    rmsf = np.sqrt(A.sum(axis=2).mean(axis=0))  # (N,)
 
     out = [
         {

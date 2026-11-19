@@ -95,7 +95,7 @@ const _esc = (s) =>
  * @param {Function} deps.onConnected  called after a green pre-flight, so the caller can
  *                                     refresh its own RunPod status/gate
  */
-export function initRunpodSetup({ mount, fetchImpl = fetch, onConnected = () => {} } = {}) {
+export function initRunpodSetup({ mount, fetchImpl = fetch, onConnected = () => {}, solver = null } = {}) {
   let _apiKey = ''
   let _keySource = 'none'
   let _editingApi = false
@@ -215,7 +215,7 @@ export function initRunpodSetup({ mount, fetchImpl = fetch, onConnected = () => 
 
   async function _runPreflight() {
     _busy = 'preflight'; _render()
-    const r = await _post('/api/runpod/preflight', {})
+    const r = await _post(solver ? '/api/solver-cluster/runpod-check' : '/api/runpod/preflight', {})
     _busy = ''
     _preflight = r.body
     _render()
@@ -296,8 +296,7 @@ export function initRunpodSetup({ mount, fetchImpl = fetch, onConnected = () => 
       ? `<div style="margin-top:4px;color:${_C.warn}">No volumes on this account yet — create one in
           ${_link(LINKS.storage, 'RunPod → Storage')}.</div>`
       : ''
-    return `The volume must carry the patched multi-arch NAMD + packages (a one-time build —
-      see <code>experiments/exp43_runpod_bench/build_multiarch_namd.py</code>). Create it in
+    return `${solver ? "The volume must carry the solver Python environment and, for mrDNA, ARBD." : "The volume must carry patched multi-arch NAMD + packages (see experiments/exp43_runpod_bench/build_multiarch_namd.py)."} Create it in
       ${_link(LINKS.storage, 'RunPod → Storage')}, then pick it here:
       <div style="margin-top:5px">
         <select id="rp-setup-volume" style="width:100%;font-size:11px;background:#0d1117;border:1px solid #30363d;
@@ -307,16 +306,14 @@ export function initRunpodSetup({ mount, fetchImpl = fetch, onConnected = () => 
   }
 
   function _preflightBlock() {
-    const canRun = _connected && !!_volumeId && _s3?.configured === true
+    const canRun = _connected && !!_volumeId && (solver || _s3?.configured === true)
     const rows = (_preflight?.checks ?? []).map(c =>
       `<div style="display:flex;gap:6px;align-items:baseline">
         <span style="color:${c.ok ? _C.ok : _C.bad};width:10px">${c.ok ? '✓' : '✗'}</span>
         <span style="color:${_C.fg};min-width:130px">${_esc(c.label)}</span>
         <span style="color:${_C.dim}">${_esc(c.detail ?? '')}</span>
       </div>`).join('')
-    return `Run the pre-flight gate — it proves the job can actually launch (key, volume, SSH,
-      GPU arch, stock) before anything is rented. Podless transfer must be configured first,
-      so a long result download cannot keep the GPU billing:
+    return `${solver ? "Check connection, volume, SSH and watchdog credentials before renting. Solver software is checked on the allocated pod; result transfers use pod time." : "Run the pre-flight gate (key, volume, SSH, GPU arch, stock). Configure podless transfer first so downloads do not keep the GPU billing."}
       <div style="margin-top:6px">
         <button id="rp-setup-preflight" ${canRun ? '' : 'disabled'}
           style="font-size:11px;padding:5px 10px;border-radius:4px;cursor:${canRun ? 'pointer' : 'not-allowed'};
@@ -324,7 +321,7 @@ export function initRunpodSetup({ mount, fetchImpl = fetch, onConnected = () => 
           color:${canRun ? '#fff' : '#484f58'}">${_busy === 'preflight' ? 'checking…' : 'Run pre-flight'}</button>
       </div>
       ${rows ? `<div style="margin-top:8px;display:flex;flex-direction:column;gap:2px">${rows}</div>` : ''}
-      ${_preflight?.ok ? `<div style="margin-top:8px;color:${_C.ok};font-weight:600">✓ You're ready — RunPod jobs can now launch.</div>` : ''}`
+      ${_preflight?.ok ? `<div style="margin-top:8px;color:${_C.ok};font-weight:600">${solver ? "Account ready. Configure solver paths and choose a GPU in the Clusters card." : "✓ You're ready — RunPod jobs can now launch."}</div>` : ''}`
   }
 
   function _s3Block() {

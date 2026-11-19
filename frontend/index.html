@@ -3014,9 +3014,7 @@
     }
 
     /* ── SNUPI + BLADE Stop buttons ──────────────────────────────────────
-       Always present under the run buttons so the panel never reflows when a run
-       starts; greyed + non-interactive until there is something to stop.
-       Both engines share this rule so the two panels can't drift apart visually. */
+       Shared active/disabled colors. SNUPI hides its row when no job is active. */
     #snupi-jobs-stop-btn,
     #blade-jobs-stop-btn {
       background: #3a1418;
@@ -5281,7 +5279,6 @@
           <!-- ── mrDNA (coarse ARBD relaxation: single Run + CG display) ──── -->
           <div class="panel-section" id="mrdna-jobs-panel">
             <div id="mrdna-jobs-body" style="margin-top:2px">
-
               <!-- two run buttons: Coarse (fast, global shape) + Fine (curvature).
                    Relocated above the jobs card at init (see main.js run-control move). -->
               <div id="mrdna-launch-row" style="display:flex;gap:5px;margin-bottom:6px">
@@ -5311,6 +5308,8 @@
                   <div id="mrdna-jobs-list" style="max-height:120px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                 </div>
               </div>
+
+              <div id="mrdna-cluster-card" style="margin-bottom:6px"></div>
 
               <!-- ── Advanced (collapsible card) ──────────────────────────── -->
               <div class="ox-card">
@@ -5712,7 +5711,6 @@
           </div>
           <div class="panel-section" id="snupi-jobs-panel">
             <div id="snupi-jobs-body" style="margin-top:2px">
-
               <!-- NO progress bar here by design: the ONE bar for every engine lives in the unified
                    Jobs card (#simulate-jobs-progress), with the % / ETA / phase on the status line
                    directly beneath it. SNUPI stamps a live `progress_fraction` on running jobs
@@ -5732,9 +5730,8 @@
                   ⤴ Fine (nonlinear)
                 </button>
               </div>
-              <!-- Stop: ALWAYS present directly under the run buttons (never appears/disappears and
-                   shifts the layout) — disabled + greyed until a run is actually in flight. -->
-              <div id="snupi-stop-row" style="display:flex;gap:5px;margin-bottom:6px">
+              <!-- Stop is shown only while a SNUPI job is active. -->
+              <div id="snupi-stop-row" style="display:none;gap:5px;margin-bottom:6px">
                 <button id="snupi-jobs-stop-btn" disabled
                         title="Stop the running SNUPI solve"
                         style="flex:1;font-size:var(--text-xs);padding:6px;border-radius:3px;font-weight:600">
@@ -5756,6 +5753,8 @@
                   <div id="snupi-jobs-list" style="max-height:120px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                 </div>
               </div>
+
+              <div id="snupi-cluster-card" style="margin-bottom:6px"></div>
 
               <!-- ── Advanced (collapsible card) ──────────────────────────── -->
               <div class="ox-card">
