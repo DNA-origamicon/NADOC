@@ -157,7 +157,7 @@ export function initSnupiDisplay({
     signal.throwIfAborted()
     if (epoch !== _epoch) throw new DOMException('Display superseded', 'AbortError')
     if (!Number.isFinite(n)) throw new Error('Could not determine result size')
-    if (n <= LARGE_CANDO_THRESHOLD) return null
+    if (n <= (largeView.threshold ?? LARGE_CANDO_THRESHOLD)) return null
     const result = await compact[fn](jobId, onProgress, { nNucleotides: n })
     if (epoch !== _epoch) throw new DOMException('Display superseded', 'AbortError')
     _jobId = jobId; _mode = compact.mode(); _stats = compact.lastStats()
@@ -315,7 +315,7 @@ export function initSnupiDisplay({
     if (result.ok) {
       _jobId = jobId; _mode = 'trajectory'
       _stats = { kind: 'trajectory', frames: result.frames, large: true,
-        representation: 'zoom-adaptive nucleotide points; one frame in memory' }
+        representation: `${largeView.representation?.('trajectory') ?? 'zoom-adaptive nucleotide points'}; one frame in memory` }
       window.dispatchEvent(new Event('nadoc:simulation-source'))
     }
     return result

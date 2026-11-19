@@ -142,3 +142,19 @@ it('shows Stop only while a job is active, independently of the selected result'
     expect(button.disabled).toBe(true)
   }
 })
+
+it('defaults completed selections to coarse output and preserves an explicit Off choice', async () => {
+  const { initSnupiJobsPanel } = await import('./snupi_jobs_panel.js')
+  mountDom()
+  document.getElementById('snupi-jobs-body').insertAdjacentHTML('beforeend', '<input class="snupi-display-mode" type="radio" name="snupi-mode" value="cando">')
+  _jobsOnServer = [{ job_id: 'one', status: 'completed' }, { job_id: 'two', status: 'completed' }]
+  const display = { showCandoStyle: vi.fn(async () => ({ ok: true })), stopDeform: vi.fn(), deformActive: () => false, mode: () => null }
+  const panel = initSnupiJobsPanel({ snupiDisplay: display })
+  await panel.selectJob('one')
+  expect(display.showCandoStyle).toHaveBeenCalledTimes(1)
+  expect(document.querySelector('[value="cando"]').checked).toBe(true)
+  document.querySelector('.snupi-display-mode[value="off"]').click()
+  await panel.selectJob('two')
+  expect(display.showCandoStyle).toHaveBeenCalledTimes(1)
+  expect(document.querySelector('.snupi-display-mode[value="off"]').checked).toBe(true)
+})

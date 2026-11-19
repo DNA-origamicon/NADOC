@@ -1,5 +1,12 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-250 — SNUPI results lose depth in point/line fallback (2026-11-19)
+
+- **Cause:** static results above 50k nucleotides and all trajectory frames used unlit point/line glyphs; deform/trajectory had no categorical colors. The coarse cylinder option also became thin lines above the threshold.
+- **Change:** dedicated SNUPI instanced, opaque MeshStandardMaterial sphere/tube renderer consumes the existing bounded result transport at all sizes. Saved axis/joint pairs supply coarse geometry, saved nucleotide positions supply the other modes. RMSF/deviation recolor live; other beads use helix colors. No topology, molecular placements or solver results change.
+- **Default:** selecting a completed result opens Coarse FEM output; explicit Off remains respected on later selections. CanDo's renderer and defaults remain unchanged.
+- **Validation:** all five views exercised on completed 2-mer and 10-mer jobs, including trajectory scrub to frame 21/40 and Off cleanup. Fresh focused renderer/controller run: 16 passed. Full frontend run: 10,786 passed, 1 skipped, 1 stale-module failure (the neutral-color test was added during the run; fresh rerun passed). Smoke: 27 passed, 2 skipped. Evidence in `.development-artifacts/snupi-rendering-20261119/`.
+
 ## ISSUE-236 — Legacy BigO source cannot pass construction replay (2026-11-18)
 
 - **Status:** reconstructed through real editor commands; original source unchanged. User explicitly requested filling this legacy gap.

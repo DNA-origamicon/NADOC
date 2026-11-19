@@ -582,6 +582,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     })
   }
 
+  let _displayChosen = false
   async function _selectJob(jobId) {
     const request = ++_displayRequest
     _displayLoading = false
@@ -594,6 +595,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     if (selectionUpdatesVisualization(_selectedJob())) _applyRunConfig(_selectedJob())
     _renderList()
     _renderDetail()
+    if (!_displayChosen && _selectedJob()?.status === 'completed' && checkedMode() === 'off') setMode('cando')
     if (selectionUpdatesVisualization(_selectedJob())) await _retargetDisplayToSelection()
     _base.schedulePoll()
   }
@@ -703,11 +705,11 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
         `Deviation from design — RMSD ${s.rmsd.toFixed(2)} nm (max ${s.max.toFixed(2)} nm)`
     } else if (mode === 'cando' && s?.kind === 'cando') {
       displayStatus.textContent =
-        `CanDo-style cylinders — ${s.helices} helix tubes, ${s.joints} crossover joints`
+        `Coarse FEM output — ${s.helices} helix tubes, ${s.joints} crossover joints`
     } else {
       displayStatus.textContent = mode === 'trajectory' ? `Thermal trajectory · ${s?.frames || 0} frames` : 'Showing predicted shape.'
     }
-    if (s?.large) displayStatus.textContent += ` · Large-result view: ${s.representation}`
+    if (s?.large) displayStatus.textContent += ` · ${s.representation}`
   }
 
   // ── Control buttons ───────────────────────────────────────────────────────────
@@ -773,7 +775,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     }
     _syncDisplayStatus()
   }
-  modeRadios().forEach((r) => r.addEventListener('change', _onModeChange))
+  modeRadios().forEach((r) => r.addEventListener('change', () => { _displayChosen = true; _onModeChange() }))
   if (showAll) showAll.addEventListener('change', _fetchJobs)
 
   // ── Cross-panel coordination ──────────────────────────────────────────────────

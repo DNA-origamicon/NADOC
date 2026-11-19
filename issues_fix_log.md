@@ -1,5 +1,19 @@
 # Issues fix log
 
+## 2026-11-19 — ISSUE-250: shaded SNUPI results
+
+Completed-job selection now defaults to saved coarse FEM axes/joints, rendered
+as opaque lit tubes with RMSF colors. Other modes use shaded nucleotide beads,
+with scalar colors for flexibility/deviation and helix colors for shape/trajectory.
+Missing scalars are gray. Tiled, zoom-adaptive bead detail retains all saved
+coordinates and reuses frame buffers; coarse segments are never subsampled.
+Explicit Off remains respected. No molecular state or CanDo rendering changes.
+All five modes reviewed against actual completed 2-mer/10-mer jobs; trajectory
+scrubbing and display teardown passed. Focused tests: 16 passed. Full frontend:
+10,786 passed, 1 skipped, one cached pre-edit module failure resolved in the fresh
+focused rerun. Smoke: 27 passed, 2 skipped. Main.js delta: +1 wiring line.
+Evidence: `.development-artifacts/snupi-rendering-20261119/`.
+
 ## 2026-11-18 — ISSUE-234 / ISSUE-236: install bounded timestep and reconstruct BigO
 
 Stopped RunPod before case `bebad41f65e7`; exact pod `84j90s4fjgre6t`

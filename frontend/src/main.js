@@ -330,6 +330,7 @@ import { initFlexScale } from './ui/flex_scale.js'
 import { initEngineActivityHeaders } from './ui/engine_activity_headers.js'
 import { initCandoCylinders } from './scene/cando_cylinders.js'
 import { initCandoLargeView } from './scene/cando_large_view.js'
+import { initSnupiResultView } from './scene/snupi_result_view.js'
 import { initMrdnaConnections } from './scene/mrdna_connections.js'
 import { initOxdnaInputOverlay } from './scene/oxdna_input_overlay.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
@@ -1568,7 +1569,7 @@ async function main() {
   snupiDisplay = initSnupiDisplay({
     designRenderer, api,
     cylinderOverlay:  snupiCylinderOverlay,
-    largeView: initCandoLargeView(scene, 'snupi-large-result'),
+    largeView: initSnupiResultView(scene),
     setDesignVisible: _setSimulationVisualizationVisible,
     restoreDesignVisible: _restoreNativeAfterSimulation,
     flexScale,

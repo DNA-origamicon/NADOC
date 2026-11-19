@@ -8,6 +8,23 @@ metadata:
 
 # SNUPI frontend engine tab — fresh-session build brief (P5)
 
+## Shaded result rendering (2026-11-19)
+
+`snupi_result_view.js` uses mrDNA's instanced sphere/stick rendering approach with
+opaque, lit materials and per-instance colors. The existing compact CVIZ endpoint
+is used at every SNUPI result size; CanDo retains its own threshold/renderer.
+Coarse FEM output draws the saved axis segments and crossover joint pairs, with
+RMSF colors where available. Predicted shape and trajectory use helix-colored
+nucleotide beads; flexibility and deviation use their saved scalar maps and the
+live scale widget; missing scalar values are neutral gray. Playback reuses tiled instance buffers and requests one frame
+at a time. Progressive bead prefixes bound distant drawing work; zoom restores
+full detail, and every coordinate remains available for playback/materialization.
+Coarse tubes/joints always retain every recorded segment.
+This is visualization of NADOC's SNUPI-model results, not an import of the external
+MATLAB SNUPI application's renderer. No simulated coordinates or topology change.
+Completed-job selection defaults to coarse output unless the user explicitly
+chooses a display mode (including Off). Evidence/checks: ISSUE-250.
+
 ## Activity and selected cluster (2026-11-18)
 
 The shared engine-tab activity poll includes SNUPI alongside CanDo, mrDNA and
@@ -110,7 +127,11 @@ for scale-fixture provenance, validation and manual visual-quality debt.
 - Related heads: [[snupi-mimic]] (backend/verdict), simulate_panel_overhaul, cando_fem, md_viz_tools,
   md_engines_panel, mrdna_panel (clean clone precedent).
 
-## Current BigO-poly Langevin submission (2026-11-18)
+## Historical BigO-poly Langevin submission (2026-11-18; superseded)
+
+The before case below was subsequently terminated. Optimized two- and ten-monomer
+jobs completed successfully; see `project_snupi_dynamics.md` for measured scaling
+and receipts. No RunPod pod from those runs remains active.
 
 The original job `4c9ec02f01e5` was stopped during setup to deploy remote
 telemetry; pod deletion was independently verified (spent $0.531981). Replacement

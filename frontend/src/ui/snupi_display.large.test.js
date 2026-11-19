@@ -68,3 +68,16 @@ it('hides the expensive native scene immediately when panel metadata identifies 
   expect(d.restoreDesignVisible).toHaveBeenCalled()
   expect(d.scene.children).toHaveLength(0)
 })
+
+it('uses the shaded compact renderer for small results too, without rebuilding a nucleotide scene', async () => {
+  const { initSnupiResultView } = await import('../scene/snupi_result_view.js')
+  const d = deps(); d.largeView = initSnupiResultView(d.scene)
+  d.api.getSnupiJob.mockResolvedValue({ n_nucleotides: 29008 })
+  const controller = initSnupiDisplay(d)
+  for (const fn of ['showDeform', 'showFlex', 'showDeviation', 'showCandoStyle']) {
+    expect((await controller[fn]('small')).ok).toBe(true)
+    expect(d.scene.children[0].children[0].material.isMeshStandardMaterial).toBe(true)
+  }
+  expect(d.api.getSnupiSnapshotGeometry).not.toHaveBeenCalled()
+  controller.stopDeform(); expect(d.scene.children).toHaveLength(0)
+})
