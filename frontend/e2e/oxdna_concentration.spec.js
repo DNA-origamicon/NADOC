@@ -28,6 +28,17 @@ test('DNA concentration beside conditions: create, ramp, edit and view',async({p
  await expect(dialog.locator('.wizard-dna-concentration')).toContainText('6.52 nm')
  await dialog.locator('[data-thermal-field="enabled"]').check()
  await expect(input()).toHaveValue('12000')
+ const melt=dialog.locator('[data-thermal-field="stop_on_unpaired"]:visible')
+ const threshold=dialog.locator('[data-thermal-field="unpaired_threshold"]:visible')
+ await expect(melt).toBeChecked()
+ await expect(threshold).toHaveValue('100')
+ await threshold.fill('90');await threshold.blur()
+ await expect(threshold).toHaveValue('90')
+ await melt.uncheck()
+ await expect(threshold).toHaveCount(0)
+ await melt.check()
+ await threshold.fill('100');await threshold.blur()
+ await threshold.scrollIntoViewIfNeeded()
  await capture('thermal.png')
  await page.setViewportSize({width:720,height:900})
  await capture('thermal-narrow.png')
@@ -36,6 +47,7 @@ test('DNA concentration beside conditions: create, ramp, edit and view',async({p
  await dialog.getByRole('tab',{name:'Summary',exact:true}).click()
  await dialog.getByRole('button',{name:'Create job',exact:true}).click()
  await expect.poll(()=>page.evaluate(()=>window.concentrationSubmitted?.dna_concentration_uM)).toBe(12000)
+ expect(await page.evaluate(()=>window.concentrationSubmitted.thermal_ramp)).toMatchObject({stop_on_unpaired:true,unpaired_threshold:1,block_steps:100000000})
  await page.evaluate(()=>{
   window.concentrationJob={job_id:'queued',parent_job_id:'parent',status:'queued',salt_concentration:.3,
    run_config:{kind:'run',dna_concentration_uM:12000,box_conditions:{dna_strands:2,concentration_uM:12000,box_nm:[6.51677,6.51677,6.51677]}},
@@ -51,6 +63,23 @@ test('DNA concentration beside conditions: create, ramp, edit and view',async({p
  await dialog.getByRole('tab',{name:'Parameters & options',exact:true}).click()
  await expect(dialog.locator('.oxdna-recorded-fields:visible')).toContainText('µM total strands')
  await capture('view.png')
+ await page.evaluate(()=>window.concentrationWizard.openEditable({...window.concentrationJob,
+  run_config:{...window.concentrationJob.run_config,thermal_ramp:{start_c:25,end_c:35,step_c:5,block_steps:100000000,stop_on_unpaired:true,unpaired_threshold:1}},
+  stages:[{name:'1_thermal',status:'pending',steps:100000000}]}))
+ await expect(dialog.locator('[data-thermal-field="stop_on_unpaired"]:visible')).toBeChecked()
+ await dialog.locator('[data-thermal-field="unpaired_threshold"]:visible').fill('95')
+ await dialog.locator('[data-thermal-field="unpaired_threshold"]:visible').blur()
+ await capture('melt-stop-edit.png')
+ await dialog.getByRole('button',{name:'Save changes',exact:true}).click()
+ await expect.poll(()=>page.evaluate(()=>window.concentrationEdited?.thermal_ramp?.unpaired_threshold)).toBe(.95)
+ await page.evaluate(()=>window.concentrationWizard.openReadOnly({...window.concentrationJob,status:'completed',
+  run_config:{...window.concentrationJob.run_config,thermal_ramp:{start_c:25,end_c:35,step_c:5,block_steps:100000000,stop_on_unpaired:true,unpaired_threshold:1},
+   melt_stop:{stage:'1_thermal',step:10000,unpaired_fraction:1,threshold:1}},
+  stages:[{name:'1_thermal',status:'done',steps:100000000},{name:'2_thermal',status:'skipped',steps:100000000},{name:'3_thermal',status:'skipped',steps:100000000}]}))
+ await dialog.getByRole('tab',{name:'Parameters & options',exact:true}).click()
+ await expect(dialog).toContainText('later temperatures were skipped')
+ await expect(dialog.locator('.oxdna-thermal-recorded__table')).toContainText('skipped')
+ await capture('melt-stop-recorded.png')
  expect(errors).toEqual([])
  if(process.env.NADOC_CONCENTRATION_REVIEW){console.log('CONCENTRATION_REVIEW',info.outputPath(''));await page.waitForTimeout(45000)}
 })

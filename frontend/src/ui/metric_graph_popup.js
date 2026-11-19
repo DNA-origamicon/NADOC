@@ -62,7 +62,8 @@ function _build() {
 export function metricSpecs(metric, result, scope) {
   const meta = METRIC_META[metric]
   const bp = metric === 'base_pairing'
-  const temporalBasis = meta.temporal.xLabel.startsWith('simulation time')
+  const xLabel = result?.[metric]?.temporal?.x_label || meta.temporal.xLabel
+  const temporalBasis = xLabel.startsWith('Monte Carlo') ? 'MC steps' : meta.temporal.xLabel.startsWith('simulation time')
     ? 'sim time'
     : 'trajectory frame'
   const sampleNote = meta.source !== 'namd-log' && result?.sampling === 'uniform'
@@ -80,7 +81,7 @@ export function metricSpecs(metric, result, scope) {
       title: (scope === 'chain'
         ? `Temporal — vs ${temporalBasis} (jobs concatenated)`
         : `Temporal — vs ${temporalBasis}`) + sampleNote,
-      xLabel: meta.temporal.xLabel, yLabel: meta.temporal.yLabel,
+      xLabel, yLabel: meta.temporal.yLabel,
       annotations: (result?.[metric]?.temporal?.boundaries || [])
         .filter(b => Number.isFinite(b.temperature_c))
         .map(b => ({ x: b.start_x, label: `${b.temperature_c}°C` })),

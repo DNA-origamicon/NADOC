@@ -1,3 +1,4 @@
+import {umbrellaResultActions} from './oxdna_umbrella_results.js'
 import { initThermalSelection } from './oxdna_thermal_selection.js'
 import { isThermalRun, thermalRunNumbers } from './oxdna_thermal_job.js'
 import { docKey } from '../shared/doc_id.js'
@@ -557,7 +558,7 @@ export function productionRunAnchors(elements = {}) {
  *  No lightning-bolt icon: the [E] tag denotes the electric field instead. */
 export function runRowLabel(job, index) {
   const tags = runIndicatorTags(job)
-  return `${isThermalRun(job) ? 'Tm Run' : 'Run'} ${index}${tags ? ' ' + tags : ''}`
+  return `${job.run_config?.vmmc_melting ? 'VMMC Run' : isThermalRun(job) ? 'Tm Run' : 'Run'} ${index}${tags ? ' ' + tags : ''}`
 }
 
 /** Pure: hover title for a run child describing its added elements. */
@@ -1907,6 +1908,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
         { type: 'header', label: `${job.design_name || 'job'} · ${formatJobTime(job.created_at)}` },
         { label: editable ? 'Edit…' : 'View settings…',
           onClick: () => (editable ? _wizard.openEditable(job) : _wizard.openReadOnly(job)) },
+        ...umbrellaResultActions(job),
         { type: 'separator' },
         { label: 'Copy job (new seed)', onClick: () => { void _copyJob(jobId) } },
       ],
@@ -1967,7 +1969,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     const controlsChanged = _controlsJobId !== jobId || _controlsSignature !== _settingsSignature(_jobSettings.overlay(job))
     if (!thermalSelection.set(job, thermalStage)) return false
     _selectedId = jobId
-    void submodel?.select('oxdna', jobId)
+    void submodel?.select('oxdna', job.creating ? null : jobId)
     const epoch = ++selectionEpoch
     if (controlsChanged && selectionUpdatesVisualization(job)) _applyRunControls(_jobSettings.overlay(job))
     // Accept the selection using the job already in the list. Disk-backed progress
@@ -2469,7 +2471,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     if (!(await _ensureJobCurrent('a production run', parent))) return null
     if (!(await confirmNoConcurrentJob({
       excludeJobId: parentJobId,
-      usesGpu: (parent.backend || 'CUDA') === 'CUDA',   // run inherits the job's backend
+      usesGpu: (wizardPayload?.backend || parent.backend || 'CUDA') === 'CUDA',
     }))) return null
     oxdnaLive?.stop()   // a production run supersedes any live session (shared overlay)
     const steps = Number(wizardPayload?.steps) || 5_000_000
@@ -2481,6 +2483,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     const body = { steps, steps_per_frame: stepsPerFrame,
       ...(wizardPayload?.dna_concentration_uM != null ? {dna_concentration_uM:wizardPayload.dna_concentration_uM} : {}) }
     if (wizardPayload?.backend) body.backend = wizardPayload.backend
+    if (wizardPayload?.vmmc_melting) body.vmmc_melting = structuredClone(wizardPayload.vmmc_melting)
     if (wizardPayload?.thermal_ramp) body.thermal_ramp = structuredClone(wizardPayload.thermal_ramp)
     if (wizardPayload?.stage_overrides) body.stage_overrides = wizardPayload.stage_overrides
     if (el.field?.enabled && el.field.field_pN > 0) {

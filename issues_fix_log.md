@@ -1,5 +1,71 @@
 # Issues fix log
 
+## ISSUE-233 — VMMC wizard rejects empty submodel selection (2026-11-18)
+
+Validation: 6 focused backend; FAST 21,015 passed (90 skipped), FULL deferred by session policy; 10,698 frontend passed (1 skipped). Smoke 23 passed, 2 skipped; existing Honeycomb request timeout passed isolated retry. Native job and copy each completed eight stages with explicit empty-box payload. All test jobs/captures removed. Evidence: `.development-artifacts/vmmc-wizard-422.json`.
+
+[x] The normal production launcher includes `submodel: {box: null}` for a full-system
+job. VMMC incorrectly rejected the wrapper's presence as an active submodel, returning
+422 before job allocation. Accept the explicit null box while continuing to reject an
+actual region. Regression covers both cases with the real RunRequest schema, and the
+native browser/API workflow now includes the launcher's explicit empty-box payload.
+
+Optimistic `creating-*` rows now select the submodel draft and skip export trajectory
+metadata until the real job exists, avoiding the secondary 404 requests. Feature
+`main.js` LOC Δ: 0. Native browser create/edit/run/copy/results validation passed
+with the corrected payload; both jobs completed all eight stages and were removed.
+
+
+## ISSUE-232 — Umbrella results entry points (2026-11-18)
+
+Validation: dedicated browser gesture/export test and visual review passed; 10,696 frontend tests passed (1 skipped). Smoke: 23 passed, 2 skipped, unrelated Honeycomb creation request timeout; exact isolated retry passed. Screenshots/traces removed; compact receipt `.development-artifacts/umbrella-results-ui.json`.
+
+[x] VMMC job right-click menu and Graphs and Metrics now expose “Show umbrella
+results”. Both open one shared dialog with saved melting curves, uncertainty/
+sampling diagnostics and CSV/JSON exports. Pending analyses show the existing
+pending-results message; ordinary MD jobs do not show this action. UI-only change;
+no simulations or molecular documents authored. Feature `main.js` LOC Δ: 0.
+
+
+## ISSUE-231 — CPU VMMC equilibrium duplex workflow (2026-11-18)
+
+Final checks: 9 focused backend, 10,696 frontend (1 skipped), 24 smoke (2 skipped); lint/diff clean. Edited salt 0.35 M and a fresh-seed copy each completed all eight native CPU stages. All validation jobs/captures removed. FAST: 21,009 passed; four energy compatibility failures fixed/retested, existing aptamer-history HTTP 413 remains. FULL deferred by session policy. Feature `main.js` LOC Δ: 0.
+
+[x] Add a wizard mode mutually exclusive with thermal ramps, with salt/concentration,
+fixed tuning/equilibration/production budgets and independently seeded CPU replicas.
+Persist stage progress and frozen bias weights, replay interrupted stages, and recover
+analysis after restart. Native histogram reweighting and finite-size correction produce
+melting curves, replica diagnostics and CSV/JSON exports in settings/metrics. Undamaged
+complementary free-solution DNA duplexes only; unsupported CPD/hybrid/force systems
+fail preflight. Sparse sampling reports inconclusive rather than a reliable Tm.
+
+Validation: real browser create → API queued edit → native CPU execution of eight stages
+→ recorded results → CSV download passed on the existing duplex; all native stages done,
+no page errors. Short sampling was correctly inconclusive. Desktop/narrow pixel review
+fixed salt alignment and stage-table spacing. Disposable simulation child removed through
+API; authored source unchanged. Compact evidence: `.development-artifacts/vmmc-development/validation.json`.
+
+
+## ISSUE-230 — Native melt threshold with durable stage pruning (2026-11-18)
+
+Added default-on Stop series after melting and editable Unpaired bases (%)
+controls for creation/queued editing, plus recorded settings and skipped-stage
+reasons. Count unique DNA bases without native hydrogen bonds, including initially
+single-stranded bases and non-designed/intrastrand pairing. Observe at trajectory
+cadence; any sampled crossing ends the series only after the current full dwell.
+
+Native HBList output uses the active CPU/CUDA interaction and consecutive output
+numbering. Parse complete frames incrementally; malformed/missing samples cannot
+trigger. Preserve attempt offsets, exclude discarded retry samples, and persist
+threshold/step/fraction with skipped stages. Recovered boundaries reapply pruning
+idempotently. Copies clear evidence; old saved protocols remain opt-out.
+
+Validation includes native analysis of bound and melted duplex checkpoints,
+runner tests for both toggle states, persistence/reload, copy/retry handling and
+wizard create/edit/view checks. Detailed final validation/cleanup receipt:
+.development-artifacts/melt-stop-20261118.json. main.js feature LOC delta: 0.
+No user jobs or authored molecular documents were modified.
+
 ## ISSUE-229 — DNA concentration controls and simulation volume (2026-11-18)
 
 Added µM total DNA strands controls for relaxation, production, thermal ramps and

@@ -1,7 +1,7 @@
 import { createInput, el } from './primitives/index.js'
 
 export const THERMAL_DEFAULTS = Object.freeze({ start_c: 25, end_c: 85, step_c: 5,
-  block_steps: 100_000_000 })
+  block_steps: 100_000_000, stop_on_unpaired: true, unpaired_threshold: 1 })
 
 // Old saved ramp settings may contain adaptive controls; do not submit them again.
 export const THERMAL_PHYSICS_DEFAULTS = Object.freeze({ dt: 0.005, thermostat: 'brownian',
@@ -9,7 +9,7 @@ export const THERMAL_PHYSICS_DEFAULTS = Object.freeze({ dt: 0.005, thermostat: '
 
 export function thermalConfig(config) {
   return Object.fromEntries(Object.keys(THERMAL_DEFAULTS).map(key =>
-    [key, config?.[key] ?? THERMAL_DEFAULTS[key]]))
+    [key, config?.[key] ?? (key === 'stop_on_unpaired' && config ? false : THERMAL_DEFAULTS[key])]))
 }
 
 export function thermalError(config) {
@@ -17,6 +17,8 @@ export function thermalError(config) {
   const c = thermalConfig(config)
   for (const key of Object.keys(THERMAL_DEFAULTS))
     if (!Number.isFinite(Number(c[key]))) return `${key} must be finite.`
+  if (typeof c.stop_on_unpaired !== 'boolean') return 'Choose whether to stop after melting.'
+  if (!(c.unpaired_threshold > 0 && c.unpaired_threshold <= 1)) return 'Unpaired bases must be greater than 0% and at most 100%.'
   if (Math.min(c.start_c, c.end_c) <= -273.15 || Math.max(c.start_c, c.end_c) > 200) return 'Temperatures must be above −273.15 °C and at most 200 °C.'
   if (c.step_c <= 0 || c.step_c > 200 || Math.ceil(Math.abs(c.end_c - c.start_c) / c.step_c - 1e-10) > 100) return 'Choose a positive increment producing at most 101 plateaus.'
   if (!Number.isInteger(c.block_steps) || c.block_steps < 1000 || c.block_steps > 10_000_000_000) return 'Steps per temperature must be a whole number from 1,000 to 10,000,000,000.'
@@ -63,8 +65,8 @@ export function thermalControls(config, onChange, { salt, concentration } = {}) 
   const fields = (entries, className = '') => el('div', {
     className: `oxdna-thermal__grid ${className}`,
     children: entries.map(([key, label, help]) => {
-      const input = createInput({ type: 'number', size: 'sm', data: true, step: 'any', value: c[key],
-        onChange: value => update(key, Number(value)) })
+      const input = createInput({ type: 'number', size: 'sm', data: true, step: 'any', value: key === 'unpaired_threshold' ? c[key] * 100 : c[key],
+        onChange: value => update(key, Number(value) / (key === 'unpaired_threshold' ? 100 : 1)) })
       input.dataset.thermalField = key
       return el('label', { className: 'oxdna-thermal__field', children: [
         el('span', { className: 'oxdna-thermal__label', text: label }), input,
@@ -81,6 +83,9 @@ export function thermalControls(config, onChange, { salt, concentration } = {}) 
     temperatures.append(salt)
   }
   if (concentration) root.insertBefore(el('div', {className:'oxdna-conditions',children:[concentration]}), root.querySelectorAll('.oxdna-thermal__grid')[1])
+  root.append(checkbox('Stop series after melting', c.stop_on_unpaired, value => update('stop_on_unpaired', value), 'stop_on_unpaired'))
+  if (c.stop_on_unpaired) root.append(fields([['unpaired_threshold', 'Unpaired bases (%)']]),
+    note('Finish the current temperature’s full dwell, then skip later temperatures if any recorded frame meets this threshold. Counts DNA bases without any hydrogen bond, including bases that were single-stranded initially.'))
   root.append(note('New ramps use sequence-dependent oxDNA2 and a Brownian thermostat. Salt defaults to the continued job’s saved concentration. Use the simulation parameter controls to change these settings for every temperature.'))
   root.append(note('Every temperature runs for this fixed number of steps. Energy data are recorded for metrics; they do not extend or stop a stage.'))
   return root

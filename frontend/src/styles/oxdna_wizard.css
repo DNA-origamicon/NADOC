@@ -98,3 +98,13 @@
 
 /* Capitalizing µ changes the unit glyph; preserve scientific labels verbatim. */
 .modal--oxdna-wizard .oxdna-recorded-fields dt { text-transform: none; }
+
+/* VMMC parameters use matching stacked labels/inputs, including inherited salt. */
+.modal--oxdna-wizard .oxdna-vmmc .oxdna-thermal__grid > .wizard-field {
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto;
+  grid-row: auto; gap: 6px; padding: 0; border: 0; align-content: start;
+}
+.modal--oxdna-wizard .oxdna-vmmc .oxdna-thermal__grid > .wizard-field > input { grid-column: 1; }
+.oxdna-vmmc-results button { margin: 6px 8px 6px 0; }
+.oxdna-vmmc-recorded table { width: 100%; border-collapse: collapse; }
+.oxdna-vmmc-recorded th, .oxdna-vmmc-recorded td { text-align: left; padding: 8px; border-bottom: 1px solid var(--color-border-default); }

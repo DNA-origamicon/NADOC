@@ -14,6 +14,8 @@ class ThermalRamp(BaseModel):
     end_c: float = Field(85, gt=-273.15, le=200)
     step_c: float = Field(5, gt=0, le=200)
     block_steps: int = Field(100_000_000, ge=1000, le=10_000_000_000)
+    stop_on_unpaired: bool = True
+    unpaired_threshold: float = Field(1.0, gt=0, le=1)
     # Read old saved protocols, but never serialize or honor adaptive controls.
     max_steps: int | None = Field(None, exclude=True)
     gate: bool = Field(False, exclude=True)
@@ -73,19 +75,28 @@ def evaluate(directory, design, cfg, *, n_trailing_extra=0, evaluated_steps=None
 
 
 def advance(job, workspace, specs, idx, design):
-    """After native completion/health checks, always advance the fixed schedule."""
+    """Record a completed fixed dwell, then prune later temperatures after melting."""
     spec = specs[idx]
     if not spec.thermal_ramp:
         return "done"
     reports = dict((job.run_config or {}).get("thermal_progress") or {})
     previous = reports.get(spec.name, {})
     if previous.get('protocol_version') == 4 and previous.get('evaluated_steps') == spec.steps:
+        from backend.core.oxdna_melt_stop import prune_after_melt
+        prune_after_melt(job, idx, previous)
         return 'done'
     try:
         metrics = evaluate(job.stage_dir(workspace, spec.name), design,
                            ThermalRamp.model_validate(spec.thermal_ramp), evaluated_steps=spec.steps)
     except Exception as error:
         metrics = {'energy': {'status': 'unavailable', 'reason': str(error)}}
+    if spec.thermal_ramp.get('stop_on_unpaired', False):
+        from backend.core.oxdna_melt_stop import pairing_summary
+        try:
+            metrics['pairing'] = pairing_summary(job.stage_dir(workspace, spec.name),
+                job.stage_dir(workspace, spec.name).parent / 'topology.top', spec.thermal_ramp.get('unpaired_threshold', 1.0))
+        except (OSError, ValueError) as error:
+            metrics['pairing'] = {'status': 'unavailable', 'reason': str(error)}
     report = {"temperature": spec.temperature, "evaluated_steps": spec.steps,
               "protocol_version": 4, "metrics": metrics, "gate_enabled": False,
               "stability_status": "not_assessed", "decision": "done"}
@@ -93,6 +104,8 @@ def advance(job, workspace, specs, idx, design):
         report['previous_decision'] = previous
     reports[spec.name] = report
     job.run_config = {**(job.run_config or {}), "thermal_progress": reports}
+    from backend.core.oxdna_melt_stop import prune_after_melt
+    prune_after_melt(job, idx, report)
     encoded = json.dumps(report, indent=2)
     for filename in ('thermal_check.json', f'thermal_dwell_{spec.steps}.json'):
         (job.stage_dir(workspace, spec.name) / filename).write_text(encoded)
@@ -114,8 +127,9 @@ def configure_child(child, stage, config):
 def reset_copy(specs, config):
     if config is not None:
         config.pop("thermal_progress", None)
+        config.pop("melt_stop", None)
     return [replace(s, steps=ThermalRamp.model_validate(s.thermal_ramp).block_steps, refresh_vel=True,
-                    thermal_ramp=ThermalRamp.model_validate(s.thermal_ramp).model_dump())
+                    thermal_ramp=ThermalRamp.model_validate({**s.thermal_ramp, 'stop_on_unpaired': s.thermal_ramp.get('stop_on_unpaired', False)}).model_dump())
             if s.thermal_ramp else s for s in specs]
 
 
@@ -168,7 +182,7 @@ def restart_plateau(job, workspace, specs, idx):
     # Retain failed evidence outside the active sampling namespace.
     archive = directory / f"thermal_retry_{job.production_retries}"
     archive.mkdir(exist_ok=True)
-    for pattern in ("energy*.dat", "trajectory*.dat", "thermal_check*.json", "thermal_dwell*.json", "thermal_energy_curve.json", "thermal_attempt_*.json", "error_conf.dat"):
+    for pattern in ("energy*.dat", "trajectory*.dat", "thermal_check*.json", "thermal_dwell*.json", "thermal_energy_curve.json", "thermal_attempt_*.json", "error_conf.dat", "thermal_pairing_*.dat"):
         for path in directory.glob(pattern):
             path.replace(archive / path.name)
 

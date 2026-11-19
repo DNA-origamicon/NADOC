@@ -79,3 +79,23 @@ it('uses literature physics for new ramps and applies user edits uniformly', () 
   values.stage_overrides['1_production'].salt_concentration = -1
   expect(validateOxdnaProductionWizard(values).valid).toBe(false)
 })
+
+
+it('defaults melt stop on, edits percent, and preserves legacy full ramps', () => {
+  let value = {...THERMAL_DEFAULTS}
+  const mount = document.createElement('div')
+  document.body.append(mount)
+  const draw = () => mount.replaceChildren(thermalControls(value, next => { value = next; draw() }))
+  draw()
+  expect(mount.querySelector('[data-thermal-field="stop_on_unpaired"]').checked).toBe(true)
+  const percent = mount.querySelector('[data-thermal-field="unpaired_threshold"]')
+  expect(percent.value).toBe('100')
+  percent.value = '90'; percent.dispatchEvent(new Event('change'))
+  expect(oxdnaProductionPayload({thermal_ramp:value}).thermal_ramp.unpaired_threshold).toBe(.9)
+  mount.querySelector('[data-thermal-field="stop_on_unpaired"]').click()
+  expect(value.stop_on_unpaired).toBe(false)
+  expect(mount.querySelector('[data-thermal-field="unpaired_threshold"]')).toBeNull()
+  for (const threshold of [0, -1, 1.1]) expect(thermalError({...value,unpaired_threshold:threshold})).toBeTruthy()
+  expect(oxdnaProductionPayload({thermal_ramp:{start_c:25,end_c:30,step_c:5,block_steps:10000}}).thermal_ramp.stop_on_unpaired).toBe(false)
+  mount.remove()
+})

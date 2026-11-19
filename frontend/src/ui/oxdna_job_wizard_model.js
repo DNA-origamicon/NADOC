@@ -1,3 +1,4 @@
+import {vmmcError, vmmcConfig, vmmcStages} from './oxdna_vmmc.js'
 import { concentrationError } from './oxdna_concentration.js'
 import { thermalError, thermalStages, thermalConfig, THERMAL_PHYSICS_DEFAULTS } from './oxdna_thermal_ramp.js'
 // GPU default is user-authorized; further convergence and sampling checks are
@@ -152,6 +153,15 @@ export function oxdnaProductionDefaults(overrides = {}) { return { ...PRODUCTION
 export function validateOxdnaProductionWizard(values = {}) {
   const v = oxdnaProductionDefaults(values)
   const errors = {}
+  if (v.vmmc_melting) {
+    if (v.thermal_ramp) errors.vmmc_melting = 'Choose VMMC or a thermal ramp.'
+    if (vmmcError(v.vmmc_melting)) errors.vmmc_melting = vmmcError(v.vmmc_melting)
+    if (!v.parentJobId) errors.parentJobId = 'Choose a prepared or relaxed duplex job.'
+    if (concentrationError(v.dna_concentration_uM)) errors.dna_concentration_uM = concentrationError(v.dna_concentration_uM)
+    const salt = v.stage_overrides?.['1_production']?.salt_concentration ?? v.inherited_parameters?.salt_concentration
+    if (salt != null && !(Number(salt)>0)) errors.salt_concentration = 'Salt concentration must be positive.'
+    return {valid:Object.keys(errors).length===0,errors}
+  }
   if (v.backend != null && !['CPU', 'CUDA'].includes(v.backend)) errors.backend = 'Choose CPU or CUDA.'
   if (thermalError(v.thermal_ramp)) errors.thermal_ramp = thermalError(v.thermal_ramp)
   if (!v.parentJobId) errors.parentJobId = 'Choose a completed or stopped oxDNA job with a saved configuration.'
@@ -181,6 +191,7 @@ export function validateOxdnaProductionWizard(values = {}) {
 /** Mirrors build_run_stage defaults. Execution hardware and salt are inherited. */
 export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
   const v = oxdnaProductionDefaults(values)
+  if (v.vmmc_melting) return vmmcStages(v.vmmc_melting, v.stage_overrides?.['1_production']?.salt_concentration ?? parentJob?.salt_concentration ?? v.inherited_parameters?.salt_concentration ?? .3)
   const stage = {
     name: '1_production', purpose: 'Sample from the relaxed structure', sim_type: 'MD',
     backend: v.backend ?? parentJob?.backend ?? null, device: parentJob?.device ?? null,
@@ -207,7 +218,8 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
 export function oxdnaProductionPayload(values) {
   const v = oxdnaProductionDefaults(values)
   return { ...(v.dna_concentration_uM != null ? {dna_concentration_uM:v.dna_concentration_uM} : {}), steps: Number(v.thermal_ramp ? thermalConfig(v.thermal_ramp).block_steps : v.steps), steps_per_frame: Number(v.steps_per_frame),
-    ...(v.backend ? { backend: v.backend } : {}),
+    ...(v.backend || v.vmmc_melting ? { backend: v.vmmc_melting ? 'CPU' : v.backend } : {}),
+    ...(v.vmmc_melting ? {vmmc_melting:vmmcConfig(v.vmmc_melting)} : {}),
     ...(v.thermal_ramp ? { thermal_ramp: thermalConfig(v.thermal_ramp) } : {}),
     ...(Object.keys(v.stage_overrides || {}).length ? { stage_overrides: structuredClone(v.stage_overrides) } : {}),
   }

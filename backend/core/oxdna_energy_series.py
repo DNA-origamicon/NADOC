@@ -5,6 +5,9 @@ from backend.core.oxdna_temperature_markers import input_temperature_c
 
 def energy_series(jobs, workspace, scope='latest'):
     values, times, temperatures, stages, job_ids, boundaries = [], [], [], [], [], []
+    vmmc = any((getattr(job, "run_config", None) or {}).get("vmmc_melting") for job in jobs)
+    if vmmc:
+        jobs = [job for job in jobs if (getattr(job, "run_config", None) or {}).get("vmmc_melting")]
     offset = 0.0
     for job in jobs:
         for stage in job.stages:
@@ -31,4 +34,5 @@ def energy_series(jobs, workspace, scope='latest'):
             'jobs': list(dict.fromkeys(job_ids)),
             'oxdna_energy': {'temporal': {'per_frame': values, 'x_values': times,
                 'temperature_c': temperatures, 'stage_names': stages, 'job_ids': job_ids,
-                'boundaries': boundaries}}}
+                'x_label': 'Monte Carlo steps (concatenated stages)' if vmmc else 'simulation time (oxDNA units)',
+                'csv_x': 'mc_steps' if vmmc else 'simulation_time_oxdna', 'boundaries': boundaries}}}

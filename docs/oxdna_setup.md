@@ -452,6 +452,25 @@ In **Dynamics → oxDNA → New job → Production**, select a completed relaxat
 are in °C; the positive increment works for heating or cooling and always includes
 the endpoint. Set **Steps per temperature** once; every stage uses that fixed
 number of integration steps. The default is **100 million steps per temperature**.
+**Stop series after melting** defaults on, with **Unpaired bases (%) = 100**.
+At the end of each full dwell, the runner checks the native hydrogen-bond samples
+recorded at the trajectory-output cadence. If any complete sampled frame reaches
+the threshold, the current stage finishes normally and later temperatures become
+**Skipped (melt threshold)**. The series completes successfully; no failure or BP
+health-guard event is generated. Turning the toggle off runs the whole schedule.
+
+The fraction counts unique DNA bases without any native hydrogen bond, including
+initially single-stranded bases. Non-designed and intramolecular DNA pairing count
+as paired; protein/PEG particles do not enter the denominator. It is an instantaneous
+sample threshold, not a sustained-melting or equilibrium test. Rebinding later in
+the same dwell does not undo a recorded crossing. The threshold, first crossing
+step, measured fraction and skipped stages are saved across server restarts.
+Interrupted attempts retain their sampling offsets; numerical-retry samples are
+excluded. Missing/malformed pairing data are reported as unavailable and never
+interpreted as 100% unpaired. Existing saved ramps without the option retain their
+original full schedule. This stop rule must not be used to estimate equilibrium
+bound/unbound populations, which require reversible sampling.
+
 The Summary shows every plateau and the exact total planned steps. The current implementation uses the **local, full-system runner**;
 a simulation submodel box must be disabled. Ordinary CPU/CUDA physics and frozen
 CPD models are inherited from the parent. CPD supports local CPU or CUDA MD with its smaller timestep; choose GPU (CUDA)
@@ -636,3 +655,43 @@ discusses total strand concentration and finite-size corrections, whereas
 [Lim et al. (2022)](https://academic.oup.com/nar/article-pdf/50/5/2480/42917779/gkac082.pdf)
 state their octamer benchmark as 6 mM dsDNA. The wizard explicitly labels total
 strands to make this factor-of-two distinction visible.
+
+### CPU VMMC equilibrium duplex melting
+
+In **New job → Production → Parameters & options**, choose a prepared/relaxed
+undamaged complementary duplex and enable **CPU VMMC umbrella sampling**. This
+is mutually exclusive with a thermal ramp. Salt and total DNA strand concentration
+remain editable. The initial implementation supports two linear, fully complementary
+DNA strands (2–100 bases each), free in solution; it rejects CPDs, hybrid systems,
+fields, anchors, surfaces and submodels. Execution uses the local CPU runner.
+
+The wizard configures four 200,000-step weight-tuning rounds, then five independently
+seeded replicas with 200,000 equilibration and 2,000,000 production MC steps each.
+These are starting budgets, not established convergence guarantees. Sampling defaults
+to 70°C, with histogram reweighting over 60–80°C every 2°C. These are **MC steps, not
+physical time**. A valid prepared configuration is required; prior MD relaxation is
+useful for removing clashes but does not replace the VMMC equilibration phase.
+
+The order parameter counts designed native base pairs. Tuning adjusts bias weights
+between rounds; all replicas then use the same frozen weights. Tuning/equilibration
+samples are excluded from the melting estimate. Bound means at least one native
+pair. Native reweighted histograms are corrected for the two-strand finite box;
+Tm is the interpolated 50% duplex yield. Total strand concentration is twice each
+strand species concentration for the equal-stoichiometry duplex.
+
+Right-click a VMMC job and choose **Show umbrella results**, or use the same button
+in **Graphs and Metrics**. Both open the saved analysis, including CSV/JSON exports;
+unfinished jobs explain that results are pending. Results also appear in recorded settings, with a melting curve,
+CSV and JSON exports, replica Tm SEM, and sampling diagnostics. Fewer than 20
+recorded bound/unbound transitions per replica, missing pair-count states, or an
+unbracketed Tm produce **inconclusive**, even though execution completed successfully.
+Passing these checks is not proof of convergence. Reweighting far from the sampled
+energy distribution needs independent checks; shared tuned weights can create
+systematic uncertainty not captured by replica SEM.
+
+The detached controller persists completed stages. After interruption, an unfinished
+stage replays from its original stage input and seed; prior partial outputs are archived
+inside that stage and excluded from analysis. Completed stages are retained.
+
+Method references: [official umbrella sampling documentation](https://lorenzo-rovigatti.github.io/oxDNA/umbrella_sampling.html)
+and [Sengar et al. (2021)](https://www.frontiersin.org/journals/molecular-biosciences/articles/10.3389/fmolb.2021.693710/full).

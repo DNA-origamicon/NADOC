@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
-  dirLabel, formatField, formatSurface, metaTags, lineageForJob,
+  initOxdnaExportCard, dirLabel, formatField, formatSurface, metaTags, lineageForJob,
   buildExportModel, buildJobRows, runJobsOf, segmentTooltip, clampRange,
   frameToPct, pctToFrame, segmentsSpanned, rangeSummary,
   runBoundaries, snapValue, chimeraxOpenCommand,
@@ -313,4 +313,15 @@ describe('PDB+DCD export format (ChimeraX two-file flow)', () => {
     expect(Object.keys(FORMAT_LABEL).sort()).toEqual(['dcd', 'oxdna', 'pdb'])
     expect(FORMAT_LABEL.dcd).toContain('DCD')
   })
+})
+
+
+it('does not request trajectory metadata for an optimistic job', async () => {
+  const body = document.createElement('div'); body.id = 'oxdna-export-card'; document.body.append(body)
+  const getTrajectoryMeta = vi.fn()
+  try {
+    const card = initOxdnaExportCard({getSelectedJob: () => ({job_id: 'creating-1', creating: true}), getTrajectoryMeta})
+    await card.rebuild()
+    expect(getTrajectoryMeta).not.toHaveBeenCalled()
+  } finally { body.remove() }
 })

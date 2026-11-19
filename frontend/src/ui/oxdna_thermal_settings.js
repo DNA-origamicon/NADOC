@@ -18,9 +18,17 @@ export function thermalRecordedSettings(job) {
   const root = el('div', { className: 'oxdna-thermal-recorded' })
   root.append(el('h3', { text: 'Temperature ramp' }), fields([
     ['Start (°C)', cfg.start_c], ['End (°C)', cfg.end_c], ['Increment (°C)', cfg.step_c],
+    ['Stop series after melting', cfg.stop_on_unpaired === true],
+    ['Unpaired threshold (%)', cfg.stop_on_unpaired ? (cfg.unpaired_threshold ?? 1) * 100 : 'Disabled'],
     ['Steps per temperature', cfg.block_steps], ['Temperature stages', rows.length],
     ['Progression', cfg.gate === true ? 'Historical gated protocol' : 'Fixed steps per temperature'],
   ]))
+  if (job.run_config?.melt_stop) {
+    const stop = job.run_config.melt_stop
+    root.append(el('p', {className: 'wizard-note', text: `Melt threshold reached in ${stop.stage} at step ${Number(stop.step).toLocaleString()}: ${(stop.unpaired_fraction * 100).toFixed(1)}% unpaired. The full dwell finished; later temperatures were skipped.`}))
+  }
+  const unavailable = Object.entries(job.run_config?.thermal_progress || {}).filter(([,report]) => report.metrics?.pairing?.status === 'unavailable')
+  if (unavailable.length) root.append(el('p', {className:'wizard-note',text:`Melt detection unavailable for ${unavailable.map(([name]) => name).join(', ')}. Missing or invalid pairing data did not trigger a stop.`}))
   const spec = specs.find(s => s.name === rows[0]?.name)
   root.append(el('h3', { text: 'Recorded simulation parameters' }), fields([
     ['DNA concentration (µM total strands)', (job.box_conditions || job.run_config?.box_conditions)?.concentration_uM ?? job.run_config?.dna_concentration_uM],

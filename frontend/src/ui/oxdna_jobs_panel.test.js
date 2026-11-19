@@ -859,6 +859,16 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(submodel.select).toHaveBeenLastCalledWith('oxdna', null)
   })
 
+  it('does not fetch a submodel for an optimistic creation row', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'creating-1', creating: true, status: 'queued', design_source_path: 'A.nadoc', stages: [] }])
+    const submodel = { select: vi.fn() }
+    const panel = initOxdnaJobsPanel({ submodel, getWorkspacePath: () => 'A.nadoc' })
+    await panel.refresh()
+    await panel.selectJob('creating-1')
+    expect(submodel.select).toHaveBeenLastCalledWith('oxdna', null)
+    expect(api.getOxdnaProgress).not.toHaveBeenCalledWith('creating-1')
+  })
+
   it('accepts selection before progress loads and ignores late details from the previous job', async () => {
     api.listOxdnaJobs.mockResolvedValue([
       { job_id: 'slow', status: 'running', design_source_path: 'A.nadoc', stages: relaxStages() },

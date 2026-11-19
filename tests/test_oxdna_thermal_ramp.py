@@ -82,7 +82,7 @@ def test_numerical_retry_discards_gate_evidence_and_archives_samples(tmp_path):
     job = fake_job(tmp_path, specs[0])
     job.production_retries = 1
     job.run_config = {'thermal_progress': {'1_thermal': {'consecutive_passes': 1}}}
-    for name in ('energy.dat', 'energy.r1.dat', 'thermal_check.json', 'error_conf.dat'):
+    for name in ('energy.dat', 'energy.r1.dat', 'thermal_check.json', 'error_conf.dat', 'thermal_pairing_0.dat'):
         (tmp_path / name).write_text('test sentinel')
     restart_plateau(job, tmp_path, specs, 0)
     assert specs[0].steps == 1000000 and specs[0].refresh_vel
@@ -90,6 +90,8 @@ def test_numerical_retry_discards_gate_evidence_and_archives_samples(tmp_path):
     assert not list(tmp_path.glob('energy*.dat'))
     assert not (tmp_path / 'error_conf.dat').exists()
     assert (tmp_path / 'thermal_retry_1/energy.r1.dat').read_text() == 'test sentinel'
+    assert not (tmp_path / 'thermal_pairing_0.dat').exists()
+    assert (tmp_path / 'thermal_retry_1/thermal_pairing_0.dat').exists()
 
 
 def test_edit_rejects_silent_plateau_overrides_and_unsupported_runner(tmp_path):
@@ -217,7 +219,7 @@ def test_fixed_duration_advances_regardless_of_observations(tmp_path, monkeypatc
     report = job.run_config['thermal_progress']['1_thermal']
     assert report['gate_enabled'] is False and report['stability_status'] == 'not_assessed'
     assert report['previous_decision']['decision'] == 'failed'
-    assert set(cfg.model_dump()) == {'start_c', 'end_c', 'step_c', 'block_steps'}
+    assert set(cfg.model_dump()) == {'start_c', 'end_c', 'step_c', 'block_steps', 'stop_on_unpaired', 'unpaired_threshold'}
     assert not cfg.gate
     assert all(s.steps == 1000000 for s in specs)
     reset_copy(specs, job.run_config)

@@ -1,3 +1,4 @@
+import {vmmcControls, vmmcRecorded} from './oxdna_vmmc.js'
 import { concentrationControl } from './oxdna_concentration.js'
 import { saltControl, recordedStageConditions, recordedOptions } from './oxdna_conditions.js'
 import '../styles/oxdna_wizard.css'
@@ -191,6 +192,16 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
   }
 
   function renderProductionSettings() {
+    const vmmc = vmmcControls(values.vmmc_melting, config => {
+      values.vmmc_melting = config
+      if (config) { values.thermal_ramp = null; values.backend = 'CPU' }
+      renderSettings(); renderConfig(); paintValidation()
+    }, {salt:saltControl({value:oxdnaProductionStagePlan(values)[0]?.salt_concentration,inherit:true,onChange:value=>setStageValue('1_production','salt_concentration',value)}),dna:dnaControl()})
+    if (values.vmmc_melting) {
+      settingsStageTable = el('div',{className:'wizard-stages'})
+      panels.settings.replaceChildren(vmmc, thermalControls(null,config=>{values.vmmc_melting=null;values.thermal_ramp=config;renderSettings();paintValidation()}), settingsEstimate, settingsStageTable)
+      renderConfig();return
+    }
     const conditions = el('div', { className: 'oxdna-conditions', children: [temperatureControl({
       value: oxdnaTemperature(mode === 'production' ? oxdnaProductionStagePlan(values) : oxdnaStagePlan(values)),
       help: 'Temperature for all stages of this job. Individual stage values remain editable below.',
@@ -244,6 +255,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     }, { concentration: dnaControl(), salt: saltControl({ value: oxdnaProductionStagePlan(values)[0]?.salt_concentration,
       inherit: true, thermal: true, onChange: value => setStageValue('1_production', 'salt_concentration', value) }) })
     panels.settings.insertBefore(ramp, grid)
+    panels.settings.insertBefore(vmmc, grid)
     panels.settings.append(settingsEstimate, el('h3', { text: 'Simulation parameters' }), settingsStageTable)
     renderConfig()
   }
@@ -301,7 +313,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     const stages = oxdnaProductionStagePlan(values, parentJob)
     updateTemperatureControl(panels.settings, oxdnaTemperature(stages))
     const maxSteps = stages.reduce((total, stage) => total + stage.steps, 0)
-    stageSummary.textContent = values.thermal_ramp
+    stageSummary.textContent = values.thermal_ramp || values.vmmc_melting
       ? `${stages.length} stages · ${maxSteps.toLocaleString()} steps · ${outputEstimate(stages)}`
       : `1 stage · ${stages[0].steps.toLocaleString()} scheduled steps · ${outputEstimate(stages)}`
     renderActiveStageTable(stages)
@@ -387,6 +399,9 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
 
   function renderStageTable(stages, mount = stageTable) {
     if (!mount) return
+    if (values.vmmc_melting && mode === 'production') {
+      mount.replaceChildren(el('table',{children:[el('thead',{children:[el('tr',{children:['Stage','Purpose','MC steps'].map(text=>el('th',{text}))})]}),el('tbody',{children:stages.map(s=>el('tr',{children:[s.name,s.purpose,s.steps.toLocaleString()].map(text=>el('td',{text}))}))})]}));return
+    }
     const keys = [...new Set(stages.flatMap(stage => Object.keys(stage)))]
       .filter(key => !['name', 'purpose'].includes(key))
     const head = el('tr', { children: [el('th', { className: 'param', text: 'Parameter' }),
@@ -702,7 +717,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       if (editable.thermal_ramp) editable.thermal_ramp = thermalConfig(editable.thermal_ramp)
       derivedEditor.value = JSON.stringify(editable, null, 2)
       const thermostatControls = el('div', { className: editable.thermal_ramp ? '' : 'wizard-grid' })
-      for (const stage of editable.stages.filter(stage => !editable.thermal_ramp && stage.kind !== 'mc' && !stage.name.includes('mc_relax'))) {
+      for (const stage of editable.stages.filter(stage => !editable.thermal_ramp && !editable.vmmc_melting && stage.kind !== 'mc' && !stage.name.includes('mc_relax'))) {
         const overrides = { ...job.stage_specs?.find(spec => spec.name === stage.name), ...(editable.inherited_parameters || {}), ...(editable.stage_overrides?.[stage.name] || {}), ...stage }
         const change = (key, value) => {
           try {
@@ -751,12 +766,12 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
           current.stage_overrides ||= {}
           for (const stage of current.stages || []) {
             stage[key] = value
-            if (!current.thermal_ramp) {
+            if (!current.thermal_ramp && !current.vmmc_melting) {
               current.stage_overrides[stage.name] ||= {}
               current.stage_overrides[stage.name][key] = value
             }
           }
-          if (current.thermal_ramp) {
+          if (current.thermal_ramp || current.vmmc_melting) {
             current.stage_overrides['1_production'] ||= {}
             current.stage_overrides['1_production'][key] = value
           }
@@ -787,7 +802,16 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
             drawThermal()
           } catch { derivedError.textContent = 'Correct the advanced configuration before editing the thermal ramp.'; derivedError.hidden = false }
         }, { salt: current.thermal_ramp ? salt : null, concentration: current.thermal_ramp ? dna : null }) : null
-        thermalMount.replaceChildren(...(current.thermal_ramp ? [ramp] : [conditions, ...(ramp ? [ramp] : [])]))
+        if (current.vmmc_melting) {
+          thermalMount.replaceChildren(vmmcControls(current.vmmc_melting,config=>{const updated=JSON.parse(derivedEditor.value);updated.vmmc_melting=config;updated.thermal_ramp=null;updated.backend='CPU';derivedEditor.value=JSON.stringify(updated,null,2);drawThermal()}, {salt,dna}))
+          return
+        }
+        const vmmcToggle = kind === 'run' ? vmmcControls(null, config => {
+          const updated = JSON.parse(derivedEditor.value)
+          updated.vmmc_melting = config; updated.thermal_ramp = null; updated.backend = 'CPU'
+          derivedEditor.value = JSON.stringify(updated, null, 2); drawThermal()
+        }) : null
+        thermalMount.replaceChildren(...(current.thermal_ramp ? [ramp] : [conditions, ...(ramp ? [ramp] : [])]), ...(vmmcToggle ? [vmmcToggle] : []))
       }
       drawThermal()
       if (editable.thermal_ramp) thermostatControls.append(thermalRecordedPhysicsEditor(editable, (key,value) => {
@@ -892,7 +916,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       ] }),
       settings: el('section', { className: 'wizard-pane wizard-tabpanel', children: [
         el('h3', { text: 'Recorded parameters' }),
-        ...(config.thermal_ramp ? [thermalRecordedSettings(job)] : [recordedFields(recordedOptions(Object.fromEntries(Object.entries(snapshot).filter(([key]) => !['job_id', 'execution_target', 'backend', 'device'].includes(key))))), recordedStageConditions(job)]),
+        ...(config.vmmc_melting ? [vmmcRecorded(job)] : config.thermal_ramp ? [thermalRecordedSettings(job)] : [recordedFields(recordedOptions(Object.fromEntries(Object.entries(snapshot).filter(([key]) => !['job_id', 'execution_target', 'backend', 'device'].includes(key))))), recordedStageConditions(job)]),
       ] }),
       config: el('section', { className: 'wizard-pane wizard-tabpanel', children: [
         el('pre', { className: 'oxdna-wizard-config', text: JSON.stringify(snapshot, null, 2) }),
@@ -912,7 +936,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       recordedTabs[id] = el('button', { className: 'wizard-tab', text: label,
         attrs: { type: 'button', role: 'tab' }, on: { click: () => selectRecordedTab(id) } })
     }
-    selectRecordedTab(config.thermal_ramp ? 'settings' : 'target')
+    selectRecordedTab(config.thermal_ramp || config.vmmc_melting ? 'settings' : 'target')
     readOnlyPanel.replaceChildren(
       el('div', { className: 'wizard-note', text: 'Read-only settings recorded for this job.' }),
       el('div', { className: 'wizard-tabbar', children: [

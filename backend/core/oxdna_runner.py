@@ -1729,6 +1729,10 @@ async def run_job(
     jd = job.job_dir(workspace_dir)
     logger.info("[%s] oxdna run_job starting; job_dir=%s", job.job_id, jd)
 
+    if (job.run_config or {}).get("vmmc_melting"):
+        from backend.core.oxdna_vmmc_runner import run as run_vmmc
+        return await run_vmmc(job, workspace_dir, specs)
+
     if job.submodel:
         from backend.core.oxdna_submodel_runner import run as run_submodel
         return await run_submodel(job, workspace_dir, specs)
@@ -1821,6 +1825,9 @@ async def run_job(
 
     idx = start_idx
     while idx < len(specs):
+        if job.stages[idx].status == "skipped":
+            idx += 1
+            continue
         spec = specs[idx]
 
         stage_dir = job.stage_dir(workspace_dir, spec.name)
@@ -1957,6 +1964,7 @@ async def run_job(
         cpd_input = cpd_stage_input(jd, spec)
         from backend.core.oxdna_thermal_ramp import prepare_attempt
         spec = prepare_attempt(spec, job, workspace_dir, idx)
+        from backend.core.oxdna_melt_stop import pairing_output
         input_path.write_text(
             render_stage_input(
                 spec,
@@ -1966,7 +1974,7 @@ async def run_job(
                 parfile_name=parfile,
                 sequence_parameters_name=str(jd / "oxDNA2_average_sequence_parameters.txt")
                     if (jd / "oxDNA2_average_sequence_parameters.txt").exists() else None,
-            ) + cpd_input
+            ) + cpd_input + pairing_output(spec, job.stages[idx].completed_steps)
         )
 
         logger.info(
@@ -2511,6 +2519,8 @@ def reconcile_oxdna_status(
                 and "END OF THE SIMULATION, everything went OK!" in log_tail
                 and stage_completed_steps(sdir, specs[idx]) >= specs[idx].steps
             )
+        if (job.run_config or {}).get("vmmc_melting"):
+            complete = st.status == "done"
         if specs[idx].thermal_ramp:
             complete = (job.run_config or {}).get("thermal_progress", {}).get(st.name, {}).get("decision") == "done"
         if complete and st.status != "failed":
@@ -2520,6 +2530,16 @@ def reconcile_oxdna_status(
             break
 
     if all(s.status in ("done", "skipped") for s in job.stages):
+        if (job.run_config or {}).get("vmmc_melting") and not job.run_config.get("vmmc_result"):
+            from backend.core.oxdna_vmmc import VmmcMelting, analyse, duplex_pairs
+            root = job.job_dir(workspace_dir)
+            try:
+                job.run_config["vmmc_result"] = analyse(root, specs, VmmcMelting.model_validate(job.run_config["vmmc_melting"]), len(duplex_pairs(root / "topology.top")))
+            except (OSError, ValueError) as exc:
+                job.status = OxdnaStatus.failed
+                job.error = f"VMMC analysis recovery failed: {exc}"
+                job.save(workspace_dir)
+                return job
         job.status = OxdnaStatus.completed
         job.current_stage_idx = len(job.stages)
         job.error = None
