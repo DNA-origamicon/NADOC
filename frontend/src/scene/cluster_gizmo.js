@@ -1,3 +1,5 @@
+import { createCompliantTetherMotion } from './tether_network_motion.js'
+import { createTetherContactController } from './tether_contact_controller.js'
 import { clusterTransformSelection } from './cluster_entries.js'
 /**
  * Cluster Gizmo — wraps Three.js TransformControls for cluster rigid transforms.
@@ -214,7 +216,7 @@ function _ringRadius(cluster, currentHelixAxes) {
   return Math.max(3, maxDist * 1.4 + 1.0)
 }
 
-export function initClusterGizmo(store, controls, onLiveTransform = null, captureBase = null, onTransformUpdate = null, client = null, { displayLayer } = {}) {
+export function initClusterGizmo(store, controls, onLiveTransform = null, captureBase = null, onTransformUpdate = null, client = null, { displayLayer, previewFrame = update => update() } = {}) {
   let releaseLayer = null
   let _tc             = null   // TransformControls instance (translate mode)
   let _rotationSnapDeg = null  // rotate-drag angle snap in degrees, or null for free drag
@@ -238,6 +240,16 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   let _groupBaseline   = null   // Map<clusterId, {pivot, translation, rotation}> | null
 
   // ── Constraint state ─────────────────────────────────────────────────────────
+  let _ssNetwork = null
+  const _networkMotion = createCompliantTetherMotion({ store, pending: getAllPendingTransforms,
+    capture: captureBase, paint: onLiveTransform, record: setPendingTransform,
+    read: () => ({ type: _constraintType, clusterId: _clusterId, dummy: _dummy,
+      startPos: _startDummyPos, startQuat: _startQuat, incrQuat: _incrQuat,
+      links: _ssLinks, network: _ssNetwork, resolve: _resolveSsWorldPos, constraints: _ssConstraints }) })
+  const _contacts = createTetherContactController({ store, pending: getAllPendingTransforms,
+    read: () => ({ type: _constraintType, clusterId: _clusterId, dummy: _dummy,
+      startPos: _startDummyPos, startQuat: _startQuat, incrQuat: _incrQuat,
+      links: _ssLinks, tethers: _ssArmed }) })
   let _constraintType  = 'centroid'  // 'centroid' | 'joint' | 'ssdna'
   let _constraintJoint = null        // ClusterJoint object when type = 'joint'
   // ssDNA-constrained drag: flexible tethers from the active cluster to others.
@@ -900,64 +912,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
 
       if (e.value) {
         _isDragging = true
-        // Capture base positions and start-state at drag start, not at attach time.
-        // This guarantees the snapshot is taken on the current helixCtrl after any
-        // geometry rebuild (e.g. from the initial pivot-setting patchCluster) is done.
-        _startDummyPos = _dummy.position.clone()
-        _startQuat     = _dummy.quaternion.clone()
-        if (captureBase) {
-          const { currentDesign } = store.getState()
-          const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
-          if (cl) captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
-        }
-        // Arm ssDNA constraints: snapshot each tether's moving-anchor start world
-        // position (pM0) + fixed-anchor world position (pF, constant during drag).
-        _ssArmed = null
-        _ssLinkNearArmed = null
-        if (_constraintType === 'ssdna' && _ssConstraints && _resolveSsWorldPos) {
-          _ssArmed = []
-          for (const c of _ssConstraints) {
-            const pM0 = _resolveSsWorldPos(c.movingKey)
-            const pF  = _resolveSsWorldPos(c.fixedKey)
-            if (pM0 && pF) _ssArmed.push({ pM0: pM0.clone(), pF: pF.clone(), contour: c.contour, rigid: !!c.rigid })
-          }
-        }
-        // Arm movable links (duplex bodies): snapshot each link cluster's base pose + its bond
-        // start positions, and capture its beads' base so it can be painted as it swings.
-        _ssLinks = null
-        if (_ssLinkDescs?.length && _resolveSsWorldPos) {
-          const design = store.getState().currentDesign
-          _ssLinks = []
-          for (const d of _ssLinkDescs) {
-            const cl = design?.cluster_transforms?.find(c => c.id === d.linkClusterId)
-            if (!cl) continue
-            const pivot = [...cl.pivot]
-            const startPos = [pivot[0] + cl.translation[0], pivot[1] + cl.translation[1], pivot[2] + cl.translation[2]]
-            const baseQuat = [...cl.rotation]
-            const tethers = []
-            for (const t of d.tethers) {
-              const lStart = _resolveSsWorldPos(t.linkKey)
-              const pStart = _resolveSsWorldPos(t.partKey)
-              if (lStart && pStart) {
-                tethers.push({
-                  lStart: [lStart.x, lStart.y, lStart.z],
-                  pStart: [pStart.x, pStart.y, pStart.z],
-                  partDragged: !!t.partDragged, contour: t.contour,
-                })
-              }
-            }
-            if (!tethers.length) continue
-            // append=true: ADD the link's beads to the base snapshot without clearing the
-            // dragged cluster's (captured just above) — else the main cluster loses its base
-            // and freezes while only the link paints.
-            captureBase?.(d.helixIds, d.domainIds, true)
-            _ssLinks.push({
-              clusterId: d.linkClusterId, helixIds: d.helixIds, domainIds: d.domainIds,
-              pivot, startPos, baseQuat, tethers,
-              resultPos: startPos, resultQuat: baseQuat,
-            })
-          }
-        }
+        _armTetherDrag()
       } else {
         // Drag ended — queue the complete pose for the owning Apply transaction.
         _isDragging = false
@@ -965,11 +920,10 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       }
     })
 
-    _tc.addEventListener('change', () => {
+    _tc.addEventListener('change', () => previewFrame(() => {
       if (!_isDragging) return
       _incrQuat.copy(_dummy.quaternion).multiply(_startQuat.clone().invert())
-      _projectSsdnaConstraints()   // clamp _dummy so no static tether exceeds contour
-      _solveLinksChain()           // swing movable-link bodies to follow + re-clamp A against them
+      _projectTetherMotion()
       const { currentDesign } = store.getState()
       const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
       if (!cluster) return
@@ -980,10 +934,79 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
         const p = _dummy.position
         onTransformUpdate([p.x - px, p.y - py, p.z - pz], _dummy.quaternion)
       }
-    })
+    }))
 
     document.addEventListener('keydown', _onKey)
     store.setState({ activeClusterId: clusterId })
+  }
+
+  function _armTetherDrag() {
+    // Capture base positions and start-state at drag start, not at attach time.
+    // This guarantees the snapshot is taken on the current helixCtrl after any
+    // geometry rebuild (e.g. from the initial pivot-setting patchCluster) is done.
+    _startDummyPos = _dummy.position.clone()
+    _startQuat     = _dummy.quaternion.clone()
+    if (captureBase) {
+      const { currentDesign } = store.getState()
+      const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
+      if (cl) captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
+    }
+    // Arm ssDNA constraints: snapshot each tether's moving-anchor start world
+    // position (pM0) + fixed-anchor world position (pF, constant during drag).
+    _ssArmed = null
+    _ssLinkNearArmed = null
+    if (_constraintType === 'ssdna' && _ssConstraints && _resolveSsWorldPos) {
+      _ssArmed = []
+      for (const c of _ssConstraints) {
+        const pM0 = _resolveSsWorldPos(c.movingKey)
+        const pF  = _resolveSsWorldPos(c.fixedKey)
+        if (pM0 && pF) _ssArmed.push({ pM0: pM0.clone(), pF: pF.clone(), contour: c.contour, rigid: !!c.rigid })
+      }
+    }
+    // Arm movable links (duplex bodies): snapshot each link cluster's base pose + its bond
+    // start positions, and capture its beads' base so it can be painted as it swings.
+    _ssLinks = null
+    if (_ssLinkDescs?.length && _resolveSsWorldPos) {
+      const design = store.getState().currentDesign
+      _ssLinks = []
+      for (const d of _ssLinkDescs) {
+        const cl = _withPendingTransform(design?.cluster_transforms?.find(c => c.id === d.linkClusterId))
+        if (!cl) continue
+        const pivot = [...cl.pivot]
+        const startPos = [pivot[0] + cl.translation[0], pivot[1] + cl.translation[1], pivot[2] + cl.translation[2]]
+        const baseQuat = [...cl.rotation]
+        const tethers = []
+        for (const t of d.tethers) {
+          const lStart = _resolveSsWorldPos(t.linkKey)
+          const pStart = _resolveSsWorldPos(t.partKey)
+          if (lStart && pStart) {
+            tethers.push({
+              lStart: [lStart.x, lStart.y, lStart.z],
+              pStart: [pStart.x, pStart.y, pStart.z],
+              partDragged: !!t.partDragged, contour: t.contour,
+            })
+          }
+        }
+        if (!tethers.length) continue
+        // append=true: ADD the link's beads to the base snapshot without clearing the
+        // dragged cluster's (captured just above) — else the main cluster loses its base
+        // and freezes while only the link paints.
+        captureBase?.(d.helixIds, d.domainIds, true)
+        _ssLinks.push({
+          clusterId: d.linkClusterId, helixIds: d.helixIds, domainIds: d.domainIds,
+          pivot, startPos, baseQuat, tethers,
+          resultPos: startPos, resultQuat: baseQuat,
+        })
+      }
+    }
+    if (!_networkMotion.arm()) _contacts.arm()
+  }
+
+  function _projectTetherMotion(interactive=true) {
+    if (_networkMotion.solve(interactive)) return
+    _projectSsdnaConstraints()
+    _solveLinksChain()
+    _contacts.clamp()
   }
 
   // ── Pending transform state ─────────────────────────────────────────────────
@@ -1034,7 +1057,8 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     if (!client.commitClusterPoses) client = await _loadClient()
     const organized = _pendingSource?.group_organization != null
     const result = await commitPlacementTransforms(_pendingTransforms, {
-      organized, command: client.groupOrganizationCommand, batch: client.commitClusterPoses,
+      organized, command: (kind, inputs) => client.groupOrganizationCommand(kind, inputs, { throwOnFailure: true }),
+      batch: client.commitClusterPoses,
       isCurrent: () => store.getState().currentDesign === _pendingSource,
     })
     if (result.count) _pendingSource = store.getState().currentDesign
@@ -1314,6 +1338,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
    */
   function setConstraint(type, joint) {
     _constraintType  = type
+    _ssNetwork = type === 'ssdna' ? joint?.network ?? null : null
     _constraintJoint = (type === 'joint') ? (joint ?? null) : null
     // ssDNA-constrained mode reuses the normal translate/rotate TC widget and
     // only adds a per-frame projection. The payload is {connections, resolveWorldPos}.
@@ -1420,28 +1445,30 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   /**
    * Programmatically set the cluster transform (e.g. from manual UI input).
    * Captures current positions as base, applies the transform locally for
-   * instant preview, then persists to backend.
+   * instant preview, then queues the pose for the Apply transaction.
    *
    * @param {number[]} translation  [tx, ty, tz] in nm, relative to pivot
    * @param {number[]} rotation     [qx, qy, qz, qw] quaternion
    */
   function setTransform(translation, rotation) {
+    return previewFrame(() => _setTransform(translation, rotation))
+  }
+
+  function _setTransform(translation, rotation) {
     if (!_dummy || !_pivot) return
     if (_isGroup()) { _setGroupTransform(translation, rotation); return }
     const [px, py, pz] = _pivot
 
-    // Snapshot current rendered positions as base for the incremental transform.
-    if (captureBase) {
-      const { currentDesign } = store.getState()
-      const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
-      if (cl) captureBase(cl.helix_ids, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
-    }
+    _armTetherDrag()
 
     const prevPos  = _dummy.position.clone()
     const prevQuat = _dummy.quaternion.clone()
 
     _dummy.position.set(px + translation[0], py + translation[1], pz + translation[2])
     _dummy.quaternion.set(rotation[0], rotation[1], rotation[2], rotation[3])
+
+    _incrQuat.copy(_dummy.quaternion).multiply(prevQuat.clone().invert())
+    _projectTetherMotion(false)
 
     // Live preview using incremental transform from old → new position.
     if (onLiveTransform) {
@@ -1451,6 +1478,8 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       if (cl) onLiveTransform(cl.helix_ids, prevPos, _dummy.position, _incrQuat, clusterTransformSelection(cl, store.getState().currentDesign, store.getState().currentGeometry))
     }
 
+    _paintLinks()
+
     // Reset drag-start state so the next drag begins from the new position.
     _startDummyPos = _dummy.position.clone()
     _startQuat     = _dummy.quaternion.clone()
@@ -1458,7 +1487,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     // Notify the transform panel (marks the tool dirty so Cancel restores, and
     // re-syncs the number boxes to the committed value). `translation` is already
     // expressed relative to the pivot — the same convention the fields use.
-    if (onTransformUpdate) onTransformUpdate([...translation], _dummy.quaternion.clone())
+    if (onTransformUpdate) onTransformUpdate(_dummy.position.clone().sub(new THREE.Vector3(..._pivot)).toArray(), _dummy.quaternion.clone())
 
     _recordCurrentTransform()
   }
@@ -1493,7 +1522,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _startDummyPos = _dummy.position.clone()
     _startQuat     = _dummy.quaternion.clone()
 
-    if (onTransformUpdate) onTransformUpdate([...translation], _dummy.quaternion.clone())
+    if (onTransformUpdate) onTransformUpdate(_dummy.position.clone().sub(new THREE.Vector3(..._pivot)).toArray(), _dummy.quaternion.clone())
 
     _recordCurrentTransform()
   }
@@ -1581,6 +1610,8 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     setTransform,
     setJointRotation,
     setConstraint,
+    setCollisionDetection(value) { _contacts.setEnabled(value); _networkMotion.setEnabled(value) },
+    isTetherConstraintActive: () => _constraintType === 'ssdna',
     /** Set the rotate-drag angle snap in degrees (null = free drag). Applies to the standard rotate rings. */
     setRotationSnap(deg) {
       _rotationSnapDeg = deg

@@ -1215,7 +1215,7 @@ function _showFlexibleSegmentMenu(x, y, nuc, onFlexibleSegmentRightClick) {
   }
   if (marked) {
     menu.appendChild(_menuSep())
-    menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one'), {
+    menu.appendChild(_menuItem('Relax connected flexible network', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one'), {
       disabled: !connIdForBead(nuc, design),
       title: 'Requires a flexible tether between two different clusters',
     }))
@@ -1245,7 +1245,7 @@ function _showFlexibleSegmentMenu(x, y, nuc, onFlexibleSegmentRightClick) {
 function _showFlexibleConnectionMenu(x, y, connId, onFlexibleSegmentRightClick) {
   _dismissMenu()
   const menu = _menuBase(x, y)
-  menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(null, 'relax_one', connId)))
+  menu.appendChild(_menuItem('Relax connected flexible network', () => onFlexibleSegmentRightClick?.(null, 'relax_one', connId)))
   menu.appendChild(_menuItem('Relax all flexible segments', () => onFlexibleSegmentRightClick?.(null, 'relax_all')))
   menu.appendChild(_menuSep())
   const rm = _menuItem('Unmark as flexible', () => onFlexibleSegmentRightClick?.(null, 'unmark_connection', connId))
@@ -1319,7 +1319,7 @@ function _showScaffoldMenu(x, y, ctx, cbs) {
     rm.style.color = '#ff6b6b'
     menu.appendChild(rm)
     // Relax sub-items — only meaningful once the run is marked.
-    menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one'), {
+    menu.appendChild(_menuItem('Relax connected flexible network', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one'), {
       disabled: !connIdForBead(nuc, design),
       title: 'Requires a flexible tether between two different clusters',
     }))

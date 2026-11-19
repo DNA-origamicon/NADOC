@@ -57,18 +57,16 @@ export async function loadScaffoldedPart(page, { doc, name = 'harness', extraQue
   await page.click('#menu-file-new')
   // `__e2e__` prefix → global-teardown removes the auto-saved workspace file.
   await page.fill('#new-design-name', `__e2e__${name}`)
+  const created = page.waitForResponse(response => response.request().method() === 'POST'
+    && /\/api\/design(\?|$)/.test(response.url()))
   await page.getByRole('button', { name: 'Create', exact: true }).click()
+  expect((await created).ok()).toBe(true)
   await expect(page.locator('#welcome-screen')).not.toBeVisible({ timeout: 10_000 })
 
-  // The welcome screen hides as soon as the PAGE has a design — but File→New's
-  // POST may still be in flight, and on a cold smoke backend it can take >500 ms.
-  // A fixed sleep here raced it: page.request then hit the backend before the doc
-  // had a design and got 404 "No active design", so every downstream call fell
-  // apart. Poll the backend's own view of THIS doc instead of guessing a duration.
-  await expect.poll(
-    async () => (await page.request.get(`${API}/design`, { headers: H })).status(),
-    { timeout: 15_000, message: `backend never got a design for doc ${doc}` },
-  ).toBe(200)
+  // Await both server creation and the browser's adoption of that document;
+  // welcome dismissal alone can precede the asynchronous creation request.
+  await page.waitForFunction(expected => window.__nadocTest?.store.getState().currentDesign?.metadata?.name === expected,
+    `__e2e__${name}`)
 
   await page.request.post(`${API}/design/helix-at-cell`, { data: { row: 0, col: 0, length_bp: 200 }, headers: H })
   // Scaffold the helix by painting a domain over its full length. (There is no
@@ -79,11 +77,13 @@ export async function loadScaffoldedPart(page, { doc, name = 'harness', extraQue
   await page.request.post(`${API}/design/scaffold-domain-paint`, {
     data: { helix_id: design.helices[0].id, lo_bp: 0, hi_bp: 199 }, headers: H,
   })
-  await page.evaluate((d) => {
-    const bc = new BroadcastChannel('nadoc-design')
-    bc.postMessage({ type: 'design-changed', source: 'e2e-' + Math.random(), docId: d })
-    bc.close()
-  }, doc)
+  // Fixture setup needs a completed refresh, not an unacknowledged cross-tab
+  // notification racing File > New's own response/geometry synchronization.
+  await page.evaluate(async () => {
+    const api = await import('/src/api/client.js')
+    await api.getDesign()
+    await api.getGeometry()
+  })
 
   await page.waitForFunction(() => {
     const s = window.__nadocTest?.scene
