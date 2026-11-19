@@ -5566,9 +5566,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
 
-      // 2. Cones — recompute all from updated entry.pos (handles cross-cluster edges,
+      // 2. Cones — update edges touching this body (including cross-cluster edges,
       //    including real→__ext_ and intra-__ext_ cones).
+      const movedHelix = n => helixSet.has(n.helix_id) || helixSet.has(_extToRealHelix.get(n.extension_id))
       for (const cone of coneEntries) {
+        if (!movedHelix(cone.fromNuc) && !movedHelix(cone.toNuc)) continue
         const fe = _nucToEntry.get(cone.fromNuc)
         const te = _nucToEntry.get(cone.toNuc)
         if (!fe || !te) continue
@@ -5587,12 +5589,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // 3. Slabs — rigidly transform the rendered center and frame. Deriving
       //    the center from nuc.base_position here leaves slabs behind because
       //    currentGeometry is deliberately not mutated during preview.
+      const movedSlabs = []
       for (const slab of slabEntries) {
         if (!helixSet.has(slab.nuc.helix_id)) continue
         if (!inSelection(slab.nuc)) continue
         const entry    = _nucToEntry.get(slab.nuc)
         const baseData = _cbSlabs.get(slab.nuc)
         if (!entry || !baseData) continue
+        movedSlabs.push(slab)
         slab.bbPos.copy(entry.pos)
         _clusterV.copy(baseData.bnDir).applyQuaternion(incrRotQuat)
         _clusterQ.multiplyQuaternions(incrRotQuat, baseData.quat)
@@ -5625,7 +5629,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
-      _refreshSlabConnectors()
+      _refreshSlabConnectors(movedSlabs)
 
       // 4. Helix-level axis aStart/aEnd + curved tube transform.
       //    Partial-coverage clusters skip this (only individual segments move; aStart/aEnd

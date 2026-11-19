@@ -46,7 +46,7 @@ def _run(session, before, fn, state, *, retry=True, command=None):
     preserve_topology = command is not None and (
         metadata_policy(*command) or command[0] == "extension-delete"
         or command[0] in NUCLEOTIDE_KINDS
-        or command[0] in {"annotations-state", "view-volumes-state"})
+        or command[0] in {"annotations-state", "view-volumes-state", "flexible-relax"})
     result = fn(session.design)
     report = None
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):

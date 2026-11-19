@@ -32,10 +32,23 @@ const DOM = {
   'mr-rz-dec':              'button',
   'mr-rz-inc':              'button',
   'mr-snap-45':             'input',
+  'mr-tether-collisions':   'input',
   'mr-frame-sel':           'select',
   'mr-reset-btn':           'button',
   'mr-apply-btn':           'button',
 }
+
+it('routes the collision checkbox to tethered motion without committing a pose', () => {
+  const els = mountPanelDom(), deps = makeDeps()
+  deps.clusterGizmo.setCollisionDetection = vi.fn()
+  initMoveRotatePanel(deps)
+  els['mr-tether-collisions'].checked = false
+  els['mr-tether-collisions'].dispatchEvent(new Event('change'))
+  expect(deps.clusterGizmo.setCollisionDetection).toHaveBeenLastCalledWith(false)
+  els['mr-tether-collisions'].checked = true
+  els['mr-tether-collisions'].dispatchEvent(new Event('change'))
+  expect(deps.clusterGizmo.setCollisionDetection).toHaveBeenLastCalledWith(true)
+})
 
 describe('session-mode UX', () => {
   it('disables exact fields while armed empty and explains the next action', () => {
@@ -507,6 +520,19 @@ describe('initMoveRotatePanel — dropdown handlers', () => {
     const ssdna = opts.find(o => o.value === 'ssdna')
     expect(ssdna, 'tethers option present').toBeTruthy()
     expect(ssdna.textContent).toBe('Constrained (tethers)')
+  })
+
+  it('refreshes tether options when waiting-mode gate discovery finishes', async () => {
+    const els=mountPanelDom(), deps=makeDeps()
+    let finish
+    deps.flexRelax.refreshFlexGates.mockImplementation(()=>new Promise(r=>finish=r))
+    deps.store.setState({activeClusterId:'c1',translateRotateActive:true,currentDesign:{id:'d',cluster_joints:[]}})
+    const panel=initMoveRotatePanel(deps)
+    panel.setPivotOptions([], 'c1')
+    expect([...els['mr-pivot-sel'].options].some(o=>o.value==='ssdna')).toBe(false)
+    deps.flexRelax.hasTetherOption.mockReturnValue(true)
+    finish(); await Promise.resolve()
+    expect([...els['mr-pivot-sel'].options].some(o=>o.value==='ssdna')).toBe(true)
   })
 
   it('setPivotOptions lists each overhang root for a duplex cluster (driver + driven)', () => {

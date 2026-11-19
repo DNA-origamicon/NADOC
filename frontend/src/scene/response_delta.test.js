@@ -5,7 +5,18 @@ import { createDisplayGeometry } from './display_geometry.js'
  */
 import { describe, it, expect, vi } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
-import { rebakeHelixAxesForClusterDelta, initResponseDelta } from './response_delta.js'
+import { rebakeHelixAxesForClusterDelta, initResponseDelta, requiresResolvedClusterGeometry } from './response_delta.js'
+
+it('resolves shared ownership even when the changed cluster owns whole helices', () => {
+  const diffs = [{ cluster_id: 'moving', helix_ids: ['h'] }]
+  expect(requiresResolvedClusterGeometry(diffs, { cluster_transforms: [
+    { id: 'moving', helix_ids: ['h'] }, { id: 'other', helix_ids: ['h'] },
+  ] })).toBe(true)
+  expect(requiresResolvedClusterGeometry(diffs, { cluster_transforms: [
+    { id: 'moving', helix_ids: ['h'] }, { id: 'other', helix_ids: ['unrelated'], base_ids: ['b'] },
+  ] })).toBe(false)
+  expect(requiresResolvedClusterGeometry(diffs, { cluster_transforms: [] })).toBe(true)
+})
 
 const IDENT = { pivot: [0, 0, 0], translation: [0, 0, 0], rotation: [0, 0, 0, 1] }
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps
@@ -81,7 +92,7 @@ function makeHelixCtrl() {
 
 function makeDeps(initialState = {}, { helixCtrl = makeHelixCtrl(), jointRenderer = { rebuildHulls: vi.fn() } } = {}) {
   const store = createMockStore(initialState)
-  const api = { refreshBridges: vi.fn().mockResolvedValue([]), registerResponseDeltaHandler: vi.fn() }
+  const api = { getGeometry: vi.fn().mockResolvedValue({}), refreshBridges: vi.fn().mockResolvedValue([]), registerResponseDeltaHandler: vi.fn() }
   const designRenderer = {
     getHelixCtrl: vi.fn(() => helixCtrl),
     applyClusterCrossoverUpdate: vi.fn(),
@@ -153,16 +164,19 @@ describe('initResponseDelta', () => {
     expect(store.getState().currentHelixAxes.h1.start.map(v => +v.toFixed(6))).toEqual([1, 0, 0])
   })
 
-  it('cluster move with domain_ids skips the axis rebake (no rebuildHulls)', async () => {
+  it.each([{ domain_ids: ['d1'] }, { base_ids: [{ helix_id: 'h1', bp_index: 1 }] }])('partial cluster history resolves native geometry without whole-helix deltas: %j', async ownership => {
     const state = {
       ...clusterState,
-      currentDesign: { cluster_transforms: [{ id: 'c1', helix_ids: ['h1'], domain_ids: ['d1'] }], helices: [{ id: 'h1' }] },
+      currentDesign: { cluster_transforms: [{ id: 'c1', helix_ids: ['h1'], ...ownership }], helices: [{ id: 'h1' }] },
       currentHelixAxes: { h1: { start: [0, 0, 0] } },
     }
-    const { deps, jointRenderer } = makeDeps(state)
+    const { deps, jointRenderer, helixCtrl } = makeDeps(state)
     const rd = initResponseDelta(deps)
     await rd.applyResponseDelta({ diff_kind: 'cluster_only', cluster_diffs: [clusterDiff] })
     expect(jointRenderer.rebuildHulls).not.toHaveBeenCalled()
+    expect(deps.api.getGeometry).toHaveBeenCalledOnce()
+    expect(helixCtrl.applyClusterTransform).not.toHaveBeenCalled()
+    expect(helixCtrl.commitClusterPositions).not.toHaveBeenCalled()
     expect(deps.store.getState().currentHelixAxes.h1.start).toEqual([0, 0, 0]) // unchanged
   })
 

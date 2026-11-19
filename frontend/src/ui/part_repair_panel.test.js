@@ -57,10 +57,11 @@ function setup({ draft = null, protectedLoadout = false, fields = [nameField], u
   }
   const host = document.createElement('div'); document.body.append(host)
   const focusFeature = vi.fn()
-  const panel = initPartRepairPanel({ store, api: { partRepairAPI: endpoints, currentRevisionWatermark: () => revision }, host,
+  const displayAPI = { cancelHistoryPreview: vi.fn(async () => {}), getGeometry: vi.fn(async () => ({})) }
+  const panel = initPartRepairPanel({ store, api: { ...displayAPI, partRepairAPI: endpoints, currentRevisionWatermark: () => revision }, host,
     getDocumentId: () => 'document', focusFeature, createComparisonViewer })
   panels.push(panel)
-  return { panel, store, endpoints, focusFeature, host, revision: () => revision }
+  return { panel, store, endpoints, displayAPI, focusFeature, host, revision: () => revision }
 }
 async function open(h) { h.panel.open(); await flush() }
 async function select(feature_id = 'import', child_id = null) {
@@ -77,6 +78,18 @@ beforeEach(() => vi.useFakeTimers())
 afterEach(() => { for (const panel of panels.splice(0)) panel.dispose(); document.body.replaceChildren(); vi.useRealTimers() })
 
 describe('desktop part recipe repair panel', () => {
+  it('offers display-only recovery separately from recipe verification', async () => {
+    const h = setup()
+    await open(h)
+    const design = h.store.getState().currentDesign
+    const button = [...document.querySelectorAll('button')].find(b => b.textContent === 'Refresh displayed geometry')
+    button.click(); await flush()
+    expect(h.displayAPI.cancelHistoryPreview).toHaveBeenCalledOnce()
+    expect(h.displayAPI.getGeometry).toHaveBeenCalledOnce()
+    expect(h.store.getState().currentDesign).toBe(design)
+    expect(h.endpoints.start).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Display rebuilt from published geometry; recipe unchanged.')
+  })
   it('saves, reloads, rebases and explicitly applies the exact group repair through the existing draft flow', async () => {
     const upgrade = groupUpgrade(), h = setup({ fields: [], upgrades: [upgrade], featureLog: [groupRow] })
     const original = h.store.getState().currentDesign

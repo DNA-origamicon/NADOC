@@ -1628,3 +1628,20 @@ regression exercises the real checkbox and representation buttons, supplies base
 selection through the canonical controller, and checks rendered contacts. The
 pointer-to-base gesture and subjective readability across dense designs remain
 manual checks. No molecular edits are involved.
+
+
+### MV-70 — Tethered collision drag feel (PENDING, 2026-11-17)
+
+Open JJ_Hinge, relax its flexible network, select Geometry Cluster 2, open
+Move/Rotate and choose Constrained (tethers). Drag translation arrows and rotation
+rings toward the loose bundles behind the hinge with Detect collisions during
+tethered motion on and off. With detection on, check that the six small flexible clusters yield in both
+rotation directions while Cluster 1 stays fixed; also check stopping at immovable barriers,
+separation from an initially overlapping pose, and smooth continuation after
+release/regrab. Cancel and Undo must discard the complete preview. The automated
+app exercise covers the real toggle, numerical motion, 60 repeated TransformControls
+change events at 0.1/0.5/1 degree increments in both directions, and all-part
+contact metrics. Keyboard M before selection is tested with delayed gate replies.
+The desktop GPU run additionally covers completed Full frames (gl.finish),
+120 updates across the relaxed and saved poses, max 171.8 ms on RTX 2080 SUPER.
+Subjective raycast/pointer feel near crowded contacts remains a manual check.

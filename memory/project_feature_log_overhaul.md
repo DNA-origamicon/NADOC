@@ -9,6 +9,18 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 
 ## Current state and navigation
 
+November17 Undo/Redo preview safety (ISSUE-215): client history entry points await
+Move/Rotate cancellation and display restoration before issuing the history
+request. Pending previews never become the base of a committed-pose delta.
+Partial/base-selected or overlapping cluster ownership now uses authoritative
+native geometry regeneration for cluster-only history responses; whole-helix
+incremental transforms cannot express these placements or segmented axes.
+Recipe repair checks authored data, not the viewport. Its separate Refresh
+displayed geometry action cancels previews and regenerates the disposable display
+without changing any feature or authored transform, reporting changed cached
+nucleotide coordinates. This also recovers older contaminated display caches.
+
+
 November15 guide prerequisite: bounded ordinary caDNAno uploads now call the
 existing pinned `cadnano-import` command, retaining original source bytes and
 F1 instead of beginning with an unrecorded imported snapshot. Optional import
