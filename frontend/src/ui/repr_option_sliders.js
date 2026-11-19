@@ -65,6 +65,36 @@ export function initReprOptionSliders({
     interactions.addEventListener('change', () => setBaseInteractionsEnabled(interactions.checked))
   }
 
+  document.getElementById('repr-options-reset')?.addEventListener('click', () => {
+    // Use the same handlers as manual edits so labels, renderers and shared
+    // display state stay in sync, including controls hidden by the current repr.
+    const panel = document.getElementById('repr-options-section')
+    for (const slider of panel?.querySelectorAll('input[type="range"]') ?? []) {
+      const value = slider.id === 'sl-hull-margin'
+        ? String(hullMarginDefaultTick(store.getState().currentDesign?.lattice_type))
+        : slider.defaultValue
+      if (Number(slider.value) === Number(value)) continue
+      slider.value = value
+      slider.dispatchEvent(new Event('input', { bubbles: true }))
+      slider.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    // Manual slider handlers skip inactive LODs; reset must also restore those
+    // meshes so switching representations later cannot reveal stale sizes.
+    for (const [id, setter] of [
+      ['sl-bead-radius', 'setBeadRadius'],
+      ['sl-slab-thickness', 'setSlabThickness'],
+      ['sl-cyl-radius', 'setCylinderRadius'],
+    ]) {
+      const slider = document.getElementById(id)
+      if (slider) designRenderer[setter](Number(slider.value))
+    }
+    if (interactions) {
+      interactions.checked = interactions.defaultChecked
+      interactions.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    document.getElementById('surface-color-strand')?.click()
+  })
+
   let _currentBeadRadius = 0.10   // current bead radius (nm); matches sl-bead-radius default
 
   const _slBeadRadius = document.getElementById('sl-bead-radius')
