@@ -14,7 +14,7 @@
 /** The three compute targets, in the order the step presents them. */
 export const TARGETS = [
   { id: 'local', label: 'This computer',
-    blurb: 'Runs NAMD as a local subprocess. No queue, no allocation spend.' },
+    blurb: 'Runs on this computer. No queue or cloud charges.' },
   { id: 'alpine', label: 'Alpine cluster',
     blurb: 'CU Research Computing. Needs a login (Duo) and spends SU.' },
   { id: 'runpod', label: 'RunPod',

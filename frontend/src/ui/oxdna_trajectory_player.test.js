@@ -455,7 +455,7 @@ it('reports buffering without advancing the scene and clears it after the exact 
 // Scrubs preview immediately; playback waits for saved frames. Stale exact
 // completion must never replace a newer requested point.
 describe('interactive preview and exact settling', () => {
-  it('shows each scrub immediately, debounces exact reads, and labels failures honestly', async () => {
+  it('shows previews while dragging and loads exact frames only on release', async () => {
     vi.useFakeTimers()
     const slider = document.createElement('input'), label = document.createElement('div')
     const preview = vi.fn(), exact = vi.fn()
@@ -469,7 +469,10 @@ describe('interactive preview and exact settling', () => {
     expect(preview.mock.calls.map(c => c[0])).toEqual([12, 57, 90])
     expect(label.textContent).toContain('Frame 91 / 100 · preview')
     expect(exact).not.toHaveBeenCalled()
-    await vi.advanceTimersByTimeAsync(180)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(exact).not.toHaveBeenCalled()
+    slider.dispatchEvent(new Event('change'))
+    await vi.advanceTimersByTimeAsync(0)
     expect(exact).toHaveBeenCalledTimes(1)
     expect(exact.mock.calls[0][0]).toBe(90)
     expect(label.textContent).toContain('loading exact')
@@ -477,10 +480,11 @@ describe('interactive preview and exact settling', () => {
     expect(exact.mock.calls[0][1]()).toBe(false)
     finish(true); await Promise.resolve()
     expect(label.textContent).toContain('Frame 21 / 100 · preview')
-    await vi.advanceTimersByTimeAsync(180)
+    slider.dispatchEvent(new Event('change'))
+    await vi.advanceTimersByTimeAsync(0)
     finish(false); await Promise.resolve(); await Promise.resolve()
     expect(label.textContent).toContain('exact frame unavailable')
-    scrub(30); await vi.advanceTimersByTimeAsync(180)
+    scrub(30); slider.dispatchEvent(new Event('change')); await vi.advanceTimersByTimeAsync(0)
     finish(true); await Promise.resolve(); await Promise.resolve()
     expect(label.textContent).toBe('Frame 31 / 100')
     p.stop(); vi.useRealTimers()
@@ -550,4 +554,47 @@ it('loads the exact scrub position before playback and allows that load to be ca
     const resumed = p.play(); release(true); await resumed
     expect(onSeek).toHaveBeenCalledWith(55); expect(p.isPlaying()).toBe(true)
   } finally { p.stop() }
+})
+
+// No sparse preview/cache: dragging must still span the entire trajectory.
+it('keeps the handle at the requested frame and ignores obsolete buffered seeks', async () => {
+  const slider = document.createElement('input'); slider.type = 'range'
+  const pending = [], onSeek = vi.fn()
+  const before = vi.fn(() => new Promise(resolve => pending.push(resolve)))
+  const p = initOxdnaTrajectoryPlayer({ slider, onSeek, onBeforeSeek: before })
+  p.setTrajectory(1000)
+  const old = p.seek(10)
+  slider.dispatchEvent(new Event('pointerdown'))
+  for (const i of [100, 500, 999]) {
+    slider.value = String(i); slider.dispatchEvent(new Event('input'))
+    expect(slider.value).toBe(String(i))
+  }
+  expect(before).toHaveBeenCalledTimes(1)
+  pending[0](true); await old
+  expect(slider.value).toBe('999'); expect(onSeek).not.toHaveBeenCalled()
+  slider.dispatchEvent(new Event('change'))
+  expect(before).toHaveBeenLastCalledWith(999)
+  expect(slider.value).toBe('999')
+  pending[1](true); await Promise.resolve(); await Promise.resolve()
+  expect(onSeek).toHaveBeenCalledWith(999)
+  p.stop()
+})
+
+it('pauses playback at pointer-down before the handle moves and accepts keyboard commits', async () => {
+  vi.useFakeTimers()
+  const slider = document.createElement('input'); slider.type = 'range'
+  const onSeek = vi.fn()
+  const p = initOxdnaTrajectoryPlayer({ slider, onSeek, fps: 10 })
+  try {
+    p.setTrajectory(1000)
+    await p.play()
+    slider.dispatchEvent(new Event('pointerdown'))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(p.isPlaying()).toBe(false)
+    expect(onSeek).not.toHaveBeenCalled()
+    slider.value = '999'; slider.dispatchEvent(new Event('input'))
+    expect(onSeek).not.toHaveBeenCalled()
+    slider.dispatchEvent(new Event('change'))
+    expect(onSeek).toHaveBeenCalledExactlyOnceWith(999)
+  } finally { p.stop(); vi.useRealTimers() }
 })

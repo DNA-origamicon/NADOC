@@ -597,6 +597,8 @@ def prepare_oxdna_job(
     jd.mkdir(parents=True, exist_ok=True)
     from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE, AVERAGE_SEQUENCE_PATH
     (jd / AVERAGE_SEQUENCE_FILE).write_bytes(AVERAGE_SEQUENCE_PATH.read_bytes())
+    sequence_file = AVERAGE_SEQUENCE_PATH.with_name("oxDNA2_sequence_dependent_parameters.txt")
+    (jd / sequence_file.name).write_bytes(sequence_file.read_bytes())
     if fixed_cores:
         (jd / 'nanoparticles.json').write_text(json.dumps({
             'model': 'fixed_gold_strep_dna_v2', 'gold_representation': 'external_exclusion_body',
@@ -720,6 +722,9 @@ def prepare_oxdna_job(
         info["cpd"] = cpd
     (jd / FILENAME).unlink(missing_ok=True)
     (jd / FILENAME).write_text(attachment_text(jd))
+    from backend.core.oxdna_concentration import apply_concentration
+    if job.run_config is not None:
+        apply_concentration(jd, job.run_config, job.run_config.get("dna_concentration_uM"))
     # Self-contained design snapshot for health checks (decoupled from live state).
     (jd / "design.json").write_text(design.model_dump_json())
     (jd / "stages_spec.json").write_text(
@@ -1019,7 +1024,8 @@ def job_overall_fraction(
             # avoids re-reading the whole growing energy.dat each poll (see helper).
             stage_dir = job.stage_dir(workspace_dir, st.name)
             lines = _stage_energy_lines_fast(stage_dir)
-            live = lines / max(1, expected_energy_lines(specs[idx]))
+            live = lines / max(1, expected_energy_lines(replace(
+                specs[idx], steps=max(1, specs[idx].steps - (st.completed_steps or 0)))))
             if job.submodel:
                 from backend.core.oxdna_submodel import attempt_fraction
                 live = attempt_fraction(specs[idx], st.completed_steps, lines)
@@ -1056,7 +1062,8 @@ def job_progress(
             lines = _stage_energy_lines(stage_dir)
             # THIS attempt's fraction — the ETA rate must be derived from it alone,
             # since started_at is this attempt's start.
-            attempt_frac = min(1.0, lines / max(1, expected_energy_lines(specs[idx])))
+            attempt_frac = min(1.0, lines / max(1, expected_energy_lines(replace(
+                specs[idx], steps=max(1, specs[idx].steps - (st.completed_steps or 0))))))
             if job.submodel:
                 from backend.core.oxdna_submodel import attempt_fraction
                 attempt_frac = attempt_fraction(specs[idx], st.completed_steps, lines)
@@ -1722,6 +1729,10 @@ async def run_job(
     jd = job.job_dir(workspace_dir)
     logger.info("[%s] oxdna run_job starting; job_dir=%s", job.job_id, jd)
 
+    if (job.run_config or {}).get("vmmc_melting"):
+        from backend.core.oxdna_vmmc_runner import run as run_vmmc
+        return await run_vmmc(job, workspace_dir, specs)
+
     if job.submodel:
         from backend.core.oxdna_submodel_runner import run as run_submodel
         return await run_submodel(job, workspace_dir, specs)
@@ -1814,6 +1825,9 @@ async def run_job(
 
     idx = start_idx
     while idx < len(specs):
+        if job.stages[idx].status == "skipped":
+            idx += 1
+            continue
         spec = specs[idx]
 
         stage_dir = job.stage_dir(workspace_dir, spec.name)
@@ -1950,6 +1964,7 @@ async def run_job(
         cpd_input = cpd_stage_input(jd, spec)
         from backend.core.oxdna_thermal_ramp import prepare_attempt
         spec = prepare_attempt(spec, job, workspace_dir, idx)
+        from backend.core.oxdna_melt_stop import pairing_output
         input_path.write_text(
             render_stage_input(
                 spec,
@@ -1959,7 +1974,7 @@ async def run_job(
                 parfile_name=parfile,
                 sequence_parameters_name=str(jd / "oxDNA2_average_sequence_parameters.txt")
                     if (jd / "oxDNA2_average_sequence_parameters.txt").exists() else None,
-            ) + cpd_input
+            ) + cpd_input + pairing_output(spec, job.stages[idx].completed_steps)
         )
 
         logger.info(
@@ -2504,6 +2519,8 @@ def reconcile_oxdna_status(
                 and "END OF THE SIMULATION, everything went OK!" in log_tail
                 and stage_completed_steps(sdir, specs[idx]) >= specs[idx].steps
             )
+        if (job.run_config or {}).get("vmmc_melting"):
+            complete = st.status == "done"
         if specs[idx].thermal_ramp:
             complete = (job.run_config or {}).get("thermal_progress", {}).get(st.name, {}).get("decision") == "done"
         if complete and st.status != "failed":
@@ -2513,6 +2530,16 @@ def reconcile_oxdna_status(
             break
 
     if all(s.status in ("done", "skipped") for s in job.stages):
+        if (job.run_config or {}).get("vmmc_melting") and not job.run_config.get("vmmc_result"):
+            from backend.core.oxdna_vmmc import VmmcMelting, analyse, duplex_pairs
+            root = job.job_dir(workspace_dir)
+            try:
+                job.run_config["vmmc_result"] = analyse(root, specs, VmmcMelting.model_validate(job.run_config["vmmc_melting"]), len(duplex_pairs(root / "topology.top")))
+            except (OSError, ValueError) as exc:
+                job.status = OxdnaStatus.failed
+                job.error = f"VMMC analysis recovery failed: {exc}"
+                job.save(workspace_dir)
+                return job
         job.status = OxdnaStatus.completed
         job.current_stage_idx = len(job.stages)
         job.error = None

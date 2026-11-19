@@ -40,8 +40,9 @@ export function thermalJobGroup(list, row, model, doc = document, onSelect, onCo
     const [symbol, label] = states[step.status]
     if (['waiting', 'running'].includes(step.status)) state.append(makeSpinner(statusBadge(step.status === 'waiting' ? 'queued' : 'running').color, 11, doc))
     else state.append(symbol)
-    state.append(` ${label}`)
+    state.append(` ${label}${step.reason ? ' (melt threshold)' : ''}`)
     item.title = `${step.name} · ${Number(step.steps || 0).toLocaleString()} scheduled steps`
+    if (step.reason) item.title += ` · ${step.reason}`
     const select = doc.createElement('button')
     select.type = 'button'; select.className = 'thermal-job-select'
     select.setAttribute('aria-pressed', String(model.selected && model.thermalSelectedStage === step.name))

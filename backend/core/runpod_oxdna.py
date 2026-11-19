@@ -256,6 +256,10 @@ def stage_inputs(job_dir: Path, specs: list[OxdnaStageSpec], remote_job_dir: str
     from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE, AVERAGE_SEQUENCE_PATH
     recorded_parameters = job_dir / AVERAGE_SEQUENCE_FILE
     result: dict[str, str] = {AVERAGE_SEQUENCE_FILE: (recorded_parameters if recorded_parameters.exists() else AVERAGE_SEQUENCE_PATH).read_text()}
+    if any(spec.sequence_dependent for spec in specs):
+        source = AVERAGE_SEQUENCE_PATH.with_name("oxDNA2_sequence_dependent_parameters.txt")
+        recorded = job_dir / source.name
+        result[source.name] = (recorded if recorded.exists() else source).read_text()
     _gold_stages(specs)
     for idx, spec in enumerate(specs):
         if spec.interaction == "DNA2GOLD":

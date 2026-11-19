@@ -1,4 +1,6 @@
-import { thermalError, thermalStages, thermalConfig } from './oxdna_thermal_ramp.js'
+import {vmmcError, vmmcConfig, vmmcStages} from './oxdna_vmmc.js'
+import { concentrationError } from './oxdna_concentration.js'
+import { thermalError, thermalStages, thermalConfig, THERMAL_PHYSICS_DEFAULTS } from './oxdna_thermal_ramp.js'
 // GPU default is user-authorized; further convergence and sampling checks are
 // required for DNA/protein and fixed gold/strep/DNA (TD-OXDNA-PHYSICS).
 const DEFAULTS = Object.freeze({
@@ -46,6 +48,7 @@ export function validateOxdnaWizard(values = {}) {
       errors.diff_coeff = 'Enter a positive diffusion coefficient for each local-bath stage.'
     if (!(Number.isFinite(Number(stage.dt)) && Number(stage.dt) > 0)) errors.dt = 'Time step must be positive.'
   }
+  if (concentrationError(v.dna_concentration_uM)) errors.dna_concentration_uM = concentrationError(v.dna_concentration_uM)
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
@@ -107,6 +110,7 @@ export function oxdnaWizardPayload(values, targetFields = {}) {
   return { backend: v.backend, device: String(v.device), interaction_type: v.interaction_type,
     engine_variant: v.engine_variant,
     salt_concentration: Number(v.salt_concentration),
+    ...(v.dna_concentration_uM != null ? {dna_concentration_uM:v.dna_concentration_uM} : {}),
     mc_steps: Number(v.mc_steps), md_relax_steps: Number(v.md_relax_steps), equil_steps: Number(v.equil_steps),
     min_bp_retained: Number(v.min_bp_retained), max_relax_retries: Number(v.max_relax_retries),
     stage_overrides: v.stage_overrides || {},
@@ -119,6 +123,7 @@ export function oxdnaConfigDocument(values, targetFields = {}) {
   const target = ['# NADOC oxDNA job',
     ...(values.cpd_present ? ['# Experimental isomer-specific CPD model; local CPU/CUDA; melting thermodynamics unvalidated.'] : []), `execution_target = ${payload.execution_target || 'local'}`,
     `engine_variant = ${payload.engine_variant}`,
+    `# Total DNA strand concentration (µM): ${payload.dna_concentration_uM ?? 'automatic/inherited box'}`,
     ...(payload.partition ? [`partition = ${payload.partition}`] : []),
     ...(payload.runpod_gpu_key ? [`runpod_gpu_key = ${payload.runpod_gpu_key}`] : []),
     ...(payload.seed ? [`seed = ${payload.seed}`] : []),
@@ -148,9 +153,18 @@ export function oxdnaProductionDefaults(overrides = {}) { return { ...PRODUCTION
 export function validateOxdnaProductionWizard(values = {}) {
   const v = oxdnaProductionDefaults(values)
   const errors = {}
+  if (v.vmmc_melting) {
+    if (v.thermal_ramp) errors.vmmc_melting = 'Choose VMMC or a thermal ramp.'
+    if (vmmcError(v.vmmc_melting)) errors.vmmc_melting = vmmcError(v.vmmc_melting)
+    if (!v.parentJobId) errors.parentJobId = 'Choose a prepared or relaxed duplex job.'
+    if (concentrationError(v.dna_concentration_uM)) errors.dna_concentration_uM = concentrationError(v.dna_concentration_uM)
+    const salt = v.stage_overrides?.['1_production']?.salt_concentration ?? v.inherited_parameters?.salt_concentration
+    if (salt != null && !(Number(salt)>0)) errors.salt_concentration = 'Salt concentration must be positive.'
+    return {valid:Object.keys(errors).length===0,errors}
+  }
   if (v.backend != null && !['CPU', 'CUDA'].includes(v.backend)) errors.backend = 'Choose CPU or CUDA.'
   if (thermalError(v.thermal_ramp)) errors.thermal_ramp = thermalError(v.thermal_ramp)
-  if (!v.parentJobId) errors.parentJobId = 'Choose a completed oxDNA job to continue from.'
+  if (!v.parentJobId) errors.parentJobId = 'Choose a completed or stopped oxDNA job with a saved configuration.'
   const range = (key, min, max, message) => {
     const n = Number(v[key])
     if (!Number.isFinite(n) || n < min || (max != null && n > max)) errors[key] = message
@@ -166,15 +180,18 @@ export function validateOxdnaProductionWizard(values = {}) {
       && !(stage.thermostat === 'langevin' && Number(stage.gamma_trans) > 0)
       && !(Number.isFinite(Number(stage.diff_coeff)) && Number(stage.diff_coeff) > 0))
     errors.diff_coeff = 'Enter a positive diffusion coefficient for the selected thermostat.'
+  if (stage.salt_concentration != null && !(Number.isFinite(Number(stage.salt_concentration)) && Number(stage.salt_concentration) > 0)) errors.salt_concentration = 'Salt concentration must be positive.'
   for (const key of ['dt', 'bussi_tau', 'newtonian_steps', 'print_energy_every']) {
     if (!(Number.isFinite(Number(stage[key])) && Number(stage[key]) > 0)) errors[key] = `${key} must be positive.`
   }
+  if (concentrationError(v.dna_concentration_uM)) errors.dna_concentration_uM = concentrationError(v.dna_concentration_uM)
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
 /** Mirrors build_run_stage defaults. Execution hardware and salt are inherited. */
 export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
   const v = oxdnaProductionDefaults(values)
+  if (v.vmmc_melting) return vmmcStages(v.vmmc_melting, v.stage_overrides?.['1_production']?.salt_concentration ?? parentJob?.salt_concentration ?? v.inherited_parameters?.salt_concentration ?? .3)
   const stage = {
     name: '1_production', purpose: 'Sample from the relaxed structure', sim_type: 'MD',
     backend: v.backend ?? parentJob?.backend ?? null, device: parentJob?.device ?? null,
@@ -185,6 +202,7 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
     print_energy_every: Math.max(1, Math.floor(Number(v.steps) / 100)),
     ...(v.inherited_parameters || {}),
     ...(parentJob.continuation_parameters || {}),
+    ...(v.thermal_ramp ? THERMAL_PHYSICS_DEFAULTS : {}),
     ...(v.stage_overrides?.['1_production'] || {}),
     steps: Number(v.steps), print_conf_interval: Number(v.steps_per_frame),
   }
@@ -199,21 +217,22 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
  *  time in oxdna_jobs_panel.js, exactly as the (removed) Full Sim button already did. */
 export function oxdnaProductionPayload(values) {
   const v = oxdnaProductionDefaults(values)
-  return { steps: Number(v.thermal_ramp ? thermalConfig(v.thermal_ramp).block_steps : v.steps), steps_per_frame: Number(v.steps_per_frame),
-    ...(v.backend ? { backend: v.backend } : {}),
+  return { ...(v.dna_concentration_uM != null ? {dna_concentration_uM:v.dna_concentration_uM} : {}), steps: Number(v.thermal_ramp ? thermalConfig(v.thermal_ramp).block_steps : v.steps), steps_per_frame: Number(v.steps_per_frame),
+    ...(v.backend || v.vmmc_melting ? { backend: v.vmmc_melting ? 'CPU' : v.backend } : {}),
+    ...(v.vmmc_melting ? {vmmc_melting:vmmcConfig(v.vmmc_melting)} : {}),
     ...(v.thermal_ramp ? { thermal_ramp: thermalConfig(v.thermal_ramp) } : {}),
     ...(Object.keys(v.stage_overrides || {}).length ? { stage_overrides: structuredClone(v.stage_overrides) } : {}),
   }
 }
 
-/** Jobs eligible as a production "Continue from" parent: completed, and belonging to the current
+/** Jobs eligible as a production "Continue from" parent: completed or stopped with a saved configuration, and belonging to the current
  *  design (unless includeJobId names one already chosen — e.g. by the panel's selected-job seed —
  *  which must survive even if the part-path filter would otherwise drop it). Newest first. */
 export function oxdnaProductionParents(jobs, partPath, { includeJobId = null } = {}) {
   const norm = p => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '')
   const want = norm(partPath)
   return (jobs || [])
-    .filter(j => j?.status === 'completed')
+    .filter(j => j?.can_seed_production === true || (j?.can_seed_production == null && j?.status === 'completed'))
     .filter(j => !want || j.job_id === includeJobId || norm(j.design_source_path) === want)
     .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
 }

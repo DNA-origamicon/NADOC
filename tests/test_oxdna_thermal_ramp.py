@@ -19,7 +19,7 @@ def stage():
 @pytest.mark.parametrize("start,end,step,expected", [(25, 36, 5, [25, 30, 35, 36]), (36, 25, 5, [36, 31, 26, 25]), (25, 25, 5, [25]), (25.4, 25.7, .1, [25.4, 25.5, 25.6, 25.7])])
 def test_schedule(start, end, step, expected):
     cfg = ThermalRamp(start_c=start, end_c=end, step_c=step)
-    assert cfg.block_steps == 10_000_000 and not cfg.gate
+    assert cfg.block_steps == 100_000_000 and not cfg.gate
     assert sampling_cadence(cfg) == 50_000
     assert cfg.temperatures() == pytest.approx(expected)
     specs = ramp_stages(replace(stage(), interaction="CpdDNA2", dt=0.0001, forces_file="frozen.txt", external_forces=True), cfg)
@@ -28,7 +28,7 @@ def test_schedule(start, end, step, expected):
     assert all(s.min_bp_retained == 0 and s.max_backbone_force is None for s in specs)
 
 
-@pytest.mark.parametrize("kwargs", [{"step_c": 0}, {"start_c": float("nan")}, {"step_c": .01}, {"block_steps": 999}, {"block_steps": 200000001}, {"block_steps": 1000.5}])
+@pytest.mark.parametrize("kwargs", [{"step_c": 0}, {"start_c": float("nan")}, {"step_c": .01}, {"block_steps": 999}, {"block_steps": 10000000001}, {"block_steps": 1000.5}])
 def test_invalid_schedule(kwargs):
     with pytest.raises(ValidationError):
         ThermalRamp(**kwargs)
@@ -82,7 +82,7 @@ def test_numerical_retry_discards_gate_evidence_and_archives_samples(tmp_path):
     job = fake_job(tmp_path, specs[0])
     job.production_retries = 1
     job.run_config = {'thermal_progress': {'1_thermal': {'consecutive_passes': 1}}}
-    for name in ('energy.dat', 'energy.r1.dat', 'thermal_check.json', 'error_conf.dat'):
+    for name in ('energy.dat', 'energy.r1.dat', 'thermal_check.json', 'error_conf.dat', 'thermal_pairing_0.dat'):
         (tmp_path / name).write_text('test sentinel')
     restart_plateau(job, tmp_path, specs, 0)
     assert specs[0].steps == 1000000 and specs[0].refresh_vel
@@ -90,6 +90,8 @@ def test_numerical_retry_discards_gate_evidence_and_archives_samples(tmp_path):
     assert not list(tmp_path.glob('energy*.dat'))
     assert not (tmp_path / 'error_conf.dat').exists()
     assert (tmp_path / 'thermal_retry_1/energy.r1.dat').read_text() == 'test sentinel'
+    assert not (tmp_path / 'thermal_pairing_0.dat').exists()
+    assert (tmp_path / 'thermal_retry_1/thermal_pairing_0.dat').exists()
 
 
 def test_edit_rejects_silent_plateau_overrides_and_unsupported_runner(tmp_path):
@@ -217,7 +219,7 @@ def test_fixed_duration_advances_regardless_of_observations(tmp_path, monkeypatc
     report = job.run_config['thermal_progress']['1_thermal']
     assert report['gate_enabled'] is False and report['stability_status'] == 'not_assessed'
     assert report['previous_decision']['decision'] == 'failed'
-    assert set(cfg.model_dump()) == {'start_c', 'end_c', 'step_c', 'block_steps'}
+    assert set(cfg.model_dump()) == {'start_c', 'end_c', 'step_c', 'block_steps', 'stop_on_unpaired', 'unpaired_threshold'}
     assert not cfg.gate
     assert all(s.steps == 1000000 for s in specs)
     reset_copy(specs, job.run_config)
@@ -247,3 +249,27 @@ def test_recording_energy_never_requires_exponential_fit(tmp_path, monkeypatch):
     assert metrics['energy']['minimum'] == -2
     assert metrics['energy']['maximum'] == 10
     assert 'passed' not in metrics
+
+
+def test_literature_defaults_render_sequence_dependent_inputs_and_allow_overrides(tmp_path):
+    from backend.api.routes_oxdna import RunRequest
+    from backend.core.oxdna_thermal_ramp import literature_stage_defaults
+    from backend.core.oxdna_protocol import apply_stage_overrides, render_stage_input, AVERAGE_SEQUENCE_PATH
+    from backend.core.runpod_oxdna import stage_inputs
+    cfg = ThermalRamp()
+    RunRequest(steps=cfg.block_steps, thermal_ramp=cfg)
+    base = stage()
+    preset = literature_stage_defaults(base)
+    assert base.salt_concentration == .5 and not base.sequence_dependent
+    assert (preset.dt, preset.thermostat, preset.newtonian_steps, preset.diff_coeff) == (.005, 'brownian', 100, 2.5)
+    assert preset.salt_concentration == .5 and preset.sequence_dependent
+    custom = apply_stage_overrides([preset], {preset.name: {'salt_concentration': .3, 'dt': .002}})[0]
+    plateaus = ramp_stages(custom, cfg)
+    assert all(s.steps == 100_000_000 and s.salt_concentration == .3 and s.dt == .002 for s in plateaus)
+    source = AVERAGE_SEQUENCE_PATH.with_name('oxDNA2_sequence_dependent_parameters.txt')
+    text = render_stage_input(plateaus[0], 'topology.top', 'conf.dat')
+    assert f'seq_dep_file = {source}' in text
+    assert 'thermostat = brownian' in text and 'newtonian_steps = 100' in text
+    remote = stage_inputs(tmp_path, plateaus[:1], '/remote/job')
+    assert remote[source.name] == source.read_text()
+    assert f'seq_dep_file = /remote/job/{source.name}' in remote['1_thermal/input.txt']

@@ -231,6 +231,225 @@ Broad memory-regression sweep hit a repair-draft capture limit during fixture se
 
 Solver memory validation found the native duplex-link auxiliary-pose assertion failure. Focused reproduction also fails with the original solver modules. Recorded as unrelated baseline debt; no fix claimed. Evidence: `.development-artifacts/solver-memory-20261117/verification-review.json` and its linked baseline logs.
 
+## ISSUE-249 — VMMC wizard rejects empty submodel selection (2026-11-18)
+
+Validation: 6 focused backend; FAST 21,015 passed (90 skipped), FULL deferred by session policy; 10,698 frontend passed (1 skipped). Smoke 23 passed, 2 skipped; existing Honeycomb request timeout passed isolated retry. Native job and copy each completed eight stages with explicit empty-box payload. All test jobs/captures removed. Evidence: `.development-artifacts/vmmc-wizard-422.json`.
+
+[x] The normal production launcher includes `submodel: {box: null}` for a full-system
+job. VMMC incorrectly rejected the wrapper's presence as an active submodel, returning
+422 before job allocation. Accept the explicit null box while continuing to reject an
+actual region. Regression covers both cases with the real RunRequest schema, and the
+native browser/API workflow now includes the launcher's explicit empty-box payload.
+
+Optimistic `creating-*` rows now select the submodel draft and skip export trajectory
+metadata until the real job exists, avoiding the secondary 404 requests. Feature
+`main.js` LOC Δ: 0. Native browser create/edit/run/copy/results validation passed
+with the corrected payload; both jobs completed all eight stages and were removed.
+
+
+## ISSUE-248 — Umbrella results entry points (2026-11-18)
+
+Validation: dedicated browser gesture/export test and visual review passed; 10,696 frontend tests passed (1 skipped). Smoke: 23 passed, 2 skipped, unrelated Honeycomb creation request timeout; exact isolated retry passed. Screenshots/traces removed; compact receipt `.development-artifacts/umbrella-results-ui.json`.
+
+[x] VMMC job right-click menu and Graphs and Metrics now expose “Show umbrella
+results”. Both open one shared dialog with saved melting curves, uncertainty/
+sampling diagnostics and CSV/JSON exports. Pending analyses show the existing
+pending-results message; ordinary MD jobs do not show this action. UI-only change;
+no simulations or molecular documents authored. Feature `main.js` LOC Δ: 0.
+
+
+## ISSUE-247 — CPU VMMC equilibrium duplex workflow (2026-11-18)
+
+Final checks: 9 focused backend, 10,696 frontend (1 skipped), 24 smoke (2 skipped); lint/diff clean. Edited salt 0.35 M and a fresh-seed copy each completed all eight native CPU stages. All validation jobs/captures removed. FAST: 21,009 passed; four energy compatibility failures fixed/retested, existing aptamer-history HTTP 413 remains. FULL deferred by session policy. Feature `main.js` LOC Δ: 0.
+
+[x] Add a wizard mode mutually exclusive with thermal ramps, with salt/concentration,
+fixed tuning/equilibration/production budgets and independently seeded CPU replicas.
+Persist stage progress and frozen bias weights, replay interrupted stages, and recover
+analysis after restart. Native histogram reweighting and finite-size correction produce
+melting curves, replica diagnostics and CSV/JSON exports in settings/metrics. Undamaged
+complementary free-solution DNA duplexes only; unsupported CPD/hybrid/force systems
+fail preflight. Sparse sampling reports inconclusive rather than a reliable Tm.
+
+Validation: real browser create → API queued edit → native CPU execution of eight stages
+→ recorded results → CSV download passed on the existing duplex; all native stages done,
+no page errors. Short sampling was correctly inconclusive. Desktop/narrow pixel review
+fixed salt alignment and stage-table spacing. Disposable simulation child removed through
+API; authored source unchanged. Compact evidence: `.development-artifacts/vmmc-development/validation.json`.
+
+
+## ISSUE-246 — Native melt threshold with durable stage pruning (2026-11-18)
+
+Added default-on Stop series after melting and editable Unpaired bases (%)
+controls for creation/queued editing, plus recorded settings and skipped-stage
+reasons. Count unique DNA bases without native hydrogen bonds, including initially
+single-stranded bases and non-designed/intrastrand pairing. Observe at trajectory
+cadence; any sampled crossing ends the series only after the current full dwell.
+
+Native HBList output uses the active CPU/CUDA interaction and consecutive output
+numbering. Parse complete frames incrementally; malformed/missing samples cannot
+trigger. Preserve attempt offsets, exclude discarded retry samples, and persist
+threshold/step/fraction with skipped stages. Recovered boundaries reapply pruning
+idempotently. Copies clear evidence; old saved protocols remain opt-out.
+
+Validation includes native analysis of bound and melted duplex checkpoints,
+runner tests for both toggle states, persistence/reload, copy/retry handling and
+wizard create/edit/view checks. Detailed final validation/cleanup receipt:
+.development-artifacts/melt-stop-20261118.json. main.js feature LOC delta: 0.
+No user jobs or authored molecular documents were modified.
+
+## ISSUE-245 — DNA concentration controls and simulation volume (2026-11-18)
+
+Added µM total DNA strands controls for relaxation, production, thermal ramps and
+queued edits. Exported DNA strand counts determine cubic box volume; proteins and
+PEG do not count. Coordinates remain unchanged. Validate source fit before
+creating continuation jobs or applying queued edits; preserve parent inputs.
+Persist resolved concentration/count/box metadata through copies and ramps, with
+readable saved settings. Blank keeps automatic/inherited boxes. Corrected recorded
+label capitalization so µM remains µM. Documented total-strand versus per-species
+conventions and the limits of interpreting heating ramps as equilibrium melting.
+
+Validation: backend fast suite 21,002 passed / 90 skipped; frontend 10,691 passed /
+one skipped. Browser workflow covers create, ramp, edit and recorded settings,
+including narrow layout. Full backend suite remains deferred by test-session
+policy. Final smoke/cleanup details in
+.development-artifacts/oxdna-concentration-20261118.json. No user jobs or molecular
+documents changed; main.js LOC delta for this feature: 0.
+
+## ISSUE-244 — Exclusive native representation after oxDNA Off (2026-11-18)
+
+Restores native scene ownership before restoring the native atomistic/surface
+representation, so the final representation decision hides CG as appropriate.
+Suspending a display uses the same order and restores representation visibility
+even if a pending heavy frame never landed, preserving held trajectory caches.
+Regression reproduced eight heavy-mode failures before the fix; all ten cases
+now pass (Off/suspend × Full, VDW, ball-and-stick, stick, surface). No topology,
+geometry parameters, user jobs or saved structures were changed. main.js delta 0.
+Validation: 226 focused display/representation tests and 10,687 frontend tests
+passed (1 skipped). Real-app browser path selected a mocked job on an existing
+read-only design, enabled VDW and oxDNA display, then clicked Off: atomistic mode
+and atom count remained intact, and the CG root was hidden. Visually inspected
+the resulting native-only atoms. Browser regression passed; lint/diff and
+artifact/session/credential cleanup verified. FULL remains deferred.
+
+## ISSUE-243 — Temperature/salt controls and wizard layout (2026-11-17)
+
+Added shared salt controls beside temperature for relaxation, ordinary production
+and queued continuation edits (including field/surface deposition). Thermal salt
+sits in the temperature schedule grid. Preserved inheritance/explicit overrides;
+relaxation-wide salt edits also update previous per-stage overrides. Conditions
+now lead the settings page; engine installation/build details are collapsible.
+Moved the ramp toggle ahead of runtime fields, styled native dropdowns, corrected
+the Celsius badge grid, and kept wide stage tables locally scrollable. Recorded
+nonthermal settings render nested options as labeled values and stage conditions
+as a table, keeping full JSON in its dedicated tab. No structures or user jobs
+were modified. main.js task LOC delta: 0.
+Validation: 10,677 frontend tests passed (1 skipped); focused condition edits
+and shared target checks passed; 4 browser workflows plus focused final review
+reruns passed. Inspected desktop relaxation/production/target/View/Edit and a
+720px thermal layout. Retook transitional screenshots after animations settled;
+also corrected shared target copy incorrectly naming NAMD in the oxDNA wizard.
+Lint/diff and browser artifact/session/credential cleanup checks passed. Reusable
+review: frontend/e2e/oxdna_wizard_review.spec.js. FULL remains deferred.
+
+## ISSUE-242 — Thermal salt defaults to the continuation source (2026-11-17)
+
+Removed salt from the thermal physics preset in both frontend and backend.
+Continuation parameters now include salt from the actual saved source stage,
+falling back to job metadata when the stage has no recorded MD specification.
+The new thermal salt field applies to every plateau and remains synchronized
+with the editable parameter table. Source changes update inherited values;
+explicit user edits win, and clearing the field restores inheritance. Existing
+jobs were not modified. main.js task LOC delta: 0.
+Validation: 20,990 FAST backend tests and 10,673 frontend tests passed; two
+browser workflows verified source switching, explicit salt edits and clearing to
+restore inheritance. Focused checks: 25 backend / 31 UI passed. Cleanup, lint and
+diff checks passed. Aggregate FAST time 191s exceeded 90s; timing triage found no
+individual violators (slowest 2.02s), so budgets/classifications remain unchanged.
+FULL deferred in .nadoc-slow-pending.
+
+## ISSUE-241 — Branch thermal production from stopped runs (2026-11-17)
+
+The list/detail API now exposes can_seed_production based on terminal status,
+writer inactivity and a nonempty saved last_conf. Both production creation and
+the wizard use this eligibility; stopped choices explicitly say last saved frame.
+Live read-only verification confirmed duplex Run 1 and Tm Run are eligible. No
+user job was created, resumed, modified or restarted. main.js task LOC delta: 0.
+Validation: 20,988 FAST backend tests / 90 skipped; 10,673 frontend tests /
+1 skipped; 2 browser workflows passed. Focused tests confirm copied seed bytes
+match the saved parent configuration and active/missing-checkpoint sources are
+rejected. Cleanup and lint/diff checks passed. Aggregate FAST time 196s triggered
+the 90s warning; triage found no per-test violators (slowest 3.56s), so no tests
+were reclassified and no budget changed. FULL deferred in .nadoc-slow-pending.
+
+## ISSUE-240 — Formatted thermal View/Edit Settings (2026-11-17)
+
+Single-job detail now includes persisted stage specifications. Opening settings
+fetches that detail; thermal View Settings opens directly on readable schedule,
+physics cards, and temperature rows. Queued/copy edits expose schedule and shared
+physics controls, with JSON collapsed under Advanced configuration. Saved physics
+is preserved in explicit overrides so editing an old job cannot silently adopt
+new defaults. Missing legacy parameters are labeled unavailable. No active job
+or molecular document was modified. main.js task LOC delta: 0.
+Validation: 20,985 FAST backend tests and 10,672 frontend tests passed;
+focused recorded-spec API regression and browser View/Edit workflow passed.
+Visually inspected desktop read-only and narrower edit dialogs; fixed the native
+select styling. Browser artifacts/session/credentials cleanup verified. Lint and
+diff checks passed. FULL deferred in .nadoc-slow-pending.
+
+## ISSUE-239 — False full-stage progress with dense energy output (2026-11-17)
+
+The progress denominator now honors print_energy_every_override, matching native
+input generation. Both live endpoints also size the current attempt against its
+remaining budget before adding banked work. The duplex's 25°C stage was still
+running normally at about 175M / 2B steps; corrected live API returned 8.83%, not
+100%. During automatic API reload the existing worker/native PIDs and start
+times remained unchanged, directly confirming server-restart survival. No job
+was stopped, skipped, resized or otherwise modified.
+
+Validation: 39 focused progress/thermal/runtime tests and 7 legacy progress tests
+passed. FAST: 20,984 passed / 90 skipped, one known VR subprocess-mock isolation
+failure caused by a delayed trajectory-precompute launch; isolated rerun passed.
+Lint/diff checks passed. FULL remains deferred in .nadoc-slow-pending. main.js
+task LOC delta 0. Receipt: `.development-artifacts/oxdna-ramp-progress-restart-20261117.json`.
+
+## ISSUE-238 — Selected temperature progress (2026-11-17)
+
+The unified Jobs bar/status now follows a selected thermal child: temperature,
+status, percentage, completed/scheduled steps and remaining steps all use that
+plateau. Parent selection retains whole-series progress. A pure projection uses
+matching live stage fractions (already including banked work), otherwise reverses
+the existing stage-count overall fraction; it never mutates job/control identity.
+Completed/pending/failed/stopped/skipped rows retain their own state, and the
+whole-series ETA is omitted from the child view.
+
+Validation: 120 focused tests; frontend 10,669 passed / one skipped; browser
+verified running 50% (500k/1M), done 100%, pending 0%, and parent 1.5M/3M.
+The added clicks initially disrupted the later playback test's selection setup;
+restoring its child selection made the full workflow pass. Lint/diff checks and
+artifact cleanup passed. No native job changed; main.js task LOC delta 0.
+Receipt: `.development-artifacts/oxdna-stage-progress-20261117.json`.
+
+## ISSUE-237 — Literature-informed thermal sampling (2026-11-17)
+
+New thermal jobs default to fixed 2-billion-step plateaus, dt 0.005, Brownian
+thermostat with 100-step updates, diffusion 2.5, and 0.1 M monovalent salt.
+The duration is a fixed adaptation of Soto et al. (2025), not an assertion that
+every system converges in that time. Physics edits in the wizard apply uniformly
+across plateaus; explicit overrides win. API/validation accept up to 10B steps.
+New ramps use the pinned upstream sequence-dependent DNA2 parameter file;
+legacy stage specs still default to average strengths. The chosen file is frozen
+with new jobs and rendered correctly for local and remote inputs. Saved jobs
+are not restarted. Documentation includes the GCGTTGCG/CGCAACGC control, 0.3 M
+reference salt, and the important 6 mM vs default-box concentration difference.
+No molecular structure or production simulation was created by this change.
+
+Validation: FAST 20,983 passed / 90 skipped; frontend 10,665 passed / one skipped;
+focused backend 36 passed / one deselected and frontend 30 passed; two browser
+workflows passed, including uniform 0.3 M salt edit and native-settings preview.
+Lint and diff checks passed, no per-test timing violators, cleanup verified.
+FULL remains deferred in .nadoc-slow-pending. main.js task LOC delta 0.
+Receipt: `.development-artifacts/oxdna-literature-defaults-20261117.json`.
+
 ## 2026-11-17 — ISSUE-220: expose placement Apply rejection details
 
 Corrected error reporting, not yet the user's unreproduced rejection. Apply now

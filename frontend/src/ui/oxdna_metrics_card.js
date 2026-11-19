@@ -1,3 +1,4 @@
+import {umbrellaResultsButton} from './oxdna_umbrella_results.js'
 /**
  * oxdna_metrics_card.js — the "Graphs and Metrics" card in the oxDNA Dynamics panel.
  *
@@ -11,12 +12,19 @@ import { startOxdnaMetrics, getOxdnaMetricsRun } from '../api/client.js'
 import { initMetricsCard, METRIC_META } from './metrics_card.js'
 
 export function initOxdnaMetricsCard({ getSelectedJob = null, getJobs = null } = {}) {
-  return initMetricsCard({
+  const card = document.getElementById('oxdna-metrics-card')
+  const vmmc = document.createElement('div')
+  card?.prepend(vmmc)
+  const render = () => {const button=umbrellaResultsButton(getSelectedJob?.());vmmc.replaceChildren(...(button ? [button] : []))}
+  window.addEventListener('nadoc:oxdna-job-selected',render)
+  render()
+  const metrics = initMetricsCard({
     idPrefix: 'oxdna-metrics', selectionEvent: 'nadoc:oxdna-job-selected',
     api: { start: startOxdnaMetrics, poll: getOxdnaMetricsRun },
     extraMetrics: [{ key: 'oxdna_energy', tok: 'energy', request: { metric: 'oxdna_energy' } }],
     getSelectedJob, getJobs,
   })
+  return {...metrics,refresh(){metrics.refresh();render()}}
 }
 
 export { METRIC_META }

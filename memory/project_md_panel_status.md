@@ -13,6 +13,18 @@ Reorganized October 17, 2026. Read the retained contracts here, then only the
 matching detail below. Dated results and old handoffs are not new verification
 or authorization; current user instructions and `CLAUDE.md` take precedence.
 
+## Trajectory scrub interaction (2026-11-17)
+
+The shared oxDNA/NAMD jobs trajectory player keeps the requested slider position
+independent of the displayed frame while buffering. Pointer-down pauses playback
+and invalidates pending seeks; input moves the handle and may show a cached
+preview without requesting exact frames. Native range `change` commits the final
+mouse/touch release or keyboard selection. Holding a drag stationary no longer
+starts an exact read on a debounce timer. New input invalidates older completions.
+Validated: 10,664 frontend tests passed (1 skipped), plus Chromium pointer/keyboard
+interaction with delayed frame callbacks. The browser check used an isolated
+control served by Vite; a real trajectory session in the full app was not exercised.
+
 ## RunPod display pulls its own snapshots (2026-08-08)
 
 The MD Display used to tell a RunPod user to do the work themselves — *"This run's

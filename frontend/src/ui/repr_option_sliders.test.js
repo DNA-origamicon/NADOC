@@ -6,6 +6,8 @@ import {
 } from './repr_option_sliders.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
+import { readFileSync } from 'node:fs'
+import { baseInteractionsEnabled } from '../scene/atomistic_renderer/interaction_overlay.js'
 
 // ── Pure cores ────────────────────────────────────────────────────────────────
 describe('reprSliderRowVisibility', () => {
@@ -91,6 +93,42 @@ function fireInput(el, value) {
 
 describe('initReprOptionSliders', () => {
   beforeEach(() => clearDom())
+
+  it.each(['SQUARE', 'HONEYCOMB'])('resets all card options and applies the %s hull default', lattice => {
+    const html = readFileSync('index.html', 'utf8')
+    document.body.innerHTML = html.slice(html.indexOf('<div class="panel-section" id="repr-options-section">'), html.indexOf('<button id="reset-btn">'))
+    const deps = makeDeps({ store: createMockStore({ currentDesign: { lattice_type: lattice } }) })
+    initReprOptionSliders(deps)
+    const events = []
+    const sliders = [...document.querySelectorAll('input[type="range"]')]
+    for (const slider of sliders) {
+      slider.value = slider.max
+      slider.addEventListener('input', () => events.push(`${slider.id}:input`))
+      slider.addEventListener('change', () => events.push(`${slider.id}:change`))
+    }
+    const interactions = document.getElementById('show-base-interactions')
+    interactions.checked = true
+    interactions.dispatchEvent(new Event('change'))
+    const strandClick = vi.fn()
+    document.getElementById('surface-color-strand').addEventListener('click', strandClick)
+    document.getElementById('repr-options-reset').click()
+    for (const slider of sliders) {
+      expect(Number(slider.value)).toBe(slider.id === 'sl-hull-margin'
+        ? (lattice === 'HONEYCOMB' ? 8 : 7) : Number(slider.defaultValue))
+      if (slider.defaultValue !== slider.max) {
+        expect(events).toContain(`${slider.id}:input`)
+        expect(events).toContain(`${slider.id}:change`)
+      }
+    }
+    expect(deps.designRenderer.setBeadRadius).toHaveBeenCalledWith(0.10)
+    expect(deps.designRenderer.setSlabThickness).toHaveBeenCalledWith(0.06)
+    expect(deps.designRenderer.setCylinderRadius).toHaveBeenCalledWith(1.13)
+    expect(deps._jointRenderer.setHullScanTick).toHaveBeenCalledWith(lattice === 'HONEYCOMB' ? 8 : 7)
+    expect(document.getElementById('sv-bead-radius').textContent).toBe('0.10')
+    expect(interactions.checked).toBe(false)
+    expect(baseInteractionsEnabled()).toBe(false)
+    expect(strandClick).toHaveBeenCalledOnce()
+  })
 
   it('returns updateForRepr and registers without DOM (all getElementById null)', () => {
     clearDom()

@@ -193,7 +193,7 @@ export function metricCSVs(result, metric) {
   if (metric === 'oxdna_energy') {
     const t = block.temporal || {}
     const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`
-    return { spatial: '', temporal: ['simulation_time_oxdna,potential_energy_per_particle,temperature_c,stage,job_id',
+    return { spatial: '', temporal: [`${t.csv_x || 'simulation_time_oxdna'},potential_energy_per_particle,temperature_c,stage,job_id`,
       ...(t.per_frame || []).map((v, i) => [t.x_values[i], v, t.temperature_c[i] ?? '',
         quote(t.stage_names[i]), quote(t.job_ids[i])].join(','))].join('\n') + '\n' }
   }

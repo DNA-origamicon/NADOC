@@ -43,6 +43,6 @@ export function thermalRunSteps(job) {
     else if (job.status === 'running' && (stage.status === 'running' || (current && stage.started_at))) status = 'running'
     const temperature = celsius != null && Number.isFinite(celsius)
       ? `${Number(celsius.toFixed(6))} °C` : 'Temperature unavailable'
-    return [{ name: stage.name, number: Number(match[1]), temperature, status, steps: stage.steps }]
+    return [{ name: stage.name, number: Number(match[1]), temperature, status, steps: stage.steps, ...(status === 'skipped' && job.run_config.melt_stop && index > job.stages.findIndex(s => s.name === job.run_config.melt_stop.stage) ? {reason: 'Melt threshold reached; later temperature not run'} : {}) }]
   })
 }

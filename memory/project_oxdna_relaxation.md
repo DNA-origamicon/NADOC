@@ -12,6 +12,17 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
+- New thermal ramps default to native-HB melt termination at 100% unpaired DNA bases: complete the current fixed dwell, then skip later temperatures after any sampled crossing. Saved legacy ramps remain unchanged; evidence and pruning persist across restart. See `oxdna_melt_stop.py`.
+
+- Thermal ramps default to 100,000,000 fixed steps per temperature (2026-11-18); explicit values and saved jobs retain their recorded steps.
+
+- DNA concentration (2026-11-18): wizard temperature/salt section accepts µM
+  total DNA strands (not nucleotides or complexes). Explicit values resize only
+  the configuration box; blank retains auto/inherited sizing. Actual exported
+  strand count and volume persist as `box_conditions`; copies/ramps preserve
+  the box. Geometry-fit/boundary checks reject unsafe resizing without scaling
+  coordinates. See `docs/oxdna_setup.md` for convention and literature links.
+
 - Manual thermal skip (2026-11-17, ISSUE-210): parent and child context menus
   target the current plateau, with expected-stage guard. Detached controller stops
   the old owner, validates/recovers its checkpoint, persists `skipped`, then
@@ -28,7 +39,10 @@ CG-to-atomistic handoff. Historical phases and experiments are in
   `oxdna_energy_series.py` owns read-only assembly; shared graph/card own rendering.
 
 - Fixed-duration ramps (2026-11-17, ISSUE-211) supersede the earlier adaptive
-  behavior: default 10M steps per temperature (one fifth of 50M). Wizard exposes
+  behavior. Subsequent literature preset (ISSUE-237) sets new ramps to 2B steps,
+  sequence-dependent DNA2, Brownian/100 steps, dt .005, diffusion 2.5; salt inherits the continued stage (ISSUE-242).
+  uniform physics edits are available in the wizard. Legacy specs stay unchanged.
+  Wizard exposes
   only start/end/increment and Steps per temperature. No gating, automatic
   extension, exponential fitting or stationarity pass is used during execution
   or manual skip. Complete energies and descriptive statistics are saved;
@@ -276,3 +290,5 @@ production.py, analyze_md.py under experiments/oxdna_submodel. Normal Run integr
 and managed production-child display are still pending; do not imply these experimental
 outputs are ordinary managed jobs. Focused4 tests, real-app headless review and lint
 passed; source snapshots independently replay. See docs/simulation_submodel.md.
+
+- 2026-11-18: Local CPU VMMC duplex workflow in `oxdna_vmmc.py` / `oxdna_vmmc_runner.py`; wizard toggle mutually exclusive with ramp. Native-pair umbrella tuning → frozen-weight independent replicas → finite-size-corrected histogram analysis, CSV/JSON and explicit inconclusive diagnostics. Scope undamaged complementary linear DNA duplex only; no CPD VMMC validation. Interrupted stages replay whole-stage inputs/seeds; completed stages retained. Native browser/API validation of existing duplex completed all 8 short stages; not a convergence study. See `docs/oxdna_setup.md` and `.development-artifacts/vmmc-development/validation.json`.

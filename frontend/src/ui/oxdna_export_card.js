@@ -447,6 +447,7 @@ export function initOxdnaExportCard({
     _renderDetail(lineage)                       // instant, from the lineage
     if (statusEl) statusEl.textContent = ''
     if (!job) { _setEmpty('Select an oxDNA job to export its trajectory.'); return }
+    if (job.creating) { _setEmpty('Creating job — trajectory export will be available after creation.'); return }
     if (typeof getTrajectoryMeta !== 'function') { _setEmpty('Trajectory export unavailable.'); return }
     _setEmpty('Loading composite trajectory…')
     let meta = null

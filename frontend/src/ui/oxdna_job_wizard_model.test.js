@@ -138,7 +138,7 @@ describe('oxDNA copied-job seed display', () => {
     expect(visiblePanel().textContent).toContain('saved-partition')
     tabs[1].click()
     expect(visiblePanel().textContent).toContain('1234')
-    expect(visiblePanel().textContent).toContain('"field_pN": 2')
+    expect(visiblePanel().textContent).toContain('field / field pN2')
     tabs[2].click()
     expect(JSON.parse(visiblePanel().querySelector('pre').textContent).field.dir).toEqual([0, 0, -1])
     expect(view.querySelector('input, select, textarea')).toBeNull()
@@ -327,4 +327,15 @@ it('allows a GPU thermal continuation from a CPU parent and preserves explicit C
   expect(oxdnaProductionPayload(values).backend).toBe('CUDA')
   expect(oxdnaProductionStagePlan(values, { backend: 'CPU' }).every(s => s.backend === 'CUDA')).toBe(true)
   expect(oxdnaProductionPayload({ ...values, backend: 'CPU' }).backend).toBe('CPU')
+})
+
+it('includes stopped parents only with a backend-confirmed saved configuration', () => {
+  const jobs = [
+    {job_id:'saved',status:'stopped',can_seed_production:true},
+    {job_id:'empty',status:'stopped',can_seed_production:false},
+    {job_id:'unknown',status:'stopped'},
+    {job_id:'active',status:'running',can_seed_production:false},
+    {job_id:'missing',status:'completed',can_seed_production:false},
+  ]
+  expect(oxdnaProductionParents(jobs, null).map(j=>j.job_id)).toEqual(['saved'])
 })

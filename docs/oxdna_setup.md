@@ -451,7 +451,26 @@ In **Dynamics → oxDNA → New job → Production**, select a completed relaxat
 (or production continuation), then enable **Thermal ramp**. Start/end temperatures
 are in °C; the positive increment works for heating or cooling and always includes
 the endpoint. Set **Steps per temperature** once; every stage uses that fixed
-number of integration steps. The default is **10 million steps per temperature**.
+number of integration steps. The default is **100 million steps per temperature**.
+**Stop series after melting** defaults on, with **Unpaired bases (%) = 100**.
+At the end of each full dwell, the runner checks the native hydrogen-bond samples
+recorded at the trajectory-output cadence. If any complete sampled frame reaches
+the threshold, the current stage finishes normally and later temperatures become
+**Skipped (melt threshold)**. The series completes successfully; no failure or BP
+health-guard event is generated. Turning the toggle off runs the whole schedule.
+
+The fraction counts unique DNA bases without any native hydrogen bond, including
+initially single-stranded bases. Non-designed and intramolecular DNA pairing count
+as paired; protein/PEG particles do not enter the denominator. It is an instantaneous
+sample threshold, not a sustained-melting or equilibrium test. Rebinding later in
+the same dwell does not undo a recorded crossing. The threshold, first crossing
+step, measured fraction and skipped stages are saved across server restarts.
+Interrupted attempts retain their sampling offsets; numerical-retry samples are
+excluded. Missing/malformed pairing data are reported as unavailable and never
+interpreted as 100% unpaired. Existing saved ramps without the option retain their
+original full schedule. This stop rule must not be used to estimate equilibrium
+bound/unbound populations, which require reversible sampling.
+
 The Summary shows every plateau and the exact total planned steps. The current implementation uses the **local, full-system runner**;
 a simulation submodel box must be disabled. Ordinary CPU/CUDA physics and frozen
 CPD models are inherited from the parent. CPD supports local CPU or CUDA MD with its smaller timestep; choose GPU (CUDA)
@@ -463,6 +482,12 @@ number within each design. Expand the arrow to see selectable **25C - Run 2**,
 completed, failed, stopped, and paused steps have their own status labels.
 The parent reports the whole job's status, including an early failure while later
 temperatures remain queued. Expansion and temperature selection survive polling.
+
+Selecting a temperature child also scopes the Jobs progress bar and status text
+to that temperature's percentage and completed/scheduled steps. Selecting the
+parent restores whole-series progress. A completed child remains 100% even
+while later temperatures are running; pending children show 0%. Stage progress
+uses the existing live reading and retains banked steps on resume.
 
 Select the parent and load a trajectory to view all temperatures in that ramp.
 Select a temperature child to load only that stage, including its resumed segments.
@@ -522,7 +547,42 @@ CSV includes each sample's time, potential energy per particle, temperature, sta
 and job ID, preserving duplicate resume/temperature boundary records. Pending stages
 without recorded energy are omitted. Generating metrics never changes the schedule.
 
-Defaults: 25–85 °C in 5 °C increments and **10,000,000 steps per temperature**.
+New thermal jobs use sequence-dependent oxDNA2 strengths, `dt=0.005`,
+`thermostat=brownian` and `newtonian_steps=100`. Salt concentration defaults to
+the saved stage of the continued job and can be changed in the wizard for every
+temperature.
+The diffusion coefficient is 2.5 (the standard oxDNA setting, not a value reported
+in the cited melting paper). Physics rows in the wizard are editable and apply
+uniformly to all temperatures. Explicit edits override the preset. Ordinary
+relaxation/production defaults and saved jobs retain their previous physics.
+The sequence parameter file is frozen with the job and selected in native input;
+legacy specs retain average strengths. The native file uses `use_average_seq=false`
+in both modes; the selected parameter file determines the actual strengths.
+
+This fixed-dwell preset is informed by Soto et al. (2025),
+https://doi.org/10.3389/fmolb.2025.1646428 : the reported longer-duplex equilibration
+scale is about 1 billion steps and roughly twice that near melting. Our uniform
+2-billion-step dwell is an adaptation, not a reproduction of their complete
+sampling/replicate protocol and not a guarantee of convergence. Assess the early
+settling portion separately from the later sampling portion offline. The 25–85°C
+range and 5°C spacing remain exploratory choices, not published universal values.
+
+A compact CPD-related control is the antiparallel duplex with strands written
+5′→3′: `GCGTTGCG` and `CGCAACGC`. Use 0.3 M monovalent salt to compare with
+Lim et al. (2022), https://doi.org/10.1093/nar/gkac082 . Their reference is 6 mM
+dsDNA concentration, approximately 70°C undamaged and 57°C with a central
+cis-syn TT lesion. The latter is not a target for cis-anti or every isomer.
+Sequence source: Kemmink et al. (1987), https://pubmed.ncbi.nlm.nih.gov/3028790/ .
+Run the undamaged duplex first. Concentration/box volume and single-duplex
+finite-size corrections must be matched before comparing an equilibrium Tm;
+the wizard does not currently set target strand concentration. The default
+minimum 50 nm cube gives one copy of each strand about 13.3 µM each
+(1 / (Avogadro constant × 50³ × 10⁻²⁴ litres)); it does not reproduce 6 mM.
+A one-way MD
+heating curve alone measures protocol-dependent loss of pairing. Compare
+independent seeds and distinguish local base-pair loss from duplex dissociation.
+
+Defaults: 25–85 °C in 5 °C increments and **100,000,000 steps per temperature**.
 The integration timestep is unchanged. Default energy-recording intervals remain
 at most 50,000 steps; explicit intervals are respected subject to exact duration
 divisibility. Each resumed process uses a reproducible seed derived from job,
@@ -534,7 +594,7 @@ New/copy/edit submissions omit retired adaptive controls. Older saved `gate: tru
 settings cannot enable adaptive progression in the updated runner. The retired
 `thermal_max_steps` resume request is rejected without altering the saved plan.
 An already-running detached worker retains the code/settings it loaded at launch;
-these changes do not shorten or restart an ongoing job. New jobs default to 10M;
+these changes do not shorten or restart an ongoing job. New jobs default to 2B;
 existing saved step counts remain unchanged unless explicitly edited/copied.
 
 `scripts/watch_oxdna_ramp.py JOB_DIRECTORY AUDIT_DIRECTORY` watches filesystem
@@ -552,3 +612,86 @@ uv run python -m scripts.validate_oxdna_thermal_ramp PARENT_JOB_ID WORKSPACE \
 ```
 
 This tests execution; these short runs do not establish melting thermodynamics.
+
+Wizard conditions: salt concentration is adjacent to temperature for relaxation,
+production and queued continuation edits, including field/surface-deposition
+jobs. Thermal ramps place salt beside the temperature schedule. The shared salt
+setting applies to all stages; new continuation defaults use the saved source
+stage. Engine build/installation details can be expanded separately.
+
+### DNA concentration and simulation volume
+
+The wizard includes **DNA concentration (µM total strands)** in the temperature/salt
+section for relaxation, production, thermal ramps and queued-job edits. This is
+`sum_s N_s / (N_A V)` over DNA strands in the exported topology, including DNA
+capture strands; protein and PEG particles are excluded. It is not nucleotide
+molarity, salt molarity, or assembled-complex molarity. For one copy each of two
+complementary strands, 12,000 µM total means 6 mM of each strand (6 mM
+duplex equivalents). Repeated strands count separately.
+
+An explicit `dna_concentration_uM` determines a cubic box:
+`L_nm = (N_DNA_strands * 1e30 / (N_A * concentration_uM))^(1/3)`.
+The app updates only the physical configuration's box header, never scaling
+coordinates or modifying the authored structure. Blank keeps automatic sizing for
+new relaxation jobs and the inherited box for continuations; clearing a queued
+ordinary job's field keeps its prepared box. A thermal protocol rebuild with a
+blank concentration inherits its parent's box. Requested concentration and actual
+strand count, concentration and box dimensions persist in `run_config.box_conditions`.
+Copies retain the box; every thermal plateau carries it through its checkpoint.
+Historical jobs can show box conditions calculated read-only from their input files.
+
+Preparation rejects a box smaller than the starting particle envelope plus a
+3 nm image gap, and rejects resizing configurations already spanning that gap
+at their old boundary. This avoids silently moving particles or breaking periodic
+contacts. The gap is a geometric preparation check, not a proof of negligible
+finite-size/electrostatic effects at every salt concentration. A smaller box does
+not add molecules or turn a one-way heating trajectory into an equilibrium Tm.
+
+Convention references: the [oxDNA.org submission form](https://oxdna.org/create)
+exposes salt concentration and accepts box size through the configuration file;
+no separate DNA-concentration control was found there (2026-11-18).
+The [oxDNA primer, section 6.1](https://www.frontiersin.org/journals/molecular-biosciences/articles/10.3389/fmolb.2021.693710/full)
+discusses total strand concentration and finite-size corrections, whereas
+[Lim et al. (2022)](https://academic.oup.com/nar/article-pdf/50/5/2480/42917779/gkac082.pdf)
+state their octamer benchmark as 6 mM dsDNA. The wizard explicitly labels total
+strands to make this factor-of-two distinction visible.
+
+### CPU VMMC equilibrium duplex melting
+
+In **New job → Production → Parameters & options**, choose a prepared/relaxed
+undamaged complementary duplex and enable **CPU VMMC umbrella sampling**. This
+is mutually exclusive with a thermal ramp. Salt and total DNA strand concentration
+remain editable. The initial implementation supports two linear, fully complementary
+DNA strands (2–100 bases each), free in solution; it rejects CPDs, hybrid systems,
+fields, anchors, surfaces and submodels. Execution uses the local CPU runner.
+
+The wizard configures four 200,000-step weight-tuning rounds, then five independently
+seeded replicas with 200,000 equilibration and 2,000,000 production MC steps each.
+These are starting budgets, not established convergence guarantees. Sampling defaults
+to 70°C, with histogram reweighting over 60–80°C every 2°C. These are **MC steps, not
+physical time**. A valid prepared configuration is required; prior MD relaxation is
+useful for removing clashes but does not replace the VMMC equilibration phase.
+
+The order parameter counts designed native base pairs. Tuning adjusts bias weights
+between rounds; all replicas then use the same frozen weights. Tuning/equilibration
+samples are excluded from the melting estimate. Bound means at least one native
+pair. Native reweighted histograms are corrected for the two-strand finite box;
+Tm is the interpolated 50% duplex yield. Total strand concentration is twice each
+strand species concentration for the equal-stoichiometry duplex.
+
+Right-click a VMMC job and choose **Show umbrella results**, or use the same button
+in **Graphs and Metrics**. Both open the saved analysis, including CSV/JSON exports;
+unfinished jobs explain that results are pending. Results also appear in recorded settings, with a melting curve,
+CSV and JSON exports, replica Tm SEM, and sampling diagnostics. Fewer than 20
+recorded bound/unbound transitions per replica, missing pair-count states, or an
+unbracketed Tm produce **inconclusive**, even though execution completed successfully.
+Passing these checks is not proof of convergence. Reweighting far from the sampled
+energy distribution needs independent checks; shared tuned weights can create
+systematic uncertainty not captured by replica SEM.
+
+The detached controller persists completed stages. After interruption, an unfinished
+stage replays from its original stage input and seed; prior partial outputs are archived
+inside that stage and excluded from analysis. Completed stages are retained.
+
+Method references: [official umbrella sampling documentation](https://lorenzo-rovigatti.github.io/oxDNA/umbrella_sampling.html)
+and [Sengar et al. (2021)](https://www.frontiersin.org/journals/molecular-biosciences/articles/10.3389/fmolb.2021.693710/full).

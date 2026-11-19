@@ -51,7 +51,7 @@ def test_run_destroys_exact_pod_and_preserves_receipt(tmp_path, monkeypatch, eng
         async def launch_detached(self, script, directory): return 123
         async def pid_alive(self, pid): return False
         async def read_file(self, path):
-            return '0' if path.endswith('solver.exit') else 'RUNNING' if failure == 'process' else 'FINISHED' 
+            return '0' if path.endswith('solver.exit') else 'RUNNING' if failure == 'process' else 'FINISHED'
     async def stock(*a): return {'gpu': {'on_demand': 2 if failure == 'stale_quote' else 1, 'stock': 'None' if failure == 'capacity' else 'High', 'vram_gb': None if failure == 'vram' else 48}}
     def watchdog(**kw):
         events.append(('watchdog', kw['pod_id']))

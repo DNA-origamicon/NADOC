@@ -17,9 +17,15 @@ test('production wizard toggles heating, cooling and fixed duration', async ({ p
   await wizard.locator('.wizard-mode', { hasText: 'Production' }).click()
   await wizard.locator('[data-thermal-field="enabled"]').check()
   await expect(wizard.locator('[data-thermal-field="gate"]')).toHaveCount(0)
-  await expect(wizard.locator('[data-thermal-field="block_steps"]')).toHaveValue('10000000')
+  await expect(wizard.locator('[data-thermal-field="block_steps"]')).toHaveValue('2000000000')
   await expect(wizard.locator('[data-thermal-field="max_steps"]')).toHaveCount(0)
   await expect(wizard).toContainText('Every temperature runs for this fixed number of steps')
+  const saltRow = wizard.locator('.wizard-stages tr').filter({ has: page.locator('th.param', { hasText: 'Salt concentration (M)' }) })
+  await saltRow.locator('td').first().click()
+  await saltRow.locator('input').fill('0.3')
+  await saltRow.locator('input').press('Enter')
+  await expect(saltRow.locator('td')).toHaveText(Array(13).fill('0.3'))
+
   for (const width of [1440, 760, 480]) {
     await page.setViewportSize({ width, height: 1000 })
     const layout = await wizard.locator('[data-thermal-controls]').evaluate(root => {
@@ -71,6 +77,9 @@ test('production wizard toggles heating, cooling and fixed duration', async ({ p
   await wizard.locator('[data-thermal-field="end_c"]').press('Tab')
   await wizard.locator('.wizard-tab', { hasText: 'Summary' }).click()
   const config = wizard.locator('.oxdna-wizard-config')
+  await expect(config).toContainText('thermostat = brownian')
+  await expect(config).toContainText('salt_concentration = 0.3')
+  await expect(config).toContainText('sequence_dependent = true')
   await expect(config).toContainText('temperature = 358.15K')
   await expect(config).toContainText('temperature = 298.15K')
   await expect(config).toContainText('13_thermal')

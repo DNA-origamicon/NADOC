@@ -88,6 +88,7 @@ export function initOxdnaTrajectoryPlayer({
   let _prepToken = 0       // bumped to cancel an in-flight prepare (user clicked again)
   let _bgPrep = null       // {done,total} while frames are prepared in the BACKGROUND
   let _seekToken = 0
+  let _scrubTarget = null
   let _waitingForFrame = false
   const _loadPhases = new Map() // phase → latest progress; completed rows stay visible
   let _previewShown = false, _settleTimer = null, _exactError = false
@@ -166,7 +167,7 @@ export function initOxdnaTrajectoryPlayer({
   })
 
   function _setLabel() {
-    if (label) label.textContent = _n ? `Frame ${_i + 1} / ${_n}${_previewShown ? (_exactError ? ' · preview · exact frame unavailable' : _waitingForFrame ? ' · preview · loading exact frame…' : ' · preview') : _waitingForFrame ? ' · buffering…' : ''}` : ''
+    if (label) label.textContent = _n ? `Frame ${(_scrubTarget ?? _i) + 1} / ${_n}${_previewShown ? (_exactError ? ' · preview · exact frame unavailable' : _waitingForFrame ? ' · preview · loading exact frame…' : ' · preview') : _waitingForFrame ? ' · buffering…' : ''}` : ''
   }
 
   /**
@@ -226,7 +227,7 @@ export function initOxdnaTrajectoryPlayer({
     }
   }
 
-  function seek(i, fire = true, { preview = false } = {}) {
+  function seek(i, fire = true, { preview = false, dragging = false } = {}) {
     if (_n <= 0) return
     if (fire && _smooth) pause()
     const target = Math.max(0, Math.min(_n - 1, i | 0))
@@ -235,6 +236,7 @@ export function initOxdnaTrajectoryPlayer({
     const apply = () => {
       if (token !== _seekToken) return false
       _i = target
+      _scrubTarget = null
       _previewShown = false; _exactError = false
       if (slider) slider.value = String(_i)
       _setLabel()
@@ -247,25 +249,26 @@ export function initOxdnaTrajectoryPlayer({
       _previewShown = true; _exactError = false; _waitingForFrame = false
       if (slider) slider.value = String(_i)
       _setLabel(); _steppers.refresh()
-      // Dragging never queues every intermediate request. Resolve only the latest
-      // settled point, while retaining the immediate preview during a slow read.
-      if (!_timer && onExactSeek) _settleTimer = setTimeout(async () => {
+      // Only release resolves the exact frame; a pause in pointer movement
+      // must never trigger a read while the user is still dragging.
+      if (!dragging && !_timer && onExactSeek) _settleTimer = setTimeout(async () => {
         if (token !== _seekToken) return
         _waitingForFrame = true; _setLabel()
         try {
           const ok = await onExactSeek(target, () => token === _seekToken)
-          if (token === _seekToken) { _previewShown = ok === false; _exactError = ok === false }
+          if (token === _seekToken) { _scrubTarget = null; _previewShown = ok === false; _exactError = ok === false }
         } catch { if (token === _seekToken) _exactError = true }
         finally { if (token === _seekToken) { _waitingForFrame = false; _setLabel() } }
-      }, 180)
+      }, 0)
       return true
     }
+    if (dragging) { _setLabel(); return true }
     const ready = fire ? onBeforeSeek?.(target) : true
     if (ready?.then) {
       _waitingForFrame = true
       _setLabel()
       // Keep the displayed frame number with the unchanged scene while buffering.
-      if (slider) slider.value = String(_i)
+      if (slider && _scrubTarget === null) slider.value = String(_i)
       return Promise.resolve(ready).then(ok => {
         if (token !== _seekToken) return false
         if (ok === false) { pause(); return false }
@@ -323,6 +326,7 @@ export function initOxdnaTrajectoryPlayer({
       if (await onBeforeSeek?.(_i) === false || playToken !== _seekToken) return
       seek(_i, false); onSeek?.(_i)
     }
+    _scrubTarget = null
     setLoading(null)
     _smooth = !!interpolationToggle?.checked && !!onInterpolate
     _timer = _smooth ? -1 : setInterval(_tick, Math.max(1, Math.round(1000 / fps)))
@@ -356,6 +360,7 @@ export function initOxdnaTrajectoryPlayer({
     _seekToken++
     _previewShown = false; _exactError = false
     _readyKey = null
+    _scrubTarget = null
     _n = Math.max(0, nFrames | 0)
     _markers = markers || []
     _i = 0
@@ -372,6 +377,7 @@ export function initOxdnaTrajectoryPlayer({
     _seekToken++
     _previewShown = false; _exactError = false
     _readyKey = null
+    _scrubTarget = null
     _n = 0; _i = 0; _markers = []
     // A job switch invalidates any prepare that was running for the OLD job; leaving the
     // spinner up would disable the button for a trajectory that has nothing pending.
@@ -392,7 +398,25 @@ export function initOxdnaTrajectoryPlayer({
     setLoading(null)
     if (resume && ready) void play()
   })
-  slider?.addEventListener('input', () => { pause(); seek(parseInt(slider.value, 10) || 0, true, { preview: true }) })
+  // Own the handle from pointer-down through release. A stationary drag is still
+  // a drag: no debounce timer may start buffering before the user commits.
+  slider?.addEventListener('pointerdown', () => {
+    _scrubTarget = parseInt(slider.value, 10) || 0
+    pause()
+  })
+  slider?.addEventListener('input', () => {
+    const target = parseInt(slider.value, 10) || 0
+    _scrubTarget = target
+    pause()
+    seek(target, true, { preview: true, dragging: true })
+  })
+  // Native range change covers mouse/touch release and keyboard commits.
+  slider?.addEventListener('change', () => {
+    const target = parseInt(slider.value, 10) || 0
+    _scrubTarget = target
+    pause()
+    seek(target, true, { preview: true })
+  })
 
   return {
     setTrajectory, play, pause, toggle, seek, stop, setPreparing, setLoading, prepare,

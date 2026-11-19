@@ -26,6 +26,9 @@ oxDNA output is Physical-layer only; it never mutates Design topology.
 
 from __future__ import annotations
 
+from backend.core.oxdna_vmmc import VmmcMelting
+from backend.core.oxdna_concentration import apply_job_concentration, configuration_box, validate_source_concentration
+
 from backend.api.simulation_submodel import SubmodelSelection, read_selection, save_selection
 
 from backend.core import simulation_runtime
@@ -253,6 +256,7 @@ def _apply_oxdna_run_dir(job, run_dir: Optional[str]) -> None:
 
 
 class CreateOxdnaJobRequest(BaseModel):
+    dna_concentration_uM: float | None = Field(None, gt=0, allow_inf_nan=False, description="Total DNA strand concentration in micromolar; null preserves automatic/inherited box")
     submodel: SubmodelSelection | None = None
     run_dir: Optional[str] = None
     execution_target: str = Field("local", pattern="^(local|alpine|runpod)$")
@@ -427,6 +431,8 @@ class SurfaceElement(SurfaceGeometry):
 
 
 class RunRequest(BaseModel):
+    vmmc_melting: VmmcMelting | None = None
+    dna_concentration_uM: float | None = Field(None, gt=0, allow_inf_nan=False, description="Total DNA strand concentration in micromolar; null preserves automatic/inherited box")
     backend: Literal["CPU", "CUDA"] | None = None
     thermal_ramp: ThermalRamp | None = None
     submodel: SubmodelSelection | None = None
@@ -435,7 +441,7 @@ class RunRequest(BaseModel):
     field, a hard surface, and anchor traps (each independent/optional).  Branches a
     child job seeded from the relaxed parent so runs can be fanned out + compared."""
 
-    steps: int = Field(2_000_000, ge=1000, le=200_000_000)
+    steps: int = Field(2_000_000, ge=1000, le=10_000_000_000)
     stage_overrides: dict[str, dict] = Field(default_factory=dict)
     # Steps between trajectory frames (oxDNA's print_conf_interval).  Absolute, not a
     # fraction of `steps`, so a longer run gives a LONGER trajectory rather than a
@@ -501,6 +507,7 @@ def resolve_oxdna_field_api(field: FieldElement) -> dict:
 
 
 class SurfaceDepositionRequest(BaseModel):
+    dna_concentration_uM: float | None = Field(None, gt=0, allow_inf_nan=False, description="Total DNA strand concentration in micromolar; null preserves automatic/inherited box")
     run_dir: Optional[str] = None
     surface: SurfaceElement
     surface_anchors: list[AnchorRef] = Field(min_length=1)
@@ -1106,6 +1113,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         # Advanced / Hard surface / Anchors cards with what the run used.
         run_config={
             "kind": "relax",
+            "dna_concentration_uM": body.dna_concentration_uM,
             "backend": body.backend,
             "interaction_type": body.interaction_type,
             "engine_variant": body.engine_variant,
@@ -1276,7 +1284,7 @@ async def list_oxdna_jobs() -> list[dict]:
 
 _CONTINUATION_PARAMETERS = (
     "temperature", "dt", "thermostat", "diff_coeff", "gamma_trans",
-    "refresh_vel", "bussi_tau", "newtonian_steps",
+    "refresh_vel", "bussi_tau", "newtonian_steps", "salt_concentration",
 )
 
 
@@ -1289,6 +1297,16 @@ def _continuation_parameters(job, workspace, stage_name=None):
     if source is None:
         return {}
     return {key: getattr(source, key) for key in _CONTINUATION_PARAMETERS}
+
+
+def _can_seed_production(job, workspace):
+    """Stopped jobs may branch only after the writer has exited and saved a frame."""
+    if job.status not in (OxdnaStatus.completed, OxdnaStatus.stopped):
+        return False
+    if is_running(job.job_id):
+        return False
+    conf, _ = _latest_relaxed_conf(job, workspace)
+    return conf is not None and conf.is_file() and conf.stat().st_size > 0
 
 
 def _inherit_continuation_parameters(stages, job, workspace, stage_name=None, *, deposition=False):
@@ -1314,7 +1332,8 @@ def _list_oxdna_jobs() -> tuple[list[dict], list]:
     to_warm: list = []
     for j in jobs:
         d = j.to_dict()
-        if j.status == OxdnaStatus.completed:
+        d["can_seed_production"] = _can_seed_production(j, ws)
+        if d["can_seed_production"]:
             d["continuation_parameters"] = _continuation_parameters(j, ws)
         d.update(legacy_job_status(_job_fingerprint(j), current_fp, engine="oxdna"))
         if d.get("status") == "running":
@@ -1342,7 +1361,14 @@ async def get_oxdna_job(job_id: str) -> dict:
 
     job = _load_job(job_id)
     d = job.to_dict()
-    if job.status == OxdnaStatus.completed:
+    try:
+        d["box_conditions"] = configuration_box(job.job_dir(_workspace()))[1]
+    except (OSError, ValueError, IndexError):
+        pass
+    from dataclasses import asdict
+    d["stage_specs"] = [asdict(spec) for spec in load_stage_specs(job.job_dir(_workspace()))]
+    d["can_seed_production"] = _can_seed_production(job, _workspace())
+    if d["can_seed_production"]:
         d["continuation_parameters"] = _continuation_parameters(job, _workspace())
     d.update(legacy_job_status(_job_fingerprint(job), _current_design_fingerprint(), engine="oxdna"))
     return d
@@ -1367,6 +1393,7 @@ async def copy_oxdna_job(job_id: str, body: Optional[OxdnaRunLocation] = None) -
     copied_specs = assign_stage_seeds(specs, copied_seed)
     copied_config = deepcopy(source.run_config) if source.run_config else None
     if copied_config is not None:
+        copied_config.pop("vmmc_result", None)
         copied_config["seed"] = copied_seed
     copied_specs = reset_copy(copied_specs, copied_config)
     copied = new_oxdna_job(
@@ -1401,6 +1428,8 @@ async def copy_oxdna_job(job_id: str, body: Optional[OxdnaRunLocation] = None) -
     copied_dir = copied.job_dir(ws)
     copied_dir.mkdir(parents=True, exist_ok=copied.archived)
     files = {"submodel_selection.json", "topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", "attachment_forces.txt", AVERAGE_SEQUENCE_FILE, "cpd.dat", "cpd_model.json", "cpd_manifest.json"}
+    if (copied_config or {}).get("vmmc_melting"):
+        files.add("oxDNA2_sequence_dependent_parameters.txt")
     files.update(spec.forces_file for spec in copied_specs if spec.forces_file)
     files.update(spec.parfile for spec in copied_specs if spec.parfile)
     try:
@@ -1460,7 +1489,7 @@ def _copy_child_parameters(parent_dir, child_dir, specs, *, missing_only=False):
     for name in required:
         if not (parent_dir / name).is_file():
             raise HTTPException(409, f"Parent simulation parameter file is missing: {name}")
-    for name in required | {"oxDNA2_average_sequence_parameters.txt", "design_ref.dat"}:
+    for name in required | {"oxDNA2_average_sequence_parameters.txt", "oxDNA2_sequence_dependent_parameters.txt", "design_ref.dat"}:
         source = parent_dir / name
         if source.is_file() and (not missing_only or not (child_dir / name).exists()):
             shutil.copy(source, child_dir / name)
@@ -1482,8 +1511,8 @@ def _rebuild_continuation_settings(job, updates):
     from pydantic import ValidationError
     recorded = job.run_config or {}
     merged = {**recorded, **updates}
-    if merged.get("thermal_ramp") and updates.get("execution_target", job.execution_target) != "local":
-        raise HTTPException(422, "Thermal ramps currently require the local managed runner.")
+    if (merged.get("thermal_ramp") or merged.get("vmmc_melting")) and updates.get("execution_target", job.execution_target) != "local":
+        raise HTTPException(422, "Thermal ramps and VMMC currently require the local managed runner.")
     deposition = merged.get("surface_deposition", recorded.get("kind") == "surface_deposition")
     if not isinstance(deposition, bool):
         raise HTTPException(422, "surface_deposition must be a boolean.")
@@ -1504,7 +1533,7 @@ def _rebuild_continuation_settings(job, updates):
             # Existing stage settings are restored from stages_spec below when
             # the protocol is unchanged. Deposition stage names cannot be applied
             # to the new single-stage production protocol when toggling it off.
-            if "thermal_ramp" not in merged:
+            if "thermal_ramp" not in merged and "vmmc_melting" not in merged:
                 settings.pop("stage_overrides", None)
             settings["anchor_stiff"] = merged.get("production_anchor_stiff", DEFAULT_ANCHOR_STIFF)
             settings["seed"] = seed
@@ -1520,7 +1549,7 @@ def _rebuild_continuation_settings(job, updates):
         target.archive_path = directory
         prepared = prepare(job.parent_job_id, request, target=target)
         specs = load_stage_specs(Path(directory))
-        if recorded.get("kind") == prepared.run_config.get("kind") and not (recorded.get("thermal_ramp") or "thermal_ramp" in updates):
+        if recorded.get("kind") == prepared.run_config.get("kind") and not (recorded.get("thermal_ramp") or "thermal_ramp" in updates or recorded.get("vmmc_melting") or "vmmc_melting" in updates):
             old_specs = {s.name: s for s in load_stage_specs(jd)}
             for index, spec in enumerate(specs):
                 previous = old_specs.get(spec.name)
@@ -1533,10 +1562,15 @@ def _rebuild_continuation_settings(job, updates):
                     specs[index] = previous
         # Preserve the selected job's execution settings, not the parent's.
         for spec in specs:
-            spec.backend = job.backend
+            spec.backend = "CPU" if prepared.run_config.get("vmmc_melting") else job.backend
             spec.device = job.device
-            spec.salt_concentration = job.salt_concentration
+            spec.salt_concentration = prepared.salt_concentration if prepared.run_config.get("vmmc_melting") else job.salt_concentration
         apply_edit_hardware(prepared, job, updates, specs)
+        if prepared.run_config.get("vmmc_melting"):
+            prepared.backend = "CPU"
+            prepared.run_config["backend"] = "CPU"
+            for spec in specs:
+                spec.backend = "CPU"
         (Path(directory) / "stages_spec.json").write_text(json.dumps([asdict(s) for s in specs], indent=2))
         prepared.stages = [s.to_status() for s in specs]
         prepared.run_config["surface_deposition"] = deposition
@@ -1568,12 +1602,19 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             "Only prepared jobs that have not been submitted or started can be edited.",
         )
     recorded = dict(job.run_config or {})
+    if "dna_concentration_uM" in updates:
+        try:
+            configuration_box(job.job_dir(_workspace()), updates["dna_concentration_uM"])
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
     force_keys = {"surface", "anchors", "surface_anchors", "surface_strands", "field"}
     deposition = recorded.get("surface_deposition", recorded.get("kind") == "surface_deposition")
     if "surface_deposition" in updates and not isinstance(updates["surface_deposition"], bool):
         raise HTTPException(422, "surface_deposition must be a boolean.")
     mode_changed = "surface_deposition" in updates and updates["surface_deposition"] != deposition
     forces_changed = any(key in updates and updates[key] != recorded.get(key) for key in force_keys)
+    if updates.get("vmmc_melting") is not None or recorded.get("vmmc_melting"):
+        return _rebuild_continuation_settings(job, updates).to_dict()
     if updates.get("thermal_ramp") is not None or recorded.get("thermal_ramp"):
         validate_edit(job, updates)
         return _rebuild_continuation_settings(job, updates).to_dict()
@@ -1594,7 +1635,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             "execution_target", "kind", "partition", "runpod_budget_usd",
             "runpod_gpu_key", "runpod_quoted_rate_usd_per_hour", "runpod_volume_id",
             "salt_concentration", "seed", "slurm_resources", "stage_overrides",
-            "stages", "steps", "surface_deposition",
+            "stages", "steps", "surface_deposition", "dna_concentration_uM",
         }
         def _frozen_value(key: str, value):
             value = deepcopy(value)
@@ -1689,6 +1730,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
         }
         if len(specs) == 1:
             job.run_config["steps"] = specs[0].steps
+        apply_job_concentration(job, job.job_dir(_workspace()), job.run_config.get("dna_concentration_uM"))
         job.save(_workspace())
         return job.to_dict()
 
@@ -1750,6 +1792,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
         # saved settings and the runnable input files untouched.
         with tempfile.TemporaryDirectory(prefix=".oxdna-settings-", dir=jd.parent) as directory:
             staged = deepcopy(job)
+            staged.run_config = {**recorded, "dna_concentration_uM": body.dna_concentration_uM}
             staged.archived = True
             staged.archive_path = directory
             try:
@@ -1811,6 +1854,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             job.run_config["surface"] = persisted_wall(job.run_config["surface"], forces_info["wall"])
         old_count = ((recorded.get("surface_strands") or {}).get("built") or {}).get("n_beads", 0)
         job.n_nucleotides += int((built_capture or {}).get("n_beads", 0)) - int(old_count)
+    apply_job_concentration(job, job.job_dir(_workspace()), body.dna_concentration_uM)
     job.save(_workspace())
     return job.to_dict()
 
@@ -1888,6 +1932,8 @@ async def get_oxdna_progress(job_id: str) -> dict:
 
 
 def _submodel_preflight(job, specs):
+    if (job.run_config or {}).get("vmmc_melting") and (job.execution_target != "local" or job.backend != "CPU"):
+        raise HTTPException(422, "VMMC melting requires the local CPU runner.")
     from backend.core.oxdna_submodel import preflight
     try:
         specs = preflight(job, _workspace(), specs)
@@ -2298,9 +2344,9 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     mobile_gold = (parent.run_config or {}).get("mobile_gold")
     if mobile_gold and (body.field or body.surface or body.anchors or body.surface_anchors or body.surface_strands):
         raise HTTPException(400, "Mobile gold production currently supports free solution without additional field/surface/anchor elements")
-    if is_running(job_id) or parent.status != OxdnaStatus.completed:
+    if not _can_seed_production(parent, _workspace()):
         raise HTTPException(
-            400, "A production run requires a completed oxDNA job."
+            400, "A production run requires a completed or stopped oxDNA job with a saved configuration and no active worker."
         )
     _assert_job_current(parent)
     if find_oxdna() is None:
@@ -2309,7 +2355,7 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     ws = _workspace()
     pjd = parent.job_dir(ws)
     from backend.core.oxdna_submodel import selected as selected_box
-    require_full_system(body.thermal_ramp, body.submodel.box if body.submodel is not None else selected_box(pjd))
+    require_full_system(body.thermal_ramp or body.vmmc_melting, body.submodel.box if body.submodel is not None else selected_box(pjd))
     design = _load_snapshot_design(pjd)
     if design is None:
         raise HTTPException(
@@ -2318,6 +2364,13 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     relaxed_conf, _stage = _latest_relaxed_conf(parent, ws)
     if relaxed_conf is None:
         raise HTTPException(400, "No relaxed configuration to seed the run from.")
+
+    from backend.core.oxdna_vmmc import validate_request as validate_vmmc
+    try:
+        validate_vmmc(body, pjd, parent)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    validate_source_concentration(pjd, relaxed_conf, body.dna_concentration_uM)
 
     # Resolve the enabled elements into the writer's input dicts.
     field_in = None
@@ -2375,10 +2428,13 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     )
     allowed = {
         "temperature", "dt", "thermostat", "diff_coeff", "refresh_vel",
-        "bussi_tau", "newtonian_steps", "max_backbone_force",
+        "bussi_tau", "newtonian_steps", "max_backbone_force", "salt_concentration", "sequence_dependent",
         "max_backbone_force_far", "min_bp_retained", "print_energy_every",
     }
     _inherit_continuation_parameters([stage], parent, ws, _stage)
+    if body.thermal_ramp:
+        from backend.core.oxdna_thermal_ramp import literature_stage_defaults
+        stage = literature_stage_defaults(stage)
     overrides = body.stage_overrides.get(stage.name, {})
     if "diff_coeff" in overrides or ("thermostat" in overrides and overrides["thermostat"] != "langevin"):
         stage.gamma_trans = None
@@ -2416,7 +2472,7 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         n_nucleotides=parent.n_nucleotides,
         device=parent.device,
         backend=body.backend or parent.backend,
-        salt_concentration=parent.salt_concentration,
+        salt_concentration=stage.salt_concentration,
         random_seed=job_seed,
         design_source_path=parent.design_source_path,
         project_id=parent.project_id,
@@ -2526,8 +2582,16 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
             stream.write("\n" + peg_terminal_field_text(cap["spec"], field_in))
     _inherit_submodel_selection(pjd, cjd, body.submodel)
 
-    specs = configure_child(child, stage, body.thermal_ramp)
+    from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_PATH
+    sequence_file = AVERAGE_SEQUENCE_PATH.with_name("oxDNA2_sequence_dependent_parameters.txt")
+    shutil.copy2(sequence_file, cjd / sequence_file.name)
+    if body.vmmc_melting:
+        from backend.core.oxdna_vmmc import configure as configure_vmmc
+        specs = configure_vmmc(child, stage, body.vmmc_melting)
+    else:
+        specs = configure_child(child, stage, body.thermal_ramp)
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(s) for s in specs], indent=2))
+    apply_job_concentration(child, cjd, body.dna_concentration_uM)
     child.status = OxdnaStatus.queued
     if target is None:
         child.save(ws)
@@ -2715,6 +2779,7 @@ def _prepare_surface_deposition_job(job_id: str, body: SurfaceDepositionRequest,
     (cjd / "stages_spec.json").write_text(
         json.dumps([asdict(stage) for stage in stages], indent=2), encoding="utf-8"
     )
+    apply_job_concentration(child, cjd, body.dna_concentration_uM)
     child.status = OxdnaStatus.queued
     if target is None:
         child.save(ws)

@@ -125,6 +125,121 @@
 - **Evidence:** `.development-artifacts/solver-memory-20261117/gesture-rerun.log`, `gesture-baseline.log`, and `baseline-gesture-module-proof.json`; original SNUPI and mrDNA adapter modules were injected for the baseline reproduction without modifying the working tree.
 - **Next:** diagnose native private gesture auxiliary propagation and its test contract; root cause is not yet established.
 
+## ISSUE-249 — VMMC wizard rejects empty submodel selection (2026-11-18)
+
+Validation: 6 focused backend; FAST 21,015 passed (90 skipped), FULL deferred by session policy; 10,698 frontend passed (1 skipped). Smoke 23 passed, 2 skipped; existing Honeycomb request timeout passed isolated retry. Native job and copy each completed eight stages with explicit empty-box payload. All test jobs/captures removed. Evidence: `.development-artifacts/vmmc-wizard-422.json`.
+
+[x] The normal production launcher includes `submodel: {box: null}` for a full-system
+job. VMMC incorrectly rejected the wrapper's presence as an active submodel, returning
+422 before job allocation. Accept the explicit null box while continuing to reject an
+actual region. Regression covers both cases with the real RunRequest schema, and the
+native browser/API workflow now includes the launcher's explicit empty-box payload.
+
+Optimistic `creating-*` rows now select the submodel draft and skip export trajectory
+metadata until the real job exists, avoiding the secondary 404 requests. Feature
+`main.js` LOC Δ: 0. Native browser create/edit/run/copy/results validation passed
+with the corrected payload; both jobs completed all eight stages and were removed.
+
+
+## ISSUE-248 — Umbrella results entry points (2026-11-18)
+
+Validation: dedicated browser gesture/export test and visual review passed; 10,696 frontend tests passed (1 skipped). Smoke: 23 passed, 2 skipped, unrelated Honeycomb creation request timeout; exact isolated retry passed. Screenshots/traces removed; compact receipt `.development-artifacts/umbrella-results-ui.json`.
+
+[x] VMMC job right-click menu and Graphs and Metrics now expose “Show umbrella
+results”. Both open one shared dialog with saved melting curves, uncertainty/
+sampling diagnostics and CSV/JSON exports. Pending analyses show the existing
+pending-results message; ordinary MD jobs do not show this action. UI-only change;
+no simulations or molecular documents authored. Feature `main.js` LOC Δ: 0.
+
+
+## ISSUE-247 — CPU VMMC equilibrium duplex workflow (2026-11-18)
+
+Final checks: 9 focused backend, 10,696 frontend (1 skipped), 24 smoke (2 skipped); lint/diff clean. Edited salt 0.35 M and a fresh-seed copy each completed all eight native CPU stages. All validation jobs/captures removed. FAST: 21,009 passed; four energy compatibility failures fixed/retested, existing aptamer-history HTTP 413 remains. FULL deferred by session policy. Feature `main.js` LOC Δ: 0.
+
+[x] Add a wizard mode mutually exclusive with thermal ramps, with salt/concentration,
+fixed tuning/equilibration/production budgets and independently seeded CPU replicas.
+Persist stage progress and frozen bias weights, replay interrupted stages, and recover
+analysis after restart. Native histogram reweighting and finite-size correction produce
+melting curves, replica diagnostics and CSV/JSON exports in settings/metrics. Undamaged
+complementary free-solution DNA duplexes only; unsupported CPD/hybrid/force systems
+fail preflight. Sparse sampling reports inconclusive rather than a reliable Tm.
+
+Validation: real browser create → API queued edit → native CPU execution of eight stages
+→ recorded results → CSV download passed on the existing duplex; all native stages done,
+no page errors. Short sampling was correctly inconclusive. Desktop/narrow pixel review
+fixed salt alignment and stage-table spacing. Disposable simulation child removed through
+API; authored source unchanged. Compact evidence: `.development-artifacts/vmmc-development/validation.json`.
+
+
+## ISSUE-246 — Finish thermal dwell and prune melted series (2026-11-18)
+
+[x] New ramp toggle defaults to stopping after a sampled 100% unpaired-base
+threshold. Complete the current fixed dwell, persist native HBList evidence,
+then skip later temperatures without failure. Preserve legacy full schedules,
+manual skips, interrupted-attempt offsets and clean copy/retry semantics.
+
+## ISSUE-245 — Explicit oxDNA DNA concentration and readable units (2026-11-18)
+
+[x] Added total DNA strand concentration beside temperature/salt throughout the
+wizard. Translate molarity into simulation volume, preserve inherited boxes when
+blank, and show resolved conditions in saved settings. Visual review found CSS
+capitalization changing µM into ΜM; preserve unit case in recorded field labels.
+
+## ISSUE-244 — Full geometry overlays native atoms after oxDNA Off (2026-11-18)
+
+Select a job, switch to atomistic, show oxDNA positions, then select Off. Native
+scene-ownership restoration re-enables the CG root after native heavy restoration
+has already hidden it. Restore ownership before applying the selected native
+representation. Cover both teardown and suspended display restoration.
+
+## ISSUE-243 — Consistent oxDNA conditions and wizard visual review (2026-11-17)
+
+Salt needs a visible control beside temperature for every wizard run type.
+Review creation, queued edits and recorded settings at desktop/narrow widths;
+remove the asymmetry between thermal and ordinary production and reduce engine
+information competing with the experiment's primary conditions.
+
+## ISSUE-242 — Thermal salt inheritance and visible editing (2026-11-17)
+
+The literature ramp preset overwrote parent salt with 0.1 M. Preserve salt from
+the saved continuation stage, expose a dedicated wizard field, and apply explicit
+user overrides uniformly across the ramp. Source switching updates inherited
+salt until an explicit override is provided; clearing restores inheritance.
+
+## ISSUE-241 — Stopped production runs missing from continuation picker (2026-11-17)
+
+Duplex Run 1 has a saved last configuration but status stopped, so completed-only
+filters in both wizard and production API reject it. Permit completed/stopped
+sources with a nonempty checkpoint after their writer exits; retain the source
+unchanged and label stopped choices as using the last saved frame.
+
+## ISSUE-240 — Raw thermal configuration in View/Edit Settings (2026-11-17)
+
+Running thermal jobs exposed nested configuration/metrics JSON as ordinary fields.
+Show a readable recorded schedule and saved simulation physics, and formatted
+controls for queued copies. Do not substitute new defaults for recorded settings.
+
+## ISSUE-239 — Thermal progress falsely reaches 100% (2026-11-17)
+
+Live duplex ramp e88bad894726 reported zero steps left at 25°C while native
+oxDNA was around 175M / 2B steps. expected_energy_lines ignored the explicit
+50k-step sampling interval and assumed approximately 100 samples per stage.
+Correct the denominator for explicit cadence and resumed remaining budgets;
+verify the existing detached scheduler survives API server reload unchanged.
+
+## ISSUE-238 — Selected temperature progress in the Jobs card (2026-11-17)
+
+Selecting a temperature child must show that stage's percentage and completed /
+scheduled steps beneath the unified progress bar. Keep parent selection scoped
+to the whole series; handle pending, done, stopped, failed and skipped stages.
+
+## ISSUE-237 — Literature-informed melting defaults (2026-11-17)
+
+Use fixed literature-scale dwell and explicit MD physics for new thermal jobs.
+Enable sequence-dependent strengths for sequence-specific controls, editable
+salt across all temperatures, and preserve existing job specifications. Document
+a published duplex benchmark and concentration/finite-size limitations.
+
 ## ISSUE-220 — Generic refusal on large constrained Move/Rotate Apply (2026-11-17)
 
 - **Status:** diagnosis open; failure reporting corrected. Saved JJ_Hinge accepts successive X requests of 55°, 65°, and 90° in an isolated app, clearing pending poses and appending one feature per Apply. Constraints project these requests to X=19.772/19.820/19.868°, so an accepted pose above 50° is not demonstrated. The user's exact failing editing state has not been reproduced.

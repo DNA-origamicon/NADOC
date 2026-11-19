@@ -56,3 +56,55 @@
   .oxdna-thermal__grid, .oxdna-thermal__grid--three { grid-template-columns: minmax(0, 1fr); }
   .modal--oxdna-wizard .wizard-field { grid-template-columns: minmax(0, 1fr) minmax(90px, 120px) auto; }
 }
+
+.oxdna-thermal-recorded > h3 { margin: 16px 0 10px; }
+.oxdna-thermal-recorded .oxdna-recorded-fields { grid-template-columns: repeat(auto-fit,minmax(min(100%,230px),1fr)); }
+.oxdna-thermal-recorded__table { max-width: 100%; overflow-x: auto; }
+.oxdna-thermal-recorded__table table { width: 100%; border-collapse: collapse; }
+.oxdna-thermal-recorded__table th, .oxdna-thermal-recorded__table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--color-border-default); white-space: nowrap; }
+
+/* Keep the experimental conditions together, with consistent top-aligned inputs. */
+.modal--oxdna-wizard .oxdna-conditions {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px; margin-bottom: 16px;
+}
+.modal--oxdna-wizard .oxdna-conditions > .wizard-field,
+.modal--oxdna-wizard .oxdna-thermal .wizard-salt {
+  grid-column: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto;
+  align-content: start; align-items: start; max-width: none; margin: 0; padding: 0; border: 0;
+}
+.modal--oxdna-wizard .oxdna-conditions .wizard-field__control { grid-column: 1; }
+.modal--oxdna-wizard .oxdna-conditions .wizard-temperature { grid-template-columns: minmax(0, 1fr) auto; }
+.modal--oxdna-wizard .oxdna-conditions .wizard-temperature > .wizard-field__label { grid-column: 1 / -1; }
+.modal--oxdna-wizard .oxdna-conditions .wizard-temperature .wizard-field__control { grid-column: 1; grid-row: 2; }
+.modal--oxdna-wizard .oxdna-conditions .wizard-chip { grid-column: 2; grid-row: 2; align-self: center; justify-self: start; }
+.modal--oxdna-wizard .oxdna-conditions .wizard-field__help { grid-column: 1 / -1; }
+.modal--oxdna-wizard .oxdna-conditions input { width: 100%; box-sizing: border-box; }
+.oxdna-thermal__grid--conditions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.modal--oxdna-wizard details { margin: 12px 0; }
+.modal--oxdna-wizard details > summary { cursor: pointer; color: var(--color-text-secondary); padding: 8px 0; font-size: var(--text-sm); }
+.modal--oxdna-wizard .wizard-stages { max-width: 100%; overflow-x: auto; }
+@media (max-width: 800px) {
+  .oxdna-thermal__grid--conditions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .modal--oxdna-wizard .oxdna-conditions, .oxdna-thermal__grid--conditions { grid-template-columns: minmax(0, 1fr); }
+}
+.modal--oxdna-wizard .oxdna-thermal .wizard-salt { grid-row: span 3; grid-template-rows: subgrid; }
+
+/* Concentration is a volume setting shared by every stage. */
+.modal--oxdna-wizard .wizard-dna-concentration { grid-column: 1 / -1; }
+.modal--oxdna-wizard .wizard-dna-concentration input { max-width: 260px; }
+
+/* Capitalizing µ changes the unit glyph; preserve scientific labels verbatim. */
+.modal--oxdna-wizard .oxdna-recorded-fields dt { text-transform: none; }
+
+/* VMMC parameters use matching stacked labels/inputs, including inherited salt. */
+.modal--oxdna-wizard .oxdna-vmmc .oxdna-thermal__grid > .wizard-field {
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto;
+  grid-row: auto; gap: 6px; padding: 0; border: 0; align-content: start;
+}
+.modal--oxdna-wizard .oxdna-vmmc .oxdna-thermal__grid > .wizard-field > input { grid-column: 1; }
+.oxdna-vmmc-results button { margin: 6px 8px 6px 0; }
+.oxdna-vmmc-recorded table { width: 100%; border-collapse: collapse; }
+.oxdna-vmmc-recorded th, .oxdna-vmmc-recorded td { text-align: left; padding: 8px; border-bottom: 1px solid var(--color-border-default); }
