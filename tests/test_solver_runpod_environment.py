@@ -45,3 +45,5 @@ def test_setup_shell_and_dependency_versions():
     assert 'UV_PYTHON_INSTALL_DIR=/workspace/' in script
     assert script.index('pip install --python') < script.index('> /workspace/nadoc-solver-env/.nadoc-ready')
     assert '--clear' not in script
+    assert 'torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128' in script
+    assert script.index('torch==2.9.1') < script.index('> /workspace/nadoc-solver-env/.nadoc-ready')

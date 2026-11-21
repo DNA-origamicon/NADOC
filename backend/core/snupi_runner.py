@@ -4,7 +4,8 @@ SNUPI FEM Runner — background execution of a single SNUPI shape prediction.
 Sibling of ``cando_runner.py``, predict-only: a SNUPI job is a pure Python FEM solve
 (``backend.physics.fem_solver.predict_shape`` with ``material="snupi"``), not an external
 simulator — the two "engines" are the solver modes (linear "Coarse" preview vs nonlinear
-"Fine" solve).  There is no GPU and no availability probe.
+"Fine" solve). Linear Stokes dynamics can use the optional CUDA backend;
+static and unsupported dynamics modes retain CPU execution.
 
 The solve runs in a DETACHED worker subprocess (:mod:`backend.core.snupi_worker`), NOT an
 in-process daemon thread.  The reason is operational: a "Fine" solve on a large design (e.g.
@@ -360,6 +361,7 @@ def _cache_fem_analysis(job: SnupiJob, jd: Path, result: dict) -> None:
     """Write a ``predict_shape`` result to the job's ``display.json`` + ``rmsf.json`` and record the
     node/RMSF summary on the job — the display cache every SNUPI display mode reads (deform / flex /
     deviation / cylinders)."""
+    job.execution = result.get("execution")
     positions = result.get("positions", [])
     (jd / "display.json").write_text(
         json.dumps(
@@ -519,6 +521,7 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
             # Langevin structural dynamics: run a thermal trajectory and report its time-mean shape +
             # trajectory RMSF (same display payload). hydrodynamics=True → full RPY coupled friction.
             dynamics=getattr(job, "dynamics", False),
+            dynamics_backend=os.environ.get("NADOC_SNUPI_BACKEND", "auto"),
             hydrodynamics=getattr(job, "hydrodynamics", False),
             # Coarse blob hydrodynamics (1 bead / k bp) — the only mode that fits at origami scale;
             # the exact per-bp friction is dense O(N²). None = exact (guarded by check_friction_memory).

@@ -33,6 +33,8 @@ rendering updates `solver_cluster_card.showJob`, selecting the job's provider an
 restoring its saved remote settings when selection changes. Same-job polls retain
 next-run edits. RunPod displays selected-job pod/GPU/requested RAM/CPU/quote/budget
 separately from live rental offers; deselection clears those job details.
+The RunPod help text describes automatic default SNUPI environment setup and
+optional linear/Stokes CUDA; custom environments and mrDNA remain user-managed.
 
 ## Launch resource admission (2026-11-18)
 
@@ -52,7 +54,8 @@ Coarse/Fine opens `solver_resource_wizard.js` when Alpine or RunPod is selected.
 The estimate endpoint uses the current solver options and whole assembly compact
 projection. Users choose resources, RAM, CPUs, time, paths and provider settings,
 then review and explicitly submit/rent. Undersized or unknown GPU memory is
-ineligible for mrDNA; SNUPI needs no VRAM. Alpine RAM is capped by the profile and
+ineligible for mrDNA. SNUPI retains a CPU fallback, so the wizard has no mandatory
+VRAM minimum; optional CUDA dynamics performs a separate runtime headroom check. Alpine RAM is capped by the profile and
 allocated CPU count. RunPod queries live stock/prices in the selected volume's
 datacenter for the requested host RAM/CPU minima, then checks again before review
 and rental; this is not a capacity reservation. Controls use the standard NADOC

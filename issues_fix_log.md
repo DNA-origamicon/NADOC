@@ -1,5 +1,60 @@
 # Issues fix log
 
+## 2026-11-20 — ISSUE-253/254: RunPod cold imports and large-result collection
+
+- [x] Extend dependency preflight to 180 s and native-result packaging to 900 s,
+  preserving dependency failures, immutable provenance, staging, compression and
+  the paid-pod budget/watchdog. Actual failures: `53d8d2b83be8` before solving,
+  `f404d25df60e` after a successful 693.43 s CUDA solve during packaging.
+- [x] Correct obsolete RunPod help text: managed default SNUPI setup is automatic,
+  and linear/Stokes dynamics can use CUDA. Unsupported models retain CPU.
+- [x] 19 focused solver-cluster tests pass after both fixes; the existing 25 focused
+  frontend checks passed for provider cards, engine activity and stage timelines.
+- [x] All three managed RunPod jobs completed, all native outputs passed numerical
+  checks and all nine result-view checks passed. Completed spinner/Stop clear;
+  provider inventory confirms no pods remain. Total compute $2.629 including
+  failed attempts; browser artifacts removed, managed scientific results retained.
+- [x] Fresh FAST: 21,247 passed, 19 skipped, one known ISSUE-235 failure.
+  No individual >5 s; aggregate 506.31 s pytest / 551 s wrapper, no guard changes.
+  FULL remains deferred. Benchmark results and final campaign checks are recorded
+  in `memory/project_snupi_dynamics.md`. Main.js LOC delta: 0.
+
+
+## 2026-11-19 — ISSUE-251: CUDA SNUPI integration and cached output
+
+- [x] Installed optional float64 device-resident linear/Stokes GJF, sampled
+  translation transfers, bounded RMSF and cached reconstruction with native normals.
+  Unsupported models retain CPU; actual backend/RNG metadata survives collection.
+  Managed RunPod bootstrap installs CUDA Torch; the subsequent remote campaign
+  verifies actual CUDA execution and managed result collection.
+- [x] Same-host full benchmarks, 60,000 steps, 1,200 samples, 40 output frames:
+  2-mer 469.294→60.827 s (7.72×), 10-mer 2537.728→280.310 s (9.05×).
+  Integration improves 14.96× / 20.58×; reconstruction/analysis 4.57× / 4.59×.
+  Single paired observations on Ryzen 5 3600 / RTX 2080 SUPER; no provisioning or
+  transfer time. Same 6/8 GiB guards; baseline 10-mer briefly hit the soft limit
+  (0.264 s observed pressure stall), no OOM. Source/input hashes verified.
+- [x] Full matched-noise 2-mer RMSF max difference 1.999e-15 nm; coupled oscillator
+  covariance error 1.01%. Independent production RNG streams differ; no claim of
+  physical equilibration. All benchmark trajectories/RMSF finite, no retries,
+  large temporary outputs removed. Evidence and methodology in
+  `.development-artifacts/snupi-gpu-implementation-20261119/` and project memory.
+- [x] 90 focused tests, lint and diff check pass. Main.js LOC delta: 0.
+  `test-smart` decision FAST: 21,240 passed, 6 failed, 19 skipped. Five failures
+  pass in isolation (ISSUE-252); known ISSUE-235 remains. Aggregate budget overrun
+  triaged with no individual >5 s test; no thresholds weakened.
+
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+
+## 2026-11-19 — ISSUE-252: FAST isolation debt (open)
+
+- [ ] Resolve ambient-memory and background-process interference in the mrDNA
+  field/surface and VR tour tests. Five broad-run failures pass in isolation;
+  no guards, thresholds or production behavior were weakened. Dossier/evidence
+  recorded while validating SNUPI acceleration. Known ISSUE-235 remains separate.
+
 ## 2026-11-19 — ISSUE-250: shaded SNUPI results
 
 Completed-job selection now defaults to saved coarse FEM axes/joints, rendered

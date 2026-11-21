@@ -54,7 +54,7 @@ export function initSolverRunpodCard({ mount, engine, fetchImpl = fetch }) {
     row.append(input); settings.append(row); controls.set(key, input)
   }
   const note = document.createElement('p'); note.style.fontSize = 'var(--text-xs)'
-  note.textContent = 'Budget includes pod startup, checks, simulation and transfers; network-volume storage is billed separately. Remote software must already be installed on the volume. SNUPI uses CPU even on a GPU pod. RAM is separate from GPU VRAM. No automatic retries.'
+  note.textContent = 'Budget includes pod startup, checks, simulation and transfers; network-volume storage is billed separately. The default SNUPI environment is prepared automatically; custom environments and mrDNA must already be installed. Linear/Stokes SNUPI dynamics can use CUDA; unsupported modes retain CPU. RAM is separate from GPU VRAM. No automatic retries.'
   settings.append(note)
   return {
     showJob(job) {

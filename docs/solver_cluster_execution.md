@@ -24,18 +24,36 @@ cluster installation.
 
 For Alpine, create the environment in persistent project storage, then enter its
 Python path in the card. **Check Alpine environment** is read-only and does not
-submit a job. Select a CPU partition for SNUPI, or a GPU partition for mrDNA.
+submit a job. Static SNUPI uses CPU partitions; linear/Stokes SNUPI dynamics
+can accelerate on a GPU partition when its Python environment has CUDA-enabled
+PyTorch. mrDNA requires a GPU partition.
 CPU cores, RAM, QoS, account and walltime are explicit. Hydrodynamics preflight
 uses 80% of requested RAM, leaving allocation headroom. Large-job estimates are
 not convergence guarantees.
 
 For RunPod, select a network volume through the existing account setup. SNUPI
-automatically provisions Python 3.12 and pinned CPU-worker dependencies at the
+automatically provisions Python 3.12, pinned core dependencies and PyTorch 2.9.1
+CUDA 12.8 wheels at the
 default `/workspace/nadoc-solver-env/bin/python` path, then reuses that environment
 on later pods. Setup is serialized on the volume and included in the pod budget.
 Custom Python paths are checked without modification. mrDNA still requires its
 installed environment and ARBD on the volume. Choose a GPU from a live price query. Host RAM and vCPU minima are separate
-from GPU VRAM. SNUPI uses CPU even though this provider flow rents a GPU pod.
+from GPU VRAM. Supported SNUPI dynamics selects float64 CUDA automatically when
+runtime VRAM admission succeeds. Static calculations, hydrodynamics, modified GJF,
+nonlinear forces and simulated tails retain the CPU implementation. Missing CUDA
+or insufficient VRAM also selects CPU, with the reason recorded in job `execution`
+metadata. Mandatory RAM admission is retained for this fallback; CUDA is optional.
+
+`NADOC_SNUPI_BACKEND=cpu|cuda|auto` controls the managed worker (default `auto`).
+Explicit `cuda` fails rather than silently changing an unsupported model. Device
+state and random generation remain on GPU; only sampled translations are returned.
+Precision is float64, and timestep/force/sampling rules remain unchanged. GPU random
+streams differ from NumPy; backend, RNG and Torch version are recorded. Local and
+custom Alpine environments must install compatible CUDA-enabled PyTorch themselves.
+Managed RunPod setup is automatic only at the default interpreter path. Dependency
+preflight allows up to 180 seconds for cold imports on the network volume;
+missing dependencies still deny startup. Packaging large native result archives
+allows up to 900 seconds. The paid-pod budget/watchdog remains active throughout.
 The provider GraphQL deployment supports explicit RAM/CPU minima:
 [RunPod deployment documentation](https://github.com/runpod/docs/blob/main/sdks/graphql/manage-pods.mdx).
 
@@ -76,11 +94,13 @@ native output and enter the existing local result-viewing flow.
 
 - SNUPI NMA completed on Alpine at approximately 46 GiB RSS; 64 GiB is a provisional
   allocation, not a measured minimum.
-- Dynamics and hydrodynamics pilots timed out during setup; the remote terminal
-  stack was not captured, so hydrodynamic matrix capacity remains unmeasured.
+- Historical dynamics/hydrodynamics pilots timed out during setup. Bounded timestep
+  selection subsequently completed the 2-mer and 10-mer Stokes runs; dense
+  hydrodynamic matrix capacity remains a separate limit.
 - mrDNA Fine model preparation advances beyond the old clustering memory barrier,
   but its external PDB writer rejects residue 100000 (ISSUE-223).
-- No production GPU implementation of SNUPI was introduced here.
+- Linear/Stokes GPU dynamics and cached result reconstruction are installed as of
+  November 19; full same-host validation is recorded in `memory/project_snupi_dynamics.md`.
 
 ## Part/assembly parity
 
@@ -91,9 +111,9 @@ native output and enter the existing local result-viewing flow.
 | Start, stop, reconnect, errors | Shared provider adapters and persisted receipts; no local PID inference for remote jobs. |
 | Results, export, downstream consumers | Downloaded into the original native job directory; existing viewing/export paths retained. |
 | Persistence and cleanup | Saved execution target/settings; active or uncollected remote receipts block archive/delete. |
-| Progress | Scheduler/provider state, with no invented percentage or ETA; live native phase streaming is not implemented. |
+| Progress | Provider startup, mesh, stiffness, timestep, integration, analysis and download stages. Integration percentage uses actual completed dynamics steps; unknown startup durations remain indeterminate. |
 | Resume | No checkpoint continuation on either host; new jobs start from the initial snapshot. |
-| Scale exceptions | Existing periodic-strand materialization issue, slow dynamics setup, and mrDNA Fine PDB identifier limit remain explicit above. |
+| Scale exceptions | Existing periodic-strand materialization issue and mrDNA Fine PDB identifier limit remain explicit above; bounded timestep selection replaces the former unbounded dynamics setup. |
 
 The browser contract test exercises both engines and both providers on each host
 with provider/job submissions intercepted. Backend tests exercise scheduler and
@@ -102,6 +122,44 @@ and paid-pod cleanup without allocating hardware. Live SNUPI deployment is verif
 (November 18, 2026): 18.8 minutes, 424,144 finite nucleotide positions, results
 downloaded and readable through NADOC, pod termination independently confirmed.
 Live mrDNA deployment through these adapters remains unverified.
+
+## CUDA RunPod benchmark — November 19–20, 2026
+
+Normal managed submissions of `BigO-poly-2monomer.nass`, `BigO-poly-10monomer.nass`
+and the independently replayed `BigO-poly-30monomer.nass` completed with actual
+float64 CUDA execution, native results collected, and every pod automatically
+destroyed. Each used 60,000 steps at 0.13 ps, 1,200 samples and 40 output frames,
+an A100 80GB PCIe, 80 GiB requested host RAM and eight requested vCPUs.
+
+| Assembly | Solver time | Fold vs 2-mer | Paid pod lifetime | Compute cost |
+| --- | ---: | ---: | ---: | ---: |
+| 2-mer | 41.75 s | 1.00× | 6.74 min | $0.235 |
+| 10-mer | 179.84 s | 4.31× | 10.81 min | $0.376 |
+| 30-mer | 485.80 s | 11.64× | 37.53 min | $1.307 |
+
+For 10→30 monomers, three times the FEM nodes required 2.70× total solver time
+and 2.87× integration time (23→66 s). Solver time includes setup and analysis/save;
+paid lifetime additionally includes startup/imports, staging, compression,
+transfer and cleanup. The 30-mer archive is 838 MB; transfer now dominates
+end-to-end time. These are single observed cloud runs, not a controlled
+CPU-versus-GPU speedup: 2-mer CPU host EPYC 9374F, 10/30-mer hosts EPYC 7543.
+
+Coarse, Flexibility and trajectory views pass for all three sizes, including
+frame-21 scrubbing and Off cleanup. The completed 30-mer clears spinner/Stop and
+shows all stages Done with RunPod selected. Cosmetic stale-sync wording on
+terminal receipts remains tracked as ISSUE-255.
+
+Every delivered trajectory/display is finite and RMSF is nonnegative. Source and
+input hashes match submission. An on-pod matched-noise CPU/CUDA kernel control
+has maximum state difference 2.0e-15 with deployed Torch 2.9.1+cu128. Short runs
+benchmark execution and do not establish physical equilibration.
+
+Validation exposed cold-import and result-packaging timeouts (ISSUE-253/254),
+now bounded at 180/900 seconds respectively. One earlier 30-mer solved in
+693.43 s on EPYC Genoa but failed collection; its receipt remains retained.
+Total compute including that failure and the failed cold-import attempt: $2.629;
+network-volume storage is separate. Detailed receipts and test limitations:
+[SNUPI dynamics notes](../memory/project_snupi_dynamics.md).
 
 ## Validation — November 18, 2026
 

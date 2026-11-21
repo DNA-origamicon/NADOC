@@ -409,27 +409,14 @@ def trajectory_rmsf(
     displacements exactly and would count their diffusive growth as internal deformation.
     This changes only the fluctuation analysis, not the input trajectory or force model.
     """
-    ref_c = ref - ref.mean(axis=0)
     if linearized:
-        rigid = np.column_stack(
-            [np.tile(axis, (len(ref), 1)).ravel() for axis in np.eye(3)]
-            + [np.cross(axis, ref_c).ravel() for axis in np.eye(3)]
-        )
-        basis, singular, _ = np.linalg.svd(rigid, full_matrices=False)
-        # Collinear nodes have only five observable rigid modes: rotation about
-        # their axis moves no positions. Do not remove an arbitrary sixth mode.
-        tol = singular.max() * max(rigid.shape) * np.finfo(float).eps
-        basis = basis[:, singular > tol]
-        disp = (frames - ref).reshape(len(frames), -1)
-        projected = (disp @ basis) @ basis.T
-        np.subtract(disp, projected, out=projected)
-        aligned = projected.reshape(frames.shape)
-        del disp
-    else:
-        aligned = np.empty_like(frames)
-        for k, fr in enumerate(frames):
-            fc = fr - fr.mean(axis=0)
-            aligned[k] = fc @ _kabsch(fc, ref_c).T
+        from backend.physics.snupi_analysis import linear_rmsf
+        return linear_rmsf(frames, ref)
+    ref_c = ref - ref.mean(axis=0)
+    aligned = np.empty_like(frames)
+    for k, fr in enumerate(frames):
+        fc = fr - fr.mean(axis=0)
+        aligned[k] = fc @ _kabsch(fc, ref_c).T
     mean = aligned.mean(axis=0)
     aligned = aligned.astype(np.result_type(aligned.dtype, mean.dtype), copy=False)
     aligned -= mean
@@ -777,6 +764,7 @@ def simulate_equilibrium(
     n_equil: int = 4000,
     sample_every: int = 20,
     seed: int = 0,
+    backend: str = "cpu",
     nonlinear_force: bool = False,
     modified_gjf: bool = False,
     hydro_coarse_bp: Optional[int] = None,
@@ -1059,8 +1047,14 @@ def simulate_equilibrium(
         else:
             Z = friction_matrix(X0, generalized=hydro_generalized)
 
+    from backend.physics.snupi_cuda import select_backend
+    cuda, execution = select_backend(
+        backend, Kcsr, m_diag, gamma, f_ext, k_anchor_diag,
+        supported=not (hydrodynamics or modified_gjf or nonlinear_force or block is not None),
+    )
+
     _phase(
-        _SETUP_FRACTION, "trajectory", {"n_nodes": n, "n_steps": n_steps, "dt_ns": dt}
+        _SETUP_FRACTION, "trajectory", {"n_nodes": n, "n_steps": n_steps, "dt_ns": dt, **execution}
     )
 
     # The trajectory occupies the remaining [_SETUP_FRACTION, 1] of the bar. `_attempt_box` carries
@@ -1082,6 +1076,7 @@ def simulate_equilibrium(
                     "dt_ns": dt,
                     "n_nodes": n,
                     "attempt": _attempt_box[0],
+                    **execution,
                 },
             )
 
@@ -1100,7 +1095,12 @@ def simulate_equilibrium(
             )
         rng = np.random.default_rng(seed)
         try:
-            if coarse_fric is not None:
+            if cuda is not None:
+                samples, _v = cuda.integrate(
+                    q_start, kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
+                    sample_every=sample_every, seed=seed, progress_cb=traj_cb, translation_only=True,
+                )
+            elif coarse_fric is not None:
                 samples, _v = gjf_integrate_operator_friction(
                     force_fn,
                     q_start,
@@ -1162,25 +1162,22 @@ def simulate_equilibrium(
         raise _GJFDiverged("GJF failed to stabilise after halving dt 4×")
 
     _phase(1.0, "Analyzing dynamics trajectory", {"step": n_steps, "attempt": _attempt_box[0]})
-    disp_all = samples.reshape(len(samples), n_tot, 6)[
-        :, :, :3
-    ]  # translational disp per frame
-    frames_all = X0[None, :, :] + disp_all
-    # Everything below the tail block is reported on the DUPLEX CORE ONLY, byte-for-byte as before:
-    # `frames`, `rmsf`, `mean_u`, `positions0` are (…, n, …). Mixing tail beads into them would put
-    # floppy, badly-placed points into every downstream Kabsch fit and RMSF comparison — the exact
-    # bug the VoltronCore DISPLAY fix had to undo. The tails are reported separately.
-    disp = disp_all[:, :n, :]
-    frames = frames_all[:, :n, :]
+    # Rendering/RMSF use translations only. CUDA keeps full q/v on-device, but
+    # transfers only the observed components; it never retains discarded rotations.
+    disp_all = samples if cuda is not None else samples.reshape(len(samples), n_tot, 6)[:, :, :3]
     mean_u = np.zeros(6 * n, dtype=float)
-    mean_u.reshape(n, 6)[:, :3] = disp.mean(
-        axis=0
-    )  # mean translational displacement per node
+    mean_u.reshape(n, 6)[:, :3] = disp_all[:, :n, :].mean(axis=0)
     n_frame = len(samples)
-    # These views retain the full six-DOF trajectory until explicitly released.
-    del disp, disp_all, samples
+    if cuda is not None:
+        frames_all = samples  # owned translation-only buffer; convert in-place
+        frames_all += X0[None, :, :]
+    else:
+        frames_all = X0[None, :, :] + disp_all
+    frames = frames_all[:, :n, :]
+    del disp_all, samples
     rmsf = trajectory_rmsf(frames, X0[:n], linearized=not nonlinear_force)
     out = {
+        "execution": execution,
         "positions0": X0[:n],
         "frames": frames,
         "mean_u": mean_u,

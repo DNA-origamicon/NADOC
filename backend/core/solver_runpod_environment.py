@@ -7,7 +7,7 @@ import hashlib
 import shlex
 
 DEFAULT_PYTHON = '/workspace/nadoc-solver-env/bin/python'
-# CPU worker dependencies pinned to the repository's validated uv.lock versions.
+# Core worker dependencies pinned to the repository's validated uv.lock versions.
 REQUIREMENTS = (
     'appdirs==1.4.4', 'fastapi==0.135.1', 'networkx==3.6.1',
     'numba==0.64.0', 'numpy==2.4.3', 'orjson==3.11.8',
@@ -15,10 +15,15 @@ REQUIREMENTS = (
     'sqlmodel==0.0.37', 'threadpoolctl==3.6.0',
 )
 
+# CUDA 12.8 wheels support the Blackwell RunPod hosts as well as older CUDA GPUs.
+# Optional local installs may use other CUDA-enabled Torch versions.
+GPU_REQUIREMENT = 'torch==2.9.1'
+GPU_INDEX = 'https://download.pytorch.org/whl/cu128'
+
 
 def setup_script():
     """Idempotent, serialized setup; never clear or replace an existing environment."""
-    revision = hashlib.sha256(('python3.12 uv0.10.9 ' + ' '.join(REQUIREMENTS)).encode()).hexdigest()
+    revision = hashlib.sha256(('python3.12 uv0.10.9 ' + ' '.join(REQUIREMENTS) + GPU_REQUIREMENT + GPU_INDEX).encode()).hexdigest()
     return '\n'.join([
         'set -euo pipefail',
         'mkdir -p /workspace/.nadoc-solver-tools',
@@ -34,7 +39,8 @@ def setup_script():
         '  /workspace/.nadoc-solver-tools/uv/bin/uv venv --python 3.12 /workspace/nadoc-solver-env',
         'fi',
         f'/workspace/.nadoc-solver-tools/uv/bin/uv pip install --python {DEFAULT_PYTHON} ' + ' '.join(REQUIREMENTS),
-        f'{DEFAULT_PYTHON} -c "import numpy, scipy, pydantic, numba, networkx, orjson, psutil, fastapi, sqlmodel, appdirs, threadpoolctl"',
+        f'/workspace/.nadoc-solver-tools/uv/bin/uv pip install --python {DEFAULT_PYTHON} {GPU_REQUIREMENT} --index-url {GPU_INDEX}',
+        f'{DEFAULT_PYTHON} -c "import numpy, scipy, pydantic, numba, networkx, orjson, psutil, fastapi, sqlmodel, appdirs, threadpoolctl, torch"',
         f'printf "%s\\n" {revision} > /workspace/nadoc-solver-env/.nadoc-ready',
     ])
 

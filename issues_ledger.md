@@ -1,5 +1,39 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-255 — Completed remote progress retains stale-sync annotation (2026-11-20)
+
+- **Status:** open cosmetic progress-label debt; completion and stage statuses remain correct.
+- **Observed:** completed RunPod SNUPI job `a2b747c76d72` shows all stages Done and 60,000/60,000 steps, but its persisted progress receipt ages into “last known (sync unavailable)” after the pod has correctly been destroyed.
+- **Next:** suppress transient sync-staleness wording for terminal, collected jobs while retaining it for genuinely active/disconnected jobs. Do not invent percentages or remote liveness.
+- **Evidence:** live result review in `.development-artifacts/snupi-runpod-gpu-20261119/`; Coarse/trajectory rendering and provider selection pass. The inspected temporary screenshot is removed after review.
+
+
+## ISSUE-254 — Large solver results exceed remote packaging timeout (2026-11-20)
+
+- **Cause:** 30-mer CUDA solve `f404d25df60e` completed in 693.43 s, but compressing its multi-gigabyte native trajectory on RunPod network storage exceeded the fixed 120-second archive deadline. The failed collection automatically destroyed the pod ($0.6585); raw outputs remain on the existing volume.
+- **Change:** bounded 900-second packaging window, preserving archive format/compression, provenance checks, staging and paid-lifetime watchdog. No simulation resubmission or fallback is implicit.
+- **Validation:** 19 focused cluster tests pass, including modeled large-archive latency for both solvers and result-identity acceptance. A fresh normal 30-mer run verifies the revised collection path; campaign receipts live under `.development-artifacts/snupi-runpod-gpu-20261119/`.
+
+
+## ISSUE-253 — Cold RunPod imports exceed solver preflight timeout (2026-11-20)
+
+- **Cause:** a valid managed Python environment on the persistent network volume exceeded the 30-second dependency-import check. The 10-mer job `53d8d2b83be8` failed before solving; its pod was automatically destroyed ($0.0521).
+- **Change:** allow a bounded 180-second dependency check; missing dependencies still deny startup. No resource admission, scientific settings or watchdog limits changed. Correct the Clusters help text to describe automatic default SNUPI setup and optional CUDA acceleration.
+- **Validation:** 19 solver-cluster checks pass, including cold-import tolerance and dependency-error propagation. Remote retry and larger campaign results are recorded in the SNUPI dynamics project memory.
+
+
+## ISSUE-252 — FAST tests depend on ambient RAM and background subprocesses (2026-11-19)
+
+- **Status:** open test-isolation debt, observed during SNUPI acceleration validation; no production resource guard changed.
+- **Repro/evidence:** `just test-smart` FAST, `.development-artifacts/snupi-gpu-implementation-20261119/test-smart.log`. Four mrDNA field/surface request tests received resource-admission HTTP 409 with only 1.71–1.89 GiB available against a 2.03 GiB estimate, rather than their expected validation/success status. The ligation tour test's mocked `Popen` also captured an unrelated background trajectory-precompute launch.
+- **Isolation check:** all four mrDNA cases and all 20 parametrized tour launch cases pass when run separately; logs retained beside the broad run. This does not repair the cross-test interference. Suspected locations: request-test RAM fixtures and lifetime/ownership of trajectory-precompute threads versus process-launch mocks.
+- **Next:** make test resource inputs deterministic and ensure background work is joined or scoped before unrelated launch assertions. Preserve production admission limits. The separate duplex-gesture failure remains ISSUE-235. The November 20 rerun passed all of these ambient-resource/background-process cases (21,247 passed overall); the underlying isolation debt remains open.
+
+## ISSUE-251 — SNUPI CPU integration and repeated output reconstruction (2026-11-19)
+
+- **Change:** optional float64 CUDA linear/Stokes GJF, sampled translation transfers, bounded linear RMSF, and cached per-frame reconstruction including normals. CPU fallback preserves unsupported models. Actual execution metadata is saved/collected; managed RunPod setup includes CUDA Torch.
+- **Validation:** complete local same-host 60,000-step benchmarks: 2-mer 469.294→60.827 s (7.72×); 10-mer 2537.728→280.310 s (9.05×). Full matched-noise 2-mer RMSF max error 1.999e-15 nm. 90 focused tests pass. FAST broad debt remains (ISSUE-235/252); managed RunPod CUDA execution, collection and app visualization are now verified for 2-, 10- and 30-mers; campaign details are recorded in project memory. Evidence under `.development-artifacts/snupi-gpu-implementation-20261119/`; detailed methodology in `memory/project_snupi_dynamics.md`.
+
 ## ISSUE-250 — SNUPI results lose depth in point/line fallback (2026-11-19)
 
 - **Cause:** static results above 50k nucleotides and all trajectory frames used unlit point/line glyphs; deform/trajectory had no categorical colors. The coarse cylinder option also became thin lines above the threshold.

@@ -78,7 +78,10 @@ async def preflight(conn, engine, config):
         cmd += f" && test -x {shlex.quote(config.arbd)}"
         if Path(config.arbd).name != "arbd":
             raise ValueError("The remote ARBD executable must be named arbd")
-    result = await conn.run(cmd, timeout=30)
+    # Cold imports from a RunPod network volume can exceed 30 seconds even
+    # when the managed environment is complete. Keep startup bounded while
+    # allowing the shared filesystem to populate its cache.
+    result = await conn.run(cmd, timeout=180)
     if result.rc:
         raise RuntimeError("Remote solver environment check failed. Configure a Python environment with NADOC dependencies"
                            + (" and mrDNA, plus an installed ARBD executable" if engine == "mrdna" else "")
@@ -211,7 +214,9 @@ async def collect(engine, job, workspace, conn, state, exit_code):
     q = shlex.quote
     # Transfer results into staging first. Never overwrite local provenance or job identity.
     relative = f"workspace/{engine}_jobs/{job_id}"
-    packed = await conn.run(f"cd {q(remote)} && tar czf results.tar.gz -C {q(relative)} .", timeout=120)
+    # Multi-gigabyte native trajectories on network storage can take several
+    # minutes to compress. The RunPod budget/watchdog still bounds paid lifetime.
+    packed = await conn.run(f"cd {q(remote)} && tar czf results.tar.gz -C {q(relative)} .", timeout=900)
     if packed.rc:
         raise RuntimeError(packed.stderr or "Could not package solver results")
     with tempfile.TemporaryDirectory(prefix=".solver-results-", dir=job.job_dir(workspace)) as tmp:
@@ -235,7 +240,7 @@ async def collect(engine, job, workspace, conn, state, exit_code):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
         # Copy only scientific result metadata. Keep all local ownership/path/submission fields.
-        for field in ("sim_seconds", "n_nodes", "rmsf_min_nm", "rmsf_max_nm", "n_override", "n_beads"):
+        for field in ("sim_seconds", "n_nodes", "rmsf_min_nm", "rmsf_max_nm", "n_override", "n_beads", "execution"):
             if hasattr(job, field) and field in reported:
                 setattr(job, field, reported[field])
         success = state == "COMPLETED" and exit_code == "0:0" and reported.get("status") == "completed" and (staging / "display.json").is_file()

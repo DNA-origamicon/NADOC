@@ -13,6 +13,27 @@ from backend.core import solver_cluster as remote
 from backend.core.solver_cluster_config import SolverClusterSettings, validate_settings
 
 
+@pytest.mark.parametrize('rc', [0, 1])
+def test_environment_preflight_allows_cold_shared_volume_imports(rc):
+    class Connection:
+        def is_connected(self):
+            return True
+
+        async def run(self, command, *, timeout):
+            # Model a valid cold import taking longer than the former limit.
+            if timeout < 45:
+                raise TimeoutError('cold network-volume import')
+            assert timeout <= 180
+            return SimpleNamespace(rc=rc, stdout='', stderr='missing dependency')
+
+    check = remote.preflight(Connection(), 'snupi', SolverClusterSettings(python='/env/python'))
+    if rc:
+        with pytest.raises(RuntimeError, match='missing dependency'):
+            asyncio.run(check)
+    else:
+        asyncio.run(check)
+
+
 def test_uploaded_bundle_imports_snupi_without_source_checkout(tmp_path):
     job = job_at(tmp_path, 'snupi')
     # Opaque archive fixture, not an authored molecular structure.
@@ -90,6 +111,11 @@ class Connection:
     def is_connected(self): return True
     async def run(self, command, **kw):
         self.commands.append(command)
+        if 'tar czf results.tar.gz' in command:
+            # A large valid result can exceed the former two-minute window.
+            if kw.get('timeout', 0) < 180:
+                raise TimeoutError('large native trajectory packaging')
+            assert kw['timeout'] <= 900
         return SimpleNamespace(rc=0, stderr='', stdout=f'123|{self.state}|0:0\n' if 'sacct' in command else '')
     async def sftp_get(self, remote_path, local):
         import shutil
@@ -105,6 +131,8 @@ def test_scheduler_completion_requires_solver_result(tmp_path, engine, scheduler
     job = job_at(tmp_path, engine)
     stage = tmp_path / 'remote'; stage.mkdir()
     report = job.to_dict(); report['status'] = solver
+    if engine == 'snupi':
+        report['execution'] = {'backend': 'cuda', 'precision': 'float64', 'rng': 'torch-cuda'}
     (stage / 'job.json').write_text(json.dumps(report))
     (stage / 'display.json').write_text('{}')
     (stage / 'design.json').write_text('must never replace local snapshot')
@@ -118,6 +146,8 @@ def test_scheduler_completion_requires_solver_result(tmp_path, engine, scheduler
     assert loaded.status.value == expected
     assert loaded.remote['results_collected']
     assert loaded.execution_target == 'alpine'
+    if engine == 'snupi':
+        assert loaded.execution == report['execution']
     assert (job.job_dir(tmp_path) / 'design.json').read_text() == 'original'
     assert not (job.job_dir(tmp_path) / '.runtime.json').exists()
 
