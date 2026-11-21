@@ -1,5 +1,16 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-257 — Attachment Apply leaves Move/Rotate open (2026-11-21)
+
+- **Cause:** both the panel and tool button handlers committed directly through
+  protein/nanoparticle gizmos, bypassing session confirmation and closure.
+- **Change:** one shared Apply route resolves the active attachment controller,
+  awaits commit, detaches, and closes the session. No-op Apply closes too; failed
+  commits remain open, and duplicate in-flight Apply requests are ignored.
+- **Validation:** 134 focused panel/tool/gizmo tests; gold browser regression
+  checks the saved translation, single history entry, popup and gizmo closure.
+
+
 ## ISSUE-256 — Move/Rotate Clear selection retains its active cluster (2026-11-21)
 
 - **Cause:** the popup cleared canonical selection only; the independent tool target,

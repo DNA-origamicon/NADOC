@@ -386,7 +386,7 @@ export function initTranslateRotateTool(deps) {
     // Explicit activation lets attachment subscribers attach the selected
     // protein/nanoparticle. Keep their controller and panel instead of replacing
     // them with the cluster-selection waiting state.
-    if (!targetClusterId && proteinGizmo?.isAttached()) {
+    if (!targetClusterId && (_moveRotatePanel.getProteinController?.()?.isAttached?.() || proteinGizmo?.isAttached())) {
       finishClusterPick?.()
       _moveRotatePanel.setAssemblyCtx(null)
       _moveRotatePanel.setSessionMode?.('protein')
@@ -517,8 +517,9 @@ export function initTranslateRotateTool(deps) {
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
   }
 
+  let attachmentCommitInFlight = false
   async function _confirmTranslateRotateTool() {
-    if (!getActive()) return
+    if (!getActive() || attachmentCommitInFlight) return
     if (_vrPreview) {
       showToast('VR Move / Rotate is preview-only; use Cancel to restore the design.')
       return
@@ -530,10 +531,22 @@ export function initTranslateRotateTool(deps) {
       && !store.getState().assemblyActive
     // Finish the attachment preview before disabling the tool: its subscribers
     // cancel uncommitted previews on deactivation.
-    if (proteinGizmo?.isAttached()) {
-      await proteinGizmo.commit()
-      if (!current()) return false
-      proteinGizmo.detach()
+    const panelController = _moveRotatePanel.getProteinController?.()
+    const attachment = panelController?.isAttached?.() ? panelController
+      : proteinGizmo?.isAttached() ? proteinGizmo : null
+    if (attachment) {
+      const attachmentId = attachment.getAttachmentId?.()
+      attachmentCommitInFlight = true
+      try {
+        await attachment.commit()
+        if (!current() || attachment.getAttachmentId?.() !== attachmentId) return false
+        attachment.detach()
+      } catch (error) {
+        if (current()) showToast(error?.message || 'The move was not accepted.', { severity: 'error' })
+        return false
+      } finally {
+        attachmentCommitInFlight = false
+      }
     }
     setActive(false)
     _confirmBtn.style.display = 'none'
@@ -965,10 +978,7 @@ export function initTranslateRotateTool(deps) {
 
   _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
   document.getElementById('mr-apply-btn')?.addEventListener('click', () => {
-    const attachmentController = _moveRotatePanel.getProteinController?.()
-    if (attachmentController?.isAttached?.()) attachmentController.commit()
-    else if (proteinGizmo?.isAttached()) proteinGizmo.commit()
-    else if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.confirm()
+    if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.confirm()
     else _confirmTranslateRotateTool()
   })
   document.getElementById('mr-cancel-btn')?.addEventListener('click', () => {

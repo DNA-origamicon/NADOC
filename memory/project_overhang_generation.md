@@ -38,3 +38,12 @@ Merged to `master` on 2026-04-15 (commit 80a64f8).
 
 **Why:** User wanted rare overhang sequences that avoid off-target binding and secondary structure.
 **How to apply:** When touching overhang sequence generation, see `backend/core/overhang_generator.py`.
+
+**Viewport context menu (2026-11-21):** right-click a single overhang →
+`Generate sequence…` uses `runOverhangGen(id, null, ...)` and the existing recorded
+Johnson generation endpoint. A themed override confirmation precedes generation
+when the assembled sequence contains assigned bases (including sub-domain overrides);
+empty/all-N placeholders generate directly. Cancel/Escape do not write. This action
+generates for the clicked overhang; it does not invoke the partner-pairing choices.
+Coverage: `overhang_orientation_menu.test.js`, `overhang_gen.test.js`, and the
+read-only-input app exercise `e2e/overhang_context_sequence.spec.js`.

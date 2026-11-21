@@ -280,8 +280,11 @@ describe('initMoveRotatePanel — view setters', () => {
     const controller = { isAttached: () => true, setTransform() {}, commit: vi.fn() }
     api.setProteinController(controller)
     expect(api.getProteinController()).toBe(controller)
+    const confirm = vi.fn()
+    els['mr-apply-btn'].addEventListener('click', confirm)
     els['mr-apply-btn'].click()
-    expect(controller.commit).toHaveBeenCalledOnce()
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(controller.commit).not.toHaveBeenCalled()
   })
 
   it('no-ops gracefully when DOM is absent', () => {

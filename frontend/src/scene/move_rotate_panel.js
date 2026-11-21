@@ -85,15 +85,8 @@ export function initMoveRotatePanel({
   let   _acceptedPivot = 'centroid'
   let   _pivotRequest = 0
 
-  // Attachment controllers (proteins and nanoparticles) are installed on the
-  // panel after subsystem construction.  Handle their buttons here, where the
-  // active controller is authoritative; the general translate/rotate tool's
-  // later listeners remain the fallback for clusters and nucleotides.
-  document.getElementById('mr-apply-btn')?.addEventListener('click', event => {
-    if (!_proteinController?.isAttached?.()) return
-    event.stopImmediatePropagation()
-    _proteinController.commit?.()
-  })
+  // Attachment Cancel/Reset use their preview controller. Apply is owned by the
+  // translate/rotate session so committing also closes the tool and popup.
   document.getElementById('mr-cancel-btn')?.addEventListener('click', event => {
     if (!_proteinController?.isAttached?.()) return
     event.stopImmediatePropagation()

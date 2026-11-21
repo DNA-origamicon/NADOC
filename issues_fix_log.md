@@ -1,5 +1,15 @@
 # Issues fix log
 
+## 2026-11-21 — ISSUE-257: Close Move/Rotate after attachment Apply
+
+- [x] Gold/quantum-dot and protein Apply now use shared session confirmation;
+  successful and no-op commits detach and close, errors remain open for retry.
+- [x] 134 focused panel/tool/gizmo tests and lint pass.
+- [x] Gold in-app regression passes: exact translation, one new history entry,
+  closed popup/gizmo, and no extra entry after an unchanged Apply. Test fixture,
+  revision store and browser artifacts removed by teardown.
+
+
 ## 2026-11-21 — ISSUE-256: Move/Rotate Clear selection
 
 - [x] Clear now releases the cluster tool target and pending preview, then leaves
