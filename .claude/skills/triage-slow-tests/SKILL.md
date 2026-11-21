@@ -5,8 +5,9 @@ description: Triage a heavy test that leaked into the fast suite — find what m
 
 # Triage slow tests
 
-The per-change loop (`just test-smart`, `just test-fast`) stops being a per-change loop
-when heavy work leaks into it. Your job is to find that work and move it out — never to
+Routine changes use explicit focused selection (`just test-smart FILE…`). Broad
+regression runs (`just test-fast`, `just test-regression`) belong in deliberate test
+sessions; do not invoke them merely to validate a small change. Your job is to find that work and move it out — never to
 raise a budget.
 
 **Which signal fired matters.** The mandatory gate is **per-test**: an unmarked test over
@@ -34,7 +35,7 @@ Do not ask for a test session merely to run or diagnose a relevant slow test.
 - `.nadoc-slow-candidates.json` (repo root, gitignored) — written by every fast run:
   `violators` = unmarked tests over the per-test budget (default 5 s, `NADOC_PER_TEST_BUDGET_SEC`),
   plus `slowest_25` and `total_test_seconds` for context.
-- If it's missing or stale, regenerate:
+- If it's missing or stale, regenerate only in a user-opened broad test session:
   `NADOC_TEST_CONFIRM=1 just test-fast` (it rewrites the file), or for a durations table:
   `uv run pytest tests/ -n auto --dist loadfile -m "not slow" --durations=25`
 

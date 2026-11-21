@@ -21,7 +21,7 @@ import { docHeaders, docKey } from '../shared/doc_id.js'
 import { addRecentFile, getRecentFiles, closeSession as apiCloseSession,
          listLibraryFiles, getLibraryFileContent, uploadLibraryFile,
          saveDesignAs, saveDesignToWorkspace,
-         mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem } from '../api/client.js'
+         mkdirLibrary, renameLibrary, moveLibrary, listLibraryMoveDestinations, deleteLibraryItem } from '../api/client.js'
 import { openFileBrowser } from '../ui/file_browser.js'
 import { initMenuFlyouts } from '../ui/menu_flyouts.js'
 import { initDesignReadinessHost } from '../ui/design_readiness_host.js'
@@ -439,7 +439,7 @@ async function _saveAs() {
     fileType: 'part',
     suggestedName: stem,
     suggestedExt: '.nadoc',
-    api: { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem },
+    api: { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, listLibraryMoveDestinations, deleteLibraryItem },
   })
   if (!result) return
   _setSyncStatus('yellow', 'saving…')
@@ -817,7 +817,7 @@ setInterval(_update3dConnectionStatus, 2000)
 // (The menu item is visually disabled in the HTML; this guard prevents any accidental trigger.)
 
 document.getElementById('menu-file-open')?.addEventListener('click', async () => {
-  const _fbApi = { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem }
+  const _fbApi = { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, listLibraryMoveDestinations, deleteLibraryItem }
   const result = await openFileBrowser({ title: 'Open from Server', mode: 'open', fileType: 'part', api: _fbApi })
   if (!result) return
   const res = await getLibraryFileContent(result.path)
@@ -841,7 +841,7 @@ document.getElementById('menu-file-upload')?.addEventListener('click', () => {
   input.onchange = async (e) => {
     const files = Array.from(e.target.files ?? [])
     if (!files.length) return
-    const _fbApi = { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem }
+    const _fbApi = { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, listLibraryMoveDestinations, deleteLibraryItem }
     for (const file of files) {
       const content = await file.text()
       const ext     = file.name.endsWith('.nass') ? '.nass' : '.nadoc'

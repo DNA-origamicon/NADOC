@@ -47,6 +47,24 @@ library name now records a `document-metadata` rename when the name differs.
 This fixes independent replay after Save As/reopen; identical-name opens add no
 operation. The molecular recipe and source document remain unchanged.
 
+**Welcome rename (2026-11-20):** Inline rename keeps its DOM input through
+background listing/disk-usage refreshes. Input and action-button events no longer
+open/select the containing row; submissions are serialized. Failed requests retain
+the draft and report the server error instead of assuming a filename collision.
+Welcome and file-browser rename inputs show only the stem and preserve `.nadoc`
+(parts) / `.nass` (assemblies), including when users paste the extension. Collision
+checks use the complete filename; folder names remain literal. Enter and leaving
+the rename control commit once, then immediately restore the normal row after
+success without waiting for a new listing. Cancel/Escape discard. The confirm
+and cancel buttons sit beside the input in normal flex layout.
+
+**Welcome move destinations and refresh layout (2026-11-21):** Move pickers
+request current filesystem-validated destinations through `/library/move-destinations`.
+Internal/hidden trees, out-of-workspace links, source descendants, unwritable folders,
+and name collisions are excluded; bulk selections are checked together. A fixed
+30px status slot keeps the file tree stationary when initial simulation refresh
+finishes. Later polling remains silent.
+
 **Feature reorder selector (2026-11-14):** The Move dialog uses the shared
 `createSelect` control for standard canvas/text colors and fits it to the modal
 width. The Feature Log designer guide excludes advanced repair proposals.

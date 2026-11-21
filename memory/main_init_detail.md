@@ -61,7 +61,7 @@ extractions (see the note at the top of `REFACTOR_AUDIT.md`). Per extraction:
    method in the log row. *(A periodic Stryker mutation run over `src/scene`+`ui` is the objective audit
    that these pins actually assert behavior rather than restating it — a survived mutant on a new pin test
    = a missing assertion; run it out-of-band, not in the per-commit gate.)*
-5. **Gate:** `just test-frontend` green; `just lint` delta ≤ 0. Iterate with `just test-frontend-watch`.
+5. **Gate:** `just test-frontend TEST_FILE…` green; `just lint` delta ≤ 0. Iterate with `just test-frontend-watch`.
    **"Done" is coupling + cohesion, not LOC.** An extraction is done when the new module has **one reason
    to change** and a **small, countable dep surface** (the dep list you write in the log row) — LOC-Δ is
    narrative only, never the goal. A drop in LOC with coupling unchanged just relocated the problem.

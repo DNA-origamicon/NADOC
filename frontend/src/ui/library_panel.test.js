@@ -234,3 +234,157 @@ it('preserves cached sizes while pending and marks completion explicitly', () =>
   const ready = mergeLibraryDiskUsage(pending, { 'a.nadoc': 90 })
   expect(ready[0]).toMatchObject({ disk_bytes: 100, disk_usage_pending: false })
 })
+
+describe('inline library rename', () => {
+  async function setup(rename = vi.fn().mockResolvedValue({ new_path: 'new.nadoc' })) {
+    document.body.innerHTML = '<div id="welcome-screen"><div id="library-panel-mount"></div></div>'
+    const api = {
+      listLibraryFiles: vi.fn().mockResolvedValue([
+        { path: 'old.nadoc', name: 'old', type: 'part', mtime_iso: new Date().toISOString() },
+        { path: 'taken.nadoc', name: 'taken', type: 'part', mtime_iso: new Date().toISOString() },
+      ]),
+      renameLibrary: rename,
+    }
+    const onOpenPart = vi.fn()
+    const panel = initLibraryPanel({ api, onOpenPart })
+    await panel.refresh()
+    document.querySelector('[data-library-path="old.nadoc"] [title="Rename"]').click()
+    await new Promise(resolve => setTimeout(resolve, 30))
+    return { api, panel, onOpenPart, input: document.querySelector('.lib-inline-input') }
+  }
+  const key = (input, value, options = {}) => input.dispatchEvent(new KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true, ...options }))
+
+  it('keeps focus, draft and selection through refresh and editing shortcuts', async () => {
+    const { panel, input, onOpenPart } = await setup()
+    expect(input.value).toBe('old')
+    input.value = 'new name'
+    input.setSelectionRange(2, 5)
+    input.click()
+    key(input, ' ')
+    key(input, 'a', { ctrlKey: true })
+    await panel.refresh()
+    expect(document.querySelector('.lib-inline-input')).toBe(input)
+    expect(document.activeElement).toBe(input)
+    expect(input.value).toBe('new name')
+    expect(input.selectionStart).toBe(2)
+    expect(onOpenPart).not.toHaveBeenCalled()
+    key(input, 'Escape')
+    expect(document.querySelector('.lib-inline-input')).toBeNull()
+  })
+
+  it('submits Enter once without opening the file and retains failed drafts for retry', async () => {
+    let resolve
+    const rename = vi.fn().mockImplementation(() => new Promise(r => { resolve = r }))
+    const { input, onOpenPart } = await setup(rename)
+    expect(input.value).toBe('old')
+    input.value = 'new name'
+    key(input, 'Enter'); key(input, 'Enter')
+    expect(rename).toHaveBeenCalledTimes(1)
+    expect(rename.mock.calls[0].slice(0, 2)).toEqual(['old.nadoc', 'new name.nadoc'])
+    expect(onOpenPart).not.toHaveBeenCalled()
+    rename.mock.calls[0][2].onError(403, 'Workspace is read-only')
+    resolve(null)
+    await vi.waitFor(() => expect(input.disabled).toBe(false))
+    expect(document.body.textContent).toContain('Workspace is read-only')
+    expect(document.body.textContent).not.toContain('already exist')
+    expect(document.activeElement).toBe(input)
+    expect(input.value).toBe('new name')
+    rename.mockResolvedValue({ new_path: 'new name.nadoc' })
+    const confirm = document.querySelector('[title="Confirm rename"]')
+    key(confirm, 'Enter')
+    expect(onOpenPart).not.toHaveBeenCalled()
+    confirm.click()
+    expect(onOpenPart).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(document.querySelector('.lib-inline-input')).toBeNull())
+  })
+
+  it.each(['Enter', 'blur'])('finishes %s without waiting for the next listing', async action => {
+    const rename = vi.fn().mockResolvedValue({ new_path: 'saved.nadoc' })
+    const { input, api } = await setup(rename)
+    let resolveListing
+    api.listLibraryFiles.mockImplementation(() => new Promise(resolve => { resolveListing = resolve }))
+    input.value = 'saved'
+    if (action === 'Enter') key(input, 'Enter')
+    else input.blur()
+    await vi.waitFor(() => expect(document.querySelector('.lib-inline-input')).toBeNull())
+    expect(document.querySelector('[data-library-path="saved.nadoc"] .lib-row-name').textContent).toBe('saved')
+    expect(rename).toHaveBeenCalledTimes(1)
+    resolveListing([{ path: 'saved.nadoc', name: 'saved', type: 'part', mtime_iso: new Date().toISOString() }])
+  })
+
+  it('cancels without saving when focus moves to Cancel', async () => {
+    const { input, api } = await setup()
+    input.value = 'discard'
+    const cancel = document.querySelector('[title="Cancel"]')
+    cancel.focus()
+    expect(api.renameLibrary).not.toHaveBeenCalled()
+    cancel.click()
+    expect(document.querySelector('.lib-inline-input')).toBeNull()
+    expect(api.renameLibrary).not.toHaveBeenCalled()
+  })
+
+  it('rejects a real collision locally while keeping the editor open', async () => {
+    const { input, api } = await setup()
+    input.value = 'taken'
+    key(input, 'Enter')
+    expect(api.renameLibrary).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('already exists')
+    expect(document.querySelector('.lib-inline-input')).toBe(input)
+  })
+})
+
+describe('workspace move destinations and stable refresh space', () => {
+  it('offers only fresh server-validated destinations, not cached folders', async () => {
+    document.body.innerHTML = '<div id="library-panel-mount"></div>'
+    const api = {
+      listLibraryFiles: vi.fn().mockResolvedValue([
+        { path: 'Stale', name: 'Stale', type: 'folder' },
+        { path: 'sample.nadoc', name: 'sample', type: 'part', mtime_iso: new Date().toISOString() },
+      ]),
+      listLibraryMoveDestinations: vi.fn().mockResolvedValue(['Fresh']),
+      moveLibrary: vi.fn().mockResolvedValue({}),
+    }
+    const panel = initLibraryPanel({ api })
+    await panel.refresh()
+    document.querySelector('[data-library-path="sample.nadoc"] [title="Move"]').click()
+    await vi.waitFor(() => expect(document.querySelector('.lib-move-picker')).not.toBeNull())
+    expect(api.listLibraryMoveDestinations).toHaveBeenCalledWith(['sample.nadoc'])
+    expect([...document.querySelectorAll('[data-move-destination]')].map(el => el.dataset.moveDestination)).toEqual(['Fresh'])
+    document.querySelector('[data-move-destination="Fresh"]').click()
+    await vi.waitFor(() => expect(api.moveLibrary).toHaveBeenCalledWith('sample.nadoc', 'Fresh'))
+  })
+
+  it('shows an empty destination list rather than offering invalid folders', async () => {
+    document.body.innerHTML = '<div id="library-panel-mount"></div>'
+    const api = {
+      listLibraryFiles: vi.fn().mockResolvedValue([
+        { path: 'sample.nadoc', name: 'sample', type: 'part', mtime_iso: new Date().toISOString() },
+      ]),
+      listLibraryMoveDestinations: vi.fn().mockResolvedValue([]),
+    }
+    const panel = initLibraryPanel({ api })
+    await panel.refresh()
+    document.querySelector('[title="Move"]').click()
+    await vi.waitFor(() => expect(document.querySelector('.lib-move-picker')?.textContent).toContain('No valid workspace destinations'))
+    expect(document.querySelectorAll('[data-move-destination]')).toHaveLength(0)
+  })
+
+  it('keeps the refresh status row in layout when its contents disappear', async () => {
+    document.body.innerHTML = '<div id="library-panel-mount"></div>'
+    let finishUsage
+    const api = {
+      listLibraryFiles: vi.fn().mockResolvedValue([]),
+      libraryDiskUsage: vi.fn().mockImplementation(() => new Promise(resolve => { finishUsage = resolve })),
+    }
+    const panel = initLibraryPanel({ api })
+    await panel.refresh()
+    const status = document.querySelector('.lib-simulation-refresh-status')
+    expect(status.style.visibility).toBe('visible')
+    const reservedHeight = status.style.height
+    finishUsage({})
+    await vi.waitFor(() => expect(status.style.visibility).toBe('hidden'))
+    expect(status.style.display).toBe('flex')
+    expect(status.style.height).toBe(reservedHeight)
+    expect(status.getAttribute('aria-hidden')).toBe('true')
+  })
+})

@@ -47,7 +47,7 @@ markers = [
     "scientific: opt-in physical validation; only runs with --scientific",
     "slow: marks tests as slow (run GROMACS EM; deselect with -m 'not slow')",
     "integration: marks tests requiring external files at /tmp",
-    # Area sub-markers on slow tests, for change-based selection (just test-smart /
+    # Area sub-markers on slow tests, for change-based selection (just test-regression /
     # scripts/select_tests.py). A slow test carries `slow` + exactly one of these.
     "oxdna: slow oxDNA/oxpy group",
     "cando: slow CanDo-FEM / autorefine group",

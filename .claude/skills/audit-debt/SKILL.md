@@ -56,8 +56,7 @@ all live in the ledger head. This skill is the thin driver — same shape as `/a
    confirmed **repo-wide**, including tests, e2e, scripts and `experiments/`), then real code fixes.
    For a behavior fix, pin it: ≥1 test that fails without the change (backend `pytest`, frontend
    `vitest`) unless the fix is provably prose-only.
-7. **Gate.** Per the ledger's Gate section: backend → `just test-smart` (cite decision, pass count,
-   any `DEFERRED` group); frontend → `just test-frontend` **plus exercise it in the running app**,
+7. **Gate.** Per the ledger's Gate section: backend → `just test-smart SOURCE…` (cite selected coverage and pass count); frontend → `just test-frontend TEST_FILE…` **plus exercise it in the running app**,
    or lead the report with `NOT VERIFIED IN APP`; prose-only → no tests, say so. Never run
    `just test` / broad `just test-slow` without a user-opened session. For slow tests directly related to the fix, use `just test-focused TARGET` without asking for a session; duration is not a gate.
 8. **Record.** In the ledger: strike each resolved bullet with `~~…~~ — <STATE> YYYY-MM-DD:` plus
@@ -87,7 +86,7 @@ in this pass.
 
 - Item id + title, and the per-bullet tally (`3 STALE / 2 FIXED / 1 DECIDE`).
 - The probe evidence that changed the plan (which bullets were already dead).
-- Gate result verbatim: `just test-smart` decision + pass count, or why no tests were needed.
+- Gate result verbatim: `just test-smart SOURCE…` decision + pass count, or why no tests were needed.
 - Any new DECISIONS, one line each.
 - Next `▶ NEXT`.
 

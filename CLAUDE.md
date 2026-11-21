@@ -45,11 +45,12 @@ Never regenerate a geometry lock or visual golden as part of proposing a candida
 export PATH="$HOME/.local/bin:$PATH"
 just dev                  # FastAPI :8000
 just frontend             # Vite :5173
-just test-smart           # default backend loop; fast suite, scoped
-just test-affected FILE…  # tight backend loop
+just test-smart FILE…     # current-task backend sources/tests; prints coverage selection
+just test-affected FILE…  # same focused selector; --dry-run previews coverage
 just test-file FILE       # one fast test file
 just test-focused TARGET  # current-task file/node, including slow tests; no session needed
-just test-frontend        # Vitest
+just test-frontend FILE…  # explicit JS tests; --related selects source consumers
+just test-regression-plan # inspect accumulated broad debt without running tests
 just fmt
 just lint
 just lint-memory
@@ -75,8 +76,10 @@ The app is at `http://localhost:5173` when both servers run. See [START.md](STAR
 - Keep test/development output out of the main user workspace. Delete disposable artifacts; retain useful evidence under `.development-artifacts/`. Follow [artifact cleanup](memory/feedback_development_artifact_cleanup.md), including dependency checks and final cleanup verification.
 - **Portable test/development storage (2026-10-17 clarification):** select scratch by explicit local configuration and filesystem capabilities, never by hostname or a hardcoded drive. Ordinary isolated tests may use the OS temporary directory on machines with sufficient local capacity. Use `NADOC_TEST_SCRATCH_ROOT` to select another existing directory; an explicitly configured unavailable destination must fail without fallback. On the space-constrained Archive workstation, set `NADOC_TEST_SCRATCH_MOUNT` as well and verify that mount and resolved filesystem before writing. Bound output, check space for the workload, propagate scratch to child tools and clean up on failure. Keep user designs/jobs, active runtimes and historical provenance intact; existing-data relocation/deletion still requires review. See [artifact policy](memory/feedback_development_artifact_cleanup.md#portable-storage-across-machines--2026-10-17) and [local setup](START.md#test-scratch-on-different-machines).
 
-- Backend behavior change → run `just test-smart`; report its `FAST`/`fast+slow[area]` decision, pass count, and any `DEFERRED` groups verbatim.
-- Frontend behavior change → run `just test-frontend` and exercise the feature in the running app. If that is impossible, lead the final report with `NOT VERIFIED IN APP` and explain why.
+- **Focused validation is the default (user authorization, 2026-11-21).** Backend changes → run `just test-smart SOURCE…` / `just test-affected SOURCE…`, or `just test-focused TEST_FILE[::NODE]`. Frontend changes → `just test-frontend TEST_FILE…` or `just test-frontend --related SOURCE…`. Select the changed behavior, affected consumers and integration contracts; add regression tests for the actual failure. Report what ran, results and material coverage gaps. Do not run broad suites merely because a behavior changed.
+- Select current-task paths explicitly; do not mix unrelated dirty work or the last-full-pass watermark into routine validation. Backend mappings are reviewed starting points, not proof of exhaustive impact. Unmapped sources require an explicit test list plus coverage rationale. Empty selections are not a pass. Static dependency selection does not cover every dynamic import, HTML/CSS, native boundary, or application wiring change; include explicit contract/browser tests for these.
+- User-visible frontend behavior changes also require exercising the relevant flow in the running app. If impossible, lead the final report with `NOT VERIFIED IN APP` and explain why. Test-runner/configuration-only maintenance needs command-level verification, not an unrelated browser sweep.
+- Broaden only when shared infrastructure, dependency changes, unresolved failures or an uncertain impact justify the additional coverage. Keep full sweeps in CI or deliberate regression sessions (`test-regression`, `test-fast`, `test-frontend-all`). Focused passes never advance the full-suite watermark or clear regression debt. Do not repeat broad runs after focused checks pass without new evidence.
 - Geometry/topology change → also load a representative `.nadoc` design and inspect it visually.
 - Never claim a test or app check passed unless it was actually run.
 - **Playwright artifact-cleanup gate (binding for every agent):** before invoking Playwright,
@@ -87,7 +90,7 @@ The app is at `http://localhost:5173` when both servers run. See [START.md](STAR
   artifact needs an exact, failure-safe `afterEach`/global-teardown cleanup. After the run, query the
   relevant paths and verify that no test-created artifact remains; if cleanup cannot be proven, the
   Playwright run is not complete. Never rely on a successful test body to perform cleanup.
-- **Test-session scope (user clarification, 2026-09-26):** `just test-session` gates the full `just test` suite and equivalent broad runs (`test-all`, broad `test-slow`, accumulated slow groups in `test-smart`). It is NOT a duration limit or a prerequisite for development validation.
+- **Test-session scope (user clarification, 2026-09-26):** `just test-session` gates the full `just test` suite and equivalent broad runs (`test-all`, broad `test-slow`, accumulated groups in `test-regression`). It is NOT a duration limit or a prerequisite for development validation.
 - **Focused tests and benchmarks directly related to the code currently being developed are authorized by the development task**, including slow-marked tests, GPU checks, native integration checks, and runs lasting minutes or longer. Use `just test-focused tests/test_topic.py[::test_name]` (optional `-k` / `-m` filtering) for pytest; run relevant benchmark scripts directly. Choose the smallest meaningful scope, explain its relation to the change, and clean up artifacts. Do not ask for a test session just because a focused run is long.
 - Unrelated long tests and broad regression sweeps still require a user-opened test session or explicit user authorization. Do not convert a deferred FULL verdict into a request for permission to finish focused development checks. Report broad-suite debt separately; a focused pass does not clear it.
 - User-requested native simulations, including job-specific validation, troubleshooting, retries, continuations, and monitoring, may run without a test-session marker. Authorization to own a simulation validation loop covers the necessary native retries within that task; do not repeatedly ask the user to open a test session or wrap these job launches in the test-suite guard. This does not authorize unrelated benchmarks or heavy test suites.

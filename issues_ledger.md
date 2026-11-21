@@ -1036,7 +1036,7 @@ PROTOCOL (do not skip step 1-repro or step 2-ask):
    mechanical bugs. Do not assume the fix.
 3. Implement ONE phase. Route the fix through the already-extracted module that owns the code
    (ui/ scene/ app/), NEVER back into the main() closure — see "Don't grow main.js" below.
-4. GATE: just test-frontend green (≥1 test pinning the fix) → just smoke → one app exercise.
+4. GATE: just test-frontend TEST_FILE… green (≥1 test pinning the fix), plus the relevant app/browser flow. Broad sweeps follow CLAUDE.md’s separate regression-session policy.
 5. Update issues_ledger.md (check the phase box, fix stale notes, overwrite the handoff) +
    add a row to issues_fix_log.md. Record the root cause (5-Whys) + any failed hypothesis in the
    fix-log's Root-cause log; on a reopen, bump the reopen counter. Class-of-bug → LESSONS.md.

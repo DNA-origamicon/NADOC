@@ -58,7 +58,7 @@ moved + imported back), to produce the test file for step 4.
    `expect(deps.X.method).toHaveBeenCalledWith(...)`), and each store-subscription
    branch (`store._emit({ … })` → assert the reaction).
 
-4. **Gate:** `just test-frontend` green (≥1 assertion per pure fn). For stateful
+4. **Gate:** `just test-frontend TEST_FILE…` green (≥1 assertion per pure fn). For stateful
    regions also run `just smoke` + one running-app exercise. Pure-2D-DOM panels
    need no Playwright gesture spec; WebGL-bead interactions use
    `e2e/helpers/scene_harness.js`.
@@ -78,7 +78,7 @@ moved + imported back), to produce the test file for step 4.
 ## Pattern note (why this exists / where it's heading)
 
 The reusable asset is **propose → validate against an authoritative oracle →
-retry**, not "trust generated output". Here the oracle is `just test-frontend` +
+retry**, not "trust generated output". Here the oracle is `just test-frontend TEST_FILE…` +
 `just smoke` + the verbatim-move discipline. The same harness shape (generate a
 structured artifact, then gate it on independent validators) is the intended
 foundation for later validator-gated generation features (e.g. text→design, where

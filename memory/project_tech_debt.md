@@ -64,8 +64,8 @@ one-question framing into this head, obtain the answer, then archive the resolut
 
 ## Per-iteration verification
 
-- Backend code → `just test-smart`.
-- Frontend code → `just test-frontend` plus app exercise or `NOT VERIFIED IN APP`.
+- Backend code → `just test-smart SOURCE…`.
+- Frontend code → `just test-frontend TEST_FILE…` plus app exercise or `NOT VERIFIED IN APP`.
 - Prose-only resolution → no tests; state that explicitly.
 - Deleted tested behavior → identify removed tests and remaining coverage.
 

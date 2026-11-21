@@ -5508,8 +5508,16 @@ export async function mkdirLibrary(path) {
   return _request('POST', '/library/mkdir', { path })
 }
 
-export async function renameLibrary(path, newName) {
-  return _request('PATCH', '/library/rename', { path, new_name: newName })
+export async function renameLibrary(path, newName, { onError } = {}) {
+  return _request('PATCH', '/library/rename', { path, new_name: newName }, {
+    onError: (status, detail) => onError?.(status, errorDetailToMessage(detail)),
+  })
+}
+
+export async function listLibraryMoveDestinations(paths) {
+  const query = new URLSearchParams()
+  for (const path of paths) query.append('path', path)
+  return _request('GET', `/library/move-destinations?${query}`)
 }
 
 export async function moveLibrary(path, destFolder) {
