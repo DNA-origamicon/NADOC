@@ -1,0 +1,688 @@
+{
+  "smoke-campaign": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": ".development-artifacts/oxdna-hybrid/smoke-campaign",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "coordinate": "mixed",
+      "backend": "CUDA",
+      "walkers": 2,
+      "train_steps": 10000,
+      "period": 10000,
+      "equil_steps": 10000,
+      "production_steps": 20000,
+      "cadence": 1000,
+      "seed": 913701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 20.0
+    },
+    "bias_spec": {
+      "coordinate": "mixed",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.1,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7
+    },
+    "library_sha256": "b515f304bbc8e56d6ed06dcc618d14755e0abca57cae9d0ee76c522ae11f1184",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "deadline-check": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": ".development-artifacts/oxdna-hybrid/deadline-check",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build-v3/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "force_validation": ".development-artifacts/oxdna-hybrid/force-validation-v3.json",
+      "coordinate": "mixed",
+      "backend": "CPU",
+      "walkers": 2,
+      "train_steps": 10000,
+      "period": 10000,
+      "equil_steps": 10000,
+      "production_steps": 20000,
+      "cadence": 1000,
+      "seed": 913701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 0.001,
+      "hill_height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "contact_radius": 0.5
+    },
+    "bias_spec": {
+      "coordinate": "mixed",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7,
+      "contact_radius": 0.5
+    },
+    "library_sha256": "5f7fbac912b3e5061e7ba7be15d7241b56e921886dbda83a1de968840a9808f9",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "pairing-pilot": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": ".development-artifacts/oxdna-hybrid/pairing-pilot",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "coordinate": "mixed",
+      "backend": "CUDA",
+      "walkers": 4,
+      "train_steps": 2000000,
+      "period": 10000,
+      "equil_steps": 200000,
+      "production_steps": 5000000,
+      "cadence": 1000,
+      "seed": 913701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 15.0
+    },
+    "bias_spec": {
+      "coordinate": "mixed",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.1,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7
+    },
+    "library_sha256": "b515f304bbc8e56d6ed06dcc618d14755e0abca57cae9d0ee76c522ae11f1184",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "contact-refinement/radius_0.5": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-hybrid/contact-refinement/radius_0.5",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build-v3/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "force_validation": ".development-artifacts/oxdna-hybrid/force-validation-v3.json",
+      "coordinate": "mixed",
+      "backend": "CUDA",
+      "walkers": 4,
+      "train_steps": 2000000,
+      "period": 10000,
+      "equil_steps": 200000,
+      "production_steps": 2000000,
+      "cadence": 1000,
+      "seed": 1213701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 10.0,
+      "hill_height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "contact_radius": 0.5
+    },
+    "bias_spec": {
+      "coordinate": "mixed",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7,
+      "contact_radius": 0.5
+    },
+    "library_sha256": "5f7fbac912b3e5061e7ba7be15d7241b56e921886dbda83a1de968840a9808f9",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "contact-refinement/radius_1.5": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-hybrid/contact-refinement/radius_1.5",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build-v3/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "force_validation": ".development-artifacts/oxdna-hybrid/force-validation-v3.json",
+      "coordinate": "mixed",
+      "backend": "CUDA",
+      "walkers": 4,
+      "train_steps": 2000000,
+      "period": 10000,
+      "equil_steps": 200000,
+      "production_steps": 2000000,
+      "cadence": 1000,
+      "seed": 1213701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 10.0,
+      "hill_height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "contact_radius": 1.5
+    },
+    "bias_spec": {
+      "coordinate": "mixed",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7,
+      "contact_radius": 1.5
+    },
+    "library_sha256": "5f7fbac912b3e5061e7ba7be15d7241b56e921886dbda83a1de968840a9808f9",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "ablation/unbiased": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-hybrid/ablation/unbiased",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build-v2/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "force_validation": ".development-artifacts/oxdna-hybrid/force-validation-v2.json",
+      "coordinate": "mixed",
+      "backend": "CUDA",
+      "walkers": 4,
+      "train_steps": 0,
+      "period": 10000,
+      "equil_steps": 200000,
+      "production_steps": 4000000,
+      "cadence": 1000,
+      "seed": 913701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 10.0,
+      "hill_height_kbt": 0.5,
+      "bias_factor": 10.0
+    },
+    "bias_spec": {
+      "coordinate": "mixed",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7
+    },
+    "library_sha256": "51fb6baf8ab37d384a0c15343d301b4da4980d408220e71d4f7216f79fb8eb51",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "ablation/mixed": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-hybrid/ablation/mixed",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build-v2/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "force_validation": ".development-artifacts/oxdna-hybrid/force-validation-v2.json",
+      "coordinate": "mixed",
+      "backend": "CUDA",
+      "walkers": 4,
+      "train_steps": 2000000,
+      "period": 10000,
+      "equil_steps": 200000,
+      "production_steps": 2000000,
+      "cadence": 1000,
+      "seed": 1213701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 10.0,
+      "hill_height_kbt": 0.5,
+      "bias_factor": 10.0
+    },
+    "bias_spec": {
+      "coordinate": "mixed",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7
+    },
+    "library_sha256": "51fb6baf8ab37d384a0c15343d301b4da4980d408220e71d4f7216f79fb8eb51",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "ablation/com": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-hybrid/ablation/com",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build-v2/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "force_validation": ".development-artifacts/oxdna-hybrid/force-validation-v2.json",
+      "coordinate": "com",
+      "backend": "CUDA",
+      "walkers": 4,
+      "train_steps": 2000000,
+      "period": 10000,
+      "equil_steps": 200000,
+      "production_steps": 2000000,
+      "cadence": 1000,
+      "seed": 1013701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 10.0,
+      "hill_height_kbt": 0.5,
+      "bias_factor": 10.0
+    },
+    "bias_spec": {
+      "coordinate": "com",
+      "minimum": 0,
+      "maximum": 7,
+      "spacing": 0.025,
+      "width": 0.2,
+      "height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7
+    },
+    "library_sha256": "51fb6baf8ab37d384a0c15343d301b4da4980d408220e71d4f7216f79fb8eb51",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "ablation/hb_cutoff": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-hybrid/ablation/hb_cutoff",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build-v2/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "force_validation": ".development-artifacts/oxdna-hybrid/force-validation-v2.json",
+      "coordinate": "hb_cutoff",
+      "backend": "CUDA",
+      "walkers": 4,
+      "train_steps": 2000000,
+      "period": 10000,
+      "equil_steps": 200000,
+      "production_steps": 2000000,
+      "cadence": 1000,
+      "seed": 1113701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 10.0,
+      "hill_height_kbt": 0.5,
+      "bias_factor": 10.0
+    },
+    "bias_spec": {
+      "coordinate": "hb_cutoff",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7
+    },
+    "library_sha256": "51fb6baf8ab37d384a0c15343d301b4da4980d408220e71d4f7216f79fb8eb51",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "training-duration-20261121/train_6000000": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-hybrid/training-duration-20261121/train_6000000",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build-v3/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "force_validation": ".development-artifacts/oxdna-hybrid/force-validation-v3.json",
+      "coordinate": "mixed",
+      "backend": "CUDA",
+      "walkers": 4,
+      "train_steps": 6000000,
+      "period": 10000,
+      "equil_steps": 200000,
+      "production_steps": 2000000,
+      "cadence": 1000,
+      "seed": 1213701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 25.0,
+      "hill_height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "contact_radius": 0.5
+    },
+    "bias_spec": {
+      "coordinate": "mixed",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7,
+      "contact_radius": 0.5
+    },
+    "library_sha256": "5f7fbac912b3e5061e7ba7be15d7241b56e921886dbda83a1de968840a9808f9",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  },
+  "training-duration-20261121/train_12000000": {
+    "protocol": {
+      "inputs": ".development-artifacts/gpu-umbrella/inputs",
+      "output": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-hybrid/training-duration-20261121/train_12000000",
+      "library": ".development-artifacts/oxdna-hybrid/engine-build-v3/src/liboxdna_common.so",
+      "oxpy": "/home/jojo/.local/share/nadoc/engines/oxdna/source/build-nadoc-upstream/python",
+      "force_validation": ".development-artifacts/oxdna-hybrid/force-validation-v3.json",
+      "coordinate": "mixed",
+      "backend": "CUDA",
+      "walkers": 4,
+      "train_steps": 12000000,
+      "period": 10000,
+      "equil_steps": 200000,
+      "production_steps": 2000000,
+      "cadence": 1000,
+      "seed": 1213701,
+      "temperature": 70.0,
+      "salt": 0.3,
+      "max_minutes": 25.0,
+      "hill_height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "contact_radius": 0.5
+    },
+    "bias_spec": {
+      "coordinate": "mixed",
+      "minimum": -1.0,
+      "maximum": 9.0,
+      "spacing": 0.025,
+      "width": 0.25,
+      "height_kbt": 0.5,
+      "bias_factor": 10.0,
+      "mixed_weight": 0.7,
+      "contact_radius": 0.5
+    },
+    "library_sha256": "5f7fbac912b3e5061e7ba7be15d7241b56e921886dbda83a1de968840a9808f9",
+    "box_oxdna": [
+      7.6505909078802,
+      7.6505909078802,
+      7.6505909078802
+    ],
+    "total_strand_concentration_M": 0.012000000000000023,
+    "files": {
+      "topology.top": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/topology.top",
+        "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+      },
+      "vmmc_op.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/vmmc_op.txt",
+        "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+      },
+      "oxDNA2_sequence_dependent_parameters.txt": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/oxDNA2_sequence_dependent_parameters.txt",
+        "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+      },
+      "conf.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/conf.dat",
+        "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+      },
+      "unbound.dat": {
+        "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+        "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+      }
+    }
+  }
+}

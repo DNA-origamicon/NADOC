@@ -1,0 +1,145 @@
+{
+  "coordinate": "mixed",
+  "temperature_c": 70.0,
+  "analysis_source_sha256": "b85b745026fdd2648f44b776249506b6ea2156e8e38a780528e1312139a5d953",
+  "wall_seconds": 198.63051490299404,
+  "replicas": [
+    {
+      "p_bound_box": 1.0,
+      "bulk_bound_fraction": 1.0,
+      "conditional_ci95": null,
+      "q_range": [
+        3,
+        8
+      ],
+      "cv_range": [
+        3.964633,
+        7.999931
+      ],
+      "recorded_crossings": 0,
+      "statistical_inefficiency": 173.53654885571305,
+      "unbound_to_six_pairs_or_back_passages": 0,
+      "weight_ess": 3999.999999999999,
+      "approximate_correlated_weight_ess": 23.049899438335604,
+      "block_samples": 868,
+      "blocks": 4,
+      "half_run_probabilities": [
+        1.0,
+        1.0
+      ],
+      "bias_energy_max_error": 0.0,
+      "bias_energy_rounding_bound": 1e-06,
+      "reasons_precision_not_certified": [
+        "Fewer than 20 recorded binding/unbinding crossings",
+        "Fewer than 10 correlation-length blocks",
+        "Low importance-weighted effective sample size"
+      ],
+      "replica": 0,
+      "start": "bound"
+    },
+    {
+      "p_bound_box": 0.00025,
+      "bulk_bound_fraction": 0.00024993753123438373,
+      "conditional_ci95": null,
+      "q_range": [
+        0,
+        1
+      ],
+      "cv_range": [
+        0.100725,
+        1.086806
+      ],
+      "recorded_crossings": 2,
+      "statistical_inefficiency": 1.107905729035334,
+      "unbound_to_six_pairs_or_back_passages": 0,
+      "weight_ess": 3999.999999999999,
+      "approximate_correlated_weight_ess": 3610.415484973477,
+      "block_samples": 6,
+      "blocks": 666,
+      "half_run_probabilities": [
+        0.0,
+        0.0005000000000000001
+      ],
+      "bias_energy_max_error": 0.0,
+      "bias_energy_rounding_bound": 1e-06,
+      "reasons_precision_not_certified": [
+        "Fewer than 20 recorded binding/unbinding crossings"
+      ],
+      "replica": 1,
+      "start": "unbound"
+    },
+    {
+      "p_bound_box": 1.0,
+      "bulk_bound_fraction": 1.0,
+      "conditional_ci95": null,
+      "q_range": [
+        4,
+        8
+      ],
+      "cv_range": [
+        4.440255,
+        7.999908
+      ],
+      "recorded_crossings": 0,
+      "statistical_inefficiency": 164.65760863120215,
+      "unbound_to_six_pairs_or_back_passages": 0,
+      "weight_ess": 3999.999999999999,
+      "approximate_correlated_weight_ess": 24.29283428352919,
+      "block_samples": 824,
+      "blocks": 4,
+      "half_run_probabilities": [
+        1.0,
+        1.0
+      ],
+      "bias_energy_max_error": 0.0,
+      "bias_energy_rounding_bound": 1e-06,
+      "reasons_precision_not_certified": [
+        "Fewer than 20 recorded binding/unbinding crossings",
+        "Fewer than 10 correlation-length blocks",
+        "Low importance-weighted effective sample size"
+      ],
+      "replica": 2,
+      "start": "bound"
+    },
+    {
+      "p_bound_box": 0.0,
+      "bulk_bound_fraction": 0.0,
+      "conditional_ci95": null,
+      "q_range": [
+        0,
+        0
+      ],
+      "cv_range": [
+        0.100725,
+        0.68937
+      ],
+      "recorded_crossings": 0,
+      "statistical_inefficiency": 1.283809562308025,
+      "unbound_to_six_pairs_or_back_passages": 0,
+      "weight_ess": 3999.999999999999,
+      "approximate_correlated_weight_ess": 3115.7269095338593,
+      "block_samples": 7,
+      "blocks": 571,
+      "half_run_probabilities": [
+        0.0,
+        0.0
+      ],
+      "bias_energy_max_error": 0.0,
+      "bias_energy_rounding_bound": 1e-06,
+      "reasons_precision_not_certified": [
+        "Fewer than 20 recorded binding/unbinding crossings"
+      ],
+      "replica": 3,
+      "start": "unbound"
+    }
+  ],
+  "p_bound_by_initial_state": {
+    "bound": 1.0,
+    "unbound": 0.000125
+  },
+  "initial_state_probability_gap": 0.999875,
+  "pooled_p_bound_box_provisional": 0.5000625,
+  "recorded_crossings": 2,
+  "tm_precision_certified": false,
+  "qualification": "Single-temperature diagnostics. No Tm precision certification; shared training bias is conditioned on, not independent campaign replication."
+}

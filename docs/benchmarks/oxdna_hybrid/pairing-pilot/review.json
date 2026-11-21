@@ -1,0 +1,5 @@
+{
+  "disposition": "diagnostic_only",
+  "reason": "Intentionally stopped after identifying a radial cutoff discontinuity in the upstream coordination proxy. Superseded by v2 engine and ablation campaign; do not pool these samples.",
+  "native_failure": false
+}

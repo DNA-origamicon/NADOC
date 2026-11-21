@@ -1,0 +1,147 @@
+{
+  "coordinate": "mixed",
+  "temperature_c": 70.0,
+  "analysis_source_sha256": "b85b745026fdd2648f44b776249506b6ea2156e8e38a780528e1312139a5d953",
+  "wall_seconds": 245.6685929610394,
+  "replicas": [
+    {
+      "p_bound_box": 1.0,
+      "bulk_bound_fraction": 1.0,
+      "conditional_ci95": null,
+      "q_range": [
+        3,
+        8
+      ],
+      "cv_range": [
+        3.521008,
+        7.999909
+      ],
+      "recorded_crossings": 0,
+      "statistical_inefficiency": 211.80933456216619,
+      "unbound_to_six_pairs_or_back_passages": 0,
+      "weight_ess": 1633.8915393416223,
+      "approximate_correlated_weight_ess": 7.713973242581875,
+      "block_samples": 1060,
+      "blocks": 1,
+      "half_run_probabilities": [
+        0.9999999999999997,
+        1.0
+      ],
+      "bias_energy_max_error": 8.577353118877085e-07,
+      "bias_energy_rounding_bound": 2.268045117435503e-06,
+      "reasons_precision_not_certified": [
+        "Fewer than 20 recorded binding/unbinding crossings",
+        "Fewer than 10 correlation-length blocks",
+        "Low importance-weighted effective sample size"
+      ],
+      "replica": 0,
+      "start": "bound"
+    },
+    {
+      "p_bound_box": 0.003516795101164898,
+      "bulk_bound_fraction": 0.003504513636701765,
+      "conditional_ci95": null,
+      "q_range": [
+        0,
+        5
+      ],
+      "cv_range": [
+        0.100725,
+        5.048201
+      ],
+      "recorded_crossings": 43,
+      "statistical_inefficiency": 251.35429359887843,
+      "unbound_to_six_pairs_or_back_passages": 0,
+      "weight_ess": 716.2961259470006,
+      "approximate_correlated_weight_ess": 2.849746927697585,
+      "block_samples": 1257,
+      "blocks": 1,
+      "half_run_probabilities": [
+        0.0004438502065430978,
+        0.021644401019385223
+      ],
+      "bias_energy_max_error": 1.2753573320756217e-06,
+      "bias_energy_rounding_bound": 2.268045117435503e-06,
+      "reasons_precision_not_certified": [
+        "Fewer than 10 correlation-length blocks",
+        "Low importance-weighted effective sample size"
+      ],
+      "replica": 1,
+      "start": "unbound"
+    },
+    {
+      "p_bound_box": 0.9999999999999994,
+      "bulk_bound_fraction": 0.9999999764391957,
+      "conditional_ci95": null,
+      "q_range": [
+        3,
+        8
+      ],
+      "cv_range": [
+        4.184881,
+        7.999937
+      ],
+      "recorded_crossings": 0,
+      "statistical_inefficiency": 127.89847225624328,
+      "unbound_to_six_pairs_or_back_passages": 0,
+      "weight_ess": 1680.099047327036,
+      "approximate_correlated_weight_ess": 13.136193245224812,
+      "block_samples": 640,
+      "blocks": 3,
+      "half_run_probabilities": [
+        1.0,
+        0.9999999999999994
+      ],
+      "bias_energy_max_error": 8.519324830036368e-07,
+      "bias_energy_rounding_bound": 2.268045117435503e-06,
+      "reasons_precision_not_certified": [
+        "Fewer than 20 recorded binding/unbinding crossings",
+        "Fewer than 10 correlation-length blocks",
+        "Low importance-weighted effective sample size"
+      ],
+      "replica": 2,
+      "start": "bound"
+    },
+    {
+      "p_bound_box": 0.008317234308479776,
+      "bulk_bound_fraction": 0.008249189844274188,
+      "conditional_ci95": null,
+      "q_range": [
+        0,
+        5
+      ],
+      "cv_range": [
+        0.100727,
+        5.330213
+      ],
+      "recorded_crossings": 41,
+      "statistical_inefficiency": 140.2342323451971,
+      "unbound_to_six_pairs_or_back_passages": 0,
+      "weight_ess": 319.3114111579832,
+      "approximate_correlated_weight_ess": 2.2769861952962676,
+      "block_samples": 702,
+      "blocks": 2,
+      "half_run_probabilities": [
+        0.003375486630744716,
+        0.04688091818801182
+      ],
+      "bias_energy_max_error": 1.2772972346475342e-06,
+      "bias_energy_rounding_bound": 2.268045117435503e-06,
+      "reasons_precision_not_certified": [
+        "Fewer than 10 correlation-length blocks",
+        "Low importance-weighted effective sample size"
+      ],
+      "replica": 3,
+      "start": "unbound"
+    }
+  ],
+  "p_bound_by_initial_state": {
+    "bound": 1.0,
+    "unbound": 0.0049900475713126665
+  },
+  "initial_state_probability_gap": 0.9950099524286873,
+  "pooled_p_bound_box_provisional": 0.3766421862594159,
+  "recorded_crossings": 84,
+  "tm_precision_certified": false,
+  "qualification": "Single-temperature diagnostics. No Tm precision certification; shared training bias is conditioned on, not independent campaign replication."
+}
