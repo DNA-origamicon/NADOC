@@ -104,7 +104,6 @@ export function initTranslateRotateTool(deps) {
     rebakeHelixAxesForClusterDelta,
     reemitClusterBridges,
     refreshClusterOverlays,
-    rightSidebar,
     getActive, setActive,
     getClusterDirty, setClusterDirty,
     getEditContext, setEditContext,
@@ -336,7 +335,6 @@ export function initTranslateRotateTool(deps) {
 
   async function _activateTranslateRotateTool(targetClusterId = null) {
     moveEpoch++
-    rightSidebar?.open?.('properties')
     const { assemblyActive, activeInstanceId, currentDesign } = store.getState()
 
     // ── Assembly mode: attach instance gizmo ────────────────────────────────
@@ -785,6 +783,25 @@ export function initTranslateRotateTool(deps) {
     if (cancelRestoreCursor !== null) await api.seekFeatures(cancelRestoreCursor)
   }
 
+  // The popup's Clear action releases tool ownership as well as the canonical
+  // selection. Ordinary deselection elsewhere still leaves tool activation independent.
+  async function _clearToolSelection() {
+    const before = store.getState()
+    if (!getActive() || before.assemblyActive || nucleotideTransformTool?.isActive()
+        || _moveRotatePanel.getProteinController?.()?.isAttached?.() || proteinGizmo?.isAttached()) {
+      selectionManager.clearSelection()
+      return
+    }
+    const cancel = _cancelTranslateRotateTool()
+    const epoch = moveEpoch
+    await cancel
+    const current = store.getState()
+    if (moveEpoch !== epoch || current.currentDesign !== before.currentDesign
+        || current.selection !== before.selection || current.assemblyActive || getActive()) return
+    selectionManager.clearSelection()
+    await _activateTranslateRotateTool()
+  }
+
   // Menu, keyboard and programmatic history requests share this API boundary.
   // Await restoration BEFORE a cluster-only delta captures its visual base.
   const unregisterHistoryPreview = api.registerHistoryPreviewCanceller?.(async () => {
@@ -1010,6 +1027,7 @@ export function initTranslateRotateTool(deps) {
     confirm: _confirmTranslateRotateTool,
     cancel: _cancelTranslateRotateTool,
     resetToSaved: _resetActiveClusterToSaved,
+    clearSelection: _clearToolSelection,
     rotateJoint: _rotateJoint,
     handleSelectionChange: _handleSelectionChange,
     handleMultiClusterSelectionChange: _handleMultiClusterSelectionChange,

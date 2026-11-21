@@ -1,5 +1,5 @@
 /**
- * Tests for scene/move_rotate_panel.js — the Move/Rotate right-sidebar panel shell
+ * Tests for scene/move_rotate_panel.js — the Move/Rotate viewport popup
  * (numeric transform inputs + pivot + current-selection box + commit controller).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -34,6 +34,7 @@ const DOM = {
   'mr-snap-45':             'input',
   'mr-tether-collisions':   'input',
   'mr-frame-sel':           'select',
+  'mr-cancel-btn':          'button',
   'mr-reset-btn':           'button',
   'mr-apply-btn':           'button',
 }
@@ -199,6 +200,15 @@ describe('exclusive history panel ownership', () => {
     f.lease.release()
     f.els['mr-apply-btn'].click()
     expect(ordinary).toHaveBeenCalledOnce()
+  })
+
+  it('routes popup close through the history cancel owner', () => {
+    const f = opened(), ordinary = vi.fn()
+    f.els['mr-cancel-btn'].addEventListener('click', ordinary)
+    f.panel.panel.closest('.tool-popup').querySelector('[aria-label="Close Move / Rotate"]').click()
+    expect(f.callbacks.onCancel).toHaveBeenCalledOnce()
+    expect(ordinary).not.toHaveBeenCalled()
+    f.lease.release()
   })
 
   it('refuses concurrent ownership and makes released callbacks inert', () => {
@@ -788,5 +798,32 @@ describe('moveRotateSelectionLabels', () => {
       currentDesign: { cluster_transforms: [{ id: 'c1', name: 'Arm' }] },
       selection: { items: [{ kind: 'cluster', id: 'c1' }] },
     })).toEqual(['Cluster · Arm'])
+  })
+})
+
+
+describe('viewport popup', () => {
+  it.each([false, true])('keeps controls outside sidebars and follows session visibility (assembly=%s)', async assemblyActive => {
+    const els = mountPanelDom()
+    const panel = els['move-rotate-panel']
+    for (const [id, node] of Object.entries(els)) if (id !== panel.id) panel.append(node)
+    panel.style.display = 'none'
+    const sidebar = document.createElement('aside')
+    sidebar.hidden = true
+    document.body.append(sidebar)
+    sidebar.append(panel)
+    initMoveRotatePanel(makeDeps({ assemblyActive }))
+    const popup = panel.closest('.tool-popup')
+    expect(popup.parentElement).toBe(document.body)
+    expect(popup.style.display).toBe('none')
+    panel.style.display = ''
+    await Promise.resolve()
+    expect(popup.style.display).toBe('flex')
+    const cancel = vi.fn(() => { panel.style.display = 'none' })
+    els['mr-cancel-btn'].addEventListener('click', cancel)
+    popup.querySelector('[aria-label="Close Move / Rotate"]').click()
+    await Promise.resolve()
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(popup.style.display).toBe('none')
   })
 })

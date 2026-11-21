@@ -337,7 +337,7 @@ export async function selectEndsPlainThenCtrl(page) {
  *
  * Returns the instance ids in add order.
  */
-export async function loadAssemblyWithParts(page, { doc, n = 2, name = 'asm' }) {
+export async function loadAssemblyWithParts(page, { doc, n = 2, name = 'asm', frame = true }) {
   const H = { 'Content-Type': 'application/json', 'X-NADOC-Doc': doc }
   // Force the per-instance renderer (?shared=0): it builds inline-source designs
   // into a pickable cache, so pickInstance / getInstanceCenters work. The shared
@@ -372,7 +372,11 @@ export async function loadAssemblyWithParts(page, { doc, n = 2, name = 'asm' }) 
     }
     ids.push(insts[insts.length - 1].id)
   }
-  await _enterAssemblyAndFrame(page)
+  if (frame) await _enterAssemblyAndFrame(page)
+  else {
+    await page.evaluate(() => window.__nadocTest.enterAssemblyMode())
+    await expect(page.locator('#mode-indicator')).toContainText('ASSEMBLY')
+  }
   return ids
 }
 
@@ -409,7 +413,7 @@ export async function frameAssembly(page) {
 /** Bounding rects of the overlays that sit above the full-width canvas. */
 async function _overlayRects(page) {
   const rects = []
-  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel']) {
+  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel', '.tool-popup:visible']) {
     const b = await page.locator(sel).boundingBox().catch(() => null)
     if (b) rects.push(b)
   }
@@ -498,14 +502,14 @@ export async function selectAssemblyInstance(page, { id = null } = {}) {
 export async function clickEmptyAssemblySpace(page) {
   const box = await page.locator('#canvas').boundingBox()
   const rects = []
-  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel']) {
+  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel', '.tool-popup:visible']) {
     const b = await page.locator(sel).boundingBox().catch(() => null)
     if (b) rects.push(b)
   }
   const covered = (p) => rects.some(r => p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height)
   // Scan a coarse grid, skip the top 50px (menu) and bottom 70px (confirm btn).
   for (let fy = 0.25; fy <= 0.75; fy += 0.15) {
-    for (let fx = 0.08; fx <= 0.5; fx += 0.12) {
+    for (let fx = 0.08; fx <= 0.92; fx += 0.12) {
       const p = { x: box.x + box.width * fx, y: box.y + box.height * fy }
       if (p.y < box.y + 50 || p.y > box.y + box.height - 70) continue
       if (covered(p)) continue

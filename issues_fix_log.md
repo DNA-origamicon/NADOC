@@ -1,5 +1,15 @@
 # Issues fix log
 
+## 2026-11-21 — ISSUE-256: Move/Rotate Clear selection
+
+- [x] Clear now releases the cluster tool target and pending preview, then leaves
+  the popup waiting for another selection. The existing cancel path restores display.
+- [x] Focused tool, panel and subscription tests: 124 passed.
+- [x] App regression passed: `frontend/e2e/move_clear_selection.spec.js` loads the existing
+  JJ_Hinge file and checks clear/reselection plus unchanged saved design content
+  (excluding the normal Open file-identity signoff metadata).
+
+
 ## 2026-11-20 — ISSUE-253/254: RunPod cold imports and large-result collection
 
 - [x] Extend dependency preflight to 180 s and native-result packaging to 900 s,

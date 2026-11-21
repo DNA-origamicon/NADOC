@@ -4511,7 +4511,7 @@ async function main() {
     applyAssemblyPrimaryLive:     _applyAssemblyPrimaryLive,
     queueAssemblyPrimaryCommit:   _queueAssemblyPrimaryCommit,
     setClusterRotationPoint:      api.setClusterRotationPoint,
-    clearSelection:               () => selectionManager.clearSelection(),
+    clearSelection:               () => _translateRotateTool.clearSelection(),
   })
   proteinSubsystem.setMoveRotatePanel(_moveRotatePanel)
   nanoparticleSubsystem.setMoveRotatePanel(_moveRotatePanel)

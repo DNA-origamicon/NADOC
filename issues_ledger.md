@@ -1,5 +1,17 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-256 — Move/Rotate Clear selection retains its active cluster (2026-11-21)
+
+- **Cause:** the popup cleared canonical selection only; the independent tool target,
+  pending transform and gizmo remained attached. Reported on JJ_Hinge after select → M → Clear.
+- **Change:** route the explicit popup action through the tool's cancel/restore path,
+  then clear canonical selection and rearm cluster picking. A superseding session,
+  document or selection prevents a delayed cancel from rearming the old session.
+  Ordinary deselection and assembly/attachment selection semantics are unchanged.
+- **Validation:** focused tool/panel/subscription regressions; JJ_Hinge
+  browser regression checks clear, disabled numeric fields, and selecting another cluster.
+
+
 ## ISSUE-255 — Completed remote progress retains stale-sync annotation (2026-11-20)
 
 - **Status:** open cosmetic progress-label debt; completion and stage statuses remain correct.

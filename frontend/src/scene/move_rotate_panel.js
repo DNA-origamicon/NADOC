@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { posEulerFromMatrix, eulerDegToQuat, stepEulerDeg } from './rotation_math.js'
+import { createToolPopup } from '../ui/tool_popup.js'
 import { showToast } from '../ui/toast.js'
 import { canonicalSelection } from './selection_model.js'
 import { createMoveRotateHistoryBinding } from './move_rotate_history_binding.js'
@@ -27,7 +28,7 @@ export function moveRotateSelectionLabels(state) {
 }
 
 /**
- * Move/Rotate right-sidebar panel — numeric transform inputs (tx/ty/tz, rx/ry/rz,
+ * Move/Rotate viewport popup — numeric transform inputs (tx/ty/tz, rx/ry/rz,
  * joint-angle) + pivot dropdown and a current-selection box with an explicit clear
  * action. Drives the
  * design cluster gizmo (clusterGizmo) and the assembly instance gizmo
@@ -59,6 +60,8 @@ export function initMoveRotatePanel({
   setClusterRotationPoint, clearSelection,
 }) {
   const _mrPanel         = document.getElementById('move-rotate-panel')
+  createToolPopup({ panel: _mrPanel, title: 'Move / Rotate',
+    onClose: () => document.getElementById('mr-cancel-btn')?.click() })
   const _mrSelectionBox  = document.getElementById('mr-current-selection')
   const _mrSessionHint   = document.getElementById('mr-session-hint')
   const _mrTxInp         = document.getElementById('mr-tx')
