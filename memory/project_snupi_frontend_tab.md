@@ -8,6 +8,16 @@ metadata:
 
 # SNUPI frontend engine tab — fresh-session build brief (P5)
 
+## Fit visible results (2026-11-21)
+
+The F shortcut and fit-to-view use SNUPI's live result bounds before native
+part/assembly bounds or part selections. This covers Coarse FEM tubes/joints,
+predicted shape, RMSF, deviation and the current trajectory frame, including
+materialized representations. Turning results off restores native framing.
+The shared fit calculation encloses the bounding-box diagonal and accounts for
+viewport aspect ratio and camera zoom. Regression: `snupi_fit_view.spec.js`
+(display-only transport fixtures in both hosts) and `fit_view_math.test.js`.
+
 ## Shaded result rendering (2026-11-19)
 
 `snupi_result_view.js` uses mrDNA's instanced sphere/stick rendering approach with

@@ -3326,10 +3326,10 @@ async function main() {
   function _fitToView() {
     const state = store.getState()
     const { assemblyActive } = state
-    const box = assemblyActive
+    const box = snupiDisplay?.getBoundingBox() ?? (assemblyActive
       ? assemblyVolumes.getBoundingBox() ?? assemblyRenderer.getBoundingBox()
-      : nucleotideLocalBox(navigationGeometry(state, visibilityController?.getEffectiveHiddenBaseKeys()))
-    const pose = fitViewPose(box, camera.position, controls.target, camera.fov)
+      : nucleotideLocalBox(navigationGeometry(state, visibilityController?.getEffectiveHiddenBaseKeys())))
+    const pose = fitViewPose(box, camera.position, controls.target, camera.getEffectiveFOV(), camera.aspect)
     if (!pose) return
     controls.target.copy(pose.target)
     camera.position.copy(pose.position)
@@ -3349,9 +3349,9 @@ async function main() {
     })
   }
 
-  // F-key handler: frame the selection if there is one, otherwise fit the whole
-  // design. Matches the standard CAD convention (Blender F, Fusion F, etc.).
+  // SNUPI owns the visible result; otherwise frame the selection or whole design.
   function _frameSelectionOrAll() {
+    if (snupiDisplay?.deformActive()) { _fitToView(); return }
     const box = _selectionBBox()
     if (!box) { _fitToView(); return }
     const center = box.getCenter(new THREE.Vector3())
@@ -7044,7 +7044,7 @@ async function main() {
       bluntEnds,
       slicePlane,
       _extrudePanel,
-      assemblyRenderer,
+      assemblyRenderer, snupiDisplay,
       selectAssemblyClusterForTest: (instanceId, clusterId) => {
         _selectedAssemblyCluster = { instanceId, clusterId }
       },
