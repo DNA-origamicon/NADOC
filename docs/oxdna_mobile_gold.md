@@ -22,6 +22,16 @@ stage, including replacement of the usual CPU MC stage. Append production, or
 use a free-solution Run child, to continue with the same cores and grafts.
 CPU fallback is rejected. Missing or unsupported chemistry is an error.
 
+The GPU replacement for the initial MC stage uses at least 10,000 MD steps,
+dt = 0.00001 and DNA diffusion = 0.0001 to dissipate close-contact seed energy.
+These are startup relaxation parameters, not production transport parameters.
+The subsequent MD relaxation, equilibration and production use dt ≤ 0.002
+and default DNA diffusion 2.5. Explicit MD diffusion settings survive model
+configuration and restarts. Backbone FENE readiness is checked at the end of
+the last consecutive MD relaxation stage; a short startup need not already
+satisfy the production bond-length limit. Retries target the latest relaxation
+stage and never increase its timestep.
+
 `mobile_gold.dat` contains engine parameters and immutable topology indices;
 `mobile_gold.json` records strand/core identity and provenance. Core particles
 are appended after DNA using reserved type 499, without fictitious base pairing
