@@ -47,7 +47,9 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
     const right = document.createElement('div'); right.style.cssText = 'order:2;flex:0 0 230px;display:flex;flex-direction:column;min-height:0;'
     body.append(left, preview, right, strepPanel); win.append(header, tabs, body); overlay.appendChild(win); document.body.appendChild(overlay)
 
-    left.innerHTML = `<div style="font-size:12px;color:${DIM};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Overhangs</div>
+    const stepTitleStyle = `font-size:13px;font-weight:600;line-height:1.4;color:${TEXT};margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid ${BORDER}`
+    left.innerHTML = `<h3 style="${stepTitleStyle}">Step 1: Sequence</h3>
+      <div style="font-size:12px;color:${DIM};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Overhangs</div>
       <div id="np-conj-overhangs" style="flex:1;min-height:80px;overflow-y:auto;border:1px solid ${BORDER};border-radius:4px;margin-bottom:10px"></div>
       <label style="font-size:12px;color:${TEXT};display:block;margin-bottom:3px">ssDNA handle</label>
       <input id="np-conj-sequence" maxlength="500" placeholder="Enter DNA or select an overhang" style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid ${BORDER};border-radius:4px;color:${CYAN};font-family:monospace;font-size:12px;padding:5px 7px;margin-bottom:10px">
@@ -55,12 +57,12 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
       <div style="font-size:12px;color:${TEXT};margin-bottom:10px">Thiol modification &nbsp;<label style="margin-right:8px"><input type="radio" name="np-thiol-end" value="5p" checked> 5′ end</label><label><input type="radio" name="np-thiol-end" value="3p"> 3′ end</label></div>
       <button id="np-conj-create-handle" disabled style="width:100%;background:#1f6feb;color:#fff;border:none;border-radius:5px;padding:8px;cursor:pointer;font-size:13px">Create ssDNA handle</button>
       <div id="np-conj-status" style="font-size:11px;color:${DIM};margin:8px 0;min-height:28px"></div>`
-    right.innerHTML = `<div style="font-size:12px;color:${DIM};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Surface coverage</div>
+    right.innerHTML = `<h3 style="${stepTitleStyle}">Step 2: Coverage</h3>
       <label style="font-size:12px;color:${TEXT}">Density<input id="np-conj-density" type="range" min="0" max="8" step="1" style="display:block;width:100%;margin-top:7px"></label>
       <div style="display:flex;justify-content:space-between;color:${DIM};font-size:9px"><span>1</span><span>2</span><span>3</span><span>5</span><span>10</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
       <label style="font-size:12px;color:${TEXT};margin-top:10px"><input id="np-conj-count" type="number" min="1" max="10000" step="1" style="width:72px;background:#0d1117;border:1px solid ${BORDER};border-radius:4px;color:${TEXT};padding:4px"> strands</label>
       <div id="np-conj-summary" style="font-size:11px;color:${DIM};line-height:1.55;margin-top:12px"></div><div id="np-conj-error" style="font-size:11px;color:#ff7b72;min-height:28px;margin-top:8px"></div>
-      <div style="display:flex;gap:8px;margin-top:auto"><button id="np-conj-cancel" style="flex:1;background:#21262d;color:${TEXT};border:1px solid ${BORDER};border-radius:5px;padding:8px;cursor:pointer;font-size:13px">Cancel</button><button id="np-conj-apply" disabled style="flex:1;background:#238636;color:#fff;border:none;border-radius:5px;padding:8px;cursor:pointer;font-size:13px">Apply</button></div>
+      <div style="display:flex;gap:8px;margin-top:auto"><button id="np-conj-cancel" style="flex:1;background:#21262d;color:${TEXT};border:1px solid ${BORDER};border-radius:5px;padding:8px;cursor:pointer;font-size:13px">Cancel</button><button id="np-conj-apply" disabled style="flex:0 0 auto;white-space:nowrap;background:#238636;color:#fff;border:none;border-radius:5px;padding:8px 12px;cursor:pointer;font-size:13px">Step 3: Apply</button></div>
       <button id="np-conj-remove" style="margin-top:8px;background:#21262d;color:${TEXT};border:1px solid ${BORDER};border-radius:5px;padding:6px;cursor:pointer">Remove conjugation</button>`
 
     const list = left.querySelector('#np-conj-overhangs'), sequence = left.querySelector('#np-conj-sequence')
