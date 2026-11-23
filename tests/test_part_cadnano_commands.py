@@ -80,8 +80,8 @@ def inputs(data=None, *, raw=None, **changes):
     return design, params, EmbeddedResolver(design.input_sources)
 
 
-def legacy_pipeline(data):
-    imported, warnings = import_cadnano(data)
+def legacy_pipeline(data, *, importer_version=1):
+    imported, warnings = import_cadnano(data, importer_version=importer_version)
     imported = _recenter_design(imported)
     imported = autodetect_all_overhangs(imported)
     imported = _autodetect_clusters(imported)
@@ -90,11 +90,12 @@ def legacy_pipeline(data):
 
 
 @pytest.mark.parametrize("name", ["Honeycomb_6hb_test1.json", "6hb_cadnano_native_test1.json"])
-def test_real_source_complete_pipeline_matches_after_identity_only_normalization(name):
+@pytest.mark.parametrize("importer_version", [1, 2, 3])
+def test_real_source_complete_pipeline_matches_after_identity_only_normalization(name, importer_version):
     raw = (EXAMPLES / name).read_bytes()
-    initial, params, resolver = inputs(raw=raw)
+    initial, params, resolver = inputs(raw=raw, importer_version=importer_version)
     before = initial.model_dump_json()
-    expected, warnings = legacy_pipeline(json.loads(raw))
+    expected, warnings = legacy_pipeline(json.loads(raw), importer_version=importer_version)
     expected = remap_design(expected, commands.identity_mapping(expected, commands.parse_command("cadnano-import", params)))
     result, actual_warnings = commands.evaluate("cadnano-import", initial, params, resolver=resolver)
     assert result.model_dump(include=AUTHORING_FIELDS) == expected.model_dump(include=AUTHORING_FIELDS)
@@ -163,7 +164,7 @@ def test_same_source_and_seed_reproduce_every_id_but_source_change_invalidates_a
 
 @pytest.mark.parametrize("change", [
     lambda p: p.pop("name_override"), lambda p: p.update(_proof_version=True),
-    lambda p: p.update(importer_version=2), lambda p: p.update(lattice_import_version=True),
+    lambda p: p.update(importer_version=4), lambda p: p.update(lattice_import_version=True),
     lambda p: p.update(history_seed="not-a-uuid"), lambda p: p.update(identity_policy="nearest-geometry"),
     lambda p: p.update(helices=[]), lambda p: p.update(geometry={}),
     lambda p: p.update(content="{}"), lambda p: p["source"].update(path="mutable.json"),
@@ -213,6 +214,33 @@ def test_source_format_and_size_admission_precede_resolution(patch):
     with pytest.raises(SourceContractError):
         commands.build("cadnano-import", initial, params,
                        resolver=lambda _: pytest.fail("Unsupported input was resolved"))
+
+
+@pytest.mark.parametrize("importer_version", [1, 2])
+def test_direct_legacy_importer_refuses_native_roundtrip_metadata(importer_version):
+    from backend.core import cadnano
+    from backend.core.lattice import make_bundle_design
+
+    data = cadnano.export_cadnano(make_bundle_design([(4, 6), (4, 7)], 42))
+    assert "nadoc_roundtrip" in data
+    with pytest.raises(ValueError, match="requires importer version 3"):
+        cadnano.import_cadnano(data, importer_version=importer_version)
+
+
+@pytest.mark.parametrize("importer_version", [1, 2])
+def test_legacy_versions_refuse_native_roundtrip_metadata_before_import(monkeypatch, importer_version):
+    from backend.core import cadnano
+    from backend.core.lattice import make_bundle_design
+
+    native = make_bundle_design([(4, 6), (4, 7)], 42)
+    data = cadnano.export_cadnano(native)
+    assert "nadoc_roundtrip" in data
+    initial, params, resolver = inputs(data, importer_version=importer_version)
+    monkeypatch.setattr(cadnano, "import_cadnano",
+                        lambda *_args, **_kwargs: pytest.fail("Old importer received v3 metadata"))
+    with pytest.raises(SourceContractError, match="requires importer version 3") as error:
+        commands.build("cadnano-import", initial, params, resolver=resolver)
+    assert error.value.code == "unsupported_source"
 
 
 @pytest.mark.parametrize("case", ["huge_loop", "width", "many_helices", "nested", "huge_integer", "duplicate", "nonfinite", "opaque_cpd", "legacy_loop", "duplicate_grid"])

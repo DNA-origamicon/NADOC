@@ -40,21 +40,19 @@ Direction convention
     vstrand.num % 2 == 1 → scaffold runs REVERSE (5′→3′, bp decreasing)
 
 Global bp coordinate system
-    length_bp = len(vstrand['scaf'])  (the full caDNAno array length, e.g. 462).
+    length_bp = last_active_bp - first_active_bp + 1.
     bp_start  = first active bp index (e.g. 30 for M13 18HB designs).
     Domain start_bp / end_bp values are caDNAno bp array indices (global bp).
-    axis_start.z = bp_start * RISE,  axis_end.z = last_bp * RISE.
-    Geometry uses the global bp index for both axial position and twist angle,
-    so the helix backbone orientation at bp=30 is phase_offset + 30*twist,
-    matching caDNAno's angular convention exactly.
+    axis_start.z = bp_start * RISE, axis_end.z = (last_active_bp + 1) * RISE.
+    phase_offset is the native lattice phase plus bp_start * lattice twist;
+    the local geometry index therefore preserves the source global bp register.
+    Import versions 1 and 2 retain their historical array-length/phase semantics
+    solely for replay of existing recorded imports.
 
 XY convention
-    x = nc × COL_PITCH  (positive, matching sliceview.js hcCellNm / square_position).
-    y = lattice Y after Y-flip from caDNAno Y-down to NADOC Y-up.
-    The Y-flip is intentional: it lets the phase constants stay consistent across
-    all rows (FORWARD helices alternate between SOUTH and NORTH positions, and the
-    16-bp = 180° half-period guarantees the backbone automatically points the right
-    way at each row's crossover positions).
+    Version 3 uses the native lattice position for each source cell together
+    with the native phase and exact lattice twist. The legacy reflected HC axes
+    and importer phase constants remain available only to versioned replay.
 
 Colour
     stap_colors stores a 24-bit RGB integer (e.g. 0xF7931E = orange).
@@ -111,7 +109,8 @@ _CADNANO_SQ_CENTER_COL: int = _CADNANO_SQ_MAX_COLS // 2  # 25
 # A change that appears to fix one metric (e.g. crossover arc distance) will
 # silently break many others.  Any proposed change must be approved first.
 #
-# HC phase offsets (radians) — match lattice.py _lattice_phase_offset().
+# Legacy HC import phase offsets (radians), pinned for v1/v2 replay.
+# Current import geometry obtains the native phase from lattice.py instead.
 _PHASE_FORWARD = math.radians(322.2)
 _PHASE_REVERSE = math.radians(252.2)
 
@@ -371,13 +370,17 @@ def _path_to_domains_and_xovers(
 # ── Public import entry point ─────────────────────────────────────────────────
 
 
-def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
+def import_cadnano(data: dict, *, importer_version: int = 3) -> Tuple["Design", List[str]]:
     """Parse a caDNAno v2 JSON dict and return a NADOC Design.
 
     Parameters
     ----------
     data : dict
         Parsed JSON from a .json caDNAno v2 file.
+    importer_version : int
+        Version 3 uses coherent native lattice axes, phase, twist and extents.
+        Versions 1 and 2 are retained unchanged for recorded feature replay;
+        version 2 preserves source lattice cells for crossover classification.
 
     Returns
     -------
@@ -385,6 +388,10 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
         Fully populated topological Design.  Geometry (nucleotide positions)
         is computed on demand from the Helix axes as usual.
     """
+    if type(importer_version) is not int or importer_version not in (1, 2, 3):
+        raise ValueError("Unsupported caDNAno importer version")
+    if importer_version < 3 and isinstance(data, dict) and "nadoc_roundtrip" in data:
+        raise ValueError("NADOC caDNAno round-trip metadata requires importer version 3")
     from backend.core.conversion_integrity import validate_cadnano_source
     validate_cadnano_source(data)
     vstrands: List[dict] = data.get("vstrands", [])
@@ -445,7 +452,25 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
         last_bp = active_bps[-1] if active_bps else array_len - 1
 
         direction = Direction.FORWARD if num % 2 == 0 else Direction.REVERSE
-        if lattice == LatticeType.SQUARE:
+        if importer_version >= 3:
+            from backend.core.lattice import (
+                _lattice_direction,
+                _lattice_phase_offset,
+                _lattice_position,
+                _lattice_twist,
+            )
+
+            # Source numbering fixes strand polarity; the lattice fixes the
+            # neighbour/phase convention. A disagreement cannot be repaired by
+            # silently changing one or by substituting forced ligations.
+            if direction != _lattice_direction(row, col, lattice):
+                raise ValueError(
+                    f"caDNAno source helix {num} numbering contradicts lattice parity."
+                )
+            x, y = _lattice_position(row, col, lattice)
+            twist = _lattice_twist(lattice)
+            base_phase = _lattice_phase_offset(direction, lattice)
+        elif lattice == LatticeType.SQUARE:
             twist = SQUARE_TWIST_PER_BP_RAD
             base_phase = (
                 _SQ_PHASE_FORWARD
@@ -477,13 +502,19 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
         helix = Helix(
             id=f"h_XY_{nr}_{nc}",
             axis_start=Vec3(x=x, y=y, z=first_bp * BDNA_RISE_PER_BP),
-            axis_end=Vec3(x=x, y=y, z=last_bp * BDNA_RISE_PER_BP),
+            axis_end=Vec3(
+                x=x, y=y,
+                z=(last_bp + (1 if importer_version >= 3 else 0)) * BDNA_RISE_PER_BP,
+            ),
             phase_offset=phase,
             twist_per_bp_rad=twist,
-            length_bp=array_len,
+            length_bp=(last_bp - first_bp + 1) if importer_version >= 3 else array_len,
             bp_start=first_bp,
             loop_skips=loop_skips,
-            grid_pos=(row, col) if lattice == LatticeType.SQUARE else (nr, nc),
+            # Classification uses source lattice parity and neighbour orientation,
+            # independently of the normalized display axes/IDs. Version 1 is
+            # retained solely for replay of already-recorded imports.
+            grid_pos=(row, col) if importer_version >= 2 or lattice == LatticeType.SQUARE else (nr, nc),
             direction=direction,
         )
         helices.append(helix)
@@ -554,6 +585,13 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
                 domains, _ = _path_to_domains_and_xovers(path, helix_by_num, sid)
                 strands.append(Strand(id=sid, domains=domains, strand_type=StrandType.SCAFFOLD))
         warnings.append(f"{n_circ_scaf} circular scaffold(s) imported as linear at a deterministic sequence origin; all bases retained.")
+
+    if importer_version >= 3:
+        from backend.core.cadnano_roundtrip import restore_roundtrip_metadata
+
+        helices, strands = restore_roundtrip_metadata(
+            data, helices, strands, lattice, helix_by_num
+        )
 
     # ── Classify cross-helix transitions: real DX crossovers vs forced ligations ──
     crossovers, forced_ligations = extract_crossovers_from_strands(
@@ -970,10 +1008,12 @@ def export_cadnano(design: Design) -> dict:
             }
         )
 
-    return {
+    result = {
         "name": design.metadata.name or "NADOC Export",
         "vstrands": vstrands,
     }
+    from backend.core.cadnano_roundtrip import attach_roundtrip_metadata
+    return attach_roundtrip_metadata(result, design, layout)
 
 
 def export_cadnano_with_labels(design: Design) -> Tuple[dict, List[dict]]:

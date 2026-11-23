@@ -1920,6 +1920,8 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     design (clearing undo history).
     """
     from backend.core.cadnano import import_cadnano
+    from backend.core.cadnano_roundtrip import has_roundtrip_metadata
+    from backend.api.import_bond_review import assess_import_bonds, attach_import_review
     from backend.core.lattice import autodetect_all_overhangs
     from backend.core.validator import validate_design
     import json as _json
@@ -1941,9 +1943,11 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
         raise HTTPException(400, detail=f"Invalid JSON: {exc}") from exc
     try:
         design, import_warnings = import_cadnano(data)
+        preserve_frame = has_roundtrip_metadata(data)
     except Exception as exc:
         raise HTTPException(400, detail=f"caDNAno import failed: {exc}") from exc
-    design = _recenter_design(design)
+    if not preserve_frame:
+        design = _recenter_design(design)
     design = autodetect_all_overhangs(design)
     design = _autodetect_clusters(design)
     from backend.core.conversion_integrity import require_import_integrity
@@ -1955,6 +1959,7 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     design, relaxation = relax_imported_design(design, enabled=body.relax_origami)
     if relaxation and relaxation["status"] == "skipped":
         import_warnings.append("Automatic relaxation skipped: " + relaxation["message"])
+    bond_review = assess_import_bonds(design)
     report = validate_design(design)
     design_state.load_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
@@ -1963,6 +1968,7 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
         resp["relaxation"] = relaxation
     if import_warnings:
         resp["import_warnings"] = import_warnings
+    attach_import_review(resp, bond_review)
     resp["import_history"] = {"status": "unverified", "detail": history_exclusion}
     return resp
 
@@ -2067,6 +2073,7 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     from backend.core.lattice import autodetect_all_overhangs
     from backend.core.validator import validate_design
     from backend.api.part_scadnano_import_recording import prepare_ordinary
+    from backend.api.import_bond_review import assess_import_bonds, attach_import_review
     import json as _json
 
     try:
@@ -2123,6 +2130,7 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     design, relaxation = relax_imported_design(design, enabled=body.relax_origami)
     if relaxation and relaxation["status"] == "skipped":
         import_warnings.append("Automatic relaxation skipped: " + relaxation["message"])
+    bond_review = assess_import_bonds(design)
     report = validate_design(design)
     design_state.load_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
@@ -2132,6 +2140,7 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
         resp["relaxation"] = relaxation
     if import_warnings:
         resp["import_warnings"] = import_warnings
+    attach_import_review(resp, bond_review)
     resp["debug"] = {
         "recentered": True,
         "center_shift": {"x": _cx, "y": _cy},

@@ -73,8 +73,10 @@ def test_name_edit_replays_import_keeps_all_output_identity_and_is_undoable(auth
 @pytest.mark.parametrize("field", ["lattice_import_version", "importer_version", "identity_policy"])
 def test_unsupported_contract_edit_is_atomic(authored, field):
     before, revision = state.get_or_404().model_dump_json(), state.revision()
+    invalid = {"lattice_import_version": 2, "importer_version": 4,
+               "identity_policy": "nearest-geometry"}[field]
     with pytest.raises(HTTPException):
-        crud.edit_feature(0, crud.EditFeatureBody(params={field: "nearest-geometry" if field == "identity_policy" else 2}))
+        crud.edit_feature(0, crud.EditFeatureBody(params={field: invalid}))
     assert state.get_or_404().model_dump_json() == before
     assert state.revision() == revision
 

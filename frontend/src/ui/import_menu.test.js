@@ -216,6 +216,16 @@ describe.each([
   afterEach(() => { vi.restoreAllMocks(); clearDom() })
   const run = () => initImportMenu(deps)[callback]()
 
+  it('shows bond-review warnings before offering to save the imported design', async () => {
+    const warning = 'Bond review required: forced ligations exceed 20%; no approval recorded.'
+    deps.api[importMethod].mockResolvedValue({ design: imported, import_warnings: [warning] })
+    openFileBrowser.mockResolvedValue(null)
+    await run()
+    expect(showToast).toHaveBeenCalledWith(warning, 5000)
+    expect(showToast.mock.invocationCallOrder[0]).toBeLessThan(openFileBrowser.mock.invocationCallOrder[0])
+    expect(deps.api.saveDesignAs).not.toHaveBeenCalled()
+  })
+
   it('waits for one atomic nondefault-group dissolve before other omissions and save', async () => {
     let resolve
     deps.api.dissolveClusters.mockImplementation(() => new Promise(done => { resolve = done }))

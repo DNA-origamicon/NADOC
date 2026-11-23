@@ -11,7 +11,7 @@ from backend.core.part_history_proof import command_rows
 from experiments.recorded_review_process import ProcessRequired, verify
 
 
-def audit(design, *, document=True):
+def _audit_with_process(design, *, document=True):
     """Require part authoring operations as well as complete process replay."""
     for feature_id, kind, params in command_rows(design, 2000):
         if kind == 'diagnostic-process' or kind.startswith('assembly-'):
@@ -22,18 +22,27 @@ def audit(design, *, document=True):
             )
     if document and design.document_history:
         from scripts.agent_document_audit import audit as audit_document
-        return audit_document(design, audit)
+        return audit_document(design, _audit_with_process)
     if design.document_history:
         from scripts.agent_document_audit import verify_inputs
         verify_inputs(design)
     return verify(design)
 
 
-def publish(design, path, *, expected_existing_sha256=None):
+def audit(design, *, document=True, bond_review=None):
+    """Require documented bond review independently of construction replay."""
+    from scripts.agent_bond_review import require_bond_review
+    review = require_bond_review(design, bond_review)
+    result = _audit_with_process(design, document=document)
+    return {**result, 'bond_review': review}
+
+
+
+def publish(design, path, *, expected_existing_sha256=None, bond_review=None):
     """Verify the serialized artifact before creating/replacing the named file."""
     path = Path(path)
     raw = design.model_dump_json()
-    result = audit(Design.model_validate_json(raw))
+    result = audit(Design.model_validate_json(raw), bond_review=bond_review)
     if path.exists():
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
         if expected_existing_sha256 is None or actual != expected_existing_sha256:
@@ -63,5 +72,7 @@ def publish(design, path, *, expected_existing_sha256=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('file', type=Path)
+    parser.add_argument('--bond-review', type=Path, help='Exact-design documented review receipt')
     args = parser.parse_args()
-    print(json.dumps(audit(Design.model_validate_json(args.file.read_text())), indent=2))
+    print(json.dumps(audit(Design.model_validate_json(args.file.read_text()),
+                           bond_review=args.bond_review), indent=2))

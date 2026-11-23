@@ -1,4 +1,4 @@
-"""Small pinned caDNAno Import features, without fabricated construction history.
+"""Bounded pinned caDNAno Import features, without fabricated construction history.
 
 The complete existing importer/postprocessing pipeline owns topology and
 geometry. This adapter bounds input work and normalizes output identity only.
@@ -30,7 +30,7 @@ class ImportRequest(BaseModel):
 
     proof_version: Annotated[StrictInt, Field(ge=1, le=1)] = Field(alias="_proof_version")
     lattice_import_version: StrictInt = Field(ge=1, le=1)
-    importer_version: StrictInt = Field(ge=1, le=1)
+    importer_version: StrictInt = Field(ge=1, le=3)
     source: InputSource
     history_seed: _Id
     identity_policy: Literal["source-content-v1"]
@@ -72,13 +72,17 @@ def _empty_input(design, *, format_name="caDNAno"):
 def _source(command, resolver):
     source = command.source
     if source.format != "cadnano-v2" or source.media_type != "application/json":
-        raise SourceContractError("caDNAno v1 requires a cadnano-v2 application/json source",
+        raise SourceContractError("Recorded caDNAno import requires a cadnano-v2 application/json source",
                                   source=source, code="unsupported_source")
     if source.size_bytes > MAX_SOURCE_BYTES:
-        raise SourceContractError("caDNAno source exceeds the initial 100 KB contract",
+        raise SourceContractError(f"caDNAno source exceeds the {MAX_SOURCE_BYTES:,}-byte import contract",
                                   source=source, code="source_limit")
     raw = verify(source, (resolver if resolver is not None else EmbeddedResolver({}))(source))
-    return parse_source(raw, source)
+    data, counts = parse_source(raw, source)
+    if command.importer_version < 3 and "nadoc_roundtrip" in data:
+        raise SourceContractError("NADOC caDNAno round-trip metadata requires importer version 3",
+                                  source=source, code="unsupported_source")
+    return data, counts
 
 
 def _pipeline(data, command):
@@ -88,7 +92,7 @@ def _pipeline(data, command):
     from backend.core.lattice import autodetect_all_overhangs
     from backend.core.lattice_import_normalization import _recenter_design
 
-    imported, warnings = import_cadnano(data)
+    imported, warnings = import_cadnano(data, importer_version=command.importer_version)
     # The established clustering threshold is three distinct helices. With at
     # most one such scaffold there is no bridge ownership/tie-selection branch
     # or multi-scaffold geometry assignment. Do not change those algorithms to
@@ -96,9 +100,14 @@ def _pipeline(data, command):
     module_scaffolds = sum(strand.is_scaffold and len({d.helix_id for d in strand.domains}) >= 3
                            for strand in imported.strands)
     if module_scaffolds > 1:
-        raise SourceContractError("caDNAno v1 supports at most one module scaffold; multiple-module clustering is unqualified",
+        raise SourceContractError("Recorded caDNAno import supports at most one module scaffold; multiple-module clustering is unqualified",
                                   source=command.source, code="unsupported_source")
-    imported = _recenter_design(imported)
+    preserve_frame = False
+    if command.importer_version >= 3:
+        from backend.core.cadnano_roundtrip import has_roundtrip_metadata
+        preserve_frame = has_roundtrip_metadata(data)
+    if not preserve_frame:
+        imported = _recenter_design(imported)
     imported = autodetect_all_overhangs(imported)
     imported = _autodetect_clusters(imported)
     require_import_integrity(imported)

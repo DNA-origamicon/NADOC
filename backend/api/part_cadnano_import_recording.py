@@ -10,9 +10,11 @@ def prepare_ordinary(content, *, relax_origami=False):
 
     Larger/unqualified uploads retain the established legacy import path. This
     is the same qualification boundary as the explicit pinned-import endpoint.
+    Qualified uploads share its current versioned import feature; existing
+    recipes continue replaying their explicitly recorded importer version.
     """
     if len(content) > MAX_SOURCE_BYTES:
-        return None, "source exceeds the 100 KB editable-import allowance"
+        return None, f"source exceeds the {MAX_SOURCE_BYTES:,}-byte editable-import allowance"
     raw = content.encode("utf-8")
     descriptor = describe(raw, format="cadnano-v2", media_type="application/json")
     try:

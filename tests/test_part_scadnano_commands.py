@@ -141,7 +141,7 @@ def test_repeated_imports_names_and_changed_source_have_explicit_identity():
 
 
 @pytest.mark.parametrize("patch", [
-    {"_proof_version": True}, {"importer_version": 2}, {"history_seed": "random"},
+    {"_proof_version": True}, {"importer_version": 2}, {"importer_version": 3}, {"history_seed": "random"},
     {"identity_policy": "nearest"}, {"loss_policy": "silent"}, {"helices": []}, {"geometry": {}},
 ])
 def test_only_complete_versioned_inputs_are_accepted(patch):

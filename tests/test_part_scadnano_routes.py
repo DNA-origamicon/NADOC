@@ -169,7 +169,29 @@ def test_ordinary_upload_records_complete_replayable_import(ordinary_client, cas
     expected.metadata.name = "Uploaded source"
     expected = remap_design(expected, commands.identity_mapping(expected, commands.parse_command(row.op_kind, row.params)))
     assert actual.model_dump(include=AUTHORING_FIELDS) == expected.model_dump(include=AUTHORING_FIELDS)
-    assert response.json().get("import_warnings", []) == warnings
+    payload = response.json()
+    returned_warnings = payload.get("import_warnings", [])
+    assert returned_warnings[:len(warnings)] == warnings
+    review = payload["import_bond_review"]
+    counts = review["counts"]
+    expected_reasons = []
+    if counts["matched_forced_bonds"] * 5 > counts["backbone_bonds"]:
+        expected_reasons.append("FORCED_BACKBONE_FRACTION_GT_20_PERCENT")
+    if counts["matched_forced_interhelix_bonds"] * 5 > counts["interhelix_bonds"]:
+        expected_reasons.append("FORCED_JUNCTION_FRACTION_GT_20_PERCENT")
+    assert review["reason_codes"] == expected_reasons
+    assert review["review_required"] is bool(expected_reasons)
+    assert review["geometry"]["requested"] is False
+    extra_warnings = returned_warnings[len(warnings):]
+    if review["review_required"]:
+        warning, = extra_warnings
+        assert warning.startswith("Bond review required:") and "no approval" in warning
+        assert f"{counts['matched_forced_bonds']}/{counts['backbone_bonds']} backbone bonds" in warning
+        assert f"{counts['matched_forced_interhelix_bonds']}/{counts['interhelix_bonds']} interhelix junction bonds" in warning
+        assert "REVIEW REQUIRED" in row.label
+    else:
+        assert extra_warnings == []
+        assert "REVIEW REQUIRED" not in row.label
     assert response.json()["revision"] == state.revision()
     assert response.json()["debug"]["helix_count"] == len(actual.helices)
     assert response.json()["import_history"]["status"] == "reproduced_import"
