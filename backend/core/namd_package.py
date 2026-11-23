@@ -88,7 +88,9 @@ def build_namd_package(
     )
     _check_ff_files()
 
-    name = (design.metadata.name or "design").replace(" ", "_")
+    from backend.core.namd_script import package_name_stem
+
+    name = package_name_stem(design.metadata.name)
     prefix = f"{name}_namd_complete/"
 
     model = build_atomistic_model(design, include_proteins=True)

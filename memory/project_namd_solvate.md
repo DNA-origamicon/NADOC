@@ -8,6 +8,17 @@ originSessionId: 9c9be7c6-98b4-42c3-a595-eb7159ceae86
 
 `backend/core/namd_solvate.py` — fully automated NAMD explicit-solvent package builder.
 
+## Literal package filenames (2026-11-23)
+
+NAMD package builders now derive filenames with `namd_script.package_name_stem`:
+only ASCII letters, digits, underscores, dots and hyphens, with leading dots/hyphens
+removed. Display names remain unchanged. Previously only spaces were replaced;
+`Construct4_Ext[1-1]_2xT` emitted unescaped Tcl command substitution in input/output
+paths and failed memory admission. Existing prepared packages require fresh
+preparation; retry does not sanitize their scripts. Dynamic-Tcl admission remains
+strict. Regression coverage: `tests/test_namd_script.py` checks generated adaptive
+minimization and restrained NPT settle configurations against resource admission.
+
 **Public API:**
 ```python
 build_namd_solvated_package(design, *, padding_nm=1.2, ion_conc_mM=150.0) -> bytes

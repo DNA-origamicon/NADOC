@@ -6,6 +6,46 @@ from backend.core.namd_script import validate_static_order, rewrite_probe, log_c
 from backend.core.namd_measurements import qualification_reasons
 
 
+@pytest.mark.parametrize('name, expected', [
+    ('Construct4_Ext[1-1]_2xT', 'Construct4_Ext_1-1__2xT'),
+    ('my design', 'my_design'),
+    ('model-v1.2', 'model-v1.2'),
+    ('../model;$x[exec bad]\\file\n"{}', '_model__x_exec_bad__file____'),
+    ('', 'design'), (None, 'design'), ('..', 'design'),
+])
+def test_package_name_is_literal_and_relative(name, expected):
+    from backend.core.namd_script import package_name_stem
+    assert package_name_stem(name) == expected
+
+
+def test_bracketed_design_prepares_admissible_minimization_and_settle(tmp_path):
+    from backend.core.namd_script import package_name_stem
+    from backend.core.namd_resources import configuration_memory
+    from backend.core.md_protocols import SegmentSpec, _segment_conf, _min_conf
+
+    name = package_name_stem('Construct4_Ext[1-1]_2xT')
+    # Resource-reader fixture only; no molecular coordinates or simulation.
+    (tmp_path / f'{name}.psf').write_text('313861 !NATOM\n')
+    minimum = f'{name}_00_min_enm_k0p5'
+    spec = SegmentSpec(name=f'{name}_0S_300K_NPT_settle_fixed_dna_p100',
+        stage='300K NPT settle (DNA restrained)', percent=100, steps=100,
+        temp=300, damping=5, scale=1, npt=True, previous=minimum,
+        restraint_ref_file='restraints_dna_heavy.pdb')
+    configs = [_min_conf(minimum, name, (150, 150, 150), False, 100, .5,
+                         no_enm=True, n_atoms=313861),
+               _segment_conf(spec, name, (150, 150, 150), False, n_atoms=313861)]
+    conf = tmp_path / 'stage.conf'
+    for text in configs:
+        conf.write_text(text)
+        result = configuration_memory(conf, detailed=False)
+        assert result.supported
+        assert result.atoms == 313861
+    # The fix belongs in generation; the guard must still reject Tcl commands.
+    conf.write_text(configs[1].replace(name, 'Construct4_Ext[1-1]_2xT'))
+    with pytest.raises(ValueError, match='Dynamic Tcl'):
+        configuration_memory(conf, detailed=False)
+
+
 @pytest.mark.parametrize('text', ['run 100\noutputTiming 20\n',
     'minimize 100\nseed 7\nrun 100\n', 'run norepeat 100\n', 'run upto 100\n'])
 def test_unqualified_execution_is_rejected(text):

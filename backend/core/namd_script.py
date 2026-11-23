@@ -8,6 +8,15 @@ import re
 import shlex
 
 
+def package_name_stem(name):
+    """Map a display name to a literal filename in generated Tcl and shell scripts.
+
+    Apply once, before creating package files, so topology, restraints, stage
+    names and manifests all agree. Never rename an existing prepared package.
+    """
+    return re.sub(r'[^A-Za-z0-9_.-]', '_', name or 'design').lstrip('.-') or 'design'
+
+
 def validate_static_order(text):
     initialized = False
     for number, line in enumerate(text.splitlines(), 1):

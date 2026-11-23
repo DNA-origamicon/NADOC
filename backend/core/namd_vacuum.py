@@ -135,7 +135,9 @@ def build_namd_vacuum_package(
         path="vacuum NAMD package builder",
         supported_path="the full-topology explicit-solvent NAMD workflow",
     )
-    name = (design.metadata.name or "design").replace(" ", "_")
+    from backend.core.namd_script import package_name_stem
+
+    name = package_name_stem(design.metadata.name)
     name_stem = name
 
     # 1. Dry, hydrogen-complete DNA topology — the same builder the explicit path uses

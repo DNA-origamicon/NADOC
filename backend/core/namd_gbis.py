@@ -100,7 +100,9 @@ def build_namd_gbis_package(
     _check_ff_files()
     minimize_steps = _round_up_to_cycle(minimize_steps)
 
-    name = (design.metadata.name or "design").replace(" ", "_")
+    from backend.core.namd_script import package_name_stem
+
+    name = package_name_stem(design.metadata.name)
     name_stem = name
 
     # 1. Dry, hydrogen-complete DNA topology (same builder the explicit path uses

@@ -207,7 +207,9 @@ def _complete_psf_from_stub(stub: str) -> str:
 
 def get_ai_prompt(design: Design) -> str:
     """Return the AI assistant prompt with the design name substituted in."""
-    name = (design.metadata.name or "design").replace(" ", "_")
+    from backend.core.namd_script import package_name_stem
+
+    name = package_name_stem(design.metadata.name)
     return _AI_PROMPT.replace("{name}", name)
 
 
