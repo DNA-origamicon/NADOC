@@ -43,4 +43,4 @@ def attach_extension_slabs(records, design):
     if not any(r.get("extension_id") and not r.get("is_modification") for r in records):
         return
     from backend.core.atomistic_cache import build_atomistic_model_cached
-    project_extension_slabs(records, build_atomistic_model_cached(design))
+    project_extension_slabs(records, build_atomistic_model_cached(design, fast_bridges=True))

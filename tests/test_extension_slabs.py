@@ -25,7 +25,7 @@ def test_extension_slabs_follow_actual_atomic_rings(document):  # noqa: F811
     design = state.get_or_404()
     verified(design)
     before = design.model_dump_json()
-    model = build_atomistic_model_cached(design)
+    model = build_atomistic_model_cached(design, fast_bridges=True)
     atoms_before = [(a.x, a.y, a.z) for a in model.atoms]
     geometry = _geometry_for_design(design)
     coarse = _geometry_for_design(design, extension_slabs=False)
