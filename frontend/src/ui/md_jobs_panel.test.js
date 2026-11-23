@@ -1534,6 +1534,20 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
   })
   afterEach(() => { clearDom(); vi.useRealTimers() })
 
+  it('selects saved Alpine metadata without waiting for an outstanding full job list', async () => {
+    const job = { job_id: 'alpine-saved', engine: 'namd', status: 'running',
+      execution_target: 'alpine', prep_params: { padding_nm: 6 }, segments: [] }
+    mdApi.listMdJobs.mockReturnValue(new Promise(() => {}))
+    mdApi.getMdJob.mockResolvedValue(job)
+    const panel = initMdJobsPanel()
+    let accepted = false
+    void panel.selectJob(job.job_id, { explicit: true, snapshotJobs: [job] }).then(() => { accepted = true })
+    await flushMicro()
+    expect(accepted).toBe(true)
+    expect(panel.getSelectedJob()).toMatchObject({ job_id: job.job_id, execution_target: 'alpine' })
+    panel.deselectJob()
+  })
+
   it('restores the submodel on job selection and returns to the draft on deselection', async () => {
     const job = { job_id: 'region-job', status: 'draft', prep_params: {} }
     mdApi.listMdJobs.mockResolvedValue([job])

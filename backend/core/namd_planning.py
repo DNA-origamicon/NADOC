@@ -275,11 +275,17 @@ def prepared_stages(package, manifest):
             if "production" in name.lower()
             else "relaxation"
         )
-        steps = int(
-            options.get(
-                "minimize" if role == "minimization" else "run", record.get("steps", 0)
-            )
+        step_value = options.get(
+            "minimize" if role == "minimization" else "run", record.get("steps", 0)
         )
+        if role == "minimization" and "# NADOC_ADAPTIVE_MIN_BEGIN" in path.read_text():
+            # The executable minimize argument is a Tcl chunk variable. The emitted
+            # controller's ceiling is the stage budget, not that variable or one chunk.
+            step_value = next(
+                line.split()[2] for line in path.read_text().splitlines()
+                if line.startswith("set nadoc_min_max ")
+            )
+        steps = int(step_value)
         dt = float(options.get("timestep", record.get("timestep_fs") or 2))
         bond_count = 0
         if options.get("extrabonds", "off").lower() in ("on", "yes", "1", "true"):

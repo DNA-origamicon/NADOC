@@ -99,6 +99,25 @@ NADOC does not carve the water down to a finite hydration shell to make an overs
 job fit: doing so leaves vacuum in the cell, changes the ensemble to constant volume,
 removes bulk-solution conditions, and turns the run into a different protocol.
 
+Preparation RAM is planned separately from NAMD execution resources. For explicit-solvent
+DNA, NADOC prepares locally when the desktop has capacity. Otherwise an Alpine job
+prepares in an automatically sized CPU allocation, and a RunPod job prepares in a pod
+with provider-enforced minimum host RAM and CPU counts. The job keeps its chosen
+execution target. A local-only job still stops if the desktop cannot accommodate it;
+NADOC does not silently switch a local request to a paid provider.
+
+Remote preparation uses a frozen copy of the native builder, tools, design and settings.
+Returned packages are checked against input and output hashes before normal launch
+provenance is captured. Progress and Stop use the ordinary job controls. Alpine
+preparation can reattach after an API restart without another submission; interrupted
+RunPod preparation releases its pod before a retry. The memory guard, molecular
+geometry, solvent box, force field and scientific validation gates remain unchanged.
+RunPod preparation charges count toward the configured job budget. Simulation
+allocation checks use the finished package's stage settings, including host RAM
+and GPU memory, before renting a pod.
+Specialized GBIS, surface and coordinate-seeded preparation paths retain their existing
+local implementations; the explicit-DNA memory envelope does not certify those paths.
+
 Before a local GPU launch, NADOC estimates the fully solvated atom count and memory
 requirement. A system that exceeds the selected target is stopped before preparation.
 The supported choices are:

@@ -165,6 +165,8 @@ async def _md_supervisor_loop() -> None:
     """
     while True:
         try:
+            from backend.core.md_preparation_recovery import resume_preparations
+            await resume_preparations(_WORKSPACE_DIR)
             resumed = await asyncio.to_thread(resume_interrupted_jobs, _WORKSPACE_DIR)
             if resumed:
                 logger.info("MD supervisor resumed jobs: %s", ", ".join(resumed))

@@ -1,5 +1,24 @@
 # Issues fix log
 
+## ISSUE-258 — NAMD row selection waits for full job-list refresh (2026-11-22)
+
+[x] Selecting Gerling R1 Alpine could leave a second spinning circle indefinitely.
+The unified list had saved job metadata, but the NAMD panel awaited its separate
+all-job status/provenance refresh before selecting a missing panel record. A stalled
+`GET /md/jobs` reproduced the unselected row with `data-selection-pending` intact.
+Pass the visible list snapshot to the panel, seed only missing NAMD records, and
+preserve already-refreshed panel records. Include parents so production settings
+remain available. Live status, artifact checks and launch validation still use their
+ordinary paths; selection does not wait for them. No backend or simulation changes.
+Regression covers an unresolved list request, parent settings, duplicate records,
+and engine isolation. Evidence: `.development-artifacts/gerling_job_selection_20261122/`.
+Validation: stalled-request live browser check passed; 404 focused tests passed.
+Full frontend: 10,712 passed, 1 skipped; one outdated call assertion corrected
+and verified by the focused rerun. Lint passed. Smoke: 22 passed, 2 skipped,
+2 existing Create/Close Session failures. Temporary sessions/screenshots cleaned;
+Gerling source checksum unchanged. Feature `main.js` LOC Δ: 0.
+
+
 ## 2026-11-21 — ISSUE-257: Close Move/Rotate after attachment Apply
 
 - [x] Gold/quantum-dot and protein Apply now use shared session confirmation;

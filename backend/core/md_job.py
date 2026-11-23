@@ -440,9 +440,9 @@ class MdJob:
         # Atomic write (temp + rename): background preparation writes job.json
         # while the status websocket reads it every 3 s — a torn read would crash
         # the socket with a JSON decode error.
-        tmp = jd / "job.json.tmp"
-        tmp.write_text(json.dumps(data, indent=2))
-        tmp.replace(jd / "job.json")
+        # Independent status readers and controllers need distinct temporary files.
+        from backend.core.alpine_transfer_state import atomic_json
+        atomic_json(jd / "job.json", data)
         if self.archived:
             from backend.core.job_archive import cache_job_metadata
 

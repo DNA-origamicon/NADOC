@@ -1,0 +1,233 @@
+{
+  "date": "2026-11-21",
+  "scope": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-hybrid",
+  "authorization": "User requested experimental-data cleanup; retain notes and metrics.",
+  "removed_regular_files": 9889,
+  "removed_logical_bytes": 554338810,
+  "retained_metric_files": [
+    {
+      "path": "force-validation.json",
+      "bytes": 4538,
+      "sha256": "9eb7e78ba3ec082647228ac19386bfd07001cd9441d8a10bba082876122a6b24"
+    },
+    {
+      "path": "force-validation-v3.json",
+      "bytes": 8494,
+      "sha256": "a31fbca3e8ebb60ce74ad77f024f5ac067134beaea5f5000c86e9c34831bffbf"
+    },
+    {
+      "path": "force-validation-v2.json",
+      "bytes": 5236,
+      "sha256": "74053f83646865aaa2a17ae2e1ce87ef6f0a1a5fa4c5df58f33321cbcb75d56f"
+    },
+    {
+      "path": "hardware.json",
+      "bytes": 224,
+      "sha256": "44e19debafeb3a4250a269f731bb7d8f17f452737842ffc5e4efee80808e42d7"
+    },
+    {
+      "path": "contact-refinement/comparison.csv",
+      "bytes": 380,
+      "sha256": "0cee85e48d9488e65e6db92de7fd565a25b92b05fabd1dbd3596a33067c89318",
+      "retained_sha256": "34415dac53a51053be79d9d3e6183bde3a05cdbcd3e42f5d59963f931edfa13b",
+      "retained_bytes": 377,
+      "transformation": "CSV line endings normalized CRLF to LF; values unchanged. sha256 above is original copied artifact."
+    },
+    {
+      "path": "contact-refinement/benchmark.json",
+      "bytes": 9768,
+      "sha256": "d06e2f904de3a354c4ffb0e8a6ef2a8d97f4194a47537ccc7e04bc81a449d030"
+    },
+    {
+      "path": "smoke-campaign/temperature_analysis.json",
+      "bytes": 996,
+      "sha256": "61f69b0a9fba3797a5064d7016e89b7dd567d3fc321070d7cba5273ad6378863"
+    },
+    {
+      "path": "smoke-campaign/analysis.json",
+      "bytes": 2269,
+      "sha256": "32c38407e28d5d9a6771781b7649b9b6da850d69dc4a5b7e25a27dd4feba6c2c"
+    },
+    {
+      "path": "ablation/comparison.csv",
+      "bytes": 535,
+      "sha256": "910b77ceacb87419d11a5f6095b09a56647106f5f6bf43c7df9a292b99a18f55",
+      "retained_sha256": "7acee1dd576415f6bc9b5800afb38135cb7e715044075fa2079322e1908591f2",
+      "retained_bytes": 530,
+      "transformation": "CSV line endings normalized CRLF to LF; values unchanged. sha256 above is original copied artifact."
+    },
+    {
+      "path": "ablation/benchmark.json",
+      "bytes": 18642,
+      "sha256": "b3cb729ed9f633b20616a55851b5e92f8d2f7893057208bb95d8dd36f460915e"
+    },
+    {
+      "path": "deadline-check/failure.json",
+      "bytes": 153,
+      "sha256": "f2347e61f7348e16dcdca0427a6656434b9612d18d2a4fe84ff0caecce22ccf9"
+    },
+    {
+      "path": "training-duration-20261121/metrics.json",
+      "bytes": 29198,
+      "sha256": "da1f94a3ccbab5b160c25af254e457a6005055906e6eff509c1189fd5e5b47ac"
+    },
+    {
+      "path": "training-duration-20261121/metrics.csv",
+      "bytes": 1155,
+      "sha256": "dc1cc1e5886208d71f4a2c1b98b9a2a5a6de8d9f1487fbe522f6096759af81c3",
+      "retained_sha256": "c2e56b7a6d97c1996fc78712f243dd77cc36d5f0b40c03bc9d4d18b2ce8637d9",
+      "retained_bytes": 1151,
+      "transformation": "CSV line endings normalized CRLF to LF; values unchanged. sha256 above is original copied artifact."
+    },
+    {
+      "path": "training-duration-20261121/benchmark.json",
+      "bytes": 9739,
+      "sha256": "ebe996949d95166530cec73a3f2e2b6114cb99e3a86d303e15faa82c003e98cb"
+    },
+    {
+      "path": "pairing-pilot/failure.json",
+      "bytes": 50,
+      "sha256": "2c4f9d2063e4cffc9d590d6cf38a59521f4126444d2ef96c824794ae2d841b81"
+    },
+    {
+      "path": "pairing-pilot/review.json",
+      "bytes": 260,
+      "sha256": "9b5c01849be78e4ec0fa1ef6ec2d9ff8657cc1826fd19cad6931b6ac5f8484ab"
+    },
+    {
+      "path": "contact-refinement/radius_0.5/temperature_analysis.json",
+      "bytes": 3524,
+      "sha256": "a3d4b52fa8c58cb81cb51b3ecd2f9b4cea13e4c5dea96da5f8e2a76d87096eb2"
+    },
+    {
+      "path": "contact-refinement/radius_0.5/training_analysis.json",
+      "bytes": 308,
+      "sha256": "ea3808a3d0f5e03a35b691ee07d36b8c83ce39f7405c168e90ceef43082684df"
+    },
+    {
+      "path": "contact-refinement/radius_0.5/analysis.json",
+      "bytes": 4543,
+      "sha256": "2772844a385ab4bd9bc0a9104745636a7dfe25ac180da41c65104b438bbcea92"
+    },
+    {
+      "path": "contact-refinement/radius_1.5/temperature_analysis.json",
+      "bytes": 3343,
+      "sha256": "5a55c097a78c51321ee948ceec3e037fc05682b8bff02ca848475f623f5aa134"
+    },
+    {
+      "path": "contact-refinement/radius_1.5/training_analysis.json",
+      "bytes": 307,
+      "sha256": "891d5bbe7bc755d89ec85a4f86141427a69c63674277aacf1b8822505370da7b"
+    },
+    {
+      "path": "contact-refinement/radius_1.5/analysis.json",
+      "bytes": 4574,
+      "sha256": "6b308c5aaac35db0cbdb26a681623fdcadcbb3e109d950dc333c34e62f506d7f"
+    },
+    {
+      "path": "contact-refinement/radius_0.5/pairing_audit/summary.json",
+      "bytes": 935,
+      "sha256": "43a32182ea7633011ccf9f94e312524a254aea1f93282b392cce7a5d415b2822"
+    },
+    {
+      "path": "contact-refinement/radius_1.5/pairing_audit/summary.json",
+      "bytes": 937,
+      "sha256": "e5a4419043a7d28aec9906548b90ac299e5582f93aa6582a058e83a5267a84a0"
+    },
+    {
+      "path": "ablation/unbiased/analysis.json",
+      "bytes": 4079,
+      "sha256": "863f07c8d40fac4c67720ecc49a5738774533f422e08264f9a11e8863fde19df"
+    },
+    {
+      "path": "ablation/mixed/temperature_analysis.json",
+      "bytes": 3374,
+      "sha256": "223054ff4125328d3e965af93bad81a1e38d823a860274bd559c0af271a62299"
+    },
+    {
+      "path": "ablation/mixed/training_analysis.json",
+      "bytes": 308,
+      "sha256": "78af5aca669f6970baf453e957cd5519f12229a824ad13ccd8a22f5e05bef5ae"
+    },
+    {
+      "path": "ablation/mixed/analysis.json",
+      "bytes": 4503,
+      "sha256": "3b7bf4e5d2882b98e186d8d206a32215ebfc7ce5e4a77325b67358488d498017"
+    },
+    {
+      "path": "ablation/com/analysis.json",
+      "bytes": 4368,
+      "sha256": "60cc3da888b6a67b2605969b736a1a5d2e27370ace6be87a65bb9b16dea38787"
+    },
+    {
+      "path": "ablation/hb_cutoff/analysis.json",
+      "bytes": 4426,
+      "sha256": "41ab6cf5fd3756f81a1a6a9cbe0f61fc201add39c8401cb2209272957ee63929"
+    },
+    {
+      "path": "ablation/mixed/pairing_audit_matched/summary.json",
+      "bytes": 934,
+      "sha256": "d1994c2993f370cbaaf7ef153bd0a1a779d0b38c3273e067e1ca396f3743faf1"
+    },
+    {
+      "path": "training-duration-20261121/train_6000000/temperature_analysis.json",
+      "bytes": 3517,
+      "sha256": "0ab17e5bc336fff95ab6a473e50073a1a3193a6562f6d7c4da4695b2601c95e4"
+    },
+    {
+      "path": "training-duration-20261121/train_6000000/training_analysis.json",
+      "bytes": 308,
+      "sha256": "5086d0d8084846a85c66b0fb0d2717b6fb5e424851afec8b6ea9ce81fbd161cf"
+    },
+    {
+      "path": "training-duration-20261121/train_6000000/analysis.json",
+      "bytes": 4512,
+      "sha256": "187acac9378b29d8be79a38b7f4687a3f2773c901dcdbcd338cbbe121eae96e6"
+    },
+    {
+      "path": "training-duration-20261121/train_12000000/temperature_analysis.json",
+      "bytes": 3410,
+      "sha256": "6b4a39808f5a9d79d20914f607b651433a5c07609b6630992044dd1f8ae5ed49"
+    },
+    {
+      "path": "training-duration-20261121/train_12000000/training_analysis.json",
+      "bytes": 307,
+      "sha256": "e8d950e02745572598f69e54638881c7dd9d95e0e61fdcf1472e3a6b50e38bbd"
+    },
+    {
+      "path": "training-duration-20261121/train_12000000/analysis.json",
+      "bytes": 4573,
+      "sha256": "7d9c58c6deaa9fd1a169aef78ea8c8c9d018269a88438df517625061a655a3ec"
+    },
+    {
+      "path": "training-duration-20261121/train_6000000/pairing_audit/summary.json",
+      "bytes": 936,
+      "sha256": "8fa126971216882871dc6b1d26dc5f00aa0d69800da0832299e8364fed79b3d3"
+    },
+    {
+      "path": "training-duration-20261121/train_12000000/pairing_audit/summary.json",
+      "bytes": 932,
+      "sha256": "789ac799092f456ffc8e58be8f59f70148c6dad96a688f43b66d39b524532fbb"
+    },
+    {
+      "path": "ablation/comparison.png",
+      "bytes": 110700,
+      "sha256": "23b78c00f6f4031ef4a6eb679bcc2e373f581c2f7cc1fa5bc6700c2b9db9b32c"
+    },
+    {
+      "path": "contact-refinement/comparison.png",
+      "bytes": 95484,
+      "sha256": "fe800e15ad896ea78a8afda147963a3d810dc4e933bd9545418f63e0e8f32d68"
+    },
+    {
+      "path": "training-duration-20261121/training_comparison.png",
+      "bytes": 74655,
+      "sha256": "7165b3c7bc7970337e9ac288f65a597ade87864e745f60bbf2949309bd9f973f"
+    }
+  ],
+  "active_process_references": [],
+  "selected_engine": "/home/jojo/.local/share/nadoc/engines/oxdna/8028cf33b3cba12992b771156085fa54879f50cd-upstream-physics-v3-vmmc-v1",
+  "raw_data_available": false,
+  "reanalysis_requires_new_simulations": true,
+  "prototype_source_retained_uncommitted": true
+}

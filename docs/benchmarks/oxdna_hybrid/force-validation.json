@@ -1,0 +1,146 @@
+[
+  {
+    "frame": "conf.dat",
+    "frame_sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405",
+    "coordinate": "hb_cutoff",
+    "mixed_weight": 0.7,
+    "velocity_and_angular_momentum_max_error": {
+      "CUDA": 2.4518098730164084e-06,
+      "old_CUDA": 2.4518098730164084e-06
+    },
+    "numerical_derivatives": {
+      "force_error": 6.87003165467104e-09,
+      "torque_error": 1.61058544279058e-09,
+      "force_signal": 33.8114626330244,
+      "torque_signal": 6.80644470554228
+    }
+  },
+  {
+    "frame": "conf.dat",
+    "frame_sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405",
+    "coordinate": "mixed",
+    "mixed_weight": 0.7,
+    "velocity_and_angular_momentum_max_error": {
+      "CUDA": 2.4629278499999074e-06,
+      "old_CUDA": 5.639562699999434e-06
+    },
+    "numerical_derivatives": {
+      "force_error": 3.72960329286798e-09,
+      "torque_error": 7.6314421448842e-10,
+      "force_signal": 23.6680712514918,
+      "torque_signal": 4.7644911061894
+    }
+  },
+  {
+    "frame": "conf.dat",
+    "frame_sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405",
+    "coordinate": "mixed",
+    "mixed_weight": 0.0,
+    "velocity_and_angular_momentum_max_error": {
+      "CUDA": 2.488861908012119e-06,
+      "old_CUDA": 1.4340540349988551e-05
+    },
+    "numerical_derivatives": {
+      "force_error": 1.42259809313216e-09,
+      "torque_error": 1.64430416904787e-09,
+      "force_signal": 0.00319551698556033,
+      "torque_signal": 0.00160442815003714
+    }
+  },
+  {
+    "frame": "boundary.dat",
+    "frame_sha256": "3283b7ebcfb7e32be125fcdd4ecf128d1f297cdfce6bf8c5447d0fe79b210b42",
+    "coordinate": "hb_cutoff",
+    "mixed_weight": 0.7,
+    "velocity_and_angular_momentum_max_error": {
+      "CUDA": 1.5178797596604454e-07,
+      "old_CUDA": 1.5178797596604454e-07
+    },
+    "numerical_derivatives": {
+      "force_error": 0,
+      "torque_error": 0,
+      "force_signal": 0,
+      "torque_signal": 0
+    }
+  },
+  {
+    "frame": "boundary.dat",
+    "frame_sha256": "3283b7ebcfb7e32be125fcdd4ecf128d1f297cdfce6bf8c5447d0fe79b210b42",
+    "coordinate": "mixed",
+    "mixed_weight": 0.7,
+    "velocity_and_angular_momentum_max_error": {
+      "CUDA": 1.5097172401112857e-07,
+      "old_CUDA": 1.5097172401112857e-07
+    },
+    "numerical_derivatives": {
+      "force_error": 1.15871909958477e-10,
+      "torque_error": 1.5545655726785e-10,
+      "force_signal": 5.45995177824525e-05,
+      "torque_signal": 2.04327188018465e-05
+    }
+  },
+  {
+    "frame": "boundary.dat",
+    "frame_sha256": "3283b7ebcfb7e32be125fcdd4ecf128d1f297cdfce6bf8c5447d0fe79b210b42",
+    "coordinate": "mixed",
+    "mixed_weight": 0.0,
+    "velocity_and_angular_momentum_max_error": {
+      "CUDA": 1.4906713696749563e-07,
+      "old_CUDA": 1.4906713696749563e-07
+    },
+    "numerical_derivatives": {
+      "force_error": 1.85104315957455e-10,
+      "torque_error": 2.10781142838184e-10,
+      "force_signal": 0.000181998392608177,
+      "torque_signal": 6.81090626728223e-05
+    }
+  },
+  {
+    "frame": "unbound.dat",
+    "frame_sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0",
+    "coordinate": "hb_cutoff",
+    "mixed_weight": 0.7,
+    "velocity_and_angular_momentum_max_error": {
+      "CUDA": 1.040205589442067e-07,
+      "old_CUDA": 1.040205589442067e-07
+    },
+    "numerical_derivatives": {
+      "force_error": 0,
+      "torque_error": 0,
+      "force_signal": 0,
+      "torque_signal": 0
+    }
+  },
+  {
+    "frame": "unbound.dat",
+    "frame_sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0",
+    "coordinate": "mixed",
+    "mixed_weight": 0.7,
+    "velocity_and_angular_momentum_max_error": {
+      "CUDA": 9.713037696368332e-08,
+      "old_CUDA": 4.6390707100774087e-07
+    },
+    "numerical_derivatives": {
+      "force_error": 2.12178259123829e-10,
+      "torque_error": 2.23849188555646e-10,
+      "force_signal": 0.00112116258720059,
+      "torque_signal": 0.000412311336131695
+    }
+  },
+  {
+    "frame": "unbound.dat",
+    "frame_sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0",
+    "coordinate": "mixed",
+    "mixed_weight": 0.0,
+    "velocity_and_angular_momentum_max_error": {
+      "CUDA": 9.466757500131706e-08,
+      "old_CUDA": 1.494161041989961e-06
+    },
+    "numerical_derivatives": {
+      "force_error": 1.73194266003471e-10,
+      "torque_error": 1.53837498554865e-10,
+      "force_signal": 0.003737208624002,
+      "torque_signal": 0.001374371120439
+    }
+  }
+]

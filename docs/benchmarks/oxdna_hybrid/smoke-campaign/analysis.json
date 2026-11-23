@@ -1,0 +1,78 @@
+{
+  "coordinate": "mixed",
+  "temperature_c": 70.0,
+  "wall_seconds": 16.8173294600565,
+  "replicas": [
+    {
+      "p_bound_box": 0.9999999999999999,
+      "bulk_bound_fraction": 0.9999999894632878,
+      "conditional_ci95": null,
+      "q_range": [
+        7,
+        8
+      ],
+      "cv_range": [
+        7.286558,
+        7.997918
+      ],
+      "recorded_crossings": 0,
+      "statistical_inefficiency": 1.9337751502031029,
+      "weight_ess": 19.994620147832666,
+      "approximate_correlated_weight_ess": 10.33968201821843,
+      "block_samples": 10,
+      "blocks": 2,
+      "half_run_probabilities": [
+        0.9999999999999999,
+        0.9999999999999999
+      ],
+      "bias_energy_max_error": 4.926160192079152e-07,
+      "reasons_precision_not_certified": [
+        "Fewer than 20 recorded binding/unbinding crossings",
+        "Fewer than 10 correlation-length blocks",
+        "Low importance-weighted effective sample size"
+      ],
+      "replica": 0,
+      "start": "bound"
+    },
+    {
+      "p_bound_box": 0.0,
+      "bulk_bound_fraction": 0.0,
+      "conditional_ci95": null,
+      "q_range": [
+        0,
+        0
+      ],
+      "cv_range": [
+        0.10073,
+        0.111024
+      ],
+      "recorded_crossings": 0,
+      "statistical_inefficiency": 1.0093374267402149,
+      "weight_ess": 19.99999999131916,
+      "approximate_correlated_weight_ess": 19.814979075839616,
+      "block_samples": 6,
+      "blocks": 3,
+      "half_run_probabilities": [
+        0.0,
+        0.0
+      ],
+      "bias_energy_max_error": 3.838058299969818e-07,
+      "reasons_precision_not_certified": [
+        "Fewer than 20 recorded binding/unbinding crossings",
+        "Fewer than 10 correlation-length blocks",
+        "Low importance-weighted effective sample size"
+      ],
+      "replica": 1,
+      "start": "unbound"
+    }
+  ],
+  "p_bound_by_initial_state": {
+    "bound": 0.9999999999999999,
+    "unbound": 0.0
+  },
+  "initial_state_probability_gap": 0.9999999999999999,
+  "pooled_p_bound_box_provisional": 0.49090618969501776,
+  "recorded_crossings": 0,
+  "tm_precision_certified": false,
+  "qualification": "Single-temperature diagnostics. No Tm precision certification; shared training bias is conditioned on, not independent campaign replication."
+}

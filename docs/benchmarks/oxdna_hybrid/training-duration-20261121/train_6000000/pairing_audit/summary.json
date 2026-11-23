@@ -1,0 +1,33 @@
+{
+  "replicas": [
+    {
+      "replica": 0,
+      "frames": 400,
+      "q0_frames": 73,
+      "q0_with_interstrand_bonds": 2,
+      "trajectory_sha256": "facace7dae488144dc861039e4ecca2a8dc988e42eb0abe3095cc17a2099abb4"
+    },
+    {
+      "replica": 1,
+      "frames": 400,
+      "q0_frames": 141,
+      "q0_with_interstrand_bonds": 5,
+      "trajectory_sha256": "537b2834b141f978fbaca5409da61940b24bd5b3092947d9490345e96b15c237"
+    },
+    {
+      "replica": 2,
+      "frames": 400,
+      "q0_frames": 0,
+      "q0_with_interstrand_bonds": 0,
+      "trajectory_sha256": "39db3335efc2a91140c44b5e6749b46343a56d5077837dcad615985aeadf53ba"
+    },
+    {
+      "replica": 3,
+      "frames": 400,
+      "q0_frames": 101,
+      "q0_with_interstrand_bonds": 0,
+      "trajectory_sha256": "843c9ba946e2bfa4d29afbe291386c65487b8076038ad5fe4c62e911aed1f3b4"
+    }
+  ],
+  "qualification": "Biased saved-frame counts, not equilibrium fractions."
+}

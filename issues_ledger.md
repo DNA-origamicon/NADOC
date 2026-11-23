@@ -1,5 +1,24 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-258 — NAMD row selection waits for full job-list refresh (2026-11-22)
+
+[x] Selecting Gerling R1 Alpine could leave a second spinning circle indefinitely.
+The unified list had saved job metadata, but the NAMD panel awaited its separate
+all-job status/provenance refresh before selecting a missing panel record. A stalled
+`GET /md/jobs` reproduced the unselected row with `data-selection-pending` intact.
+Pass the visible list snapshot to the panel, seed only missing NAMD records, and
+preserve already-refreshed panel records. Include parents so production settings
+remain available. Live status, artifact checks and launch validation still use their
+ordinary paths; selection does not wait for them. No backend or simulation changes.
+Regression covers an unresolved list request, parent settings, duplicate records,
+and engine isolation. Evidence: `.development-artifacts/gerling_job_selection_20261122/`.
+Validation: stalled-request live browser check passed; 404 focused tests passed.
+Full frontend: 10,712 passed, 1 skipped; one outdated call assertion corrected
+and verified by the focused rerun. Lint passed. Smoke: 22 passed, 2 skipped,
+2 existing Create/Close Session failures. Temporary sessions/screenshots cleaned;
+Gerling source checksum unchanged. Feature `main.js` LOC Δ: 0.
+
+
 ## ISSUE-257 — Attachment Apply leaves Move/Rotate open (2026-11-21)
 
 - **Cause:** both the panel and tool button handlers committed directly through
@@ -913,6 +932,19 @@ files carry all the state a cold session needs.
 
 
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
+
+- November 22 2-base maps layout/export follow-up: 24 browser checks passed,
+  two skipped, and the existing Honeycomb creation request timed out again.
+  Its isolated retry passed. Progress/dropdowns/PNG+CSV downloads passed in-app;
+  no test limits changed. Evidence: `.development-artifacts/two-base-v2-browser.log`
+  and `two-base-v2-browser-retry.log`.
+
+- November 22 2-base maps validation: full smoke plus the new app workflow had
+  23 passes, two skips, and two document-creation failures (Honeycomb request
+  timeout; console-gate document GET returned 404). Both passed isolated retries.
+  The 2-base workflow passed on the first run. Root cause of the broad-run
+  failures remains unverified; no smoke thresholds were changed. Evidence:
+  `.development-artifacts/two-base-browser.log` and `two-base-browser-retry.log`.
 
 - November 17 flexible-network validation reproduces Square `lattice_type`
   undefined at `smoke.spec.js:200`: 23 passed, two skipped, one failed.

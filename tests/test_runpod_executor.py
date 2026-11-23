@@ -130,7 +130,7 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _job(tmp_path, n_segs=2) -> MdJob:
+def _job(tmp_path, n_segs=2, *, prepared_configs=False) -> MdJob:
     job = new_job("d", "equilibrium_aware_namd", "d", "package/d_namd_solvated")
     # Early-stop is ON by default since 2026-07-29, which stages an extra evaluator
     # script.  These tests are about staging REUSE, so opt out to keep them focused;
@@ -155,6 +155,11 @@ def _job(tmp_path, n_segs=2) -> MdJob:
             }
         )
     )
+    if prepared_configs:
+        # Full launch reads emitted settings; staging-only fixtures remain unchanged.
+        (pkg / "d_min.conf").write_text("GPUresident on\nminimize 100\n")
+        for segment in job.segments:
+            (pkg / f"{segment.name}.conf").write_text("GPUresident on\nrun 100\n")
     return job
 
 
@@ -511,7 +516,7 @@ class TestRunJobOnPodAlwaysTerminates:
         )
         deleted: list[str] = []
         client = _client_recording(deleted)
-        job = _job(tmp_path)
+        job = _job(tmp_path, prepared_configs=True)
 
         status = _run(
             rx.run_job_on_pod(
@@ -540,7 +545,7 @@ class TestRunJobOnPodAlwaysTerminates:
             },
         )
         deleted: list[str] = []
-        job = _job(tmp_path)
+        job = _job(tmp_path, prepared_configs=True)
         status = _run(
             rx.run_job_on_pod(
                 job,
@@ -567,7 +572,7 @@ class TestRunJobOnPodAlwaysTerminates:
 
         monkeypatch.setattr(RunpodConnection, "connect", boom)
         deleted: list[str] = []
-        job = _job(tmp_path)
+        job = _job(tmp_path, prepared_configs=True)
         client = _client_recording(deleted)
         client._audit_path = tmp_path / '.runpod_lifecycle.jsonl'
         with pytest.raises(RuntimeError, match="ssh exploded"):
@@ -604,7 +609,7 @@ class TestRunJobOnPodAlwaysTerminates:
         monkeypatch.setattr(rx, "submit_job", submitted)
         monkeypatch.setattr(rx, "_supervise_run", controller_lost)
         deleted: list[str] = []
-        job = _job(tmp_path)
+        job = _job(tmp_path, prepared_configs=True)
         with pytest.raises(RuntimeError, match="controller connection vanished"):
             _run(
                 rx.run_job_on_pod(
@@ -635,7 +640,7 @@ class TestRunJobOnPodAlwaysTerminates:
             },
         )
         deleted: list[str] = []
-        job = _job(tmp_path)
+        job = _job(tmp_path, prepared_configs=True)
         status = _run(
             rx.run_job_on_pod(
                 job,

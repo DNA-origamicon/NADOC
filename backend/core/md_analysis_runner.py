@@ -40,8 +40,8 @@ _lock = threading.Lock()
 
 DEFAULT_TIMEOUT_S = 180.0
 _PLAYBACK = {"md_composite_trajectory_bin", "md_frames_atomistic_bin", "md_atomistic_model_bin"}
-_BULK = {'md_flex_analysis','md_rmsf','md_rmsf_atomistic','md_rmsf_surface',
-         'md_occupancy','md_photoproduct_likelihood'}
+_BULK = {'md_two_base_maps','md_flex_analysis','md_rmsf','md_rmsf_atomistic','md_rmsf_surface',
+         'md_occupancy','md_photoproduct_likelihood','md_uv_crosslinking'}
 _INTERACTIVE = {'md_frames_solvent','md_atomistic_model','md_frames_atomistic'}
 
 

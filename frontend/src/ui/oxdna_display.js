@@ -547,11 +547,12 @@ export function initOxdnaDisplay({
   let _rmsfResp = null // cached /rmsf payload so the scale can recolour without re-fetching
   let _devResp = null  // cached /deviation payload so the scale can recolour without re-fetching
   let _strainResp = null // cached /strain payload (same reason)
-  let _photoproductResp = null // cached relative per-thymine KIMMDY payload
+  let _photoproductResp = null // cached per-base UV geometric-opportunity payload
   let _rmsfCmap = 'viridis'    // active flex-map colormap (widget-driven)
   let _devCmap  = 'devramp'    // active deviation-map colormap (widget-driven)
   let _strainCmap = 'coolwarm' // active strain-map colormap (diverging — 0 at the midpoint)
   let _photoproductCmap = 'magma'
+  let _photoproductBounds = { lo: 0, hi: 1 }
   let _strainDsOnly = false    // strain map: colour designed-duplex bases only (ssDNA rides uncoloured)
   let _devBounds = null
   let _strainBounds = null
@@ -1782,9 +1783,10 @@ export function initOxdnaDisplay({
     }
   }
 
-  /** Apply a precomputed NAMD KIMMDY per-base false-color map at native positions. */
+  /** Apply a saved UV per-base false-color map at native positions. */
   function displayPhotoproduct(jobId, resp) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
+    _photoproductBounds = { lo: 0, hi: 1 }
     const map = photoproductColorMap(resp, 0, 1, _photoproductCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'no scored thymine bases' }
     _epoch++
@@ -1813,6 +1815,7 @@ export function initOxdnaDisplay({
 
   function recolorPhotoproduct(lo = 0, hi = 1, cmap) {
     if (_mode !== 'photoproduct' || !_photoproductResp || !designRenderer) return false
+    _photoproductBounds = { lo, hi }
     if (cmap) _photoproductCmap = cmap
     const map = photoproductColorMap(_photoproductResp, lo, hi, _photoproductCmap)
     if (!map) return false
@@ -2440,7 +2443,7 @@ export function initOxdnaDisplay({
     if (_repKind() !== 'surface') _surfaceMotion = null
     if (!_active) return
     if (_mode === 'photoproduct') {
-      const map = photoproductColorMap(_photoproductResp, 0, 1, _photoproductCmap)
+      const map = photoproductColorMap(_photoproductResp, _photoproductBounds.lo, _photoproductBounds.hi, _photoproductCmap)
       if (!map) return
       designRenderer.applyScalarColors(map.colorByKey)
       if (_repKind() === 'atomistic') {
@@ -2626,9 +2629,9 @@ export function initOxdnaDisplay({
       if (_mode === 'photoproduct') {
         if (!resp?.base_likelihoods?.length) return null
         return {
-          attribute: 'relative_photoproduct_propensity',
-          title: 'Relative T–T photoproduct propensity', unit: 'relative',
-          colormap: _photoproductCmap, lo: 0, hi: 1,
+          attribute: 'uv_geometric_opportunity',
+          title: 'UV crosslinking analysis', unit: 'frame fraction',
+          colormap: _photoproductCmap, lo: _photoproductBounds.lo, hi: _photoproductBounds.hi,
           values: resp.base_likelihoods.filter(p => p.display_key).map(p => ({
             key: p.display_key, value: p.relative_likelihood,
           })),

@@ -1,0 +1,6 @@
+{
+  "gpu": "NVIDIA GeForce RTX 3080 Ti, 580.178.04, 12288 MiB, 350.00 W",
+  "python": "3.12.3",
+  "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+  "scope": "Local workstation; no Alpine extrapolation accepted as benchmark."
+}
