@@ -8144,11 +8144,17 @@ class EarlyStopRequest(BaseModel):
 
 @router.post("/md/jobs/{job_id}/early-stop")
 async def toggle_md_early_stop(job_id: str, body: EarlyStopRequest) -> dict:
-    """Flip the relaxation early-stop accelerator on a job WITHOUT relaunching.
+    """Flip the local relaxation early-stop accelerator WITHOUT relaunching.
 
-    If the job is running, the runner picks the new value up at its next chunk
-    boundary; if idle, it's persisted for the next start/resume."""
-    _load_job(job_id)  # 404s if the job doesn't exist
+    The local runner consumes changes at the next chunk boundary. Remote jobs
+    require settings changes followed by a new submission, not this live API."""
+    job = _load_job(job_id)  # 404s if the job doesn't exist
+    if job.execution_target in ("alpine", "runpod"):
+        raise HTTPException(
+            status_code=409,
+            detail="Remote skip acceleration is set at submission. Edit the job settings "
+                   "and submit/resume a new run; the live toggle cannot change a submitted run.",
+        )
     val = set_early_stop(job_id, body.enabled, _workspace())
     return {
         "ok": True,

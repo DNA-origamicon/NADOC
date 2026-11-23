@@ -7,6 +7,17 @@ review_after: 2026-10-01
 
 # MD job system
 
+## Remote early-stop controls (2026-11-23)
+
+Alpine and RunPod bake skip checks into their submitted scripts; neither consumes
+live toggle changes. The simulation panel shows a disabled early-stop control for
+remote relaxation jobs with a submission/resume explanation. The live-toggle API
+returns HTTP 409 for either remote target, preventing ineffective local overrides.
+Local running relaxations retain checkpoint-boundary toggling. Remote changes go
+through job settings and a new submission. Regression coverage:
+`md_early_stop_targets.spec.js`, `md_jobs_panel.test.js`, and
+`tests/test_md_early_stop_target.py`.
+
 ## Progressive NAMD flexibility maps (2026-11-13)
 
 November 14 inset correction: `scene/md_inset_source.js` supplies exact MD atom

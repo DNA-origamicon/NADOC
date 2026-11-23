@@ -1307,6 +1307,22 @@ export function mdEarlyStopToggleState(job, busy = false) {
   return { checked, pending: serverPending || !!busy }
 }
 
+export function mdEarlyStopControl(job, busy = false) {
+  const remote = mdIsRemoteJob(job)
+  const live = job?.status === 'running' && !mdIsProductionChild(job)
+  const state = mdEarlyStopToggleState(job, busy)
+  const target = job?.execution_target === 'alpine' ? 'Alpine' : 'RunPod'
+  return {
+    visible: !!job && !mdIsProductionChild(job) && (live || remote),
+    checked: remote ? !!job?.early_stop_relax : state.checked,
+    pending: !remote && state.pending,
+    disabled: remote || !live || state.pending,
+    explanation: remote
+      ? `${target}: skip acceleration is set at submission. To change it, edit the job settings and submit/resume a new run; this control cannot change the submitted run.`
+      : 'Applies at the next checkpoint of the running local relaxation.',
+  }
+}
+
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -4368,10 +4384,8 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     if (_selectedId) _submitReview.open(_selectedId, { mode: 'resume' })
   })
 
-  // Is the selected job one the early-stop toggle can control LIVE (a running LOCAL
-  // relaxation — not Alpine, not a production child)?  This is now the toggle's ONLY
-  // job: its launch-default counterpart moved into the Job Wizard, so the card is simply
-  // hidden when nothing live is selected rather than quietly meaning something else.
+  // Only a running local relaxation consumes live changes. Remote cards display
+  // a disabled toggle; launch settings are edited in the Job Wizard.
   function _isLiveRelax(job) {
     return !!job && job.status === 'running' && mdIsLocalTarget(job.execution_target) && !mdIsProductionChild(job)
   }
@@ -4399,9 +4413,11 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       showToast(enabled ? 'Early-stop enabled (applies at next checkpoint)'
                         : 'Early-stop disabled', 'info')
     } catch (err) {
-      earlyStopChk.checked = !enabled   // revert on failure
+      // Selection may have moved to a remote job while the request was pending.
+      const state = mdEarlyStopControl(_selectedJob())
+      earlyStopChk.checked = state.checked
       if (earlyStopPending) earlyStopPending.style.display = 'none'
-      earlyStopChk.disabled = false
+      earlyStopChk.disabled = state.disabled
       console.warn(`[${_ts()}] md-jobs: early-stop toggle failed`, err)
       showToast('Early-stop toggle failed', 'warn')
     } finally {
@@ -5050,16 +5066,17 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     // The primary run control covers start/stop/resume for a local job and the Alpine
     // hand-off (⟳ Preparing… → ☁ Submit to Alpine).
     _paintRunControl()
-    // The live early-stop card is shown ONLY for a running local relaxation, because
-    // that is the only state in which it does anything. mdEarlyStopToggleState honours
-    // the in-flight override so a 3 s state push can't snap the box back off.
-    const live = _isLiveRelax(job)
-    if (liveControlsCard) liveControlsCard.style.display = live ? '' : 'none'
-    if (earlyStopChk && live) {
-      const { checked, pending } = mdEarlyStopToggleState(job, _earlyStopBusy)
-      earlyStopChk.checked = checked
-      earlyStopChk.disabled = pending
-      if (earlyStopPending) earlyStopPending.style.display = pending ? '' : 'none'
+    // Remote launch scripts cannot consume live changes. Keep their control
+    // visibly disabled and explain the submission boundary.
+    const earlyStop = mdEarlyStopControl(job, _earlyStopBusy)
+    if (liveControlsCard) liveControlsCard.style.display = earlyStop.visible ? '' : 'none'
+    if (earlyStopChk) {
+      earlyStopChk.checked = earlyStop.checked
+      earlyStopChk.disabled = earlyStop.disabled
+      earlyStopChk.closest('label')?.setAttribute('title', earlyStop.explanation)
+      if (earlyStopPending) earlyStopPending.style.display = earlyStop.pending ? '' : 'none'
+      const note = document.getElementById('md-jobs-early-stop-note')
+      if (note) note.textContent = earlyStop.explanation
     }
     // Submitting a prepared job is the PRIMARY control's job now (☁ Submit to Alpine),
     // so there is no separate button here to show or hide.

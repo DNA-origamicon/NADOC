@@ -1095,7 +1095,25 @@ describe('mdHasMetrics', () => {
   })
 })
 
-import { mdEarlyStopToggleState } from './md_jobs_panel.js'
+import { mdEarlyStopToggleState, mdEarlyStopControl } from './md_jobs_panel.js'
+
+describe('mdEarlyStopControl', () => {
+  it.each(['alpine', 'runpod'])('disables %s and ignores ineffective pending overrides', execution_target => {
+    for (const status of ['draft', 'queued', 'running', 'paused', 'completed']) {
+      const state = mdEarlyStopControl({ execution_target, status, early_stop_relax: false, early_stop_pending: true })
+      expect(state).toMatchObject({ visible: true, disabled: true, checked: false, pending: false })
+      expect(state.explanation).toContain('set at submission')
+      expect(state.explanation).toContain('submit/resume')
+    }
+  })
+  it('keeps local live controls available and honors pending changes', () => {
+    expect(mdEarlyStopControl({ execution_target: 'local', status: 'running' }))
+      .toMatchObject({ visible: true, disabled: false, pending: false })
+    expect(mdEarlyStopControl({ status: 'running', early_stop_pending: true }))
+      .toMatchObject({ visible: true, disabled: true, checked: true, pending: true })
+    expect(mdEarlyStopControl({ status: 'stopped' })).toMatchObject({ visible: false, disabled: true })
+  })
+})
 
 describe('mdEarlyStopToggleState', () => {
   it('settled: no override → reflects the persisted flag, not pending', () => {
