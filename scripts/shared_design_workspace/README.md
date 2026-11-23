@@ -24,12 +24,23 @@ Before committing agent-authored parts, run the required independent audit:
 .venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc"
 ```
 
+For D003's human-reviewed corner motif, repeat the audit from the NADOC root:
+
+```bash
+.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/All Origami/D003/recovered-20261104/D003.nadoc" --bond-review "workspace/Shared Designs/All Origami/D003/recovered-20261104/review/receipt.json"
+```
+
+Its exact historical title exception is documented in
+`scripts/agent_metadata_exceptions.py`. A changed design requires a fresh audit
+and review; the receipt is bound to the saved design and report.
+
 Author parts through `scripts.agent_structure_guard.publish`. Verify assemblies'
 recorded process and dependencies separately. Failed audits block publication;
 transfer does not certify scientific validity or simulation readiness.
 
-Keep simulation jobs, trajectories, credentials, and development evidence out of
-this folder. Development inputs and reports belong under
+Keep compact publication review receipts and their referenced evidence beside
+the reviewed design so another computer can repeat its audit. Keep simulation
+jobs, trajectories, credentials, and other development evidence out of this folder. Development inputs and reports belong under
 `.development-artifacts/all-origami/`. Other workspace folders remain local.
 
 ## Existing installations

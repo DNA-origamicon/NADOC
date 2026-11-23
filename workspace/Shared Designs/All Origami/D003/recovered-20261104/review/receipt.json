@@ -1,0 +1,22 @@
+{
+  "schema": "nadoc-design-bond-review-v1",
+  "design_sha256": "fac2a0acbb2339a6b0ec4a0fd9914009b21b393f7abc30bf5e491eb0a5932781",
+  "report_sha256": "e02997da76660b969414c592d90d3b60057cd9760177cda910cf75798aeda782",
+  "reviewer": "User (human design approval); Codex (read-only census and audit)",
+  "reviewed_at": "2026-11-23T17:28:13.513465+00:00",
+  "decision": "reviewed-for-publication",
+  "rationale": "User explicitly approved D003 in the conversation on 2026-11-23. Intentional corner motif comprises four differently oriented 22-helix clusters. All 75 forced records match realized paths: 43 connect different clusters (11,11,10,11 across the four panel pairs); 32 are within clusters (8 per cluster). The high forced fraction is retained and accepted for sharing this reconstructed design, not replaced with ordinary crossover labels. Independent process replay remains required; the user separately authorized only the exact historical title discrepancy.",
+  "limitations": "Approximate rigid-panel reconstruction, not an equilibrated or simulation-qualified structure. Geometry screen flags 421/687 interhelix segments above 1.2 nm; the largest measured O5\u2032 separation is 7.379 nm. 266 segments involving junction inserts are unmeasured by native Full geometry. Neither human approval nor corner intent supplies missing coordinates or certifies chemical bond geometry. No molecular changes were made.",
+  "evidence": [
+    {
+      "kind": "visual",
+      "path": "visual-review.png",
+      "sha256": "2e4d72ae0f59b066529da79ba6bc41d7ed9ebbb097fa289bcdc9da0005d72ae2"
+    },
+    {
+      "kind": "bond-report",
+      "path": "bond-report.json",
+      "sha256": "571a18c146397faf2f6a11eb78408cc3dc5a894c10c85b64e80943100c8c8b02"
+    }
+  ]
+}

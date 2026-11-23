@@ -120,3 +120,14 @@ a missing operation. The user rejects polymerization-strand conversion to ordina
 extensions, and defers general long-extension molecular geometry beyond the
 feature-log/dependency overhaul. Read
 [the scope decision](feedback_polymerization_extension_scope.md).
+
+## Explicit D003 metadata exception — November 23, 2026
+
+The user explicitly authorized the missing historical title change to `D003`:
+"Yes. allow the metadata exception." `scripts/agent_metadata_exceptions.py` binds
+this exception to the exact normalized document and its exact saved branch,
+originating from file SHA-256
+`c7bb0f69435dff5f2513d89617ef274f2308a4647b6cf5367b0ec453693f0d4c`.
+Only the original recipe title → `D003` comparison is exempted. No feature is
+fabricated; all construction commands, molecular state and other metadata must
+still independently reproduce. This is not a general legacy-name waiver.
