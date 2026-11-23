@@ -7,7 +7,11 @@ Reorganized October 17, 2026. Read the retained contracts here, then only the
 matching detail below. Dated results and old handoffs are not new verification
 or authorization; current user instructions and `CLAUDE.md` take precedence.
 
-**Status: SHIPPED (2026-08-01), backend + frontend, verified in the running app.**
+**Status: ARCHIVED (2026-11-22). Removed from NAMD and oxDNA UI, active API routes,
+scene initialization, and feature lists. The implementation and historical notes
+below are retained for reference; they do not describe a currently available feature.**
+
+See [archive record](../docs/archived/occupancy_clouds.md).
 
 ## What it is and why
 

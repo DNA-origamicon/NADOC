@@ -1,3 +1,5 @@
+# Occupancy-cloud UI/API archived 2026-11-22. Shared clustering utilities remain
+# active for extra-base position analysis.
 """Occupancy clouds — the engine-agnostic core.
 
 PCA → k-means → medoids over a frame ensemble, plus the selection-scoping and sampling

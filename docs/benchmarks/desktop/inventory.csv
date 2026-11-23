@@ -2151,7 +2151,7 @@ frontend-module,frontend/src/scene/ndc.test.js,1,ndc.test,interaction,test/archi
 frontend-module,frontend/src/scene/nucleotide_color_key.js,1,nucleotide_color_key,authoring,
 frontend-module,frontend/src/scene/nucleotide_transform_tool.js,1,nucleotide_transform_tool,authoring,
 frontend-module,frontend/src/scene/nucleotide_transform_tool.test.js,1,nucleotide_transform_tool.test,authoring,test/archive/debug helper
-frontend-module,frontend/src/scene/occupancy_overlay.js,1,occupancy_overlay,rendering,
+frontend-module,frontend/src/scene/occupancy_overlay.js,1,occupancy_overlay,archived,retired occupancy clouds
 frontend-module,frontend/src/scene/occupancy_overlay.test.js,1,occupancy_overlay.test,rendering,test/archive/debug helper
 frontend-module,frontend/src/scene/optimistic_preview.js,1,optimistic_preview,interaction,
 frontend-module,frontend/src/scene/optimistic_preview.test.js,1,optimistic_preview.test,interaction,test/archive/debug helper

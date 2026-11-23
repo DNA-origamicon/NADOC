@@ -1667,7 +1667,8 @@ export function initOxdnaDisplay({
    * average structure, and recolour beads by RMSF (rigid→flexible).
    */
   /**
-   * Occupancy clouds: move the design to the MOST POPULATED configuration.
+   * ARCHIVED 2026-11-22. Legacy occupancy display; not wired to the application.
+   * Move the design to the MOST POPULATED configuration.
    *
    * This owns only rank 0 — the real model, which alone carries strand colours, hidden
    * staples, rep overrides, crossover arcs and protein poses. The remaining states are

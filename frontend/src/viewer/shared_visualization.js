@@ -1,7 +1,7 @@
 /** Only the published job's display label crosses the sharing boundary. */
 const MODES = {
   display: 'Simulation structure', flex: 'Flexibility map (RMSF)', deviation: 'Deviation map',
-  strain: 'Strain map', occupancy: 'Occupancy clouds', traj: 'Trajectory',
+  strain: 'Strain map', traj: 'Trajectory',
   'traj-full': 'Full trajectory', photoproduct: 'UV crosslinking analysis',
   'ion-paths': 'Nanopore ion paths', 'ion-vector-field': 'Ion vector field',
 }

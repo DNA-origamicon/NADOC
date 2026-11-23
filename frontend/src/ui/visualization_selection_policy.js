@@ -13,13 +13,12 @@ export function selectionUpdatesVisualization(job) {
 
 /** Snapshot the active MD view before a job switch changes radio availability. */
 export function mdVisualizationJobSwitchAction({
-  display, flex, photoproduct, occupancy, trajectory,
+  display, flex, photoproduct, trajectory,
 } = {}) {
   if (trajectory) return 'trajectory'
   if (display) return 'display'
   if (flex) return 'flex'
   if (photoproduct) return 'photoproduct'
-  if (occupancy) return 'occupancy'
   return 'none'
 }
 
@@ -30,6 +29,5 @@ export async function applyMdVisualizationJobSwitch(action, handlers = {}) {
   if (action === 'display') return handlers.display?.()
   if (action === 'flex') return handlers.flex?.()
   if (action === 'photoproduct') return handlers.photoproduct?.()
-  if (action === 'occupancy') return handlers.occupancy?.()
   return handlers.none?.()
 }

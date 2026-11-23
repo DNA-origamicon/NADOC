@@ -21,7 +21,6 @@ import { initMdIonPathsControls } from './md_ion_paths_controls.js'
  * Falls back to REST polling for completed jobs.
  */
 
-import { initOccupancyControls } from './occupancy_controls.js'
 import { flexProgressView } from './md_flex_progress.js'
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
@@ -1311,7 +1310,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ submodel = null, mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getIonPathsOverlay = null, getCurrentRepr = null, getWeldOverlay = null, onJobCreated = null } = {}) {
+export function initMdJobsPanel({ submodel = null, mdDisplayController = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getIonPathsOverlay = null, getCurrentRepr = null, getWeldOverlay = null, onJobCreated = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -1389,7 +1388,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   // lost trajectory, failed load).
   function _syncVizOffRadio() {
     if (!vizOffRadio) return
-    const anyOn = [displayToggle, flexToggle, photoproductToggle, trajToggle, occupancyToggle, ionPathsToggle, ionVectorFieldToggle]
+    const anyOn = [displayToggle, flexToggle, photoproductToggle, trajToggle, ionPathsToggle, ionVectorFieldToggle]
       .some(t => t?.checked)
     vizOffRadio.checked = !(anyOn || _trajJobId || _trajLoadJobId)
   }
@@ -1430,12 +1429,8 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   const photoproductToggle = document.getElementById('md-jobs-photoproduct-toggle')
   const photoproductStatus = document.getElementById('md-jobs-photoproduct-status')
   const trajToggle   = document.getElementById('md-jobs-traj-toggle')
-  // With its peers, not beside the occupancy card below: _syncVizOffRadio reads this in
-  // its `anyOn` array and runs during init, so a later `const` is a TDZ that kills boot.
-  const occupancyToggle = document.getElementById('md-jobs-occupancy-toggle')
   // Declared HERE, with the elements, not beside the controls factory ~1100 lines below:
   // _updateVizToggles reads it during init, and a `let` declared later is a TDZ.
-  let _occupancyReady = false
   const trajStatus   = document.getElementById('md-jobs-traj-status')
   const trajLoadProgress = document.getElementById('md-jobs-traj-load-progress')
   const trajControls = document.getElementById('md-jobs-traj-controls')
@@ -2831,7 +2826,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
 
   function _startMdDisplay() {
     if (!displayToggle) return
-    if (_occupancyIsActive()) _setOccupancyOff()
     _setFlexOff()                     // live display + flex/traj are mutually exclusive
     _setPhotoproductOff()
     _setTrajOff()
@@ -2885,10 +2879,8 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   // "Off" radio: turn every view off (native positions).  The browser already
   // unchecked whichever view was active; run each teardown (all idempotent) so
   // the model is restored and any in-flight analysis is cancelled.
-  // Off is an idempotent action, not merely a radio transition. A stale already-checked
-  // Off control must still clear shared occupancy scene ownership when clicked.
+  // Off remains an idempotent action when the radio is already checked.
   vizOffRadio?.addEventListener('click', () => {
-    if (_occupancyReady && _occupancyIsActive()) _setOccupancyOff()
     _setFlexOff()
     _setPhotoproductOff()
     _setTrajOff()
@@ -3020,51 +3012,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       `<span>${max.toFixed(2)} nm</span></div>` +
       `<div style="font-size:9px;color:${_C.dim}">rigid → flexible (RMSF)</div>`
   }
-  // The SAME card the oxDNA panel uses, on the md- id prefix with its own fetch.
-  // Only production (unrestrained) dynamics is ever clustered — see mdHasFreeSampling.
-  const _occupancy = initOccupancyControls({
-    api,
-    engine: 'md',
-    getOverlay: () => getOccupancyOverlay?.() ?? null,
-    getDisplay: () => getMdViz?.() ?? null,
-    getSelectedJobId: () => _selectedId,
-    getAnchorSelection,
-    fetchOccupancy: ({ jobId, params, selection, refetch, signal }) => {
-      const opts = { ...params, refetch }
-      return selection
-        ? api.postMdOccupancy(jobId, signal, { ...opts, selection })
-        : api.getMdOccupancy(jobId, signal, opts)
-    },
-  })
-
-  _occupancyReady = true
-
-  function _setOccupancyOff() {
-    _occupancy?.off()
-    // Occupancy setup is asynchronous; teardown must also invalidate the interval before
-    // the display has published mode='occupancy', or a late completion leaves states up.
-    getMdViz?.()?.stopAndRestore()
-    if (occupancyToggle) occupancyToggle.checked = false
-    _syncVizOffRadio()
-  }
-  function _occupancyIsActive() {
-    return !!_occupancy?.isActive() || getMdViz?.()?.mode?.() === 'occupancy'
-  }
-  occupancyToggle?.addEventListener('change', async () => {
-    if (!occupancyToggle.checked) { _setOccupancyOff(); return }
-    if (!_selectedId) {
-      occupancyToggle.checked = false
-      showToast('Select an MD job first', 'warn')
-      _syncVizOffRadio()
-      return
-    }
-    if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-    _setFlexOff()
-    _setPhotoproductOff()
-    _setTrajOff()
-    await _occupancy?.refresh()
-  })
-
   const flexSettings = initMdFlexSettings({ button: document.getElementById('md-jobs-flex-settings'),
     getJobId: () => _selectedId, getCounts: _loadTrajRawCounts,
     onApply: () => { _setFlexOff(); flexToggle.checked = true; flexToggle.dispatchEvent(new Event('change')) } })
@@ -3120,7 +3067,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         flexToggle.checked = false; _setFlexStatus('No trajectory frames yet', _C.warn); _syncVizOffRadio(); return
       }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-      if (_occupancyIsActive()) _setOccupancyOff()
       _setPhotoproductOff()
       _setTrajOff()
       await _refreshFlex()
@@ -3138,7 +3084,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         return false
       }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-      if (_occupancyIsActive()) _setOccupancyOff()
       _setFlexOff()
       _setTrajOff()
       return true
@@ -3170,7 +3115,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     onOff: _syncVizOffRadio,
     activate: () => {
       _stopMdDisplay('Native positions restored')
-      if (_occupancyIsActive()) _setOccupancyOff()
       _setFlexOff()
       _setPhotoproductOff()
       _setTrajOff()
@@ -3411,7 +3355,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
       }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-      if (_occupancyIsActive()) _setOccupancyOff()
       _setFlexOff()
       _setPhotoproductOff()
       await _refreshTraj()
@@ -3455,7 +3398,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   // across selections, even when the selected job has no frames of its own.
   function _updateVizToggles(job = _selectedJob()) {
     const peg = updatePegVisualization(job)
-    if (gateStorageVisualization(job, [displayToggle, flexToggle, trajToggle, photoproductToggle, occupancyToggle])) {
+    if (gateStorageVisualization(job, [displayToggle, flexToggle, trajToggle, photoproductToggle])) {
       ionPaths?.setEnabled(false)
       solvent?.setEnabled(false)
       return
@@ -3468,20 +3411,14 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     _setRadioEnabled(flexToggle, hasTraj)
     _setRadioEnabled(trajToggle, hasTraj && !_trajLoading)
     if (trajToggle && _trajJobId) trajToggle.checked = !_selectedId || _selectedId === _trajJobId
-    // Occupancy needs PRODUCTION dynamics, not merely frames: clustering the relaxation
-    // ladder describes the schedule. Gated tighter than the flexibility map on purpose.
+    // UV analysis requires free production dynamics.
     const hasFree = mdHasProductionRun(job)
     _setRadioEnabled(photoproductToggle, hasFree)
-    _setRadioEnabled(occupancyToggle, hasFree)
     if (!hasFree && !photoproductToggle?.checked) {
       _setPhotoproductStatus(_PHOTO_NEEDS_PRODUCTION, _C.dim)
     } else if (hasFree && photoproductStatus?.textContent === _PHOTO_NEEDS_PRODUCTION) {
       _setPhotoproductStatus('', _C.dim)
     }
-    // `_ready` guards the `const _occupancy` this tears down: _updateVizToggles runs
-    // during init, before that const exists, and touching it there is a TDZ that aborts
-    // the whole panel's boot (it did once — see the occupancyToggle note above).
-    if (!hasFree && occupancyToggle?.checked && _occupancyReady) _setOccupancyOff()
     if (!hasFree && photoproductToggle?.checked) _setPhotoproductOff()
     if (!hasJob && displayToggle?.checked) _stopMdDisplay('Native positions restored')
     if (!hasTraj) { if (flexToggle?.checked) _setFlexOff(); if (trajToggle?.checked && !_trajJobId && !_trajLoadJobId) _setTrajOff() }
@@ -4747,7 +4684,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       display: displayToggle?.checked,
       flex: flexToggle?.checked,
       photoproduct: photoproductToggle?.checked,
-      occupancy: occupancyToggle?.checked,
       trajectory: trajToggle?.checked,
     })
     _selectedId = jobId
@@ -4805,7 +4741,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     if (storageUnavailable(job)) return
     if (isPegJob(job)) {
       _stopMdDisplay(); _setFlexOff(); _setPhotoproductOff(); _setTrajOff()
-      if (_occupancyReady) _setOccupancyOff()
       openPegQualification(job, action)
       return
     }
@@ -4821,9 +4756,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       flex: () => _mdHasTrajectory(job) && flexToggle?.checked ? _refreshFlex() : undefined,
       photoproduct: () => mdHasProductionRun(job) && photoproductToggle?.checked
         ? _refreshPhotoproduct()
-        : undefined,
-      occupancy: () => mdHasProductionRun(job) && occupancyToggle?.checked
-        ? _occupancy?.refresh()
         : undefined,
       // Alpine selection has a dedicated one-shot download + prewarm pipeline. Do not
       // race it with the generic remote guard, which would close the socket it just opened.
@@ -5769,7 +5701,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       _setFlexOff()
       _setTrajOff()
       _setPhotoproductOff()
-      if (_occupancyIsActive()) _setOccupancyOff()
     },
     onChange: enabled => {
     setAnchorSectionEnabled(document.getElementById('md-surface-anchors-section'), enabled)
@@ -5837,13 +5768,12 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
      *  main.js, because md_panel owns the socket and this panel owns the toggles. */
     acceptLiveSolvent: (buf) => solvent?.liveBlob(buf),
 
-    captureSetupSelections: () => ({anchors:_anchorsCard.getAnchors(),surfaceAnchors:_surfaceAnchorsCard.getAnchors(),occupancyScope:_occupancy.scope()?.getAnchors?.() || []}),
+    captureSetupSelections: () => ({anchors:_anchorsCard.getAnchors(),surfaceAnchors:_surfaceAnchorsCard.getAnchors()}),
     applySetupSelections: (settings, sameDesign) => {
       _anchorsCard.applyConfig(sameDesign ? settings.anchors || [] : [])
       _surfaceAnchorsCard.applyConfig(sameDesign ? settings.surfaceAnchors || [] : [])
-      _occupancy.scope()?.applyConfig?.(sameDesign ? settings.occupancyScope || [] : [])
-      return !sameDesign && (settings.anchors?.length || settings.surfaceAnchors?.length || settings.occupancyScope?.length)
-        ? 'Anchor or occupancy selections belong to another design; reselect them here.' : ''
+      return !sameDesign && (settings.anchors?.length || settings.surfaceAnchors?.length)
+        ? 'Anchor selections belong to another design; reselect them here.' : ''
     },
     getSelectedJob: _selectedJob,
     // Immediately re-fetch the job list (used when a job is spawned from somewhere other

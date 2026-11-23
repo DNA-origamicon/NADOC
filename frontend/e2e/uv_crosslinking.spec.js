@@ -65,6 +65,8 @@ test('unified UV controls recolor native geometry locally and pause/reload clean
   if(!await page.locator('#md-jobs-viz-toggle').isVisible()) await page.locator('#md-jobs-panel-heading').click()
   if(!await page.locator('#md-jobs-photoproduct-toggle').isVisible()) await page.locator('#md-jobs-viz-toggle').click()
   await expect(page.locator('#md-jobs-weld-toggle')).toHaveCount(0)
+  await expect(page.locator('[id*="jobs-occupancy"], [id*="occupancy-scope"]')).toHaveCount(0)
+  expect(await page.evaluate(()=>typeof window.__nadocOccupancy)).toBe('undefined')
   await expect(page.locator('#md-jobs-uv-options')).not.toBeVisible()
   await expect(page.locator('#md-jobs-uv-note, #md-jobs-uv-pairs')).toHaveCount(0)
   await expect(page.locator('#md-jobs-photoproduct-option')).toHaveAttribute('title', /geometric opportunity/)

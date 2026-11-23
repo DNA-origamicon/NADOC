@@ -2639,7 +2639,7 @@ describe('initMdJobsPanel — Health card tile states', () => {
   })
 })
 
-describe('mdHasProductionRun — occupancy is only offered for production dynamics', () => {
+describe('mdHasProductionRun — UV analysis requires production dynamics', () => {
   const seg = (stage, status = 'done') => ({ stage, status, name: stage })
 
   it('rejects the terminal unrestrained equilibration stage', () => {
@@ -2672,7 +2672,7 @@ describe('mdHasProductionRun — occupancy is only offered for production dynami
   })
 
   it('requires the production stage to have actually written frames', () => {
-    // Queued is not sampling — offering occupancy there would fetch nothing.
+    // Queued is not sampling — offering UV analysis there would fetch nothing.
     expect(mdHasProductionRun({ segments: [seg('5 ns production run', 'pending')] })).toBe(false)
     expect(mdHasProductionRun({ segments: [seg('5 ns production run', 'running')] })).toBe(true)
   })

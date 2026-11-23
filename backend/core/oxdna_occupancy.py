@@ -1,3 +1,4 @@
+# ARCHIVED 2026-11-22: retained analysis implementation; no active NAMD/oxDNA API or UI.
 """Occupancy clouds — the top-N most likely CONFIGURATIONS of an oxDNA ensemble.
 
 The flexibility map (:func:`backend.core.oxdna_health.production_rmsf`) reports one

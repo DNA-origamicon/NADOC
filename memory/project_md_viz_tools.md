@@ -21,6 +21,10 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- Occupancy clouds archived (2026-11-22): removed from both engine cards, startup,
+  saved-scope handling and API registration. Historical algorithms and tests remain
+  archived; see [archive record](../docs/archived/occupancy_clouds.md).
+
 - 2-base maps (2026-11-22): the bottom of the NAMD Metrics card captures the current
   or next single-base selection in two slots. Generate measures all selected-job
   production frames with a percentage bar; Show offers four dropdown-selected
@@ -145,7 +149,7 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 - Simulation-job selection and visualization ownership are separate. Deselecting leaves the active
   visualization intact. In the NAMD tab, selecting a different job retargets Display MD to that
-  job's latest frame and recomputes an active flexibility map or occupancy cloud for that job; an
+  job's latest frame and recomputes an active flexibility map for that job; an
   active trajectory is instead turned Off because scrub/playback state must never cross job identity.
   Other queued/terminal-job inspection does not implicitly replace visualization run controls.
 - The display affine is computed once by the coordinate path and handed to every overlay; never

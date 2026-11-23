@@ -141,10 +141,11 @@ it('reads wrapped and external labels without controls or DOM cloning',()=>{
 
 it('keeps lower-priority views last in desktop markup and the native VR adapter', () => {
   const doc = new DOMParser().parseFromString(indexHtml, 'text/html')
-  for (const [engine, name, tail] of [['namd', 'md-viz', ['photoproduct', 'occupancy']], ['oxdna', 'oxdna-viz', ['occupancy']]]) {
+  for (const [engine, name, tail] of [['namd', 'md-viz', ['photoproduct']], ['oxdna', 'oxdna-viz', ['traj-full']]]) {
     const desktop = [...doc.querySelectorAll(`input[name="${name}"]`)].map(el => el.value)
     expect(desktop.slice(-tail.length)).toEqual(tail)
     const native = simulationControls(doc, engine).filter(c => c.kind === 'mode').map(c => c.group)
     expect(native).toEqual(desktop)
+    expect(native).not.toContain('occupancy')
   }
 })

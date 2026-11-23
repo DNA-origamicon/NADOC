@@ -855,7 +855,8 @@ async def _md_occupancy_impl(
     return result
 
 
-@router.get("/md/jobs/{job_id}/occupancy")
+
+# ARCHIVED 2026-11-22: retained for historical analysis; not registered as an API route.
 async def get_md_occupancy(
     job_id: str,
     request: Request,
@@ -896,7 +897,8 @@ async def get_md_occupancy(
     )
 
 
-@router.post("/md/jobs/{job_id}/occupancy")
+
+# ARCHIVED 2026-11-22: retained for historical analysis; not registered as an API route.
 async def post_md_occupancy(
     job_id: str, request: Request, body: MdOccupancyBody
 ) -> dict:

@@ -84,7 +84,7 @@ test('standard NAMD visualization controls render PEG atoms and fixed-wall RMSF'
   await expect(page.locator('#md-jobs-water-toggle')).toBeDisabled()
   await expect(page.locator('#md-jobs-photoproduct-toggle')).toBeDisabled()
   await expect(page.locator('#md-jobs-photoproduct-status')).toContainText('no thymine')
-  await expect(page.locator('#md-jobs-occupancy-toggle')).toBeDisabled()
+  await expect(page.locator('#md-jobs-occupancy-toggle')).toHaveCount(0)
   if (process.env.NADOC_PEG_VISUAL_REVIEW === '1') {
     await card.getByRole('button', { name: 'Fit surface' }).click()
     await page.screenshot({ path: info.outputPath('PEG_RMSF.png') })

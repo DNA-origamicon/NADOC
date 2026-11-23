@@ -65,7 +65,7 @@ test('CPD analysis views',async({page})=>{
  await page.locator('#md-jobs-flex-toggle').check()
  await expect(page.locator('#md-jobs-flex-legend')).toBeVisible({timeout:90000})
  await page.screenshot({path:path.join(out,'cis-anti-I-rmsf.png')})
- await expect(page.locator('#md-jobs-occupancy-toggle')).toBeDisabled()
+ await expect(page.locator('#md-jobs-occupancy-toggle')).toHaveCount(0)
  await expect(page.locator('#md-jobs-photoproduct-toggle')).toBeDisabled()
  await expect(page.locator('#md-jobs-photoproduct-status')).toContainText('production')
  await page.locator('#md-jobs-display-toggle').check()

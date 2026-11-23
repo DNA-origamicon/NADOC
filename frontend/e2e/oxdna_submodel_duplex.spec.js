@@ -90,23 +90,22 @@ test('headlessly saved duplex submodel is visible after reopening its job', asyn
       value: i.value, disabled: i.disabled, label: i.parentElement.textContent.trim(),
     })))
     fs.writeFileSync(info.outputPath('visualization-options.json'), JSON.stringify(options, null, 2))
-    expect(options.map(o => o.value)).toEqual(expect.arrayContaining(['display','flex','deviation','strain','traj','traj-full','occupancy']))
+    expect(options.map(o => o.value)).toEqual(expect.arrayContaining(['display','flex','deviation','strain','traj','traj-full']))
     if (manifest.display_relaxed) {
       await expect(page.locator('#oxdna-submodel-projection')).toContainText('simulation VRAM 0 MiB')
-      for (const value of ['display', 'flex', 'deviation', 'strain', 'traj', 'traj-full', 'occupancy']) {
+      for (const value of ['display', 'flex', 'deviation', 'strain', 'traj', 'traj-full']) {
         const radio = page.locator('input[name="oxdna-viz"][value="' + value + '"]')
         if (await radio.isDisabled()) continue // Availability follows the normal job type.
         await radio.check()
         await expect(radio).toBeChecked()
-        const expectedMode = { display: 'relaxed', flex: 'rmsf', deviation: 'deviation', strain: 'strain', traj: 'trajectory', 'traj-full': 'trajectory', occupancy: 'occupancy' }[value]
+        const expectedMode = { display: 'relaxed', flex: 'rmsf', deviation: 'deviation', strain: 'strain', traj: 'trajectory', 'traj-full': 'trajectory' }[value]
         await expect.poll(() => page.evaluate(() => window.__nadocOxdnaDisplay.mode())).toBe(expectedMode)
         await page.screenshot({ path: info.outputPath('duplex-mode-' + value + '.png') })
       }
     }
     await page.locator('#oxdna-jobs-traj-full-toggle').scrollIntoViewIfNeeded()
     await page.screenshot({ path: info.outputPath('duplex-options.png') })
-    await page.locator('#oxdna-jobs-occupancy-toggle').scrollIntoViewIfNeeded()
-    await page.screenshot({ path: info.outputPath('duplex-occupancy.png') })
+    await expect(page.locator('#oxdna-jobs-occupancy-toggle')).toHaveCount(0)
   }
   await page.locator('#engine-selector-mount').getByRole('tab', { name: 'NAMD', exact: true }).click()
   await page.locator('#md-box-solvent-toggle').click()

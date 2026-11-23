@@ -181,7 +181,7 @@ Complete these gates in order for one candidate before moving to another:
 4. **NAMD preparation.** Known historical >1 s seams include solvation/package preparation;
    verify current code rather than trusting archived timings. Ensure preparation progress reaches
    the shared job UX.
-5. **Remaining oxDNA RMSF/metrics, occupancy, and atomistic/surface reconstruction.** Revalidate
+5. **Remaining oxDNA RMSF/metrics and atomistic/surface reconstruction.** Revalidate
    cold, warm, sibling-lineage, and growing-file behavior; existing caches/vectorization are a
    baseline, not an exemption.
 6. **Remaining CanDo/SNUPI FEM builds and SNUPI visualization/metrics extraction.** Separate assembly, solve,

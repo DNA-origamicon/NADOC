@@ -1,5 +1,18 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-259 — NAMD runner scheduling fixture intermittently sees a busy lease (2026-11-22)
+
+[ ] Occupancy archive FAST validation failed in
+`test_analysis_contention_waits_cancellably_before_launch[False]` before its task
+started: `analysis_activity_lease()` raised `WorkloadBusy`. All 20 runner tests
+passed in an isolated retry (4.42 s). The fixture already sets a temporary memory
+budget directory; background activity sharing process state is a hypothesis, not
+an established cause. No runner or scheduling code changed for occupancy archival.
+Evidence: `.development-artifacts/occupancy-archive-backend.log` and
+`occupancy-archive-runner-retry.log`. Final FAST rerun passed all 21,110 tests. Investigate worker/background lease isolation.
+
+
+
 ## ISSUE-258 — NAMD row selection waits for full job-list refresh (2026-11-22)
 
 [x] Selecting Gerling R1 Alpine could leave a second spinning circle indefinitely.
@@ -932,6 +945,12 @@ files carry all the state a cold session needs.
 
 
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
+
+- November 22 occupancy archive validation: 24 browser checks passed, two skipped,
+  and Honeycomb creation hit the existing request timeout; isolated retry passed.
+  Cloud-control absence and UV workflow passed. Workspace/session cleanup verified.
+  Evidence: `.development-artifacts/occupancy-archive-browser.log` and
+  `occupancy-archive-browser-retry.log`.
 
 - November 22 2-base maps layout/export follow-up: 24 browser checks passed,
   two skipped, and the existing Honeycomb creation request timed out again.

@@ -39,8 +39,8 @@ fail explicitly. The reader does not depend on DNA/base mapping or energy parsin
 ## Remaining applicability limits
 
 - These short qualification/relaxation trajectories are not equilibrium samples.
-  Production-only occupancy clouds and density/cluster controls stay unavailable
-  with an explicit explanation. A validated PEG production path remains necessary.
+  A validated PEG production path remains necessary for equilibrium claims.
+  Occupancy clouds are [archived globally](archived/occupancy_clouds.md).
 - PEG-only systems contain no thymine; T–T photoproduct analysis is inapplicable.
 - The current qualification package contains PEG and water, with no ions. The ion
   option explains this rather than invoking DNA solvent analysis.

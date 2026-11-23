@@ -1,5 +1,6 @@
 import './namd_setup_presets.css'
 
+// The retired occupancy-toggle remains excluded when reading legacy preset controls.
 const OMIT = /^(md-jobs-(?:viz-off|display-toggle|flex-toggle|photoproduct-toggle|occupancy-toggle|traj-toggle|traj-slider|show-all)|md-ion-(?:paths-toggle|vector-field-toggle))$/
 /** Only editable settings below the preset selector; never job ownership or actions. */
 export function presetControls(root, marker) {

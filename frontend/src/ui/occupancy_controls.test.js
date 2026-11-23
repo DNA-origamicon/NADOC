@@ -690,10 +690,7 @@ describe('one card per engine, one overlay', () => {
     expect(fetchOccupancy.mock.calls[0][0]).toMatchObject({ jobId: 'J1' })
   })
 
-  it('main.js unions BOTH scope channels into the anchor halo', async () => {
-    // The scope pickers are not engine tabs, so neither is ever `getSelected()`; the halo
-    // has to name each channel explicitly. Listing only `occupancy` left the NAMD card
-    // with chips but nothing lit in the 3D view — you could not see what you had picked.
+  it('archived scope channels are absent from the active anchor halo', async () => {
     const { readFileSync } = await import('node:fs')
     const { resolve } = await import('node:path')
     const MAIN = readFileSync(resolve(process.cwd(), 'src/main.js'), 'utf8')
@@ -702,8 +699,8 @@ describe('one card per engine, one overlay', () => {
     expect(i).toBeGreaterThanOrEqual(0)
     expect(end).toBeGreaterThan(i)
     const block = MAIN.slice(i, end)
-    expect(block).toMatch(/_anchorsByEngine\.occupancy/)
-    expect(block).toMatch(/_anchorsByEngine\['md-occupancy'\]/)
+    expect(block).not.toMatch(/_anchorsByEngine\.occupancy/)
+    expect(block).not.toMatch(/_anchorsByEngine\['md-occupancy'\]/)
   })
 
   it('a second engine claiming the overlay stands the first one down', async () => {

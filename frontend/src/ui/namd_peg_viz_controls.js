@@ -21,7 +21,7 @@ export function initPegVizControls({ onMode, onAction }) {
   function sync(next = view) {
     view = next
     if (!isPegJob(job)) return
-    if (gateStorageVisualization(job, ['display-toggle', 'flex-toggle', 'traj-toggle', 'photoproduct-toggle', 'occupancy-toggle', 'water-toggle', 'box-toggle'].map(id))) return
+    if (gateStorageVisualization(job, ['display-toggle', 'flex-toggle', 'traj-toggle', 'photoproduct-toggle', 'water-toggle', 'box-toggle'].map(id))) return
     const hasFrames = !!view?.frames?.length, canFlex = hasFrames && view.stage !== 'minimize' && (view.raw_frames ?? view.frames.length) >= 2
     for (const [key, suffix] of Object.entries(modes)) {
       const el = id(suffix)
@@ -39,13 +39,12 @@ export function initPegVizControls({ onMode, onAction }) {
     }
     for (const [suffix, reason] of [
       ['photoproduct', 'Not applicable: PEG has no thymine bases.'],
-      ['occupancy', 'PEG occupancy requires validated production sampling. These qualification/relaxation jobs do not provide an equilibrium ensemble.'],
     ]) {
       const el = id(`${suffix}-toggle`)
       if (el) { el.disabled = true; el.checked = false; remember(el.closest('label'), 'title', reason) }
       remember(id(`${suffix}-status`), 'textContent', reason)
     }
-    for (const suffix of ['occupancy-params', 'occupancy-legend', 'photoproduct-legend', 'flex-bar', 'flex-legend', 'traj-load-progress', 'traj-opts']) {
+    for (const suffix of ['photoproduct-legend', 'flex-bar', 'flex-legend', 'traj-load-progress', 'traj-opts']) {
       if (id(suffix)) remember(id(suffix).style, 'display', 'none')
     }
     if (id('traj-controls')) remember(id('traj-controls').style, 'display', mode === 'traj' ? 'block' : 'none')
@@ -62,7 +61,7 @@ export function initPegVizControls({ onMode, onAction }) {
     if (id('ions-toggle')) { id('ions-toggle').disabled = true; remember(id('ions-toggle'), 'title', 'No ions in this PEG/water qualification package.') }
     if (id('solvent-status')) id('solvent-status').textContent = solvent ? 'PEG water oxygens and periodic cell; no ions in this package.' : 'Solvent hidden for the time-mean RMSF structure.'
     if (id('water-opts')) remember(id('water-opts').style, 'display', solvent && id('water-toggle')?.checked ? 'block' : 'none')
-    for (const suffix of ['display-status', 'flex-status', 'traj-status', 'occupancy-status', 'photoproduct-status', 'solvent-status']) {
+    for (const suffix of ['display-status', 'flex-status', 'traj-status', 'photoproduct-status', 'solvent-status']) {
       if (id(suffix)) {
         remember(id(suffix).style, 'color', '#c9d1d9')
         remember(id(suffix), 'textContent', id(suffix).textContent)

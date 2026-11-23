@@ -3236,37 +3236,6 @@ export const getOxdnaRmsf = (id, opts) => {
   const { align, signal } = _vizOpts(opts, 'getOxdnaRmsf')
   return _oxdnaJSON('GET', `/oxdna/jobs/${id}/rmsf?align=${align}`, undefined, { signal })
 }
-/** Top-N most likely CONFIGURATIONS ({ready, verdict, clusters:[{population, frame, …}], keys}).
- *  Where RMSF gives one mean structure, this gives several real medoid frames with weights.
- *  `opts.nClusters` 0 = auto; `opts.basis` 'nt'|'bp'; `opts.maxFrames` — leave at 200 to share
- *  the trajectory route's frame cache, anything else re-reads the trajectory.
- *  Read `verdict` first: 'switching' | 'drift' | 'unimodal' (see routes_oxdna.get_oxdna_occupancy). */
-export const getOxdnaOccupancy = (id, opts) => {
-  const { align, signal, scope } = _vizOpts(opts, 'getOxdnaOccupancy')
-  const { nClusters = 0, maxFrames = 200, method = 'pca', basis = 'nt', refetch = false } = opts ?? {}
-  return _oxdnaJSON(
-    'GET',
-    `/oxdna/jobs/${id}/occupancy?align=${align}&scope=${scope}&n_clusters=${nClusters}`
-      + `&max_frames=${maxFrames}&method=${method}&basis=${basis}&refetch=${refetch}`,
-    undefined, { signal })
-}
-/** Occupancy clouds restricted to PART of the structure — same payload as
- *  getOxdnaOccupancy plus `opts.selection` (clusters / strands / domains / overhangs /
- *  bases). POST because a base-level selection is far too big for a query string.
- *  `opts.fit` is the reference frame the scoped feature set is re-superposed in
- *  ('selection' | 'local' | 'global'); the response echoes what was actually used. */
-export const postOxdnaOccupancy = (id, opts) => {
-  const { align, signal, scope } = _vizOpts(opts, 'postOxdnaOccupancy')
-  const { nClusters = 0, maxFrames = 200, method = 'pca', basis = 'nt', refetch = false,
-          selection = null, fit = 'selection' } = opts ?? {}
-  return _oxdnaJSON('POST', `/oxdna/jobs/${id}/occupancy`, {
-    align, scope, max_frames: maxFrames, n_clusters: nClusters, method, basis, refetch,
-    selection, fit,
-  }, { signal })
-}
-/** Live frames-processed progress for an in-flight occupancy build ({active,done,total}). */
-export const getOxdnaOccupancyProgress = (id) =>
-  _oxdnaJSON('GET', `/oxdna/jobs/${id}/occupancy-progress`)
 /** Composite trajectory. `opts.scope`: 'lineage' (default, whole ancestor chain strided to
  *  ~200 frames — the fast view) or 'job' (this job's own stages only, EVERY written frame,
  *  no stride — the slow view). Scope must match whatever getOxdnaTrajectoryMeta was given. */
@@ -3643,29 +3612,6 @@ export const getMdFlexProgress = (id, kind, signal, since = 0) =>
 /** NAMD molecular surface for the average structure, carrying per-vertex RMSF. */
 export const getMdRmsfSurface    = (id, params = {}, signal, frameRange) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/rmsf-surface${flexRangeQuery(frameRange)}`, params, { signal })
-/** Occupancy clouds for a NAMD run — same payload shape as the oxDNA twin, so the same
- *  overlay draws it. Only PRODUCTION (unrestrained) dynamics is clustered — frames from
- *  the restrained relaxation ladder describe the ramp, not the structure. */
-export const getMdOccupancy = (id, signal, opts = {}) => {
-  const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false,
-          sampling = 'fast', density = false } = opts
-  return _oxdnaJSON('GET',
-    `/md/jobs/${id}/occupancy?max_frames=${maxFrames}&n_clusters=${nClusters}`
-    + `&basis=${basis}&refetch=${refetch}&sampling=${sampling}&density=${density}`,
-    undefined, { signal })
-}
-/** Occupancy clouds restricted to picked clusters / strands / bases / crossover extra
- *  bases. POST because a base-level selection is far too big for a query string.
- *  `opts.fit` picks the frame the scoped set is re-superposed in — same vocabulary as the
- *  oxDNA twin, because both engines run the one shared `occupancy_fit_plan`. */
-export const postMdOccupancy = (id, signal, opts = {}) => {
-  const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false,
-          selection = null, fit = 'selection', sampling = 'fast', density = false } = opts
-  return _oxdnaJSON('POST', `/md/jobs/${id}/occupancy`, {
-    max_frames: maxFrames, n_clusters: nClusters, basis, refetch, selection, fit,
-    sampling, density,
-  }, { signal })
-}
 /** Kill the in-flight trajectory/RMSF/surface analysis for a job (view toggled
  *  off / job deselected) so a heavy MDAnalysis read of a live DCD can't run away.
  *  `kind` cancels one view; omit to cancel all. Never throws. */
