@@ -55,6 +55,7 @@ import { initTrajPrebuildPlan } from './traj_prebuild_plan.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { openGpuDecisionModal, hasPendingGpuDecision } from './md_gate_b.js'
 import { admitMdPreparation } from './md_preparation_admission.js'
+import { mergeMdSelectionSnapshot } from './md_selection_snapshot.js'
 import { gateAMessage, openGateAModal } from './md_gate_a.js'
 import { store } from '../state/store.js'
 import { formatBytes } from './format_bytes.js'
@@ -5979,8 +5980,9 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     },
     // Select a job in this panel's list (highlight + populate cards) as a row click does.
     // Refetches first if the job isn't listed yet (a just-spawned job).
-    selectJob: async (jobId, { explicit = false } = {}) => {
+    selectJob: async (jobId, { explicit = false, snapshotJobs = [] } = {}) => {
       if (!jobId) return
+      _jobs = mergeMdSelectionSnapshot(_jobs, jobId, snapshotJobs)
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
       return _selectJob(jobId, explicit)
     },
