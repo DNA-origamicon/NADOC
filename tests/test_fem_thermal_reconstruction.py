@@ -82,6 +82,9 @@ def test_coordinates_match_full_reconstruction_and_do_not_regenerate_geometry(
             atol=1e-11,
             rtol=0,
         )
+        xyz, normals = context.coordinates(u, with_normals=True)
+        np.testing.assert_allclose(xyz, [p["backbone_position"] for p in expected], atol=1e-11, rtol=0)
+        np.testing.assert_allclose(normals, [[p["nx"], p["ny"], p["nz"]] for p in expected], atol=1e-11, rtol=0)
     assert design.to_json() == before
 
 
@@ -104,6 +107,9 @@ def test_periodic_assembly_terminal_geometry_matches_full_path():
         atol=1e-10,
         rtol=0,
     )
+
+    _, normals = context.coordinates(-u, with_normals=True)
+    np.testing.assert_allclose(normals, [[p["nx"], p["ny"], p["nz"]] for p in expected], atol=1e-10, rtol=0)
 
 
 def test_statistics_matches_full_ensemble_with_loop_copies_and_missing_node():

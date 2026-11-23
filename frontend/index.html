@@ -853,17 +853,6 @@
     .right-tab-content[hidden] { display:none; }
     .right-tab-content { padding:8px; }
     .right-tab-content > .panel-section.ox-card { border-bottom:1px solid transparent; }
-    /* Active editing tools use a shared high-contrast treatment so their
-       transient state is unmistakable among persistent property cards. */
-    #right-tab-content-properties > #move-rotate-panel.ox-card {
-      border: 1px solid #d29922;
-      background: #000;
-      box-shadow: none;
-    }
-    #right-tab-content-properties > #move-rotate-panel.ox-card > .mr-title {
-      color: #e3b341;
-      text-shadow: none;
-    }
     #right-representation-modes { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
     .right-repr-btn.active { border-color:#388bfd; background:#1f6feb; color:#fff; }
 
@@ -1628,12 +1617,6 @@
 
     /* ── Move / Rotate panel ─────────────────────────────────────────── */
     .mr-panel { padding: var(--space-3, 12px) var(--space-4, 16px) var(--space-4, 16px); }
-    .mr-title {
-      font-size: var(--text-xs, 11px); font-weight: var(--weight-semibold, 600);
-      text-transform: uppercase; letter-spacing: var(--tracking-uppercase, .06em);
-      color: var(--color-text-muted, #8b949e);
-      margin: 0 0 var(--space-3, 12px);
-    }
     .mr-section-label {
       font-size: var(--text-xs, 11px); text-transform: uppercase; letter-spacing: .05em;
       color: var(--color-text-dim, #6e7681);
@@ -2571,6 +2554,23 @@
       flex: 1;
       min-width: 60px;
     }
+    .lib-rename-editor {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
+    }
+    .lib-rename-editor > .lib-inline-input { min-width: 0; width: 0; }
+    .lib-rename-editor > .lib-row-actions {
+      display: flex;
+      position: static;
+      transform: none;
+      flex-shrink: 0;
+      align-self: stretch;
+      padding-left: 0;
+      background: none;
+    }
     .lib-bulk-actions {
       display: flex;
       align-items: center;
@@ -3014,9 +3014,7 @@
     }
 
     /* ── SNUPI + BLADE Stop buttons ──────────────────────────────────────
-       Always present under the run buttons so the panel never reflows when a run
-       starts; greyed + non-interactive until there is something to stop.
-       Both engines share this rule so the two panels can't drift apart visually. */
+       Shared active/disabled colors. SNUPI hides its row when no job is active. */
     #snupi-jobs-stop-btn,
     #blade-jobs-stop-btn {
       background: #3a1418;
@@ -5281,7 +5279,6 @@
           <!-- ── mrDNA (coarse ARBD relaxation: single Run + CG display) ──── -->
           <div class="panel-section" id="mrdna-jobs-panel">
             <div id="mrdna-jobs-body" style="margin-top:2px">
-
               <!-- two run buttons: Coarse (fast, global shape) + Fine (curvature).
                    Relocated above the jobs card at init (see main.js run-control move). -->
               <div id="mrdna-launch-row" style="display:flex;gap:5px;margin-bottom:6px">
@@ -5311,6 +5308,8 @@
                   <div id="mrdna-jobs-list" style="max-height:120px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                 </div>
               </div>
+
+              <div id="mrdna-cluster-card" style="margin-bottom:6px"></div>
 
               <!-- ── Advanced (collapsible card) ──────────────────────────── -->
               <div class="ox-card">
@@ -5712,7 +5711,6 @@
           </div>
           <div class="panel-section" id="snupi-jobs-panel">
             <div id="snupi-jobs-body" style="margin-top:2px">
-
               <!-- NO progress bar here by design: the ONE bar for every engine lives in the unified
                    Jobs card (#simulate-jobs-progress), with the % / ETA / phase on the status line
                    directly beneath it. SNUPI stamps a live `progress_fraction` on running jobs
@@ -5732,9 +5730,8 @@
                   ⤴ Fine (nonlinear)
                 </button>
               </div>
-              <!-- Stop: ALWAYS present directly under the run buttons (never appears/disappears and
-                   shifts the layout) — disabled + greyed until a run is actually in flight. -->
-              <div id="snupi-stop-row" style="display:flex;gap:5px;margin-bottom:6px">
+              <!-- Stop is shown only while a SNUPI job is active. -->
+              <div id="snupi-stop-row" style="display:none;gap:5px;margin-bottom:6px">
                 <button id="snupi-jobs-stop-btn" disabled
                         title="Stop the running SNUPI solve"
                         style="flex:1;font-size:var(--text-xs);padding:6px;border-radius:3px;font-weight:600">
@@ -5756,6 +5753,8 @@
                   <div id="snupi-jobs-list" style="max-height:120px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                 </div>
               </div>
+
+              <div id="snupi-cluster-card" style="margin-bottom:6px"></div>
 
               <!-- ── Advanced (collapsible card) ──────────────────────────── -->
               <div class="ox-card">
@@ -5880,7 +5879,7 @@
                       <input class="snupi-display-mode" name="snupi-display-mode" value="off" type="radio" checked disabled> Off (native model)
                     </label>
                     <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9">
-                      <input class="snupi-display-mode" name="snupi-display-mode" value="deform" type="radio" disabled> Predicted shape (deform model)
+                      <input class="snupi-display-mode" name="snupi-display-mode" value="deform" type="radio" disabled> Predicted shape (shaded beads)
                     </label>
                     <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9">
                       <input class="snupi-display-mode" name="snupi-display-mode" value="flex" type="radio" disabled> Flexibility map (RMSF)
@@ -5888,8 +5887,8 @@
                     <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9">
                       <input class="snupi-display-mode" name="snupi-display-mode" value="deviation" type="radio" disabled> Deviation from design
                     </label>
-                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9" title="Draw the predicted shape as CanDo's familiar jointed-cylinder tubes (native model hidden)">
-                      <input class="snupi-display-mode" name="snupi-display-mode" value="cando" type="radio" disabled> CanDo style output (cylinders)
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9" title="Saved FEM helix axes and crossover joints, shaded and colored by RMSF when available">
+                      <input class="snupi-display-mode" name="snupi-display-mode" value="cando" type="radio" disabled> Coarse FEM output (shaded tubes)
                     </label>
                     <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9" title="Animate the Langevin thermal trajectory (dynamics jobs only) — play back the actual motion, not just its time-mean shape">
                       <input class="snupi-display-mode" name="snupi-display-mode" value="trajectory" type="radio" disabled> Trajectory (animate dynamics)
@@ -8023,7 +8022,7 @@
         <section class="panel-section ox-card" id="circular-pattern-panel" aria-label="Circular Pattern" style="display:none"></section>
 
         <div class="panel-section mr-panel" id="move-rotate-panel" style="display:none">
-          <div class="mr-title">Move / Rotate <span class="dim" style="font-weight:400">M</span></div>
+          <h2>Move / Rotate <span class="ctx-count">M</span></h2>
 
           <fieldset class="tool-section"><legend>Selection</legend>
           <div id="mr-current-selection" class="mr-selection-box tool-scroll-list" tabindex="0" aria-label="Current selection" aria-live="polite"></div>
@@ -8072,6 +8071,9 @@
 
           <fieldset class="tool-section"><legend>Info</legend>
           <div id="mr-session-hint" class="dim" style="font-size:11px;margin-top:5px" aria-live="polite"></div>
+          <label class="def-row mr-row mr-check" title="During tether-constrained motion, let connected movable clusters yield while the largest cluster stays fixed. Check duplex contacts with surrounding bundles. Does not test ssDNA or atomic sterics.">
+            <input type="checkbox" id="mr-tether-collisions" checked><span>Detect collisions during tethered motion</span>
+          </label>
           <!-- Snap toggle -->
           <label class="def-row mr-row mr-check">
             <input type="checkbox" id="mr-snap-45"><span>Snap rotation to 45°</span>

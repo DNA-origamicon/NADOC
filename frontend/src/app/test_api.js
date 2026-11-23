@@ -27,6 +27,7 @@ export function installTestApi({
   slicePlane,
   _extrudePanel,
   assemblyRenderer,
+  snupiDisplay,
   selectAssemblyClusterForTest,
   _assemblyPendingPartJoints,
   _assemblyPendingTransforms,
@@ -46,6 +47,7 @@ export function installTestApi({
   multiView,
 }) {
   window.__nadocTest = {
+    snupiDisplay, camera, controls,
     clusterJoin: clusterJoinTool?.testApi,
     viewerFrameState: () => ({ rendered: renderer.info.render.frame, callbacks: window._viewerFrame,
       focused: document.hasFocus(), hidden: document.hidden }),

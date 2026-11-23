@@ -581,6 +581,8 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Full 12-tether JJ_Hinge constrained solve: 12.62 s; small fixtures stay fast.
+    "test_local_jj_hinge_numeric_regression_is_read_only",
     # Compiles and executes the native NAMD electrode harness.
     "test_compiled_electrode_forces_match_slab_confinement_and_springs",
     # November 14 FAST: two cold recipe replay workers plus edit/undo/redo
@@ -647,6 +649,9 @@ _SLOW_TESTS = {
     # integration checks (9.86 s and 16.33 s isolated); path/schema cases stay fast.
     "test_joined_routing_records_each_native_section_and_join",
     "test_generated_joined_route_cold_replay_and_upstream_path_edit",
+    # Generated joined structure, edit, and two independent cold proofs: 5.32 s
+    # in fast sweep; 6.04 s including setup in isolation (2026-11-18).
+    "test_generated_joined_path_edit_regenerates_without_samples_or_recovery",
     # Six real input-package preparations for a 1,008-nt assembly: 5.90 s in
     # the October 16 sweep and 5.34 s alone. No simulation runs, but the shared
     # lifecycle integration belongs in the assembly/CanDo slow area; siblings stay fast.
@@ -911,9 +916,17 @@ _SLOW_TESTS = {
     "test_hinge_with_staple_only_helix_still_routes_to_one_strand",
     "test_scaffold_fls_filter_excludes_staple_only_endpoint_fl",
     "test_build_2x6_has_the_hinge_shape",
-    # Mock field lifecycle still builds/exports a bundle, spawns stage processes,
-    # polls completion and parses trajectory frames (5.17 s in the Nov 4 fast run).
+    # Mock field lifecycle builds/exports bundles, spawns stage subprocesses
+    # and parses trajectories: 5.1 s finite-tau (Nov 18), 5.17 s short-run (Nov 4).
+    "test_equilibration_timeline_extracts_finite_tau",
     "test_equilibration_timeline_inconclusive_on_short_run",
+    # Builds/exports a routed bundle, runs mock stage subprocesses and parses
+    # extension display geometry: 5.64 s in the Nov 17 fast sweep (3.41 s alone).
+    "test_display_route_surfaces_extension_tails",
+    # Routed-bundle export and mock subprocess lifecycle/display checks:
+    # 5.51 s and 5.15 s in the Nov 18 resource-wizard fast sweep.
+    "test_run_field_spawns_child_field_job",
+    "test_display_route_surfaces_extra_bases",
     # test_headless_oxdna_build.py (real oxpy relax/field/iterate passes that slipped past)
     "test_autorefine_regional_runs_end_to_end_and_reports_pattern",
     "test_field_sweep_oracle_fires_on_gap",
@@ -1107,7 +1120,7 @@ def _slow_area_for(module: str) -> str:
     """Map a slow test's module (bare filename, no .py) to one area marker.
     First match wins; order matters (oxdna before headless so the oxDNA
     headless-build file lands in oxdna, not headless)."""
-    if module in {"test_part_routing_large_history", "test_extrusion_auto_routing_history", "test_vr_frame_audit", "test_vr_view_transport"}:
+    if module in {"test_flexible_network", "test_part_routing_large_history", "test_extrusion_auto_routing_history", "test_vr_frame_audit", "test_vr_view_transport"}:
         return "headless"
     if module in {"test_assembly_flatten", "test_assembly_simulation_parity"}:
         return "cando"

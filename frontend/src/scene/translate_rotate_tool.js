@@ -1,3 +1,4 @@
+import { createClusterAttachment } from './cluster_attachment.js'
 import * as THREE from 'three'
 import { quatToEulerDeg } from './rotation_math.js'
 import { showToast } from '../ui/toast.js'
@@ -103,7 +104,6 @@ export function initTranslateRotateTool(deps) {
     rebakeHelixAxesForClusterDelta,
     reemitClusterBridges,
     refreshClusterOverlays,
-    rightSidebar,
     getActive, setActive,
     getClusterDirty, setClusterDirty,
     getEditContext, setEditContext,
@@ -335,7 +335,6 @@ export function initTranslateRotateTool(deps) {
 
   async function _activateTranslateRotateTool(targetClusterId = null) {
     moveEpoch++
-    rightSidebar?.open?.('properties')
     const { assemblyActive, activeInstanceId, currentDesign } = store.getState()
 
     // ── Assembly mode: attach instance gizmo ────────────────────────────────
@@ -387,7 +386,7 @@ export function initTranslateRotateTool(deps) {
     // Explicit activation lets attachment subscribers attach the selected
     // protein/nanoparticle. Keep their controller and panel instead of replacing
     // them with the cluster-selection waiting state.
-    if (!targetClusterId && proteinGizmo?.isAttached()) {
+    if (!targetClusterId && (_moveRotatePanel.getProteinController?.()?.isAttached?.() || proteinGizmo?.isAttached())) {
       finishClusterPick?.()
       _moveRotatePanel.setAssemblyCtx(null)
       _moveRotatePanel.setSessionMode?.('protein')
@@ -518,8 +517,9 @@ export function initTranslateRotateTool(deps) {
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
   }
 
+  let attachmentCommitInFlight = false
   async function _confirmTranslateRotateTool() {
-    if (!getActive()) return
+    if (!getActive() || attachmentCommitInFlight) return
     if (_vrPreview) {
       showToast('VR Move / Rotate is preview-only; use Cancel to restore the design.')
       return
@@ -531,10 +531,22 @@ export function initTranslateRotateTool(deps) {
       && !store.getState().assemblyActive
     // Finish the attachment preview before disabling the tool: its subscribers
     // cancel uncommitted previews on deactivation.
-    if (proteinGizmo?.isAttached()) {
-      await proteinGizmo.commit()
-      if (!current()) return false
-      proteinGizmo.detach()
+    const panelController = _moveRotatePanel.getProteinController?.()
+    const attachment = panelController?.isAttached?.() ? panelController
+      : proteinGizmo?.isAttached() ? proteinGizmo : null
+    if (attachment) {
+      const attachmentId = attachment.getAttachmentId?.()
+      attachmentCommitInFlight = true
+      try {
+        await attachment.commit()
+        if (!current() || attachment.getAttachmentId?.() !== attachmentId) return false
+        attachment.detach()
+      } catch (error) {
+        if (current()) showToast(error?.message || 'The move was not accepted.', { severity: 'error' })
+        return false
+      } finally {
+        attachmentCommitInFlight = false
+      }
     }
     setActive(false)
     _confirmBtn.style.display = 'none'
@@ -784,11 +796,42 @@ export function initTranslateRotateTool(deps) {
     if (cancelRestoreCursor !== null) await api.seekFeatures(cancelRestoreCursor)
   }
 
+  // The popup's Clear action releases tool ownership as well as the canonical
+  // selection. Ordinary deselection elsewhere still leaves tool activation independent.
+  async function _clearToolSelection() {
+    const before = store.getState()
+    if (!getActive() || before.assemblyActive || nucleotideTransformTool?.isActive()
+        || _moveRotatePanel.getProteinController?.()?.isAttached?.() || proteinGizmo?.isAttached()) {
+      selectionManager.clearSelection()
+      return
+    }
+    const cancel = _cancelTranslateRotateTool()
+    const epoch = moveEpoch
+    await cancel
+    const current = store.getState()
+    if (moveEpoch !== epoch || current.currentDesign !== before.currentDesign
+        || current.selection !== before.selection || current.assemblyActive || getActive()) return
+    selectionManager.clearSelection()
+    await _activateTranslateRotateTool()
+  }
+
+  // Menu, keyboard and programmatic history requests share this API boundary.
+  // Await restoration BEFORE a cluster-only delta captures its visual base.
+  const unregisterHistoryPreview = api.registerHistoryPreviewCanceller?.(async () => {
+    const attachmentController = _moveRotatePanel.getProteinController?.()
+    if (attachmentController?.isAttached?.()) await attachmentController.cancel()
+    else if (proteinGizmo?.isAttached()) await proteinGizmo.cancel()
+    else if (nucleotideTransformTool?.isActive()) await nucleotideTransformTool.cancel()
+    await _cancelTranslateRotateTool()
+  })
+  if (import.meta.hot) import.meta.hot.dispose(() => unregisterHistoryPreview?.())
+
   // Attach the gizmo across `groupIds` as one rigid body and switch the panel into
   // group mode (dropdowns disabled, fields show the group delta = 0). Shared by tool
   // activation and the live multi-select subscriber, so a group can be entered either
   // by pressing `t` with a multi-selection OR by adding a cluster while the tool is open.
   async function _showClusterGroup(groupIds, clusters) {
+    moveEpoch++ // invalidate an outstanding single-cluster attach
     for (const id of groupIds) await _refreshClusterPivotForAttach(id)
     clusterGizmo.attachGroup(groupIds, scene, camera, canvas)
     _removeToolPickListeners({ preserveGroupPickMode: true })   // group mode has no joint picking
@@ -809,13 +852,17 @@ export function initTranslateRotateTool(deps) {
   // attach() re-sets activeClusterId → the main.js active-cluster subscriber repopulates
   // the number boxes / pivot options / centroid constraint (it early-outs while a group
   // is active, so it only runs once we're back in single mode).
-  async function _showClusterSingle(clusterId, clusters) {
+  const attachLatestCluster=createClusterAttachment(()=>({design:store.getState().currentDesign?.id,
+    epoch:moveEpoch,active:getActive()}))
+  function _showClusterSingle(clusterId, clusters) {
+    return attachLatestCluster(clusterId,async currentRequest=>{
     _moveRotatePanel.setSessionMode?.('cluster')
     if (_mrPivotSel) _mrPivotSel.disabled = false
     document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
     _mrRefreshCurrentSelection?.()
     canvas.addEventListener('pointerdown', _onToolPickPointerDown)   // dedup by the browser
     await _refreshClusterPivotForAttach(clusterId)
+    if(!currentRequest())return
     clusterGizmo.attach(clusterId, scene, camera, canvas)
     // The menu can open in waiting mode, which has never fetched tether gates.
     // Retargeting must refresh them too; the active-cluster subscriber above
@@ -823,10 +870,11 @@ export function initTranslateRotateTool(deps) {
     const designId = store.getState().currentDesign?.id
     await _flexRelax.refreshFlexGates()
     const current = store.getState()
-    if (!getActive() || current.activeClusterId !== clusterId ||
+    if (!currentRequest() || current.activeClusterId !== clusterId ||
         current.currentDesign?.id !== designId || clusterGizmo.isGroupActive?.()) return
     const joints = current.currentDesign?.cluster_joints?.filter(j => j.cluster_id === clusterId) ?? []
     _mrSetPivotOptions(joints, clusterId)
+    })
   }
 
   // Selection→tool bridge: opening/re-targeting/closing the tool in response to cluster
@@ -840,7 +888,7 @@ export function initTranslateRotateTool(deps) {
     const { action, clusterId } = decideSelectionAction({
       newSel:          canonicalSelection(newState).primary,
       toolActive:      getActive(),
-      activeClusterId: newState.activeClusterId,
+      activeClusterId: clusterGizmo.isActive?.() === false ? null : newState.activeClusterId,
       mode: {
         assemblyActive: newState.assemblyActive,
         unfoldActive:   newState.unfoldActive,
@@ -870,7 +918,7 @@ export function initTranslateRotateTool(deps) {
     } else if (groupIds.length === 1) {
       // Re-attach single only if we were a group (or somehow point elsewhere) — otherwise
       // the gizmo is already on this cluster (e.g. the promote seed) and re-attaching flickers.
-      if (clusterGizmo.isGroupActive?.() || groupIds[0] !== newState.activeClusterId) {
+      if (clusterGizmo.isActive?.() === false || clusterGizmo.isGroupActive?.() || groupIds[0] !== newState.activeClusterId) {
         await _showClusterSingle(groupIds[0], clusters)
       }
     }
@@ -930,10 +978,7 @@ export function initTranslateRotateTool(deps) {
 
   _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
   document.getElementById('mr-apply-btn')?.addEventListener('click', () => {
-    const attachmentController = _moveRotatePanel.getProteinController?.()
-    if (attachmentController?.isAttached?.()) attachmentController.commit()
-    else if (proteinGizmo?.isAttached()) proteinGizmo.commit()
-    else if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.confirm()
+    if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.confirm()
     else _confirmTranslateRotateTool()
   })
   document.getElementById('mr-cancel-btn')?.addEventListener('click', () => {
@@ -992,6 +1037,7 @@ export function initTranslateRotateTool(deps) {
     confirm: _confirmTranslateRotateTool,
     cancel: _cancelTranslateRotateTool,
     resetToSaved: _resetActiveClusterToSaved,
+    clearSelection: _clearToolSelection,
     rotateJoint: _rotateJoint,
     handleSelectionChange: _handleSelectionChange,
     handleMultiClusterSelectionChange: _handleMultiClusterSelectionChange,

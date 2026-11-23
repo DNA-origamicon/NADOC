@@ -799,8 +799,9 @@ def build_namd_seed_from_mrdna(job_id: str, workspace_dir: Path):
 
 def _estimate_seconds(job: MrdnaJob) -> float:
     """Rough wall-clock estimate for the coarse ARBD run, scaled by system size and
-    step count.  Only drives the progress bar (capped < 1.0 until the thread ends);
-    the true completion signal is the runner thread finishing."""
+    step count. Used for rough resource-wizard planning and the progress bar
+    (capped < 1.0 until the thread ends); the true completion signal is the
+    runner thread finishing."""
     beads = max(1.0, job.n_nucleotides / 2.0)  # ≈ base pairs ≈ coarse beads
     # Reference: ~635 beads · 1e5 coarse steps ≈ 21 s on an RTX 3080 Ti; be generous.
     est = 8.0 + (beads / 635.0) * (job.coarse_steps / 1e5) * 30.0
@@ -812,6 +813,9 @@ def _estimate_seconds(job: MrdnaJob) -> float:
 
 def job_progress(job: MrdnaJob, workspace_dir: Path) -> dict:
     """Overall progress fraction + ETA for the panel."""
+    if job.execution_target in {"alpine", "runpod"}:
+        from backend.core.solver_cluster import progress
+        return progress(job)
     stage = job.stages[0] if job.stages else None
     overall = 0.0
     eta_seconds: float | None = None
@@ -1164,17 +1168,30 @@ def _finalize_outputs(
 @runtime.in_workspace
 def start_job(job: MrdnaJob, workspace_dir: Path) -> None:
     """Launch _run_job in a background daemon thread. Idempotent if running."""
+    from backend.core.solver_resources import check_resources, check_snapshot_capacity
+    if is_running(job.job_id):
+        return
+    check_snapshot_capacity(job.job_dir(workspace_dir))
+    resources = check_resources("mrdna", _load_snapshot_design(job.job_dir(workspace_dir)), job, workspace_dir)
+    if job.execution_target == "runpod":
+        from backend.core.solver_runpod import start
+        return start(job, workspace_dir, "mrdna")
+    if job.execution_target == "alpine":
+        from backend.core.solver_cluster import start
+        return start(job, workspace_dir, "mrdna")
     if is_running(job.job_id):
         return
     def preparing():
+        job.error = None
+        for stage in job.stages:
+            stage.status, stage.started_at = "pending", None
         job.status = MrdnaStatus.preparing
         job.save(workspace_dir)
 
-    runtime.launch_thread(
-        job.job_dir(workspace_dir), job.job_id, lambda: _run_job(job, workspace_dir),
-        _RUNNING, _RunningHandle, lambda: stop_job(job.job_id, workspace_dir),
-        name=f"mrdna-runner-{job.job_id}", before_start=preparing,
-    )
+    from backend.core.solver_resources import launch_reserved_thread
+    launch_reserved_thread(resources, job, workspace_dir,
+                           lambda: _run_job(job, workspace_dir), _RUNNING, _RunningHandle,
+                           lambda: stop_job(job.job_id, workspace_dir), preparing)
 
 
 def _pid_is_arbd(pid: int) -> bool:
@@ -1207,6 +1224,8 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     except Exception:  # noqa: BLE001
         return live
 
+    if job.execution_target != "local":
+        return False
     pid = _external_arbd_pid(job, workspace_dir)
     if pid is None and job.arbd_pid and _pid_is_arbd(job.arbd_pid):
         pid = job.arbd_pid
@@ -1239,6 +1258,12 @@ def reconcile_mrdna_status(
 
     ``proc_scan`` — see :func:`_external_arbd_pid`; passed through for a job-list
     poll sharing one /proc scan across every job instead of each re-scanning."""
+    if job.execution_target == "runpod":
+        from backend.core.solver_runpod import reconcile
+        return reconcile(job, workspace_dir, "mrdna")
+    if job.execution_target == "alpine":
+        from backend.core.solver_cluster import reconcile
+        return reconcile(job, workspace_dir, "mrdna")
     if runtime.is_owned(job.job_dir(workspace_dir)):
         return job
 
@@ -1256,6 +1281,8 @@ def reconcile_mrdna_status(
         if changed:
             job.save(workspace_dir)
         return job
+    if job.execution_target != "local":
+        return False  # remote cancellation is asynchronous and owned by its provider route
     jd = job.job_dir(workspace_dir)
     observations["cached"] = (jd / "display.json").exists()
     if mrdna_activity(observations).action == "completed_cache":

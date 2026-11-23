@@ -26,6 +26,7 @@ function makeDeps(design = {}) {
   const api = {
     patchOverhangRotationsBatch: vi.fn().mockResolvedValue(undefined),
     patchOverhang: vi.fn(),
+    generateOverhangRandomSequence: vi.fn().mockResolvedValue({}),
     generateBinderForOverhang: vi.fn().mockResolvedValue(undefined),
     saveRepresentationOverrides: vi.fn(),
     clearOverhangs: vi.fn(),
@@ -73,6 +74,7 @@ describe('initOverhangOrientationMenu', () => {
       'Edit Orientation',
       'Reset Orientation',
       'Set Label…',
+      'Generate sequence…',
       'Generate OH binding strand',
       'Open Overhangs Manager…',
       'Clear All Overhangs',
@@ -83,6 +85,7 @@ describe('initOverhangOrientationMenu', () => {
 
   it('hides Set Label / Generate for a multi-overhang selection', () => {
     initOverhangOrientationMenu(deps).show(['o1', 'o2'], 0, 0)
+    expect(itemByLabel('Generate sequence…')).toBeFalsy()
     expect(itemByLabel('Set Label…')).toBeFalsy()
     expect(itemByLabel('Generate OH binding strand')).toBeFalsy()
     expect(itemByLabel('Edit Orientation')).toBeTruthy()
@@ -253,4 +256,56 @@ describe('extensions reachable from an overhang right-click', () => {
     initOverhangOrientationMenu(deps).show(['oh1'], 0, 0)
     expect(itemByLabel('Add extension…')).toBeFalsy()
   })
+})
+
+
+describe('overhang context-menu sequence generation', () => {
+  function open(sequence) {
+    const { deps } = makeDeps({ overhangs: [{ id: 'oh1', sequence }] })
+    initOverhangOrientationMenu(deps).show(['oh1'], 20, 20)
+    itemByLabel('Generate sequence…').click()
+    return deps
+  }
+  const button = label => [...document.querySelectorAll('button')].find(el => el.textContent.trim() === label)
+
+  it.each([null, '', 'NNNN', 'nnnn'])('generates directly for undefined sequence %s', async sequence => {
+    const deps = open(sequence)
+    await flush()
+    expect(deps.api.generateOverhangRandomSequence).toHaveBeenCalledWith('oh1')
+    expect(button('Generate new sequence')).toBeUndefined()
+  })
+
+  it.each(['ACGT', 'ACNN'])('waits for confirmation before replacing %s', async sequence => {
+    const deps = open(sequence)
+    expect(deps.api.generateOverhangRandomSequence).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Replace overhang sequence?')
+    button('Generate new sequence').click()
+    await flush()
+    expect(deps.api.generateOverhangRandomSequence).toHaveBeenCalledExactlyOnceWith('oh1')
+  })
+
+  it('cancelling preserves the existing sequence', async () => {
+    const deps = open('ACGT')
+    button('Cancel').click()
+    await flush()
+    expect(deps.api.generateOverhangRandomSequence).not.toHaveBeenCalled()
+    expect(deps.api.patchOverhang).not.toHaveBeenCalled()
+  })
+
+  it('Escape dismisses without generating', async () => {
+    const deps = open('ACGT')
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flush()
+    expect(deps.api.generateOverhangRandomSequence).not.toHaveBeenCalled()
+  })
+})
+
+
+it('confirms before replacing a sequence assigned through sub-domains', () => {
+  const { deps } = makeDeps({ overhangs: [{ id: 'oh1', sequence: null,
+    sub_domains: [{ start_bp_offset: 0, length_bp: 4, sequence_override: 'ACGT' }] }] })
+  initOverhangOrientationMenu(deps).show(['oh1'], 0, 0)
+  itemByLabel('Generate sequence…').click()
+  expect(document.body.textContent).toContain('Replace overhang sequence?')
+  expect(deps.api.generateOverhangRandomSequence).not.toHaveBeenCalled()
 })

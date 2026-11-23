@@ -5,6 +5,14 @@ description: Display-layer nanoparticle authoring and automation.
 
 # Nanoparticles
 
+## Move/Rotate Apply lifecycle (2026-11-21)
+
+Gold/quantum-dot and protein Apply use the shared tool confirmation path. A
+successful commit (or unchanged pose) detaches the attachment gizmo, deactivates
+Move/Rotate, and closes the popup. Commit failures leave the session open for retry;
+repeat Apply clicks during an attachment save cannot submit another commit.
+The panel's Cancel/Reset still delegate to the attachment preview controller.
+
 ## Topic navigation and current boundaries
 
 Reorganized October 17, 2026. Read the retained contracts here, then only the

@@ -480,19 +480,20 @@ def mrdna_model_from_nadoc_parameterized(
         # external checkout remains untouched; generated beads can later be bound
         # by segment contour, without coordinate proximity or helix rediscovery.
         def _set_splines_with_sources(seg, coordinate, hid, hmap, hrank, fwd, *args, **kwargs):
+            import numpy as np
+
             result = original_set_splines(
                 seg, coordinate, hid, hmap, hrank, fwd, *args, **kwargs
             )
             source = []
-            for idx in range(len(hmap)):
-                if int(hmap[idx]) == int(hid):
-                    source.append(
-                        {
-                            "model_nucleotide_index": idx,
-                            "segment_nt_index": int(hrank[idx]),
-                            "is_forward": bool(fwd[idx]),
-                        }
-                    )
+            for idx in np.flatnonzero(np.asarray(hmap) == int(hid)):
+                source.append(
+                    {
+                        "model_nucleotide_index": int(idx),
+                        "segment_nt_index": int(hrank[idx]),
+                        "is_forward": bool(fwd[idx]),
+                    }
+                )
             seg._nadoc_source_nucleotides = source
             return result
 
@@ -548,6 +549,12 @@ def _build_patched_class(override: CrossoverPotentialOverride):
     label = override.label
 
     class _PatchedCls(SegmentModel):
+        def generate_bead_model(self, *args, **kwargs):
+            from backend.parameterization.mrdna_clustering import bead_size_clustering
+
+            with bead_size_clustering():
+                return super().generate_bead_model(*args, **kwargs)
+
         def get_bond_potential(self, kSpring, d, correct_geometry=False):
             if abs(d - _DEFAULT_XOVER_BOND_R0) < _XOVER_BOND_R0_TOLERANCE:
                 return super().get_bond_potential(k_bond, r0_target, correct_geometry)

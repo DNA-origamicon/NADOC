@@ -42,6 +42,23 @@ def test_stages_gpu_only_and_fingerprint():
     assert oxdna_design_fingerprint(d)!=before
 
 
+def test_gold_startup_is_damped_and_configuration_is_idempotent():
+    from dataclasses import asdict
+    from backend.core.oxdna_protocol import build_relaxation_stages, escalate_md_relax_spec
+
+    stages = build_relaxation_stages(backend='CUDA')
+    configure_mobile_gold_stages(stages)
+    assert stages[0].dt == 0.00001
+    assert stages[0].diff_coeff == 0.0001
+    assert stages[0].steps >= 10000
+    assert stages[1].dt == stages[2].dt == 0.002
+    assert stages[1].diff_coeff == stages[2].diff_coeff == 2.5
+    saved = [asdict(s) for s in stages]
+    configure_mobile_gold_stages(stages)
+    assert [asdict(s) for s in stages] == saved
+    assert escalate_md_relax_spec(stages[0], 1).dt == stages[0].dt
+
+
 def test_prepared_job_and_trajectory_keep_gold_pose(tmp_path):
     from backend.api.crud import _geometry_for_design
     from backend.core.oxdna_job import new_oxdna_job

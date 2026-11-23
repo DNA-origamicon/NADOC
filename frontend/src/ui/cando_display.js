@@ -363,7 +363,7 @@ export function initCandoDisplay({
       : await api.getCandoJob(jobId, signal)
     if (epoch !== _epoch) throw new DOMException('Display superseded', 'AbortError')
     if (!job || !Number.isFinite(job.n_nucleotides)) throw new Error('Could not determine result size; retry loading the job')
-    if (job.n_nucleotides <= LARGE_CANDO_THRESHOLD) return null
+    if (job.n_nucleotides <= (largeView.threshold ?? LARGE_CANDO_THRESHOLD)) return null
     // Stop spending frames on a heavy native scene while the compact result loads.
     _nativeVisible(false)
     _progress(onProgress, 'compact-view', 0)
@@ -378,7 +378,7 @@ export function initCandoDisplay({
     _nativeVisible(false)
     _jobId = jobId; _mode = mode
     _stats = { ...view.meta, large: true,
-      representation: mode === 'cando' ? 'zoom-adaptive axis/joint lines; all segments retained' : 'zoom-adaptive nucleotide points; all positions retained' }
+      representation: largeView.representation?.(mode) ?? (mode === 'cando' ? 'zoom-adaptive axis/joint lines; all segments retained' : 'zoom-adaptive nucleotide points; all positions retained') }
     if (mode !== 'deform' && (mode !== 'cando' || view.meta.has_rmsf)) {
       flexScale?.show({ title: mode === 'deviation' ? 'Deviation (nm)' : 'RMSF (nm)',
         min: view.meta.min, max: view.meta.max, mapType: mode,

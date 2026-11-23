@@ -365,7 +365,7 @@ def escalate_md_relax_spec(base: OxdnaStageSpec, attempt: int) -> OxdnaStageSpec
     return replace(
         base,
         steps=int(base.steps * e["steps_mult"]),
-        dt=e["dt"],
+        dt=min(base.dt, e["dt"]),
         max_backbone_force=e["cap"],
         max_backbone_force_far=e["cap"] * 2.0,
     )

@@ -4,7 +4,7 @@
  * so the user can tell at a glance which engine is busy (even with the panel
  * collapsed).
  *
- * One poll of GET /api/jobs/active (via {@link fetchActiveJobs}) covers all five
+ * One poll of GET /api/jobs/active (via {@link fetchActiveJobs}) covers all supported
  * engines; {@link runningEngines} maps the result to the set of busy engines and
  * we toggle a reused `.nadoc-spinner` on each header. Purely a display aid — it
  * owns no job state and never launches or reconciles anything.
@@ -17,6 +17,7 @@ import { fetchActiveJobs as defaultFetch, runningEngines } from './job_activity.
  *  tab (next to its label). Note the tab key is 'namd' where the job key is 'md';
  *  LAMMPS has no tab (folded into oxDNA's CPU fallback) → no spinner. */
 const ENGINE_HEADERS = [
+  { engine: 'snupi', tab: 'snupi', label: 'A SNUPI' },
   { engine: 'oxdna',  tab: 'oxdna', label: 'An oxDNA' },
   { engine: 'mrdna',  tab: 'mrdna', label: 'An mrDNA' },
   { engine: 'cando',  tab: 'cando', label: 'A CanDo FEM' },

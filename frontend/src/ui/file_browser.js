@@ -11,6 +11,7 @@
  * suggestedName / suggestedExt  — pre-filled values for save mode
  */
 
+import { libraryRenameStem, libraryRenameFilename } from './library_filename.js'
 import { showConfirm } from './primitives/confirm.js'
 import { confirmAndDeleteFile } from './file_deletion.js'
 import { visibleWorkspaceEntries } from './sim_folders.js'
@@ -634,12 +635,12 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       iconEl.textContent = isFolder ? '📁' : (entry.type === 'assembly' ? '⬡' : '◈')
       iconEl.style.cssText = 'font-size:12px;flex-shrink:0;width:16px;text-align:center'
 
-      const renameInp = inp('', currentName, 'flex:1')
+      const renameInp = inp('', libraryRenameStem(entry), 'flex:1')
       const okBtn  = btn('✓', `background:none;border:none;color:${S.green};cursor:pointer;font-size:14px;padding:0 4px`)
       const canBtn = btn('×', `background:none;border:none;color:${S.muted};cursor:pointer;font-size:14px;padding:0 2px`)
 
       const doRename = async () => {
-        const newName = renameInp.value.trim()
+        const newName = libraryRenameFilename(entry, renameInp.value)
         if (!newName || newName === currentName) { await _reload(); return }
         if (newName.includes('/') || newName.includes('\\')) { alert('Name cannot contain path separators.'); renameInp.focus(); return }
         const dir = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : ''
@@ -663,7 +664,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
 
     // ── Move ──────────────────────────────────────────────────────────────────
     async function _startMove(entry) {
-      const destFolder = await _openFolderPicker(`Move "${entry.path.split('/').pop()}" to…`)
+      const destFolder = await _openFolderPicker(`Move "${entry.path.split('/').pop()}" to…`, entry.path)
       if (destFolder === null) return
       const result = await api.moveLibrary(entry.path, destFolder)
       if (result) {
@@ -673,21 +674,12 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     }
 
     // ── Folder-picker sub-modal ───────────────────────────────────────────────
-    function _openFolderPicker(subTitle) {
+    async function _openFolderPicker(subTitle, sourcePath) {
+      let folderPaths
+      try { folderPaths = await api.listLibraryMoveDestinations([sourcePath]) }
+      catch { /* Do not fall back to stale destinations. */ }
+      if (!Array.isArray(folderPaths)) { alert('Could not load valid workspace destinations.'); return null }
       return new Promise((res) => {
-        // Collect all known folder paths (including root)
-        const folderPaths = ['']
-        const seen = new Set([''])
-        for (const e of _entries) {
-          const parts = e.path.split('/')
-          for (let i = 1; i < parts.length; i++) {
-            const fp = parts.slice(0, i).join('/')
-            if (!seen.has(fp)) { seen.add(fp); folderPaths.push(fp) }
-          }
-          if (e.type === 'folder' && !seen.has(e.path)) { seen.add(e.path); folderPaths.push(e.path) }
-        }
-        folderPaths.sort()
-
         const pickerOverlay = document.createElement('div')
         pickerOverlay.style.cssText = `position:fixed;inset:0;z-index:400;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center`
 
@@ -709,6 +701,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
         const pickerList = document.createElement('div')
         pickerList.style.cssText = 'flex:1;overflow-y:auto;padding:3px 8px'
 
+        if (!folderPaths.length) pickerList.textContent = 'No valid workspace destinations for this selection.'
         for (const fp of folderPaths) {
           const row = document.createElement('div')
           row.style.cssText = `display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer`

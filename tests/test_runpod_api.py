@@ -258,8 +258,8 @@ class TestClient:
                 network_volume_id=VOLUME,
                 terminate_after="2026-08-10T00:00:00Z",
             )
-            payload.update(minMemoryInGb=20, minVcpuCount=6)
             try:
+                payload.update(minMemoryInGb=69, minVcpuCount=8)
                 return await c.create_pod(payload)
             finally:
                 await c.aclose()
@@ -268,9 +268,9 @@ class TestClient:
         gql_input = seen["body"]["variables"]["input"]
         assert gql_input["terminateAfter"] == "2026-08-10T00:00:00Z"
         assert gql_input["gpuTypeId"] == "g"
-        assert gql_input["minMemoryInGb"] == 20
-        assert gql_input["minVcpuCount"] == 6
         assert gql_input["minCudaVersion"] == rp.DEFAULT_ALLOWED_CUDA[0]
+        assert gql_input["minMemoryInGb"] == 69
+        assert gql_input["minVcpuCount"] == 8
         assert "api_key" not in seen["url"]
 
     def test_401_is_a_clear_message_not_a_stack_trace(self):

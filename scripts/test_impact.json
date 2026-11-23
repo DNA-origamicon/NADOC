@@ -1,0 +1,9 @@
+{
+  "backend/core/workspace_move_destinations.py": ["tests/test_workspace_move_destinations.py"],
+  "backend/core/workspace_listing.py": ["tests/test_workspace_listing.py", "tests/test_workspace_move_destinations.py"],
+  "scripts/test_affected.py": ["tests/test_focused_selection.py"],
+  "scripts/test_frontend.py": ["tests/test_focused_selection.py"],
+  "scripts/test_impact.json": ["tests/test_focused_selection.py"],
+  "scripts/test_focused.py": ["tests/test_test_guard_budget.py", "tests/test_focused_selection.py"],
+  "scripts/test_guard.sh": ["tests/test_test_guard_budget.py", "tests/test_focused_selection.py"]
+}

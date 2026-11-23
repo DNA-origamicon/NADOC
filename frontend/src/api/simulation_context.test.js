@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createAssemblySimulationContext, isSimulationApiPath, needsAssemblySimulation } from './simulation_context.js'
+import { createAssemblySimulationContext, isSimulationApiPath, needsAssemblySimulation, usesCompactSimulationProjection } from './simulation_context.js'
 
 describe('assembly simulation context', () => {
   it('recognizes every simulation engine and excludes ordinary design/assembly APIs', () => {
@@ -112,4 +112,11 @@ it('reads and saves submodel UI selections without materializing an assembly', a
     await context.ensure({ path, method, assemblyActive: true, assembly: { id: 'assembly' }, materialize })
   }
   expect(materialize).not.toHaveBeenCalled()
+})
+
+it('estimates both solvers from the compact whole-assembly projection', () => {
+  for (const engine of ['snupi', 'mrdna']) {
+    expect(needsAssemblySimulation(`/${engine}/resource-estimate`, 'POST')).toBe(true)
+    expect(usesCompactSimulationProjection(`/${engine}/resource-estimate`, 'POST')).toBe(true)
+  }
 })

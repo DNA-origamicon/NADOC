@@ -70,7 +70,7 @@ function makeDeps(overrides = {}) {
     instanceGizmo: { detach: vi.fn() },
     assemblyRenderer: { rebuild: vi.fn(async () => {}), rebuildLinkers: vi.fn() },
     assemblyJointRenderer: { rebuild: vi.fn() },
-    api: { skipNextResponseDelta: vi.fn(), editFeature: vi.fn(async () => {}), seekFeatures: vi.fn(async () => {}) },
+    api: { registerHistoryPreviewCanceller: vi.fn(), skipNextResponseDelta: vi.fn(), editFeature: vi.fn(async () => {}), seekFeatures: vi.fn(async () => {}) },
     moveRotatePanel: { setAssemblyCtx: vi.fn(), setSessionMode: vi.fn() },
     mrPanel: document.getElementById('__mrPanel'),
     mrPivotSel: document.getElementById('__mrPivotSel'),
@@ -249,21 +249,22 @@ describe('initTranslateRotateTool — API + init side effects', () => {
     expect(store.getState().translateRotateActive).toBe(false)
   })
 
-  it('routes Apply, Cancel, and Reset to an attached protein session', () => {
+  it('routes attachment Cancel/Reset locally and Apply through tool confirmation', async () => {
     const proteinGizmo = {
-      isAttached: vi.fn(() => true), commit: vi.fn(), cancel: vi.fn(), reset: vi.fn(),
+      isAttached: vi.fn(() => true), commit: vi.fn(), cancel: vi.fn(), reset: vi.fn(), detach: vi.fn(),
     }
-    const { deps } = makeDeps({ proteinGizmo })
-    initTranslateRotateTool(deps)
-
-    document.getElementById('mr-apply-btn').click()
+    const { deps, store } = makeDeps({ proteinGizmo })
+    const tool = initTranslateRotateTool(deps)
+    await tool.activate()
     document.getElementById('mr-cancel-btn').click()
     document.getElementById('mr-reset-btn').click()
-
-    expect(proteinGizmo.commit).toHaveBeenCalledTimes(1)
-    expect(proteinGizmo.cancel).toHaveBeenCalledTimes(1)
-    expect(proteinGizmo.reset).toHaveBeenCalledTimes(1)
-    expect(deps.clusterGizmo.detach).not.toHaveBeenCalled()
+    document.getElementById('mr-apply-btn').click()
+    await vi.waitFor(() => expect(store.getState().translateRotateActive).toBe(false))
+    expect(proteinGizmo.commit).toHaveBeenCalledOnce()
+    expect(proteinGizmo.cancel).toHaveBeenCalledOnce()
+    expect(proteinGizmo.reset).toHaveBeenCalledOnce()
+    expect(proteinGizmo.detach).toHaveBeenCalledOnce()
+    expect(deps.mrPanel.style.display).toBe('none')
   })
 
   it('returns the tool API surface', () => {
@@ -461,7 +462,7 @@ describe('initTranslateRotateTool — activate (design mode)', () => {
     const ctx = makeDeps()
     const t = initTranslateRotateTool(ctx.deps)
     await t.activate()
-    expect(ctx.deps.rightSidebar.open).toHaveBeenCalledWith('properties')
+    expect(ctx.deps.rightSidebar.open).not.toHaveBeenCalled()
     expect(ctx.active).toBe(true)
     expect(ctx.clusterGizmo.attach).not.toHaveBeenCalled()
     expect(toastCalls.length).toBe(0)
@@ -641,6 +642,18 @@ describe('initTranslateRotateTool — confirm', () => {
 })
 
 describe('initTranslateRotateTool — cancel', () => {
+  it('restores and discards a live preview at the shared history boundary without committing', async () => {
+    const ctx = makeDeps({ state: { currentGeometry: [{}], currentHelixAxes: { a: 1 } } })
+    ctx.deps.setActive(true)
+    ctx.deps.setClusterDirty(true)
+    initTranslateRotateTool(ctx.deps)
+    await ctx.deps.api.registerHistoryPreviewCanceller.mock.calls[0][0]()
+    expect(ctx.active).toBe(false)
+    expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalled()
+    expect(ctx.jointRenderer.rebuild).toHaveBeenCalled()
+    expect(ctx.clusterGizmo.commitPendingTransforms).not.toHaveBeenCalled()
+    expect(ctx.helixCtrl.commitClusterPositions).not.toHaveBeenCalled()
+  })
   it('inactive → no-op', async () => {
     const ctx = makeDeps()
     const t = initTranslateRotateTool(ctx.deps)
@@ -894,4 +907,74 @@ it('refreshes tether options when a cluster is selected after opening Move/Rotat
   await tool.handleSelectionChange(ctx.store.getState(), previous)
   expect(ctx.deps.flexRelax.refreshFlexGates).toHaveBeenCalled()
   expect(ctx.deps.setPivotOptions).toHaveBeenLastCalledWith([], 'C1')
+})
+
+it('Clear selection releases the target without committing and rearms cluster picking', async () => {
+  const cluster = { id: 'C1', translation: [0, 0, 0], rotation: [0, 0, 0, 1] }
+  const ctx = makeDeps({ state: { currentDesign: { id: 'part', cluster_transforms: [cluster], cluster_joints: [] } } })
+  const controller = createSelectionController({ store: ctx.store })
+  ctx.deps.selectionManager.clearSelection = controller.clear
+  ctx.clusterGizmo.attach.mockImplementation(id => ctx.store.setState({ activeClusterId: id }))
+  ctx.clusterGizmo.detach.mockImplementation(() => ctx.store.setState({ activeClusterId: null }))
+  controller.replace([{ kind: 'cluster', id: 'C1' }])
+  const tool = initTranslateRotateTool(ctx.deps)
+  await tool.activate('C1')
+  ctx.deps.setClusterDirty(true)
+  await tool.clearSelection()
+  expect(ctx.store.getState().selection.items).toEqual([])
+  expect(ctx.store.getState().activeClusterId).toBeNull()
+  expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalledOnce()
+  expect(ctx.clusterGizmo.commitPendingTransforms).not.toHaveBeenCalled()
+  expect(ctx.active).toBe(true)
+  expect(ctx.deps.moveRotatePanel.setSessionMode).toHaveBeenLastCalledWith('waiting')
+  expect(ctx.store.getState().selection.level).toBe('cluster')
+  expect(ctx.clusterGizmo.attach).toHaveBeenCalledTimes(1)
+  await tool.cancel()
+})
+
+
+describe('attachment Apply completion', () => {
+  function opened(commit) {
+    let attached = true
+    const controller = { isAttached: () => attached, getAttachmentId: () => 'gold',
+      commit, detach: vi.fn(() => { attached = false }) }
+    const ctx = makeDeps()
+    ctx.deps.moveRotatePanel.getProteinController = () => controller
+    const tool = initTranslateRotateTool(ctx.deps)
+    return { ctx, controller, tool }
+  }
+  it.each([true, false])('closes a nanoparticle session after commit returns %s', async result => {
+    const { ctx, controller, tool } = opened(vi.fn(async () => result))
+    await tool.activate()
+    expect(ctx.deps.moveRotatePanel.setSessionMode).toHaveBeenLastCalledWith('protein')
+    document.getElementById('mr-apply-btn').click()
+    await vi.waitFor(() => expect(ctx.active).toBe(false))
+    expect(controller.commit).toHaveBeenCalledOnce()
+    expect(controller.detach).toHaveBeenCalledOnce()
+    expect(ctx.deps.mrPanel.style.display).toBe('none')
+  })
+  it('keeps the tool open on failure and permits retry', async () => {
+    const commit = vi.fn().mockRejectedValueOnce(new Error('Save refused')).mockResolvedValueOnce(true)
+    const { ctx, controller, tool } = opened(commit)
+    await tool.activate()
+    await tool.confirm()
+    expect(ctx.active).toBe(true)
+    expect(controller.detach).not.toHaveBeenCalled()
+    expect(ctx.deps.mrPanel.style.display).toBe('')
+    expect(toastCalls.at(-1)[0]).toBe('Save refused')
+    await tool.confirm()
+    expect(ctx.active).toBe(false)
+  })
+  it('keeps the tool open while saving and ignores duplicate Apply clicks', async () => {
+    let resolve
+    const { ctx, controller, tool } = opened(vi.fn(() => new Promise(r => { resolve = r })))
+    await tool.activate()
+    const pending = tool.confirm()
+    await tool.confirm()
+    expect(controller.commit).toHaveBeenCalledOnce()
+    expect(ctx.active).toBe(true)
+    resolve(true)
+    await pending
+    expect(ctx.active).toBe(false)
+  })
 })

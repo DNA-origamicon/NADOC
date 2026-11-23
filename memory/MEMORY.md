@@ -38,7 +38,7 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 - **[tech_debt](project_tech_debt.md)** — `TD-NN` driver for `/audit-debt` (head + `_archive`).
 - **[reference_assembly_test_fixture](reference_assembly_test_fixture.md)** — `workspace/Belt_test1.nass`.
 - **[reference_efield_crossval_fixture](reference_efield_crossval_fixture.md)** — `workspace/6hb_e_test.nadoc`.
-- [test_parallelization](project_test_parallelization.md) — `test-smart` for broad fast checks; **`test-focused TARGET` permits related slow development checks without a session**. Full/broad sweeps remain session-gated; duration alone is not a gate.
+- **[Focused validation](project_test_parallelization.md)** — default request → changed behavior/consumers → explicit backend tests or frontend related tests → relevant app check → report. `test-smart SOURCE…` and `test-frontend TEST_FILE…` are focused; broad sweeps are separate. Related slow checks need no session.
 
 ## Session loops (root files; read handoff first)
 

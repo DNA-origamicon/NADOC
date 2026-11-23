@@ -20,13 +20,16 @@
  *
  * Items:
  *   Edit Orientation · Reset Orientation
- *   [single overhang]  (sep) Set Label… · Generate OH binding strand
+ *   [single overhang]  (sep) Set Label… · Generate sequence… · Generate OH binding strand
  *   (sep) Representation ▸ (flyout)
  *   (sep) Open Overhangs Manager…
  *   (sep) Clear All Overhangs (danger)
  */
 
 import { createContextMenu } from './primitives/context_menu.js'
+import { showConfirm } from './primitives/confirm.js'
+import { runOverhangGen } from './overhang_gen.js'
+import { assembleOverhangSequence } from '../scene/design_queries.js'
 
 /**
  * @param {object} deps
@@ -101,6 +104,29 @@ export function initOverhangOrientationMenu({
           const name = prompt('Overhang label:', existing)
           if (name === null) return
           api.patchOverhang(ovhgIds[0], { label: name.trim() || null })
+        },
+      })
+      items.push({
+        label: 'Generate sequence…',
+        onClick: async () => {
+          const id = ovhgIds[0]
+          const designId = store.getState().currentDesign?.id
+          const getOverhang = () => store.getState().currentDesign?.overhangs?.find(o => o.id === id)
+          const overhang = getOverhang()
+          if (!overhang) return
+          const sequence = assembleOverhangSequence(overhang).trim()
+          if (sequence && !/^n+$/i.test(sequence)) {
+            const confirmed = await showConfirm({
+              title: 'Replace overhang sequence?',
+              message: 'This overhang already has a sequence. Override it with a new sequence generated using the Johnson et al. method?',
+              confirmLabel: 'Generate new sequence',
+              danger: true,
+            })
+            if (!confirmed || store.getState().currentDesign?.id !== designId || !getOverhang()) return
+          }
+          try {
+            await runOverhangGen(id, null, { api, getSeq: () => getOverhang()?.sequence })
+          } catch { /* The API reports generation failures through lastError. */ }
         },
       })
       items.push({

@@ -258,7 +258,7 @@ def parse_network_volume(data: dict[str, Any]) -> dict[str, Any]:
         "id": str(data.get("id", "")),
         "name": data.get("name") or "",
         "size_gb": size_gb,
-        "data_center_id": data.get("dataCenterId") or None,
+        "data_center_id": data.get("dataCenterId") or data.get("dataCenter") or None,
     }
 
 

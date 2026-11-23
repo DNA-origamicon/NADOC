@@ -47,6 +47,8 @@ def build_command(argv: list[str] | None = None) -> list[str]:
             cmd.append(f"-{flag}" if len(flag) == 1 else f"--{flag}")
     return [
         "bash",
+        str(ROOT / "scripts/validation_guard.sh"),
+        "bash",
         str(ROOT / "scripts/test_guard.sh"),
         "test-focused",
         "0",

@@ -12,6 +12,25 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
+- Plasmonic mobile-gold startup (2026-11-22): direct CUDA MD from the CAD seed
+  diverged on both `Plasmonic_test` and the existing two-attached-particle part.
+  The MC replacement now uses a 10k-step overdamped startup (dt 1e-5,
+  diffusion 1e-4); subsequent MD retains diffusion 2.5 and dt ≤ .002.
+  Model configuration preserves explicit diffusion on repeated calls. Consecutive
+  MD relaxation stages defer the FENE handoff gate until the last stage; retries
+  target the latest relaxation and cannot increase an already smaller timestep.
+  Managed job `3171c01b5e56` on `Plasmonic_two_NPs_attached.nadoc` completed
+  1M relaxation steps with 96.58% geometric pair retention, maximum FENE distance
+  .935713 units and no retries. The 100k unrestrained equilibration also passed.
+  Its 5M-step uncapped production was launched and checked at 150k steps:
+  96.47% geometric pair retention, all four attachment duplexes 10/10 paired,
+  zero over-limit backbone bonds and positive DNA/core clearance. Production was
+  still running at handoff; this is not a completed-production/convergence claim.
+  Focused validation: 14 passed / 1 skipped across three commands.
+  Evidence: `.development-artifacts/plasmonic-oxdna/validation.json`.
+  Existing source geometry/history is unchanged. A fresh complete document audit
+  timed out at its unchanged 180-second limit; no new part was published.
+
 - New thermal ramps default to native-HB melt termination at 100% unpaired DNA bases: complete the current fixed dwell, then skip later temperatures after any sampled crossing. Saved legacy ramps remain unchanged; evidence and pruning persist across restart. See `oxdna_melt_stop.py`.
 
 - Thermal ramps default to 100,000,000 fixed steps per temperature (2026-11-18); explicit values and saved jobs retain their recorded steps.
@@ -39,8 +58,8 @@ CG-to-atomistic handoff. Historical phases and experiments are in
   `oxdna_energy_series.py` owns read-only assembly; shared graph/card own rendering.
 
 - Fixed-duration ramps (2026-11-17, ISSUE-211) supersede the earlier adaptive
-  behavior. Subsequent literature preset (ISSUE-212) sets new ramps to 2B steps,
-  sequence-dependent DNA2, Brownian/100 steps, dt .005, diffusion 2.5; salt inherits the continued stage (ISSUE-217).
+  behavior. Subsequent literature preset (ISSUE-237) sets new ramps to 2B steps,
+  sequence-dependent DNA2, Brownian/100 steps, dt .005, diffusion 2.5; salt inherits the continued stage (ISSUE-242).
   uniform physics edits are available in the wizard. Legacy specs stay unchanged.
   Wizard exposes
   only start/end/increment and Steps per temperature. No gating, automatic

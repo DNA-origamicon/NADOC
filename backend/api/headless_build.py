@@ -125,7 +125,6 @@ from backend.api.routes_feature_log import (
 )
 from backend.api.routes_flexible_segments import (
     FlexibleRelaxBody,
-    FlexibleRelaxTransform,
     flexible_relax as _route_flexible_relax,
 )
 from backend.api.routes_loop_skip import (
@@ -148,7 +147,6 @@ from backend.core.circle_primitive import (
     circle_footprint,
 )
 from backend.core.constants import BDNA_RISE_PER_BP
-from backend.core.flexible_relax import compute_relax_transforms
 from backend.core.models import Design, Direction, LatticeType, StrandType
 
 _scratch_counter = itertools.count()
@@ -1186,37 +1184,13 @@ def relax_flexible_segments(
     conn_id: str | None = None,
     label: str | None = None,
 ) -> Design:
-    """Relax overstretched flexible ssDNA segments headlessly
-    (computes the pose, then commits via POST /design/flexible-relax).
+    """Solve the flexible network with its largest rigid cluster fixed.
 
-    The hinge ssDNA-scaffold counterpart to :func:`connect_overhangs`: where a
-    linker confines a hinge by its contour length, the *flexible scaffold tether*
-    sets the hinge's geometric rest pose.  This runs the **same** position-based
-    constraint solver the in-app "Relax flexible segments" command runs (ported
-    to :mod:`backend.core.flexible_relax`), pulling the smaller cluster of each
-    flexible-connected pair in until no tether exceeds its contour length
-    ("free until taut"), then commits all moved clusters as ONE feature-log step.
-
-    ``scope="all"`` sweeps every flexible pair; ``scope="one"`` relaxes just the
-    pair of ``conn_id``.  **Display/pose-layer only** — moves
-    ``cluster_transforms``, never the strand graph.  Returns the relaxed design
-    (unchanged when nothing was overstretched — the route is not called, so no
-    empty feature-log entry is written).
-
-    Pin with :func:`tests.automation_harness.assert_flexible_segments_relaxed`.
+    Scope one includes the clicked connection's entire connected component.
+    App and headless authoring share one solver and one recorded transaction.
+    Failure to satisfy every tether leaves the document unchanged.
     """
-    design = design_state.get_or_404()
-    transforms, _residual = compute_relax_transforms(
-        design, scope=scope, conn_id=conn_id
-    )
-    if not transforms:
-        return design
-    _route_flexible_relax(
-        FlexibleRelaxBody(
-            transforms=[FlexibleRelaxTransform(**t) for t in transforms],
-            label=label,
-        )
-    )
+    _route_flexible_relax(FlexibleRelaxBody(scope=scope, conn_id=conn_id, label=label))
     return design_state.get_or_404()
 
 

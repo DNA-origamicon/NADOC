@@ -1,5 +1,5 @@
 /**
- * Tests for scene/move_rotate_panel.js — the Move/Rotate right-sidebar panel shell
+ * Tests for scene/move_rotate_panel.js — the Move/Rotate viewport popup
  * (numeric transform inputs + pivot + current-selection box + commit controller).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -32,10 +32,24 @@ const DOM = {
   'mr-rz-dec':              'button',
   'mr-rz-inc':              'button',
   'mr-snap-45':             'input',
+  'mr-tether-collisions':   'input',
   'mr-frame-sel':           'select',
+  'mr-cancel-btn':          'button',
   'mr-reset-btn':           'button',
   'mr-apply-btn':           'button',
 }
+
+it('routes the collision checkbox to tethered motion without committing a pose', () => {
+  const els = mountPanelDom(), deps = makeDeps()
+  deps.clusterGizmo.setCollisionDetection = vi.fn()
+  initMoveRotatePanel(deps)
+  els['mr-tether-collisions'].checked = false
+  els['mr-tether-collisions'].dispatchEvent(new Event('change'))
+  expect(deps.clusterGizmo.setCollisionDetection).toHaveBeenLastCalledWith(false)
+  els['mr-tether-collisions'].checked = true
+  els['mr-tether-collisions'].dispatchEvent(new Event('change'))
+  expect(deps.clusterGizmo.setCollisionDetection).toHaveBeenLastCalledWith(true)
+})
 
 describe('session-mode UX', () => {
   it('disables exact fields while armed empty and explains the next action', () => {
@@ -188,6 +202,15 @@ describe('exclusive history panel ownership', () => {
     expect(ordinary).toHaveBeenCalledOnce()
   })
 
+  it('routes popup close through the history cancel owner', () => {
+    const f = opened(), ordinary = vi.fn()
+    f.els['mr-cancel-btn'].addEventListener('click', ordinary)
+    f.panel.panel.closest('.tool-popup').querySelector('[aria-label="Close Move / Rotate"]').click()
+    expect(f.callbacks.onCancel).toHaveBeenCalledOnce()
+    expect(ordinary).not.toHaveBeenCalled()
+    f.lease.release()
+  })
+
   it('refuses concurrent ownership and makes released callbacks inert', () => {
     const f = opened()
     expect(() => f.panel.bindHistorySession({})).toThrow(/already/i)
@@ -257,8 +280,11 @@ describe('initMoveRotatePanel — view setters', () => {
     const controller = { isAttached: () => true, setTransform() {}, commit: vi.fn() }
     api.setProteinController(controller)
     expect(api.getProteinController()).toBe(controller)
+    const confirm = vi.fn()
+    els['mr-apply-btn'].addEventListener('click', confirm)
     els['mr-apply-btn'].click()
-    expect(controller.commit).toHaveBeenCalledOnce()
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(controller.commit).not.toHaveBeenCalled()
   })
 
   it('no-ops gracefully when DOM is absent', () => {
@@ -507,6 +533,19 @@ describe('initMoveRotatePanel — dropdown handlers', () => {
     const ssdna = opts.find(o => o.value === 'ssdna')
     expect(ssdna, 'tethers option present').toBeTruthy()
     expect(ssdna.textContent).toBe('Constrained (tethers)')
+  })
+
+  it('refreshes tether options when waiting-mode gate discovery finishes', async () => {
+    const els=mountPanelDom(), deps=makeDeps()
+    let finish
+    deps.flexRelax.refreshFlexGates.mockImplementation(()=>new Promise(r=>finish=r))
+    deps.store.setState({activeClusterId:'c1',translateRotateActive:true,currentDesign:{id:'d',cluster_joints:[]}})
+    const panel=initMoveRotatePanel(deps)
+    panel.setPivotOptions([], 'c1')
+    expect([...els['mr-pivot-sel'].options].some(o=>o.value==='ssdna')).toBe(false)
+    deps.flexRelax.hasTetherOption.mockReturnValue(true)
+    finish(); await Promise.resolve()
+    expect([...els['mr-pivot-sel'].options].some(o=>o.value==='ssdna')).toBe(true)
   })
 
   it('setPivotOptions lists each overhang root for a duplex cluster (driver + driven)', () => {
@@ -762,5 +801,32 @@ describe('moveRotateSelectionLabels', () => {
       currentDesign: { cluster_transforms: [{ id: 'c1', name: 'Arm' }] },
       selection: { items: [{ kind: 'cluster', id: 'c1' }] },
     })).toEqual(['Cluster · Arm'])
+  })
+})
+
+
+describe('viewport popup', () => {
+  it.each([false, true])('keeps controls outside sidebars and follows session visibility (assembly=%s)', async assemblyActive => {
+    const els = mountPanelDom()
+    const panel = els['move-rotate-panel']
+    for (const [id, node] of Object.entries(els)) if (id !== panel.id) panel.append(node)
+    panel.style.display = 'none'
+    const sidebar = document.createElement('aside')
+    sidebar.hidden = true
+    document.body.append(sidebar)
+    sidebar.append(panel)
+    initMoveRotatePanel(makeDeps({ assemblyActive }))
+    const popup = panel.closest('.tool-popup')
+    expect(popup.parentElement).toBe(document.body)
+    expect(popup.style.display).toBe('none')
+    panel.style.display = ''
+    await Promise.resolve()
+    expect(popup.style.display).toBe('flex')
+    const cancel = vi.fn(() => { panel.style.display = 'none' })
+    els['mr-cancel-btn'].addEventListener('click', cancel)
+    popup.querySelector('[aria-label="Close Move / Rotate"]').click()
+    await Promise.resolve()
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(popup.style.display).toBe('none')
   })
 })

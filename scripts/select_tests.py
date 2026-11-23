@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Change-based backend test selection (a safe, hand-rolled substitute for the
-broken pytest-testmon on pytest 9.x).
+"""Legacy broad regression selection. Current-task selection uses test_affected.py.
 
 All decisions below select SOFTWARE tests only. tests/conftest.py centrally
 deselects scientific campaigns unless explicitly requested with --scientific;
@@ -12,8 +11,9 @@ NOT a restriction on focused current-development tests or benchmarks: use
 ``just test-focused tests/test_topic.py[::test_name]`` even for slow/GPU checks.
 Do not ask for a session merely because relevant validation takes minutes.
 
-The fast suite (``-m "not slow"``, ~21s) is CHEAP and covers every area's unit
-tests, so it ALWAYS runs. This script only decides which HEAVY (``slow``) groups
+This legacy broad selector always runs every fast test. It is retained for
+deliberate regression sweeps, not the per-change development loop.
+This script only decides which HEAVY (``slow``) groups
 are OWED, based on what source files changed:
 
   * Change a foundational module (geometry, models, lattice, deformation,
@@ -21,7 +21,7 @@ are OWED, based on what source files changed:
   * Change a leaf subsystem (oxDNA, CanDo/FEM, NAMD, mrdna, atomistic, MD,
     headless build) -> run the fast suite + only that subsystem's slow group.
   * Change something unrecognized under backend/ -> run EVERYTHING (safe default).
-  * Only frontend / docs changed -> fast suite only (run `just test-frontend`
+  * Only frontend / docs changed -> fast suite only (run `just test-frontend-all`
     separately for JS).
 
 Safety property: because the fast suite always runs, a wrong area mapping can at
@@ -34,7 +34,7 @@ Usage:
     python scripts/select_tests.py --base origin/master   # everything since a ref
     python scripts/select_tests.py --dry-run  # print the decision + pytest cmd, don't run
 
-``--since-last-full`` (the default for ``just test-smart``) diffs against the git
+``--since-last-full`` (the default for ``just test-regression``) diffs against the git
 SHA recorded the last time the FULL suite passed on THIS machine (stored in the
 gitignored ``.nadoc-test-watermark`` at the repo root). This makes affected slow
 groups accumulate across sessions/commits: committing your work no longer hides
@@ -119,6 +119,9 @@ FULL_TRIGGER_SUBSTRINGS = (
 # Order matters (first hit classifies the file). Everything here has a narrow,
 # well-understood blast radius contained within the listed area(s).
 LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("flexible_network", ("headless",)),
+    ("flexible_contact", ("headless",)),
+    ("routes_flexible_segments", ("headless",)),
     ("chudoba", ("oxdna",)),
     ("assembly_flatten", ("cando",)),
     ("oxdna", ("oxdna",)),
@@ -312,7 +315,7 @@ def classify(files: list[str]) -> tuple[str, set[str], list[str]]:
     if not backend_or_tests:
         if files:
             reasons.append("only frontend/docs/other changed -> fast suite only "
-                           "(run `just test-frontend` for JS)")
+                           "(run `just test-frontend-all` for JS)")
             return "FAST", set(), reasons
         reasons.append("no changes detected")
         return "NONE", set(), reasons
@@ -367,7 +370,7 @@ def main() -> int:
     ap.add_argument("--since-last-full", action="store_true",
                     help="diff against the last full-suite pass on this machine "
                          f"(SHA in {WATERMARK_FILE}); no watermark yet -> FULL. "
-                         "This is the default for `just test-smart`.")
+                         "This is the default for `just test-regression`.")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the decision + pytest command, don't run it.")
     ap.add_argument("pytest_args", nargs="*",

@@ -55,7 +55,7 @@ describe('right sidebar tabs', () => {
     expect(document.querySelector('#right-tab-content-properties #extrude-panel')).toBeNull()
     expect(document.querySelector('#right-tab-content-properties #deform-panel')).toBeNull()
     expect(document.querySelector('#right-tab-content-clustering #cluster-folding-panel')).toBeTruthy()
-    expect(document.querySelector('#right-tab-content-properties #move-rotate-panel')).toBeTruthy()
+    expect(document.querySelector('#right-tab-content-properties #move-rotate-panel')).toBeNull()
     expect(document.querySelector('#right-tab-content-clustering #joints-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-overhangs #strand-anim-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-visualization #coloring-options-section')).toBeTruthy()

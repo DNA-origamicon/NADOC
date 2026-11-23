@@ -49,7 +49,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import Field
+from backend.core.solver_cluster_config import SolverExecutionRequest, validate_settings
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
@@ -105,7 +106,7 @@ def _is_out_of_date(job: SnupiJob, current_fp: "str | None") -> bool:
 # ── Request models ────────────────────────────────────────────────────────────
 
 
-class CreateSnupiJobRequest(BaseModel):
+class CreateSnupiJobRequest(SolverExecutionRequest):
     nonlinear: bool = Field(
         True,
         description="Fine (geometrically-nonlinear corotational) vs Coarse "
@@ -192,12 +193,34 @@ class CreateSnupiJobRequest(BaseModel):
 # ── Create / list / status ────────────────────────────────────────────────────
 
 
+@router.post("/snupi/resource-estimate")
+def resource_estimate(body: CreateSnupiJobRequest) -> dict:
+    from backend.core.solver_resource_options import resource_preview
+    return resource_preview("snupi", design_state.get_or_404(), body, _workspace())
+
+
 @router.post("/snupi/jobs")
 def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
     """Prepare + run a new SNUPI FEM shape-prediction job from the active design."""
     # FastAPI runs this synchronous route in its worker pool, including topology
     # counting, fingerprinting, provenance and preparation for large assemblies.
-    design = design_state.get_or_404().without_reference_geometry()
+    if body.execution_target == "alpine":
+        try:
+            validate_settings("snupi", body.cluster_settings, _workspace())
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    if body.execution_target == "runpod":
+        from backend.core.solver_runpod import validate_request
+        try:
+            validate_request("snupi", body.runpod_settings)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    design = design_state.get_or_404()
+    from backend.core.solver_resources import check_resources
+    check_resources("snupi", design, body, _workspace())
+    design = design.without_reference_geometry()
     from backend.core.streptavidin import require_coating_simulation_support
 
     try:
@@ -248,29 +271,6 @@ def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
                 "single-radius and cannot carry the tails' smaller bead).",
             )
 
-    # Preflight the RPY friction BEFORE spawning the detached worker. The friction is dense and O(N²)
-    # in the FE node count (1 node/bp), so a full-size origami wants tens of GB; letting the worker try
-    # drives the machine into swap and the OOM killer takes whatever is largest (in practice the user's
-    # editor). Refuse here with the node count + the coarse-graining way out.
-    if body.dynamics and body.hydrodynamics:
-        from backend.physics.fem_solver import build_fem_mesh
-        from backend.physics.snupi_hydro_coarse import blob_count
-        from backend.physics.snupi_hydrodynamics import (
-            HydroMemoryError,
-            check_friction_memory,
-        )
-
-        mesh = build_fem_mesh(design, material=material)
-        # Count the blobs for real. The coarse friction's only dense object is 6B×6B, and B is NOT
-        # ⌈N/k⌉ — blobs never straddle a helix, so a design's helix boundaries fragment it upwards.
-        # The ⌈N/k⌉ fallback therefore UNDERSTATES the cost, which is the wrong way for a guard whose
-        # job is to stop the OOM killer taking the user's editor.
-        nb = blob_count(mesh, body.hydro_coarse_bp) if body.hydro_coarse_bp else None
-        try:
-            check_friction_memory(len(mesh.nodes), body.hydro_coarse_bp, nb)
-        except HydroMemoryError as exc:
-            raise HTTPException(413, str(exc)) from exc
-
     job = new_snupi_job(
         design_name=name,
         nonlinear=body.nonlinear,
@@ -295,6 +295,10 @@ def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
     job.project_id = provenance.project_id
     job.design_revision_id = provenance.revision_id
     job.status = SnupiStatus.preparing
+    job.execution_target = body.execution_target
+    job.remote = {"settings": body.cluster_settings.model_dump()} if body.cluster_settings and body.execution_target == "alpine" else None
+    if body.execution_target == "runpod":
+        job.remote = {"settings": body.runpod_settings.model_dump()}
     job.save(_workspace())
     logger.info(
         "create_snupi_job: job_id=%s design=%s nonlinear=%s material=%s",
@@ -360,7 +364,7 @@ def _list_snupi_jobs() -> tuple[list[dict], list]:
         # Jobs card advances during the solve. Without this the card falls back to counting completed
         # STAGES — and a SNUPI job has exactly one stage, so it would sit at 0 % for the whole run and
         # jump to 100 % at the end (which is why this panel used to carry a second bar of its own).
-        if d.get("status") == "running":
+        if d.get("status") in {"preparing", "queued", "running", "completed", "failed", "stopped"}:
             try:
                 from backend.core.snupi_runner import job_progress
 
@@ -369,7 +373,8 @@ def _list_snupi_jobs() -> tuple[list[dict], list]:
                 d["eta_seconds"] = p.get("eta_seconds")
                 d["phase"] = p.get("phase")
                 # Fine detail (step / n_steps / rate / retry) so a long solve visibly ticks.
-                for k in ("step", "n_steps", "steps_per_s", "attempt"):
+                for k in ("step", "n_steps", "steps_per_s", "attempt", "current_step", "total_steps",
+                          "progress_indeterminate", "progress_last_known", "progress_retrieved_at", "progress_reported_at"):
                     if p.get(k) is not None:
                         d[k] = p[k]
             except Exception:  # noqa: BLE001 — progress is advisory, never sink the list
@@ -396,11 +401,12 @@ async def get_snupi_progress(job_id: str) -> dict:
 async def get_snupi_error_log(job_id: str) -> dict:
     """Failure detail for the UI's 'Error log' popup."""
     job = _load_job(job_id)
+    from backend.core.solver_cluster import error_log
     return {
         "job_id": job_id,
         "status": job.status.value,
         "error": job.error or "",
-        "log": job.error or "(no error recorded)",
+        "log": error_log(job, _workspace()),
     }
 
 
@@ -411,23 +417,32 @@ async def get_snupi_error_log(job_id: str) -> dict:
 @simulation_runtime.start_request(lambda: _workspace(), "snupi_jobs")
 async def start_snupi_job(job_id: str) -> dict:
     job = _load_job(job_id)
+    if job.execution_target in {"alpine", "runpod"}:
+        try:
+            start_job(job, _workspace())
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return job.to_dict()
     if is_running(job_id, _workspace()):
         return {"ok": True, "message": "Job already running"}
     if job.status in (SnupiStatus.running, SnupiStatus.completed):
         raise HTTPException(400, f"Job is {job.status.value} — cannot start")
-    if job.stages:
-        job.stages[0].status = "pending"
-        job.stages[0].started_at = None
-    job.status = SnupiStatus.running
-    job.error = None
-    job.save(_workspace())
     start_job(job, _workspace())
     return {"ok": True, "job_id": job_id, "status": "running"}
 
 
 @router.post("/snupi/jobs/{job_id}/stop")
 async def stop_snupi_job(job_id: str) -> dict:
-    _load_job(job_id)  # validate existence; native runner owns every status write
+    job = _load_job(job_id)
+    if job.execution_target in {"alpine", "runpod"}:
+        if job.execution_target == "runpod":
+            from backend.core.solver_runpod import cancel
+        else:
+            from backend.core.solver_cluster import cancel
+        try:
+            return await cancel(job, _workspace())
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
     stopped = stop_job(job_id, _workspace())
     if not stopped:
         return {"ok": True, "message": "Job was not actively running"}
@@ -438,6 +453,9 @@ async def stop_snupi_job(job_id: str) -> dict:
 async def delete_snupi_job(job_id: str) -> dict:
     ws = _workspace()
     job = _load_job(job_id)
+    from backend.core.solver_cluster import remote_pending
+    if remote_pending(job):
+        raise HTTPException(409, "Cancel the remote job and collect its final status before deleting it")
     if is_running(job_id, ws) or job.status == SnupiStatus.running:
         raise HTTPException(400, "Stop the SNUPI job before deleting it")
     from backend.core.job_archive import purge_index_entry

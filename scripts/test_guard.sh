@@ -135,7 +135,7 @@ Repeated/overlapping full-suite runs saturate the CPU/GPU on this machine.
 Before re-running, consider a tighter loop that touches far fewer cores:
   just test-affected <file>   # only the area you edited
   just test-file <file>       # a single file
-  just test-frontend          # JS only, no backend/GPU load
+  just test-frontend FILE     # selected JS tests, no backend/GPU load
 If this run really is necessary, opt in explicitly and re-invoke:
   NADOC_TEST_CONFIRM=1 just $LABEL
 $hr
@@ -207,7 +207,7 @@ ELAPSED=$(( $(date +%s) - START ))
 #     between $SOFT_BUDGET and $BUDGET prints a note and requires nothing.
 #
 # (Inside a test-dedicated session even the slow=0 recipes may legitimately drain heavy
-# groups — `just test-smart` does — so neither budget is enforced inside one.)
+# groups — `just test-regression` does — so neither budget is enforced inside one.)
 if session_open; then
   exit $RC
 fi

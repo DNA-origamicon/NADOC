@@ -5,7 +5,7 @@ import { initEngineActivityHeaders } from './engine_activity_headers.js'
 /** Build the engine-selector TABS the way engine_selector.js does (the busy spinner
  *  now hangs on the tab, not a section header). LAMMPS has no tab. */
 function buildTabs(doc) {
-  for (const key of ['oxdna', 'mrdna', 'cando', 'namd']) {
+  for (const key of ['oxdna', 'mrdna', 'cando', 'snupi', 'namd']) {
     const btn = doc.createElement('button')
     btn.className = 'engine-selector-btn'
     btn.dataset.engine = key
@@ -25,7 +25,7 @@ describe('initEngineActivityHeaders', () => {
   it('inserts one hidden spinner into each engine tab (no LAMMPS tab)', () => {
     buildTabs(document)
     initEngineActivityHeaders({ fetchActiveJobs: async () => [], doc: document, intervalMs: 999999 })
-    for (const e of ['oxdna', 'mrdna', 'cando', 'md']) {
+    for (const e of ['oxdna', 'mrdna', 'cando', 'snupi', 'md']) {
       const sp = spinner(document, e)
       expect(sp).toBeTruthy()
       expect(sp.classList.contains('nadoc-spinner')).toBe(true)
@@ -81,4 +81,16 @@ describe('initEngineActivityHeaders', () => {
     expect(spinner(document, 'md')).toBeNull()
     api.stop()
   })
+})
+
+it.each(['snupi', 'cando', 'mrdna'])('%s stays busy until processing ends', async engine => {
+  document.body.replaceChildren(); buildTabs(document)
+  let jobs = []
+  const activity = initEngineActivityHeaders({ fetchActiveJobs: async () => jobs })
+  for (const status of ['preparing', 'running', 'completed', 'failed', 'cancelled']) {
+    jobs = [{ engine, status, execution_target: 'runpod' }]
+    await activity.refresh()
+    expect(spinner(document, engine).hidden).toBe(!['preparing', 'running'].includes(status))
+  }
+  activity.stop()
 })

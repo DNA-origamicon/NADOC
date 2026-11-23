@@ -21,3 +21,18 @@ describe('fitViewPose', () => {
     expect(fitViewPose(box, new THREE.Vector3(), new THREE.Vector3(), 55)).toBeNull()
   })
 })
+
+it.each([0.35, 1, 2.4])('fits all corners at aspect %s from an oblique view', aspect => {
+  const box = new THREE.Box3(new THREE.Vector3(-80, -60, -40), new THREE.Vector3(80, 60, 40))
+  const camera = new THREE.PerspectiveCamera(55, aspect, .1, 10000)
+  camera.zoom = 1.5
+  camera.updateProjectionMatrix()
+  const pose = fitViewPose(box, new THREE.Vector3(1, 1, 1), new THREE.Vector3(), camera.getEffectiveFOV(), aspect)
+  camera.position.copy(pose.position); camera.lookAt(pose.target); camera.updateMatrixWorld()
+  for (const x of [-80, 80]) for (const y of [-60, 60]) for (const z of [-40, 40]) {
+    const p = new THREE.Vector3(x, y, z).project(camera)
+    expect(Math.abs(p.x)).toBeLessThan(1)
+    expect(Math.abs(p.y)).toBeLessThan(1)
+    expect(Math.abs(p.z)).toBeLessThan(1)
+  }
+})

@@ -1822,6 +1822,7 @@ async def run_job(
     # pristine copy so escalation is derived from the original, never compounded.
     relax_idx = next((i for i, s in enumerate(specs) if s.kind == "md_relax"), None)
     base_relax_spec = replace(specs[relax_idx]) if relax_idx is not None else None
+    base_relax_specs = {i: replace(s) for i, s in enumerate(specs) if s.kind == "md_relax"}
 
     idx = start_idx
     while idx < len(specs):
@@ -1829,6 +1830,12 @@ async def run_job(
             idx += 1
             continue
         spec = specs[idx]
+        # A GPU-only model may have a startup MD stage before the main relax.
+        # Retry the latest relaxation, preserving a completed startup checkpoint.
+        preceding_relax = [i for i in base_relax_specs if i <= idx]
+        if preceding_relax:
+            relax_idx = max(preceding_relax)
+            base_relax_spec = base_relax_specs[relax_idx]
 
         stage_dir = job.stage_dir(workspace_dir, spec.name)
         stage_dir.mkdir(parents=True, exist_ok=True)
@@ -2209,7 +2216,8 @@ async def run_job(
         # cliff: the structure isn't ready for the standard-potential equil.  Spend a
         # retry on an escalated relax; once the budget is exhausted, stop with a clear
         # failure rather than equilibrating a strained structure.
-        if spec.kind == "md_relax" and not res.fene_safe:
+        next_is_relax = idx + 1 < len(specs) and specs[idx + 1].kind == "md_relax"
+        if spec.kind == "md_relax" and not next_is_relax and not res.fene_safe:
             if job.relax_retries < job.max_relax_retries:
                 _escalate_relax_and_rewind(
                     job, workspace_dir, specs, relax_idx, base_relax_spec

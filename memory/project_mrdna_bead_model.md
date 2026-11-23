@@ -6,6 +6,52 @@ originSessionId: 96f9c7f1-a2dc-42fd-ade8-1e21c39596f9
 ---
 # mrdna Fine-Stage Bead Model
 
+## GPU exploration (2026-11-17)
+
+No production GPU backend enabled by this exploration. mrDNA dynamics already
+runs in CUDA ARBD; NADOC SNUPI solves/integration remain NumPy/SciPy CPU paths.
+Float64 RMSF prototypes, 120 synthetic frames × 211,680 nodes: warm CPU/resident
+GPU/batched GPU = 2.44/0.50/0.72 s (linear), 2.85/0.92/2.25 s (Kabsch), including
+transfers and alignment. GPU startup adds ~3 s. All comparisons satisfy 1e-12
+absolute/relative tolerance; largest absolute difference 1.2e-14. CPU BLAS used
+one thread; shared desktop GPU, not an exclusive-device benchmark.
+A 1,200-frame capacity run completed in 64 s with 228 MiB tensor allocations,
+286 MiB CUDA allocator reservation and 6.21 GiB host peak RSS. Input is still
+resident on host; no full-size CPU speed comparison or simulation is claimed.
+Actual BigO-part K×q: 100 calls CPU 0.139 s, warm GPU 0.011 s; cold GPU 2.48 s.
+This supports a persistent-worker, bounded-batch pilot, not automatic offload
+or a claim that dense hydrodynamics/NMA now fits VRAM.
+Evidence: `.development-artifacts/solver-vram-20261117/review.json`.
+
+
+## Ensemble analysis memory pass (2026-11-17)
+
+Shared `shape_metrics.rmsf_from_ensemble` fills one numeric stack directly and
+reuses it for variance, avoiding per-site NumPy objects and duplicate raw/aligned
+frame stacks. Identity intersection, alignment and mean/RMSF outputs are unchanged.
+A 30-frame/12,000-site numeric ensemble benchmark gave identical output hashes,
+399→325 MiB peak RSS and 1.306→0.975 s. This benefits mrDNA's analysis path, not
+native ARBD dynamics, and still retains the caller's decoded frame dictionaries.
+Evidence/status: `.development-artifacts/solver-memory-round2-20261117/`.
+
+
+## Bead-size clustering memory pilot (2026-11-17)
+
+The parameterized NADOC adapter now scopes an exact scalar single-linkage distance
+cut around native `generate_bead_model`: sort bead sizes and cut adjacent gaps,
+instead of allocating all pair distances. Cluster numbering can differ, but group
+membership and upstream per-group means are preserved. Other criteria, dimensions,
+threads and unsupported inputs retain SciPy's original path; the temporary hook is
+restored on exit and nested model scopes are serialized. The external mrDNA checkout
+is unchanged. Source-nucleotide metadata selection is also vectorized.
+
+On the existing BigO part, native fine preparation retained identical bead positions,
+type properties and nucleotide-binding manifests: peak RSS 1,138 → 428 MiB, elapsed
+25.00 → 23.12 s. Coarse preparation signatures also matched (both about 17 s).
+This removes the quadratic clustering allocation underlying the earlier 717 GB
+full-assembly estimate; it does NOT establish full BigO fine-stage capacity or
+resolve periodic-end semantics. Evidence: `.development-artifacts/solver-memory-20261117/`.
+
 ## NEGATIVE RESULT — mrDNA coarse preconditioning does NOT fix the atomistic start (2026-05-21)
 
 Read this before attempting "use mrDNA to clean up the NAMD starting geometry." It was tried on

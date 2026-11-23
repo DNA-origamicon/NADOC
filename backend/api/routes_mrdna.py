@@ -38,7 +38,8 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field
+from pydantic import Field
+from backend.core.solver_cluster_config import SolverExecutionRequest, validate_settings
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
@@ -115,7 +116,7 @@ def _confidence_summary(manifest) -> dict:
 # ── Request models ────────────────────────────────────────────────────────────
 
 
-class CreateMrdnaJobRequest(BaseModel):
+class CreateMrdnaJobRequest(SolverExecutionRequest):
     coarse_steps: int = Field(
         100_000,
         ge=1_000,
@@ -165,11 +166,17 @@ class CreateMrdnaJobRequest(BaseModel):
 # ── Create / list / status ────────────────────────────────────────────────────
 
 
+@router.post("/mrdna/resource-estimate")
+def resource_estimate(body: CreateMrdnaJobRequest) -> dict:
+    from backend.core.solver_resource_options import resource_preview
+    return resource_preview("mrdna", design_state.get_or_404(), body, _workspace())
+
+
 @router.post("/mrdna/jobs")
 async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
     """Prepare a new coarse mrDNA relaxation job from the active design."""
     avail = mrdna_available()
-    if not avail["available"]:
+    if body.execution_target == "local" and not avail["available"]:
         missing = "mrDNA" if not avail["mrdna"] else "ARBD"
         raise HTTPException(
             400,
@@ -177,7 +184,23 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
             "(one-click) and ARBD (needs a CUDA GPU) before running a mrDNA relaxation.",
         )
 
-    design = design_state.get_or_404().without_reference_geometry()
+    if body.execution_target == "alpine":
+        try:
+            validate_settings("mrdna", body.cluster_settings, _workspace())
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    if body.execution_target == "runpod":
+        from backend.core.solver_runpod import validate_request
+        try:
+            validate_request("mrdna", body.runpod_settings)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    design = design_state.get_or_404()
+    from backend.core.solver_resources import check_resources
+    check_resources("mrdna", design, body, _workspace())
+    design = design.without_reference_geometry()
     from backend.core.streptavidin import require_coating_simulation_support
     try:
         require_coating_simulation_support(design, 'mrDNA')
@@ -234,7 +257,7 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
         fine_steps=body.fine_steps,
         output_period=body.output_period,
         n_nucleotides=len(_strand_nucleotide_order(design)),
-        device=body.device,
+        device=body.device if body.execution_target == "local" else "0",
         anchors=body.anchors,
         e_field=body.field,
         surface=body.surface,
@@ -246,6 +269,10 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
     job.project_id = provenance.project_id
     job.design_revision_id = provenance.revision_id
     job.status = MrdnaStatus.preparing
+    job.execution_target = body.execution_target
+    job.remote = {"settings": body.cluster_settings.model_dump()} if body.cluster_settings and body.execution_target == "alpine" else None
+    if body.execution_target == "runpod":
+        job.remote = {"settings": body.runpod_settings.model_dump()}
     job.save(_workspace())
     logger.info(
         "create_mrdna_job: job_id=%s design=%s steps=%d",
@@ -319,7 +346,7 @@ def _list_mrdna_jobs() -> tuple[list[dict], list]:
             d["eta_seconds"] = p.get("eta_seconds")
             d["stage_name"] = p.get("stage_name")
             d["stage_fraction"] = p.get("stage_fraction")
-            d["phase"] = p.get("stage_name")
+            d["phase"] = p.get("phase") or p.get("stage_name")
         out.append(d)
     return out, to_warm
 
@@ -342,11 +369,12 @@ async def get_mrdna_progress(job_id: str) -> dict:
 async def get_mrdna_error_log(job_id: str) -> dict:
     """Failure detail for the UI's 'Error log' popup."""
     job = _load_job(job_id)
+    from backend.core.solver_cluster import error_log
     return {
         "job_id": job_id,
         "status": job.status.value,
         "error": job.error or "",
-        "log": job.error or "(no error recorded)",
+        "log": error_log(job, _workspace()),
     }
 
 
@@ -357,6 +385,12 @@ async def get_mrdna_error_log(job_id: str) -> dict:
 @simulation_runtime.start_request(lambda: _workspace(), "mrdna_jobs")
 async def start_mrdna_job(job_id: str) -> dict:
     job = _load_job(job_id)
+    if job.execution_target in {"alpine", "runpod"}:
+        try:
+            start_job(job, _workspace())
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return job.to_dict()
     if is_running(job_id):
         return {"ok": True, "message": "Job already running"}
     if job.status in (MrdnaStatus.running, MrdnaStatus.completed):
@@ -364,19 +398,22 @@ async def start_mrdna_job(job_id: str) -> dict:
     if not mrdna_available()["available"]:
         raise HTTPException(400, "mrDNA or ARBD is not installed.")
     # Reset the single coarse stage and relaunch from the persisted snapshot.
-    if job.stages:
-        job.stages[0].status = "pending"
-        job.stages[0].started_at = None
-    job.status = MrdnaStatus.running
-    job.error = None
-    job.save(_workspace())
     start_job(job, _workspace())
     return {"ok": True, "job_id": job_id, "status": "running"}
 
 
 @router.post("/mrdna/jobs/{job_id}/stop")
 async def stop_mrdna_job(job_id: str) -> dict:
-    _load_job(job_id)  # validate existence; native runner owns every status write
+    job = _load_job(job_id)
+    if job.execution_target in {"alpine", "runpod"}:
+        if job.execution_target == "runpod":
+            from backend.core.solver_runpod import cancel
+        else:
+            from backend.core.solver_cluster import cancel
+        try:
+            return await cancel(job, _workspace())
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
     stopped = stop_job(job_id, _workspace())
     if not stopped:
         return {"ok": True, "message": "Job was not actively running"}
@@ -387,6 +424,9 @@ async def stop_mrdna_job(job_id: str) -> dict:
 async def delete_mrdna_job(job_id: str) -> dict:
     ws = _workspace()
     job = _load_job(job_id)
+    from backend.core.solver_cluster import remote_pending
+    if remote_pending(job):
+        raise HTTPException(409, "Cancel the remote job and collect its final status before deleting it")
     if is_running(job_id) or job.status == MrdnaStatus.running:
         raise HTTPException(400, "Stop the mrDNA job before deleting it")
     from backend.core.job_archive import purge_index_entry

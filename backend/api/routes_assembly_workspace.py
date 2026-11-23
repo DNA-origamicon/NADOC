@@ -25,6 +25,7 @@ Routes
   GET    /library/content          — raw JSON content of a workspace file
   POST   /library/mkdir            — create a workspace folder
   PATCH  /library/rename           — rename a file/folder (+ patch .nass refs)
+  GET    /library/move-destinations — validate current workspace destinations
   POST   /library/move             — move a file/folder (+ patch .nass refs)
   DELETE /library/file             — delete a workspace file/folder
   POST   /design/save-workspace    — write the active design to a workspace file
@@ -49,7 +50,7 @@ from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -679,6 +680,17 @@ def library_rename(body: RenameRequest) -> dict:
     _sign_managed_relocation(dest, old_rel, new_rel, is_dir)
     remap_design_source_paths(_asm._WORKSPACE_DIR, old_rel, new_rel, old_is_dir=is_dir)
     return {"old_path": old_rel, "new_path": new_rel, "patched_assemblies": patched}
+
+
+@router.get("/library/move-destinations", status_code=200)
+def library_move_destinations(path: list[str] = Query(...)) -> list[str]:
+    """Return current, valid destinations for every selected workspace item."""
+    from backend.core.workspace_move_destinations import list_move_destinations
+
+    try:
+        return list_move_destinations(_asm._WORKSPACE_DIR, path)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
 
 
 @router.post("/library/move", status_code=200)

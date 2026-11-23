@@ -1,3 +1,4 @@
+import { snupiDynamicsProgress } from './snupi_progress.js'
 import { thermalRunNumbers } from './oxdna_thermal_job.js'
 import { whenOperationIdle } from '../perf/operation_timing.js'
 import { beginPanelLoading } from './panel_loading.js'
@@ -42,6 +43,7 @@ import { jobDisplayName as snupiDisplayName } from './snupi_jobs_panel.js'
 import { jobDisplayName as bladeDisplayName } from './blade_jobs_panel.js'
 import { mdJobRowCtx } from './md_jobs_panel.js'
 import { mdMinimizationRow } from './md_stage_timeline.js'
+import { renderSnupiDynamicsTimeline } from './snupi_stage_timeline.js'
 import { buildCreatePayload } from './lammps_jobs_logic.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
@@ -145,6 +147,8 @@ export function namdAwaitingSubmission(node) {
  *  while running (the bar COLOR conveys state). */
 export function masterProgressPct(node) {
   if (!node) return 0
+  const dynamics = snupiDynamicsProgress(node)
+  if (dynamics) return _pct1(dynamics.fraction)
   // A prepared plan can carry an old/default progress_fraction (4.5% was observed on a
   // fresh VoltronCoreArm package). Until submission there is no executed work: showing
   // that fraction looks like NAMD is already running and hides the required Submit click.
@@ -302,6 +306,8 @@ function _estPrefix(node) {
 /** Engine-symmetric numeric progress appended beneath the unified Jobs bar. */
 export function masterStepText(node) {
   if (!node) return ''
+  const dynamics = snupiDynamicsProgress(node)
+  if (dynamics) return dynamics.text + _etaSuffix(node)
   if (namdAwaitingSubmission(node)) return ''
   const pct = masterProgressPct(node)
   if (node.prep_progress) {
@@ -911,11 +917,11 @@ export function initSimulateJobs({
     // ONE progress bar (below the list): width from the node, colour by status, and the
     // detailed stage/segment text as a hover tooltip.
     if (progressBar) {
-      const opaquePrep = !transfer && node?.status === 'preparing'
-        && node?.prep_progress?.measured === false
+      const opaquePrep = !transfer && ((node?.status === 'preparing'
+        && node?.prep_progress?.measured === false) || snupiDynamicsProgress(node)?.indeterminate)
       progressBar.style.width = transfer
         ? `${transfer.phase === 'downloading' && !transfer.total ? 100 : ['done', 'processing'].includes(transfer.phase) ? 100 : transfer.pct || 0}%`
-        : `${progressNode ? masterProgressPct(progressNode) : 0}%`
+        : opaquePrep ? '100%' : `${progressNode ? masterProgressPct(progressNode) : 0}%`
       progressBar.style.background = opaquePrep
         ? 'repeating-linear-gradient(135deg,#4a9eff 0,#4a9eff 8px,#245f9c 8px,#245f9c 16px)'
         : transfer?.phase === 'done' ? _C.ok
@@ -1020,6 +1026,7 @@ export function initSimulateJobs({
   // Show the selected engine's stage timeline (relocated to the bottom of the jobs card);
   // hide the others. LAMMPS has no stage timeline.
   function _renderTimeline(node) {
+    renderSnupiDynamicsTimeline(_timelineEls.snupi, node)
     const eng = node && node.engine !== 'lammps' ? node.engine : null
     let anyShown = false
     for (const [k, el] of Object.entries(_timelineEls)) {
