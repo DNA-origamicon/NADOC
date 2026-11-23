@@ -68,6 +68,48 @@ Reports and review evidence belong under `.development-artifacts/`; they are not
 new structure features and cannot substitute for missing construction history.
 Read-only diagnosis of a rejected legacy file does not authorize republishing it.
 
+## Intentional corner motifs and differently oriented clusters
+
+The 20% forced-ligation threshold triggers investigation, not automatic rejection.
+A corner motif joining differently oriented clusters is a valid structural reason
+for a high forced-ligation fraction: intended seam connections need not occupy
+ordinary within-lattice crossover sites. Agents must recognize and assess this
+case rather than assume widespread forced ligations imply an importer defect.
+
+**D003 user clarification (November 23, 2026):** the user identifies the forced
+ligations as part of corner-motif construction, mainly joining four clusters
+oriented in different directions. Preserve this design intent in the review.
+This is user-provided context, not yet an independently verified junction census
+or a completed geometry/provenance review of the saved file.
+
+For a corner-motif review:
+
+1. Inspect the exact saved design's cluster membership, posed orientations and
+   recorded transforms/connections. Use the actual 3D view to show the four-cluster
+   arrangement and close-ups of each distinct seam. Use visible helix labels.
+2. Inventory all realized forced-ligation junctions by cluster pair and intended
+   seam, recording endpoint labels/bp positions and their construction features.
+   Account separately for within-cluster or unexplained connections. A bounded
+   report's worst-edge examples are not a complete junction census; do not infer
+   that every ligation belongs to the motif from those examples alone.
+3. Retain the original whole-backbone and interhelix fractions. Add counts of
+   explained corner-seam connections and any unassigned connections, together
+   with evidence for the differing orientations and intended strand continuity.
+   Do not delete, relabel or exclude valid seam bonds to force a numerical pass.
+4. Evaluate the forced-ligation classification separately from endpoint separation,
+   missing geometry, polarity/routing and steric defects. The ordinary crossover
+   distance envelope is a screening reference, not a corner-specific physical
+   validation. Motif intent can explain the forced fraction; it does not by itself
+   resolve long bonds or incomplete geometry. Document those findings explicitly.
+5. When supported by inspection, use the existing exact-design review receipt's
+   `rationale` to explain why intentional corner seams justify the elevated forced
+   fraction. Include visual and bond-report evidence and any remaining limitations.
+   Keep unresolved claims explicit; do not issue acceptance from the motif name
+   or this user clarification alone. Independent process replay still applies.
+
+This documents a legitimate design-specific exception through the existing review
+path; it does not change the threshold or automatically exempt all corner designs.
+
 ## Commands and documented review
 
 Generate a report without changing or publishing the design:

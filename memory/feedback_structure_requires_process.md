@@ -32,6 +32,19 @@ requires a documented review tied to the exact design and report; it cannot
 waive provenance or authorize molecular changes. See
 [the executable workflow](../docs/design_bond_review.md).
 
+## Corner-motif interpretation — November 23, 2026
+
+User clarification: D003's forced ligations are part of corner-motif construction,
+mainly joining four differently oriented clusters. Intentional corner seams are
+a valid reason for exceeding 20% forced ligations; the threshold requires review,
+not automatic rejection. Agents must inspect cluster orientations and recorded
+seam connections, account for all realized forced junctions, and document the
+supported motif explanation in the exact-design review receipt. Retain the raw
+fractions and distinguish user-provided intent from independently checked facts.
+This explanation does not automatically resolve long bonds, incomplete geometry,
+source/provenance failures, or authorize molecular changes. Follow the
+[corner-motif review procedure](../docs/design_bond_review.md#intentional-corner-motifs-and-differently-oriented-clusters).
+
 ## Overhang and crossover semantics — November 22, 2026
 
 User correction following the rejected Gür 2016 reconstruction: **overhangs must

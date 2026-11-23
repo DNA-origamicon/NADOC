@@ -40,6 +40,13 @@ assemblies, generated parts, and files written directly by scripts.
   geometry review, imported snapshot, or isolated candidate. Earlier snapshot
   exceptions are superseded by the user's November 1, 2026 instruction.
 
+A forced-ligation fraction above 20% is a review trigger, not automatic rejection.
+Intentional corner seams joining differently oriented clusters can justify it.
+For D003, the user identifies a four-cluster corner motif; verify and document the
+actual junction-to-seam mapping and posed orientations. Follow the corner-motif
+procedure in `docs/design_bond_review.md`; motif intent alone does not clear long
+bonds, incomplete geometry, or provenance requirements.
+
 Reading an existing legacy file for diagnosis is permitted; it does not authorize
 creating another history-free structure. Molecular-geometry authorization remains
 a separate requirement and cannot be bypassed by adding a feature log.
