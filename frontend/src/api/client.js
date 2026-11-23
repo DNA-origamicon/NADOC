@@ -3551,6 +3551,7 @@ export const prepareMdDraft      = (id, body)    => _oxdnaJSON('POST', `/md/jobs
 export const estimateMdDisk      = (body)        => _oxdnaJSON('POST', '/md/jobs/estimate-disk', body)
 /** Pre-flight water-box size verdict for a Relax launch (Gate A). Returns
  *  {tier:'ok'|'a3', ...full-box sizing advice} or {skipped:true,tier:'ok'}. */
+export const planMdPreparation = (body, jobId = null) => _oxdnaJSON('POST', '/md/jobs/preparation-plan' + (jobId ? `?job_id=${encodeURIComponent(jobId)}` : ''), body)
 export const preflightMdVram     = (body)        => _oxdnaJSON('POST', '/md/jobs/preflight-vram', body)
 /** Forecast free-disk-after for a NAMD production stage (same body as appendMdProduction). */
 export const estimateMdProductionDisk = (id, body) => _oxdnaJSON('POST', `/md/jobs/${id}/estimate-production-disk`, body)

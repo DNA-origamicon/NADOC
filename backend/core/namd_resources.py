@@ -80,7 +80,7 @@ def prepare_with_memory_budget(prepare, design, job_dir, **kwargs):
         mgcl2_mM=12.5 if screening else kwargs.get('mg_conc_mM',12.5))
     if not profile or not math.isfinite(profile['atom_upper_bound']) or profile['atom_upper_bound'] <= 0:
         raise MemoryBudgetExceeded('Cannot estimate local preparation memory: a positive finite atom count is required')
-    # Remote jobs also build their packages locally. Above the measured compact
+    # Preparation runs on the selected host. Above the measured compact
     # domain, retain the larger legacy allowance rather than imposing an atom
     # cutoff unrelated to available host RAM. This is not engine certification.
     required=preparation_memory_mib(profile['atom_upper_bound'])

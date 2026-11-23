@@ -573,6 +573,10 @@ class RunpodClient:
             "terminateAfter": payload["terminateAfter"],
             "volumeMountPath": payload.get("volumeMountPath", "/workspace"),
         }
+        # Provider-enforced host resources are independent of GPU VRAM.
+        for key in ("minMemoryInGb", "minVcpuCount"):
+            if payload.get(key) is not None:
+                gql_input[key] = max(1, int(payload[key]))
         gql_input = {k: v for k, v in gql_input.items() if v not in (None, "", [])}
         query = """
         mutation createPod($input: PodFindAndDeployOnDemandInput!) {

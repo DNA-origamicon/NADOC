@@ -31,7 +31,7 @@ import {
   selectionUpdatesVisualization,
 } from './visualization_selection_policy.js'
 import { jobOutOfDate, ensureJobCurrent, restoreSubmittedDesign } from './job_staleness.js'
-import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram } from '../api/client.js'
+import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram, planMdPreparation } from '../api/client.js'
 import { getRunDir, recommendArchive, archiveRecommendation } from './run_location.js'
 import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
@@ -54,6 +54,7 @@ import { repKind } from './oxdna_display.js'
 import { initTrajPrebuildPlan } from './traj_prebuild_plan.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { openGpuDecisionModal, hasPendingGpuDecision } from './md_gate_b.js'
+import { admitMdPreparation } from './md_preparation_admission.js'
 import { gateAMessage, openGateAModal } from './md_gate_a.js'
 import { store } from '../state/store.js'
 import { formatBytes } from './format_bytes.js'
@@ -4394,6 +4395,12 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     showOpProgress(draftId ? 'Relax' : 'Create job',
       draftId ? 'Sizing the solvated system…' : 'Saving job settings…',
       { indeterminate: true })
+
+    if (draftId && !await admitMdPreparation(payload, {
+      plan: request => planMdPreparation(request, draftId),
+      progress: message => showOpProgress('Relax', message, { indeterminate: true }),
+      notify: showToast,
+    })) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
 
     let memoryAdvice = null
     // Gate A — verify that the fully solvated system fits before starting the build.

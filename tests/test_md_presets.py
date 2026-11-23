@@ -51,7 +51,9 @@ def test_standard_is_the_default(monkeypatch):
     assert [p for p in preset_catalogue() if p["is_default"]][0]["id"] == STANDARD
 
 
-def test_labels_are_the_ones_the_panel_shows():
+def test_labels_are_the_ones_the_panel_shows(monkeypatch):
+    # Catalogue labels do not require probing a real NAMD installation.
+    monkeypatch.setattr("backend.core.namd_runner.find_namd", lambda **kwargs: "/test/namd")
     labels = {p["id"]: p["label"] for p in preset_catalogue()}
     assert labels[FAST_SHAPE] == "Fast Shape Check (Vacuum)"
     assert labels[STANDARD] == "Standard (Aksimentiev)"

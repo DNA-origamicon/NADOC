@@ -258,6 +258,7 @@ class TestClient:
                 network_volume_id=VOLUME,
                 terminate_after="2026-08-10T00:00:00Z",
             )
+            payload.update(minMemoryInGb=20, minVcpuCount=6)
             try:
                 return await c.create_pod(payload)
             finally:
@@ -267,6 +268,8 @@ class TestClient:
         gql_input = seen["body"]["variables"]["input"]
         assert gql_input["terminateAfter"] == "2026-08-10T00:00:00Z"
         assert gql_input["gpuTypeId"] == "g"
+        assert gql_input["minMemoryInGb"] == 20
+        assert gql_input["minVcpuCount"] == 6
         assert gql_input["minCudaVersion"] == rp.DEFAULT_ALLOWED_CUDA[0]
         assert "api_key" not in seen["url"]
 
