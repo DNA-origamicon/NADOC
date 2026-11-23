@@ -933,6 +933,19 @@ files carry all the state a cold session needs.
 
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
 
+- November 22 2-base maps layout/export follow-up: 24 browser checks passed,
+  two skipped, and the existing Honeycomb creation request timed out again.
+  Its isolated retry passed. Progress/dropdowns/PNG+CSV downloads passed in-app;
+  no test limits changed. Evidence: `.development-artifacts/two-base-v2-browser.log`
+  and `two-base-v2-browser-retry.log`.
+
+- November 22 2-base maps validation: full smoke plus the new app workflow had
+  23 passes, two skips, and two document-creation failures (Honeycomb request
+  timeout; console-gate document GET returned 404). Both passed isolated retries.
+  The 2-base workflow passed on the first run. Root cause of the broad-run
+  failures remains unverified; no smoke thresholds were changed. Evidence:
+  `.development-artifacts/two-base-browser.log` and `two-base-browser-retry.log`.
+
 - November 17 flexible-network validation reproduces Square `lattice_type`
   undefined at `smoke.spec.js:200`: 23 passed, two skipped, one failed.
   Dedicated network browser checks: three passed. New Part code is unchanged.

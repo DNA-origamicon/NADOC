@@ -3693,10 +3693,9 @@ export const getMdAtomisticModel = (id) =>
  *  empty for a design with no insert-carrying reciprocal crossover pair (most designs). */
 export const getMdCpdPairs = (id) =>
   _oxdnaJSON('GET', `/md/jobs/${id}/cpd-pairs`)
-/** Whole-design T-T KIMMDY analysis for the NAMD false-color view. Returns relative
- *  per-thymine incident propensities; these are not absolute reaction probabilities. */
-export const getMdPhotoproductLikelihood = (id, { signal, maxFrames = 2000 } = {}) =>
-  _oxdnaJSON('GET', `/md/jobs/${id}/photoproduct-likelihood?max_frames=${maxFrames}`,
+/** Saved/resumable pyrimidine-pair geometric opportunities for the UV map. */
+export const getMdPhotoproductLikelihood = (id, { signal } = {}) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/photoproduct-likelihood`,
     undefined, { signal })
 export const getMdPhotoproductProgress = (id) =>
   _oxdnaJSON('GET', `/md/jobs/${id}/photoproduct-progress`)
@@ -5858,3 +5857,9 @@ export const saveSimulationSubmodel = (engine, id, box) => _oxdnaJSON('PUT', `/$
 export const estimateSimulationSubmodel = (id, box) => _oxdnaJSON('POST', '/oxdna/jobs/' + id + '/submodel-estimate', { box })
 
 export const estimateSolverResources = (engine, body) => _oxdnaJSON('POST', `/${engine}/resource-estimate`, body)
+
+export const getMdTwoBaseMaps = (id, bases, { signal, designId, requestId } = {}) =>
+  _oxdnaJSON('POST', `/md/jobs/${encodeURIComponent(id)}/two-base-maps`, { bases, design_id: designId, request_id: requestId }, { signal })
+
+export const getMdTwoBaseProgress = (id, requestId) =>
+  _oxdnaJSON('GET', `/md/jobs/${encodeURIComponent(id)}/two-base-maps/progress?request_id=${encodeURIComponent(requestId)}`)

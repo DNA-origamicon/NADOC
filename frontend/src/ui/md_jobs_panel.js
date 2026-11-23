@@ -1,3 +1,4 @@
+import { initUvCrosslinking } from './uv_crosslinking.js'
 import { initMdFlexSettings, showMappedFlexScale } from './md_flex_settings.js'
 import { mergeCreatingJobs } from '../api/sim_job_creation.js'
 import { showConfirm } from './primitives/confirm.js'
@@ -43,7 +44,6 @@ import { isPegJob } from './namd_peg_visualization.js'
 import { updatePegVisualization } from './namd_peg_viz_controls.js'
 import { shouldForceDisplayReload, mdReadinessIndicator, mdDisplayReadinessFromMeta } from './md_display_state.js'
 import { initMdSolventControls } from './md_solvent_controls.js'
-import { initMdWeldControls } from './md_weld_controls.js'
 import {
   initOxdnaAnchorsSetup, initAnchorTransferControls, setAnchorSectionEnabled,
 } from './oxdna_anchors_setup.js'
@@ -1429,10 +1429,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   const flexLegend   = document.getElementById('md-jobs-flex-legend')
   const photoproductToggle = document.getElementById('md-jobs-photoproduct-toggle')
   const photoproductStatus = document.getElementById('md-jobs-photoproduct-status')
-  const photoproductProgress = document.getElementById('md-jobs-photoproduct-progress')
-  const photoproductProgressFill = document.getElementById('md-jobs-photoproduct-progress-fill')
-  const photoproductProgressLabel = document.getElementById('md-jobs-photoproduct-progress-label')
-  const photoproductLegend = document.getElementById('md-jobs-photoproduct-legend')
   const trajToggle   = document.getElementById('md-jobs-traj-toggle')
   // With its peers, not beside the occupancy card below: _syncVizOffRadio reads this in
   // its `anyOn` array and runs during init, so a later `const` is a TDZ that kills boot.
@@ -1838,10 +1834,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       void trajPlayer.prepare().finally(() => trajPlayer.setLoading(null))
     },
   })
-  // CPD weld pair — markers on the designed extra-base UV weld. Owns its own DOM +
-  // readout ticker; the panel only tells it which job is selected. Most designs have no
-  // weld pair, which the control reports as information rather than an error.
-  const weld = initMdWeldControls({ api, getWeldOverlay })
 
   _updateVizToggles(null)   // no job selected yet → only "Off" is selectable
 
@@ -2857,7 +2849,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     // socket on (re)connect, so ordering against the WS handshake doesn't matter.
     solvent?.setEnabled(true, 'live')
     solvent?.setJob(_selectedId)
-    weld?.setJob(_selectedId)
   }
 
   function _stopMdDisplay(status = 'Off') {
@@ -3138,136 +3129,24 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     }
   })
 
-  let _photoproductAbort = null
-  function _setPhotoproductStatus(text, color = _C.dim) {
-    if (photoproductStatus) {
-      photoproductStatus.textContent = text
-      photoproductStatus.style.color = color
-    }
-  }
-  function _setPhotoproductLegend(show) {
-    if (!photoproductLegend) return
-    photoproductLegend.style.display = show ? '' : 'none'
-    photoproductLegend.innerHTML = show
-      ? `<div style="display:flex;align-items:center;gap:5px;font-size:9px;color:${_C.dim};margin-top:3px">`
-        + `<span>0</span><span style="flex:1;height:7px;border-radius:3px;background:`
-        + `linear-gradient(90deg,#000004,#51127c,#b73779,#fc8961,#fcfdbf)"></span>`
-        + `<span>1</span></div><div style="font-size:9px;color:${_C.dim}">`
-        + `low → high relative T–T propensity · unscored bases use 0</div>`
-      : ''
-  }
-  function _paintPhotoproductProgress(progress = null) {
-    if (!photoproductProgress) return
-    if (!progress) {
-      photoproductProgress.style.display = 'none'
-      photoproductProgress.setAttribute('aria-valuenow', '0')
-      if (photoproductProgressFill) photoproductProgressFill.style.width = '0%'
-      if (photoproductProgressLabel) photoproductProgressLabel.textContent = ''
-      return
-    }
-    const { percent, count, message, tone } = photoproductProgressView(progress)
-    photoproductProgress.style.display = ''
-    photoproductProgress.dataset.loading = String(tone !== 'error' && tone !== 'complete')
-    photoproductProgress.setAttribute('aria-valuenow', String(percent))
-    photoproductProgress.setAttribute('aria-valuetext', `${message}${count}`)
-    if (photoproductProgressFill) {
-      photoproductProgressFill.style.width = `${percent}%`
-      photoproductProgressFill.style.background = tone === 'error'
-        ? _C.err : tone === 'complete' ? _C.ok : _C.purple
-    }
-    if (photoproductProgressLabel) {
-      photoproductProgressLabel.textContent = `${message} · ${percent}%${count}`
-    }
-    _setPhotoproductStatus(`${message}${count}`,
-      tone === 'error' ? _C.err : tone === 'complete' ? _C.ok : _C.accent)
-  }
-  function _setPhotoproductOff() {
-    _photoproductAbort?.abort()
-    _photoproductAbort = null
-    if (_selectedId) api.cancelMdAnalysis(_selectedId, 'photoproduct')
-    if (getMdViz?.()?.mode?.() === 'photoproduct') getMdViz().stopAndRestore()
-    if (photoproductToggle) photoproductToggle.checked = false
-    getFlexScale?.()?.hide?.()
-    _setPhotoproductStatus('', _C.dim)
-    _paintPhotoproductProgress(null)
-    _setPhotoproductLegend(false)
-    _syncVizOffRadio()
-  }
-  async function _refreshPhotoproduct() {
-    const v = getMdViz?.()
-    if (!_selectedId || !v) return
-    const jobId = _selectedId
-    _photoproductAbort?.abort()
-    const controller = new AbortController()
-    _photoproductAbort = controller
-    _paintPhotoproductProgress({
-      phase: 'preparing', fraction: 0.01,
-      message: 'Loading topology and production trajectories',
-    })
-    const poll = setInterval(async () => {
-      if (controller.signal.aborted || jobId !== _selectedId
-          || !photoproductToggle?.checked) return
-      const progress = await api.getMdPhotoproductProgress(jobId).catch(() => null)
-      if (controller.signal.aborted || jobId !== _selectedId
-          || !photoproductToggle?.checked) return
-      if (progress?.active) _paintPhotoproductProgress(progress)
-    }, 250)
-    try {
-      const response = await api.getMdPhotoproductLikelihood(jobId, {
-        signal: controller.signal, maxFrames: 2000,
-      })
-      if (controller.signal.aborted || jobId !== _selectedId
-          || !photoproductToggle?.checked) return
-      _paintPhotoproductProgress({
-        phase: 'coloring', fraction: 0.995,
-        done: response.n_display_bases, total: response.n_display_bases,
-        message: 'Applying per-base false colors',
-      })
-      const result = v.displayPhotoproduct(jobId, response)
-      if (!result.ok) throw new Error(result.reason || 'no photoproduct data')
-      _setPhotoproductLegend(true)
-      getFlexScale?.()?.show?.({
-        title: 'Relative T–T photoproduct propensity', min: 0, max: 1,
-        mapType: 'photoproduct',
-        onRecolor: (lo, hi, cmap) => getMdViz?.()?.recolorPhotoproduct?.(lo, hi, cmap),
-      })
-      const cap = result.truncated ? ' · candidate cap reached' : ''
-      _paintPhotoproductProgress({
-        phase: 'complete', fraction: 1,
-        message: `Ready · ${result.nPositive}/${result.n} thymine bases with candidate partners`
-          + ` · ${result.nFrames ?? '?'} sampled frames${cap}`,
-      })
-      if (result.truncated) _setPhotoproductStatus(
-        `Ready · candidate cap reached; inspect the status before interpreting the map`,
-        _C.warn,
-      )
-    } catch (error) {
-      if (controller.signal.aborted) return
-      _paintPhotoproductProgress({
-        phase: 'error', fraction: 1,
-        message: error?.message || 'Photoproduct analysis failed',
-      })
-      if (photoproductToggle) photoproductToggle.checked = false
-      _syncVizOffRadio()
-    } finally {
-      clearInterval(poll)
-      if (_photoproductAbort === controller) _photoproductAbort = null
-    }
-  }
-  photoproductToggle?.addEventListener('change', async () => {
-    if (!photoproductToggle.checked) { _setPhotoproductOff(); return }
-    if (!_selectedId || !mdHasProductionRun(_selectedJob())) {
-      photoproductToggle.checked = false
-      showToast('A free production trajectory is required', 'warn')
-      _syncVizOffRadio()
-      return
-    }
-    if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-    if (_occupancyIsActive()) _setOccupancyOff()
-    _setFlexOff()
-    _setTrajOff()
-    await _refreshPhotoproduct()
+  const uvAnalysis = initUvCrosslinking({
+    api, getJobId: () => _selectedId, getDisplay: getMdViz, getScale: getFlexScale,
+    onOff: _syncVizOffRadio,
+    activate: () => {
+      if (!_selectedId || !mdHasProductionRun(_selectedJob())) {
+        showToast('A free production trajectory is required', 'warn')
+        return false
+      }
+      if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+      if (_occupancyIsActive()) _setOccupancyOff()
+      _setFlexOff()
+      _setTrajOff()
+      return true
+    },
   })
+  function _setPhotoproductStatus(text) { if (photoproductStatus) photoproductStatus.textContent = text }
+  function _setPhotoproductOff() { uvAnalysis.off() }
+  async function _refreshPhotoproduct() { await uvAnalysis.refresh() }
 
   function _setTrajStatus(text, color = _C.ok) {
     if (trajStatus) { trajStatus.textContent = text; trajStatus.style.color = color }
@@ -3512,7 +3391,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       solvent?.setEnabled(true, 'traj')
       await solvent?.setJob(jobId, { stride: interval, nFrames: r.n_frames })
       if (_trajLoadJobId !== jobId) return
-      weld?.setJob(jobId)
       solvent?.showFrame(0)
       // Readiness includes DNA, ions/cell, and the first spline neighbourhood.
       if (!await trajPlayer.prepare() && _trajJobId === jobId) {
@@ -4938,7 +4816,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         : _setTrajOff(),
       display: async () => {
         solvent?.setJob(_selectedId)
-        weld?.setJob(_selectedId)
         await _refreshMdDisplay()
       },
       flex: () => _mdHasTrajectory(job) && flexToggle?.checked ? _refreshFlex() : undefined,

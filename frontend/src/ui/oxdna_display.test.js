@@ -744,8 +744,13 @@ describe('initOxdnaDisplay controller', () => {
     const appliedColors = designRenderer.applyScalarColors.mock.calls.at(-1)[0]
     expect(appliedColors.get('h0:99:REVERSE')).toBe(colormapHex('magma', 0))
     expect(ctrl.coloringInfo()).toMatchObject({
-      attribute: 'relative_photoproduct_propensity', lo: 0, hi: 1,
+      attribute: 'uv_geometric_opportunity', lo: 0, hi: 1,
     })
+    ctrl.recolorPhotoproduct(0, .4, 'turbo')
+    ctrl.reapplyForRepr()
+    expect(ctrl.coloringInfo()).toMatchObject({ lo: 0, hi: .4, colormap: 'turbo' })
+    expect(designRenderer.applyScalarColors.mock.calls.at(-1)[0].get('h0:4:FORWARD'))
+      .toBe(colormapHex('turbo', 1))
     ctrl.stopAndRestore()
     expect(designRenderer.clearScalarColors).toHaveBeenCalled()
     expect(ctrl.isActive()).toBe(false)

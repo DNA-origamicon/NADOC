@@ -13,6 +13,7 @@
 
 import { startMdMetrics, getMdMetricsRun } from '../api/client.js'
 import { initMetricsCard, METRIC_META } from './metrics_card.js'
+import { initMdTwoBaseMaps } from './md_two_base_maps.js'
 import { initMdSurfaceProfiles } from './md_surface_profiles.js'
 import { initMdIonTransportCard } from './md_ion_transport_card.js'
 export { mdJobNanoporeState } from './md_ion_transport_card.js'
@@ -36,7 +37,8 @@ export function initMdMetricsCard({ getSelectedJob = null, getJobs = null } = {}
   })
   const surfaceProfiles = initMdSurfaceProfiles({ getSelectedJob, getJobs })
   const ionTransport = initMdIonTransportCard({ getSelectedJob })
-  const syncIonTransport = () => { surfaceProfiles.sync(); ionTransport.sync() }
+  const twoBaseMaps = initMdTwoBaseMaps({ getSelectedJob })
+  const syncIonTransport = () => { surfaceProfiles.sync(); ionTransport.sync(); twoBaseMaps.sync() }
   const sharedRefresh = card.refresh
   card.refresh = () => { sharedRefresh(); syncIonTransport() }
   card.sync = syncIonTransport

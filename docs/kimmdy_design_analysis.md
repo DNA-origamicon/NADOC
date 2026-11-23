@@ -134,23 +134,11 @@ Managed jobs default to `JOB/analysis/kimmdy/`; explicit inputs default to
 
 ## NAMD visualization
 
-The NAMD tab's **Visualizations** card includes **Photoproduct propensity (T–T)** for jobs
-with free production dynamics. Activating it runs the same whole-design, periodic-aware T–T
-screen in a killable analysis worker and false-colors every mapped topology thymine with the
-`magma` scale.
-
-The view shows determinate progress throughout the load: topology/trajectory preparation,
-candidate screening, per-frame geometry measurement, pair-to-base aggregation, payload
-serialization, and application of the false colors. Screening and measurement report frame
-counts; aggregation reports pair counts; serialization and coloring report base counts. The
-status remains visible at completion and reports failures explicitly.
-
-For a base, the displayed value is the sum of ensemble-mean pair propensities for all analysed
-T–T candidates incident on that base, divided by the largest such base sum in the design. Thus
-the scale is relative from 0 to 1. It is not an absolute probability, quantum yield, or kinetic
-rate. Every displayed base is false-colored: non-thymines, unmapped bases, and thymines with no
-reactive candidate receive the colormap's zero color because the present KIMMDY parameters do not
-assign them a supported nonzero score. Restrained equilibration frames are excluded.
+The visualization card now uses [UV crosslinking analysis](uv_crosslinking_analysis.md):
+a resumable, job-persisted geometric-opportunity screen for all pyrimidine pairs,
+with local intra/interstrand and T–T-only filters at native positions. Its common
+geometry window is not a calibrated KIMMDY propensity for CT/TC/CC. The standalone
+KIMMDY workflow described here retains its T–T scoring contract and output files.
 
 ## Validation
 
