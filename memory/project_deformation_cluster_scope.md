@@ -227,6 +227,15 @@ IDs and event handlers stay intact. Regression app exercise:
 `frontend/e2e/floating_design_tools.spec.js`; its review screenshots use the
 Playwright output directory and the cleanup reporter removes them on all outcomes.
 
+## Move/Rotate viewport popup (2026-11-21)
+
+Move/Rotate now uses the same draggable `ui/tool_popup.js` host as Extrude and
+Sweep, for both parts and assemblies. Its controls remain the original DOM nodes;
+existing visibility changes also drive the popup, including history editing and
+attachment controllers. Header close invokes Cancel through the current owner.
+The Properties tab no longer owns the panel or opens when Move/Rotate activates.
+Section grouping and numeric, pivot, frame, snap, Reset/Apply behavior are retained.
+
 ## Desktop live plane preview (2026-11-12)
 
 The owned editor passes evaluated candidate helix axes to its private plane controls.

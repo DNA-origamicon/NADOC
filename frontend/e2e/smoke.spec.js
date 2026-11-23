@@ -183,12 +183,7 @@ test.describe('File > New Part dialog', () => {
   })
 
   test('Create with Square lattice fires API with SQUARE lattice type', async ({ page }) => {
-    let capturedBody = null
-    page.on('request', req => {
-      if (req.method() === 'POST' && /\/api\/design(\?|$)/.test(req.url())) {
-        capturedBody = req.postDataJSON()
-      }
-    })
+    const apiCall = page.waitForRequest(req => req.method() === 'POST' && /\/api\/design(\?|$)/.test(req.url()))
 
     await openDropdownAndClick(page, 'File', 'menu-file-new')
     await page.click('input[name="new-lattice-type"][value="SQUARE"]')
@@ -196,8 +191,7 @@ test.describe('File > New Part dialog', () => {
     await modalOf(page).getByRole('button', { name: 'Create' }).click()
 
     await expect(page.locator('#new-design-modal-body')).not.toBeVisible()
-    await page.waitForTimeout(500) // let request fire
-    expect(capturedBody?.lattice_type).toBe('SQUARE')
+    expect((await apiCall).postDataJSON()?.lattice_type).toBe('SQUARE')
   })
 })
 
@@ -426,3 +420,135 @@ test.describe('Teardown gate', () => {
 
 // Experimental routing is covered only in the isolated smoke launcher.
 import './helpers/experimental_autostaple.js'
+
+// Persistence: job responses are intercepted; no solver, authored structure or
+// job file is created. Browser state dies with the context; the isolated smoke
+// launcher removes its workspace, caches, credentials and reports on failure too.
+test('SNUPI Stop is hidden idle and disappears when the running job finishes', async ({ page }) => {
+  let jobs = []
+  await page.route(/\/api\/snupi\/jobs(?:\?.*)?$/, route => route.fulfill({ json: jobs }))
+  await page.route('**/api/snupi/jobs/__e2e__stop/progress', route => route.fulfill({ json: { overall: 0.5 } }))
+  await page.goto('/?doc=__e2e__snupi_stop')
+  await page.waitForFunction(() => !!window.__nadocTest)
+  // Expose the real engine panel without authoring a design or running a solver.
+  await page.evaluate(async () => {
+    const panel = document.getElementById('snupi-jobs-panel')
+    // Simulate reparents the run controls outside the engine's detail panel.
+    for (const root of [panel, document.getElementById('snupi-stop-row').parentElement]) {
+      for (let node = root; node && node !== document.body; node = node.parentElement) {
+        node.hidden = false
+        node.classList.remove('hidden')
+        node.style.display = 'block'
+      }
+    }
+    window.__stopPanel = (await import('/src/ui/snupi_jobs_panel.js')).initSnupiJobsPanel({ getWorkspacePath: () => '__e2e__stop.nadoc' })
+    await window.__stopPanel.refresh()
+  })
+  const stop = page.locator('#snupi-jobs-stop-btn')
+  await expect(stop).toBeHidden()
+  jobs = [{ job_id: '__e2e__stop', design_source_path: '__e2e__stop.nadoc', status: 'running', stages: [] }]
+  await page.evaluate(() => window.__stopPanel.refresh())
+  await expect(stop).toBeVisible()
+  await expect(stop).toBeEnabled()
+  jobs = [{ job_id: '__e2e__stop', design_source_path: '__e2e__stop.nadoc', status: 'completed', stages: [] }]
+  await page.evaluate(() => window.__stopPanel.refresh())
+  await expect(stop).toBeHidden()
+  await expect(stop).toBeDisabled()
+  await page.evaluate(() => window.__stopPanel.dispose())
+})
+
+// Telemetry-only app exercise: no structures/jobs/pods are created. Browser state
+// is discarded, and the smoke launcher removes workspace/cache/report output.
+test('RunPod SNUPI bar uses dynamics counters and labels pending or stale telemetry', async ({ page }) => {
+  await page.route('**/api/simulate/jobs**', route => route.fulfill({ json: [] }))
+  await page.goto('/?doc=__e2e__snupi_progress')
+  await page.waitForFunction(() => !!window.__nadocTest)
+  await page.evaluate(() => {
+    for (let node = document.getElementById('simulate-jobs-progress'); node && node !== document.body; node = node.parentElement) {
+      node.hidden = false
+      node.classList.remove('hidden')
+      node.style.display = 'block'
+    }
+  })
+  const report = async fields => page.evaluate(fields => {
+    window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: { select: true,
+      node: { engine: 'snupi', dynamics: true, job_id: '__e2e__progress', design_name: 'Telemetry',
+        execution_target: 'runpod', status: 'running', n_steps: 20, total_steps: 60000, stages: [], ...fields } } }))
+  }, fields)
+  const status = page.locator('#simulate-jobs-status')
+  const bar = page.locator('#simulate-jobs-progress .bar')
+  const stage = id => page.locator(`#snupi-jobs-timeline [data-stage="${id}"]`)
+  await report({ phase: 'RunPod · Calculating stable dynamics timestep', current_step: 0, progress_indeterminate: true })
+  await expect(status).toContainText('Dynamics pending · 60,000 steps planned')
+  await expect(status).toContainText('Calculating stable dynamics timestep')
+  await expect(stage('stiffness')).toHaveAttribute('data-status', 'done')
+  await expect(stage('timestep')).toHaveAttribute('aria-current', 'step')
+  await expect(stage('integration')).toHaveAttribute('data-status', 'pending')
+  expect(await bar.evaluate(el => getComputedStyle(el).animationName)).toBe('prep-progress-stripes')
+  await report({ phase: 'RunPod · trajectory', current_step: 30000, progress_fraction: .55, progress_indeterminate: false })
+  await expect(status).toContainText('50% dynamics · 30,000 / 60,000 steps · 30,000 left')
+  expect(await bar.evaluate(el => el.style.width)).toBe('50%')
+  await expect(stage('integration')).toHaveAttribute('aria-current', 'step')
+  await expect(stage('integration')).toContainText('30,000 / 60,000 steps')
+  await expect(stage('analysis')).toHaveAttribute('data-status', 'pending')
+  expect(await bar.evaluate(el => getComputedStyle(el).animationName)).toBe('none')
+  await report({ phase: 'RunPod · trajectory', current_step: 30000, progress_last_known: true })
+  await expect(status).toContainText('last known (sync unavailable)')
+  await expect(stage('integration')).toHaveAttribute('data-status', 'last-known')
+  await report({ phase: 'RunPod · Analyzing dynamics trajectory', current_step: 60000 })
+  await expect(stage('integration')).toHaveAttribute('data-status', 'done')
+  await expect(stage('analysis')).toHaveAttribute('aria-current', 'step')
+  await report({ phase: 'RunPod · Downloading results', current_step: 60000 })
+  await expect(stage('analysis')).toHaveAttribute('data-status', 'done')
+  await expect(stage('download')).toHaveAttribute('aria-current', 'step')
+  await report({ status: 'completed', current_step: 60000 })
+  await expect(status).toContainText('completed')
+  await expect(stage('download')).toHaveAttribute('data-status', 'done')
+  expect(await bar.evaluate(el => el.style.width)).toBe('100%')
+})
+
+// Persistence inventory: intercepted telemetry only, no structures or remote
+// launches. Browser context and the isolated launcher's entire scratch root are
+// removed on failure as well as success.
+test('solver tabs show activity and selected remote jobs populate the Clusters card', async ({ page }) => {
+  let active = ['snupi', 'cando', 'mrdna'].map(engine => ({ engine, status: 'running' }))
+  await page.route('**/api/jobs/active**', route => route.fulfill({ json: { jobs: active } }))
+  await page.route('**/api/simulate/jobs**', route => route.fulfill({ json: [] }))
+  await page.route('**/api/runpod/status', route => route.fulfill({ json: { connected: false } }))
+  await page.route('**/api/solver-cluster/runpod-check', route => route.fulfill({ json: { ok: false, checks: [] } }))
+  for (const engine of ['snupi', 'mrdna']) {
+    const job = { job_id: `__e2e__${engine}_provider`, design_source_path: '__e2e__provider.nadoc',
+      status: 'running', stages: [], execution_target: 'runpod',
+      remote: { pod_id: 'review-pod', scheduler_state: 'RUNNING', settings: { gpu_id: 'RTX 4090', mem_gb: 75, cores: 8, quoted_rate: .89, budget_usd: 5 } } }
+    await page.route(new RegExp(`/api/${engine}/jobs(?:\\?.*)?$`), route => route.fulfill({ json: [job] }))
+    await page.route(`**/api/${engine}/jobs/${job.job_id}/progress`, route => route.fulfill({ json: { overall: 0 } }))
+  }
+  await page.goto('/?doc=__e2e__provider')
+  await page.waitForFunction(() => !!window.__nadocTest)
+  for (const engine of ['snupi', 'cando', 'mrdna']) {
+    const spinner = page.locator(`[data-engine-spinner="${engine}"]`)
+    await expect(spinner).toHaveJSProperty('hidden', false)
+    expect(await spinner.evaluate(el => getComputedStyle(el).animationName)).not.toBe('none')
+  }
+  for (const engine of ['snupi', 'mrdna']) {
+    await page.evaluate(engine => {
+      const showAll = document.getElementById(`${engine}-jobs-show-all`)
+      showAll.checked = true
+      showAll.dispatchEvent(new Event('change'))
+      for (let node = document.getElementById(`${engine}-jobs-list`); node && node !== document.body; node = node.parentElement) {
+        node.hidden = false; node.classList.remove('hidden'); node.style.display = 'block'
+      }
+    }, engine)
+    await page.locator(`#${engine}-run-target-local`).check({ force: true })
+    await page.locator(`#${engine}-jobs-list [data-job-id="__e2e__${engine}_provider"]`).dispatchEvent('click')
+    await expect(page.locator(`#${engine}-run-target-runpod`)).toBeChecked()
+    await expect(page.locator(`#${engine}-jobs-runpod-pane`)).toHaveJSProperty('hidden', false)
+    await expect(page.locator(`#${engine}-runpod-selected-job`)).toContainText('review-pod')
+    await expect(page.locator(`#${engine}-runpod-selected-job`)).toContainText('RTX 4090')
+    await expect(page.locator(`#${engine}-runpod-mem_gb`)).toHaveValue('75')
+  }
+  active = []
+  for (const engine of ['snupi', 'cando', 'mrdna']) {
+    await expect(page.locator(`[data-engine-spinner="${engine}"]`)).toHaveJSProperty('hidden', true, { timeout: 12000 })
+  }
+})

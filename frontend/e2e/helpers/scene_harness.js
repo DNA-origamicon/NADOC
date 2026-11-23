@@ -57,18 +57,16 @@ export async function loadScaffoldedPart(page, { doc, name = 'harness', extraQue
   await page.click('#menu-file-new')
   // `__e2e__` prefix → global-teardown removes the auto-saved workspace file.
   await page.fill('#new-design-name', `__e2e__${name}`)
+  const created = page.waitForResponse(response => response.request().method() === 'POST'
+    && /\/api\/design(\?|$)/.test(response.url()))
   await page.getByRole('button', { name: 'Create', exact: true }).click()
+  expect((await created).ok()).toBe(true)
   await expect(page.locator('#welcome-screen')).not.toBeVisible({ timeout: 10_000 })
 
-  // The welcome screen hides as soon as the PAGE has a design — but File→New's
-  // POST may still be in flight, and on a cold smoke backend it can take >500 ms.
-  // A fixed sleep here raced it: page.request then hit the backend before the doc
-  // had a design and got 404 "No active design", so every downstream call fell
-  // apart. Poll the backend's own view of THIS doc instead of guessing a duration.
-  await expect.poll(
-    async () => (await page.request.get(`${API}/design`, { headers: H })).status(),
-    { timeout: 15_000, message: `backend never got a design for doc ${doc}` },
-  ).toBe(200)
+  // Await both server creation and the browser's adoption of that document;
+  // welcome dismissal alone can precede the asynchronous creation request.
+  await page.waitForFunction(expected => window.__nadocTest?.store.getState().currentDesign?.metadata?.name === expected,
+    `__e2e__${name}`)
 
   await page.request.post(`${API}/design/helix-at-cell`, { data: { row: 0, col: 0, length_bp: 200 }, headers: H })
   // Scaffold the helix by painting a domain over its full length. (There is no
@@ -79,11 +77,13 @@ export async function loadScaffoldedPart(page, { doc, name = 'harness', extraQue
   await page.request.post(`${API}/design/scaffold-domain-paint`, {
     data: { helix_id: design.helices[0].id, lo_bp: 0, hi_bp: 199 }, headers: H,
   })
-  await page.evaluate((d) => {
-    const bc = new BroadcastChannel('nadoc-design')
-    bc.postMessage({ type: 'design-changed', source: 'e2e-' + Math.random(), docId: d })
-    bc.close()
-  }, doc)
+  // Fixture setup needs a completed refresh, not an unacknowledged cross-tab
+  // notification racing File > New's own response/geometry synchronization.
+  await page.evaluate(async () => {
+    const api = await import('/src/api/client.js')
+    await api.getDesign()
+    await api.getGeometry()
+  })
 
   await page.waitForFunction(() => {
     const s = window.__nadocTest?.scene
@@ -337,7 +337,7 @@ export async function selectEndsPlainThenCtrl(page) {
  *
  * Returns the instance ids in add order.
  */
-export async function loadAssemblyWithParts(page, { doc, n = 2, name = 'asm' }) {
+export async function loadAssemblyWithParts(page, { doc, n = 2, name = 'asm', frame = true }) {
   const H = { 'Content-Type': 'application/json', 'X-NADOC-Doc': doc }
   // Force the per-instance renderer (?shared=0): it builds inline-source designs
   // into a pickable cache, so pickInstance / getInstanceCenters work. The shared
@@ -372,7 +372,11 @@ export async function loadAssemblyWithParts(page, { doc, n = 2, name = 'asm' }) 
     }
     ids.push(insts[insts.length - 1].id)
   }
-  await _enterAssemblyAndFrame(page)
+  if (frame) await _enterAssemblyAndFrame(page)
+  else {
+    await page.evaluate(() => window.__nadocTest.enterAssemblyMode())
+    await expect(page.locator('#mode-indicator')).toContainText('ASSEMBLY')
+  }
   return ids
 }
 
@@ -409,7 +413,7 @@ export async function frameAssembly(page) {
 /** Bounding rects of the overlays that sit above the full-width canvas. */
 async function _overlayRects(page) {
   const rects = []
-  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel']) {
+  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel', '.tool-popup:visible']) {
     const b = await page.locator(sel).boundingBox().catch(() => null)
     if (b) rects.push(b)
   }
@@ -498,14 +502,14 @@ export async function selectAssemblyInstance(page, { id = null } = {}) {
 export async function clickEmptyAssemblySpace(page) {
   const box = await page.locator('#canvas').boundingBox()
   const rects = []
-  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel']) {
+  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel', '.tool-popup:visible']) {
     const b = await page.locator(sel).boundingBox().catch(() => null)
     if (b) rects.push(b)
   }
   const covered = (p) => rects.some(r => p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height)
   // Scan a coarse grid, skip the top 50px (menu) and bottom 70px (confirm btn).
   for (let fy = 0.25; fy <= 0.75; fy += 0.15) {
-    for (let fx = 0.08; fx <= 0.5; fx += 0.12) {
+    for (let fx = 0.08; fx <= 0.92; fx += 0.12) {
       const p = { x: box.x + box.width * fx, y: box.y + box.height * fy }
       if (p.y < box.y + 50 || p.y > box.y + box.height - 70) continue
       if (covered(p)) continue

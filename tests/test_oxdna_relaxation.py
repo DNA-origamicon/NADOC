@@ -1227,8 +1227,9 @@ def test_run_job_recovers_from_production_explosion(
     assert specs[0].dt == 0.0025  # ran the recovery at half dt
 
 
+@pytest.mark.parametrize("gpu_startup", [False, True])
 def test_run_job_recovers_from_md_relax_bp_melt(
-    tmp_path, monkeypatch, design, geometry
+    tmp_path, monkeypatch, design, geometry, gpu_startup
 ):
     """A base-pair melt at md_relax is recoverable: the runner escalates the relax
     (more steps + smaller dt) and retries instead of hard-failing, and the job then
@@ -1240,6 +1241,11 @@ def test_run_job_recovers_from_md_relax_bp_melt(
     from backend.core.oxdna_health import OxdnaHealthResult
 
     specs = build_relaxation_stages(backend="CPU", md_relax_steps=1_000)
+    if gpu_startup:
+        specs[0].sim_type = "MD"
+        specs[0].kind = "md_relax"
+        specs[0].name = "1_gpu_relax"
+        specs[0].dt = 0.00001
     job = new_oxdna_job(
         "melt-recover", [s.to_status() for s in specs], n_nucleotides=len(geometry)
     )
@@ -1249,9 +1255,12 @@ def test_run_job_recovers_from_md_relax_bp_melt(
     monkeypatch.setattr(r, "oxdna_supports_physics_v3", lambda _: True)
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
 
-    md_health_calls = {"n": 0}
+    md_health_calls = {"n": 0, "startup": 0}
 
     def fake_health(*a, **k):
+        if gpu_startup and Path(a[1]).name == "1_gpu_relax":
+            md_health_calls["startup"] += 1
+            return OxdnaHealthResult(passed=True, bp_retained_fraction=0.99, fene_safe=False)
         kind = k.get("kind")
         if kind == "mc":
             return OxdnaHealthResult(passed=True, bp_retained_fraction=0.79)
@@ -1286,9 +1295,12 @@ def test_run_job_recovers_from_md_relax_bp_melt(
 
     assert job.status == OxdnaStatus.completed  # recovered, not failed
     assert job.relax_retries == 1  # spent exactly one escalation
-    relax_idx = next(i for i, s in enumerate(specs) if s.kind == "md_relax")
+    relax_idx = 1
     assert specs[relax_idx].steps == 3_000  # escalated 3× from the 1_000 base
     assert specs[relax_idx].dt == 0.001  # escalated to the gentler timestep
+    if gpu_startup:
+        assert md_health_calls["startup"] == 1
+        assert specs[0].dt == 0.00001
 
 
 def test_run_job_fails_after_exhausting_melt_retries(

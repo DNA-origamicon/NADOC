@@ -74,7 +74,7 @@ undocumented module already shipped it. **Only the codebase probe decides.** So:
 ## Gate
 
 Doc-only work → **no tests needed**; say so. Only a SUPERSEDED-UNDOCUMENTED migration that edits
-*code* (rare — usually you're moving prose) runs `just test-smart` and cites its decision.
+*code* (rare — usually you're moving prose) runs `just test-smart SOURCE…` and cites its decision.
 
 ## Don't
 

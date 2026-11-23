@@ -16,6 +16,65 @@ equilibrium sampling and physical convergence campaigns require explicit
 Historical full-run commands/results below predate this split; the legacy
 `NADOC_RUN_OXDNA_SLOW` flag no longer enables campaigns.
 
+## Focused defaults — November 21, 2026
+
+The user authorized replacing mandatory broad per-change suites with focused
+validation. This supersedes older “always run fast” guidance and archived timings.
+`just test-smart SOURCE…` and `just test-affected SOURCE…` now use explicit current-task
+paths and `scripts/test_impact.json`. Known sources select reviewed regression tests;
+unmapped sources require `--test FILE` (repeatable) plus `--reason` explaining coverage.
+Mappings are starting points: inspect affected consumers and add contract tests.
+No paths, missing files and unresolved selections fail visibly; there is no full-suite
+fallback. `--dry-run` prints selection without launching. Related slow software tests
+remain included. Scientific opt-ins are unchanged.
+
+`just test-frontend TEST_FILE…` runs explicit files; `--related SOURCE…` uses Vitest's
+static dependency graph. Paths may be repo-relative or frontend-relative. Use explicit
+contracts/browser tests for HTML/CSS, computed imports and app wiring. Empty related
+selections retain Vitest's failing exit status. `test-frontend-watch` also requires
+explicit paths and holds the validation lock until stopped. Three audited pure test files now use
+Node (library filename, websocket URL, trajectory memory); DOM tests retain jsdom and
+isolation. Further environment migration should follow inspection and focused checks.
+
+`test-focused`, `test-affected`, frontend selection and `test-file` now use the shared
+validation wrapper as well as their applicable pytest guards. Worker/memory limits
+and numeric thread limits are unchanged. Full local sweeps are explicit session-gated
+`test-regression`, `test-fast` and `test-frontend-all`; `test-regression-plan` is read-only.
+CI continues broad frontend and non-slow/non-integration backend coverage. No focused
+pass updates `.nadoc-test-watermark` or clears `.nadoc-slow-pending`.
+
+The prior watermark is August 28; the November 21 dry run considered 9,102 paths.
+The previous broad backend run took 564s, frontend 514s; a focused three-file frontend
+run passed 32 tests in 2.83s. These are observations, not promised future budgets.
+Testmon remains uninstalled: 2.3.1 is available, but the older 2.2.0 compatibility
+failure needs an isolated trial before adoption. It is not required for these defaults.
+
+## Request-to-validation sequence
+
+For each request, identify the changed behavior and consumers before choosing tests.
+Use explicit current-task paths (not all dirty files). Preview uncertain backend
+selection with `just test-smart SOURCE… --dry-run`; unmapped sources need reviewed
+`--test FILE` entries and `--reason`. Run the selected backend checks and either
+explicit frontend tests or `just test-frontend --related SOURCE…`, serially under
+the resource wrapper. Exercise the specific browser flow for user-visible changes.
+After a relevant pass, stop testing unless new edits, failures or coverage gaps
+justify more. Report targets/results and remaining gaps; do not append a broad
+suite as a routine final gate. A focused pass does not settle broad regression debt.
+
+For maintenance-only audits, reuse still-applicable browser evidence rather than
+rerunning UI workflows when no application behavior changed. Timings describe test
+execution, not total agent investigation/implementation time; do not claim that
+focused validation proves a whole request will finish in seconds.
+
+November 21 cycle verification: the welcome-menu request selected six backend
+filesystem/API tests and seven related frontend files (147 tests), all passing.
+Measured sequential command wall time, including launch/guard overhead: 6.05s
+backend + 11.15s frontend = 17.20s, versus the prior broad suite runner times of
+564s + 514s. Coverage is deliberately focused, not equivalent to the broad sweep.
+No UI code changed in this verification, so the existing five browser checks
+(53.5s, passed) were reused, not rerun. The memory index's stale “broad fast checks”
+pointer was corrected. Exact commands/results: `.development-artifacts/focused-cycle-verification.json`.
+
 ## November 11 full regression
 
 Full `just test` at `12958aee`: 21,492 passed, 8 failed, 26 skipped (41m50s).
@@ -63,7 +122,7 @@ already authorizes that validation. Use `just test-focused TARGET` for a specifi
 pytest file/node, optionally filtered with `-k` or `-m`; relevant benchmark scripts
 may run directly. Never ask for a session solely because these checks are slow.
 
-Full `just test`, `test-all`, broad `test-slow`, and accumulated `test-smart` debt
+Full `just test`, `test-all`, broad `test-slow`, and accumulated `test-regression` debt
 remain gated, as do unrelated long tests. Focused runs retain the execution lock,
 nice priority, and real exit status; they neither enforce fast-suite duration
 budgets nor clear full-suite debt/watermarks. Explicit file/node selection avoids

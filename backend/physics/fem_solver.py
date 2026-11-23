@@ -34,6 +34,8 @@ Architecture notes
 
 from __future__ import annotations
 
+from backend.core.solver_progress import DYNAMICS_STEPS
+
 import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -2882,7 +2884,7 @@ _DYNAMICS_TRAJ_FRAMES = (
 
 
 def _dynamics_trajectory_payload(
-    design: "Design", mesh: "FEMMesh", out: dict, X0
+    design: "Design", mesh: "FEMMesh", out: dict, X0, reference_positions=None
 ) -> dict:
     """Downsample the Langevin trajectory into the {keys, frames, n_frames} wire shape the frontend
     trajectory player consumes (``framesToUpdates``): ``keys`` = per-nucleotide [helix,bp,dir,copy];
@@ -2903,11 +2905,24 @@ def _dynamics_trajectory_payload(
             int
         )
     )
+    reconstruction = None
+    if tail_frames is None and reference_positions is not None:
+        from backend.physics.fem_thermal_reconstruction import ThermalReconstruction
+        try:
+            reconstruction = ThermalReconstruction(design, mesh, reference_positions)
+        except (KeyError, ValueError):
+            # Unknown follower ownership: preserve full reconstruction semantics.
+            pass
     keys = None
     out_frames = []
     for fi in sel:
         u = np.zeros(6 * n_node, dtype=float)
         u.reshape(n_node, 6)[:, :3] = frames[fi] - X0
+        if reconstruction is not None:
+            xyz, normals = reconstruction.coordinates(u, with_normals=True)
+            keys = reconstruction.keys
+            out_frames.append(np.concatenate((xyz, normals), axis=1).reshape(-1).tolist())
+            continue
         pos, _ax = deformed_positions_with_axis(
             design,
             mesh,
@@ -2942,6 +2957,7 @@ def _predict_shape_dynamics(
     tail_max_nt: Optional[int] = None,
     n_steps: int = 60000,
     with_rmsf: bool = True,
+    backend="auto",
     progress_cb=None,
 ) -> dict:
     """Langevin-dynamics shape prediction → the standard predict_shape payload.
@@ -2965,6 +2981,7 @@ def _predict_shape_dynamics(
     out = dyn.simulate_equilibrium(
         design,
         material=material,
+        backend=backend,
         hydrodynamics=hydrodynamics,
         hydro_coarse_bp=hydro_coarse_bp,
         field=field,
@@ -3009,6 +3026,7 @@ def _predict_shape_dynamics(
         solver += "+tails"
     result: dict = {
         "solver": solver,
+        "execution": out.get("execution", {"backend": "cpu"}),
         "n_tail_nodes": int(out.get("n_tail_nodes", 0)),
         "positions": positions,
         "axis": axis,
@@ -3019,7 +3037,7 @@ def _predict_shape_dynamics(
         # (the actual motion, not just its time-mean). Same {keys, frames} wire shape as oxDNA's
         # /trajectory (framesToUpdates), so the frontend scrubber/player is reused.
         "trajectory": _dynamics_trajectory_payload(
-            design, mesh, out, X0=out["positions0"]
+            design, mesh, out, X0=out["positions0"], reference_positions=positions
         ),
     }
     if with_rmsf:
@@ -3052,7 +3070,8 @@ def predict_shape(
     hydro_coarse_bp: Optional[int] = None,
     tails: bool = False,
     tail_max_nt: Optional[int] = None,
-    dynamics_steps: int = 60000,
+    dynamics_steps: int = DYNAMICS_STEPS,
+    dynamics_backend: str = "auto",
     progress_cb=None,
 ) -> dict:
     """Predict the CanDo-style equilibrium shape + flexibility of ``design`` (Physical layer).
@@ -3141,6 +3160,7 @@ def predict_shape(
             tails=tails,
             tail_max_nt=tail_max_nt,
             n_steps=dynamics_steps,
+            backend=dynamics_backend,
             with_rmsf=with_rmsf,
             progress_cb=progress_cb,
         )

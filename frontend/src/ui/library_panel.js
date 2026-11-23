@@ -6,6 +6,7 @@
  * Import uses the file browser to pick a destination on the server.
  */
 
+import { libraryRenameStem, libraryRenameFilename } from './library_filename.js'
 import { openFileBrowser } from './file_browser.js'
 import { showToast } from './toast.js'
 import { confirmAndDeleteFile } from './file_deletion.js'
@@ -143,6 +144,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   const mount = document.getElementById('library-panel-mount')
   if (!mount) return { refresh() {} }
 
+  let _inlineEdit = null
   let _allEntries = []
   const _expanded = new Set()
   let _sortKey = 'modified'
@@ -253,6 +255,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       tab.title = server.online ? `View files on ${server.name}` : `${server.name} is offline`
       tab.disabled = !server.online
       tab.addEventListener('click', async () => {
+        _inlineEdit = null
         _activePeerId = server.id
         _query = ''
         searchEl.value = ''
@@ -363,7 +366,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   const refreshStatus = document.createElement('div')
   refreshStatus.className = 'lib-simulation-refresh-status'
   refreshStatus.setAttribute('role', 'status')
-  refreshStatus.style.cssText = 'display:none;align-items:center;gap:7px;padding:6px 0;color:var(--text-muted,#8b949e);font-size:var(--text-sm)'
+  refreshStatus.style.cssText = 'display:flex;visibility:hidden;height:30px;box-sizing:border-box;flex-shrink:0;white-space:nowrap;overflow:hidden;align-items:center;gap:7px;padding:6px 0;color:var(--text-muted,#8b949e);font-size:var(--text-sm)'
   const refreshSpinner = document.createElement('span')
   refreshSpinner.className = 'nadoc-spinner'
   refreshSpinner.setAttribute('aria-hidden', 'true')
@@ -375,7 +378,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     else if (_refreshNoticeStarted) _refreshNoticeFinished = true
     // Once the initial load settles, polling and later visits stay silent.
     const visible = busy && !_refreshNoticeFinished
-    refreshStatus.style.display = visible ? 'flex' : 'none'
+    refreshStatus.style.visibility = visible ? 'visible' : 'hidden'
+    refreshStatus.setAttribute('aria-hidden', String(!visible))
     refreshStatus.setAttribute('aria-busy', String(visible))
   }
 
@@ -445,6 +449,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   }
 
   function _render() {
+    // Background replies must not replace an active editor.
+    if (_inlineEdit?.isConnected) return
     treeEl.innerHTML = ''
     _statusEls.clear()   // rows are rebuilt below; re-registered in _renderFileRow
     // Apply search filter: include files matching the query, plus every folder
@@ -682,6 +688,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   }
 
   function _onRowKeydown(e, entry, open) {
+    if (e.target !== e.currentTarget) return
     if (e.key === ' ' || (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey))) {
       e.preventDefault()
       if (e.key.toLowerCase() === 'a') {
@@ -831,7 +838,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       b.textContent = label
       b.title       = title
       b.setAttribute('aria-label', title)
-      b.addEventListener('click', fn)
+      b.addEventListener('click', e => { e.stopPropagation(); fn(e) })
       el.appendChild(b)
     }
     return el
@@ -922,36 +929,82 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   function _startRename(rowEl, nameEl, entry) {
     const oldName = entry.path.split('/').pop()
     const inp     = document.createElement('input')
-    inp.type = 'text'; inp.value = oldName; inp.className = 'lib-inline-input'
-    inp.style.cssText += ';flex:1'
+    inp.type = 'text'; inp.value = libraryRenameStem(entry); inp.className = 'lib-inline-input'
+    const editor = document.createElement('span')
+    editor.className = 'lib-rename-editor'
 
-    const okBtn  = document.createElement('button'); okBtn.textContent  = '✓'; okBtn.className = 'lib-row-btn lib-row-btn-ok'
-    const canBtn = document.createElement('button'); canBtn.textContent = '×'; canBtn.className = 'lib-row-btn'
-
-    nameEl.replaceWith(inp)
+    if (_inlineEdit?.isConnected) return
+    _inlineEdit = inp
+    editor.addEventListener('click', e => e.stopPropagation())
+    editor.append(inp)
+    nameEl.replaceWith(editor)
+    let submitting = false
+    let finished = false
+    const finish = () => { finished = true; _inlineEdit = null; _render() }
 
     const doRename = async () => {
-      const newName = inp.value.trim()
-      if (!newName || newName === oldName) { await refresh(); return }
+      if (submitting || finished) return
+      const newName = libraryRenameFilename(entry, inp.value)
+      if (!newName || newName === oldName) { finish(); return }
       if (newName.includes('/') || newName.includes('\\')) { showToast('Name cannot contain path separators.', { severity: 'error' }); inp.focus(); return }
       const dir = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : ''
       const newPath = dir ? `${dir}/${newName}` : newName
       const conflict = _allEntries.some(e => e.path === newPath) ||
         (entry.type === 'folder' && _allEntries.some(e => e.path.startsWith(newPath + '/')))
       if (conflict) { showToast(`"${newName}" already exists in this folder.`, { severity: 'error' }); inp.focus(); return }
-      const result = await api.renameLibrary(entry.path, newName)
-      if (result) await refresh()
-      else { showToast('Rename failed — a file with that name may already exist.', { severity: 'error' }); await refresh() }
+      submitting = true
+      inp.disabled = true
+      let errorMessage = 'Rename failed. Please try again.'
+      try {
+        const result = await api.renameLibrary(entry.path, newName, {
+          onError: (_status, message) => { errorMessage = message },
+        })
+        if (result) {
+          // Leave edit mode as soon as the rename succeeds, even if the next
+          // listing is slow or unavailable. Keep folder descendants coherent.
+          const renamedPath = result.new_path || newPath
+          const remap = path => path === entry.path ? renamedPath
+            : entry.type === 'folder' && path?.startsWith(entry.path + '/')
+              ? renamedPath + path.slice(entry.path.length) : path
+          _allEntries = _allEntries.map(item => ({ ...item, path: remap(item.path),
+            name: item.path === entry.path ? libraryRenameStem(entry, newName) : item.name }))
+          for (const paths of [_expanded, _selectedPaths]) {
+            const mapped = [...paths].map(remap)
+            paths.clear()
+            for (const path of mapped) paths.add(path)
+          }
+          _lastSelectedPath = remap(_lastSelectedPath)
+          finish()
+          await refresh()
+          return
+        }
+        showToast(errorMessage, { severity: 'error' })
+      } catch (error) {
+        showToast(error.message || errorMessage, { severity: 'error' })
+      } finally {
+        submitting = false
+        inp.disabled = false
+        if (inp.isConnected) inp.focus()
+      }
     }
-    const doCancel = () => refresh()
-    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') doRename(); if (e.key === 'Escape') doCancel() })
-    okBtn.addEventListener('click', doRename)
-    canBtn.addEventListener('click', doCancel)
+    const doCancel = () => { if (!submitting) finish() }
+    inp.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') { e.preventDefault(); void doRename() }
+      if (e.key === 'Escape') { e.preventDefault(); doCancel() }
+    })
 
-    rowEl.querySelector('.lib-row-actions')?.replaceWith(_makeActionsEl([
+    const actions = _makeActionsEl([
       { label: '✓', title: 'Confirm rename', fn: doRename },
       { label: '×', title: 'Cancel',         fn: doCancel },
-    ]))
+    ])
+    // A pointer click on Cancel must not first blur the input and save it.
+    actions.addEventListener('pointerdown', e => e.preventDefault())
+    rowEl.querySelector('.lib-row-actions')?.remove()
+    editor.append(actions)
+    editor.addEventListener('focusout', e => {
+      if (!editor.contains(e.relatedTarget)) void doRename()
+    })
 
     setTimeout(() => { inp.focus(); inp.select() }, 20)
   }
@@ -965,26 +1018,22 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     if (result) await refresh()
   }
 
-  function _pickFolderModal(title, excludePath, excludePaths = []) {
+  async function _pickFolderModal(title, excludePath, excludePaths = []) {
+    let folders
+    try { folders = await api.listLibraryMoveDestinations(excludePath ? [excludePath] : excludePaths) }
+    catch { /* Report without offering cached or inferred destinations. */ }
+    if (!Array.isArray(folders)) {
+      showToast('Could not load valid workspace destinations.', { severity: 'error' })
+      return null
+    }
     return new Promise(resolve => {
-      const seen = new Set([''])
-      for (const e of _allEntries) {
-        if (e.type === 'folder') seen.add(e.path)
-        const parts = e.path.split('/')
-        for (let i = 1; i < parts.length; i++) seen.add(parts.slice(0, i).join('/'))
-      }
-      const currentParent = excludePath?.includes('/') ? excludePath.slice(0, excludePath.lastIndexOf('/')) : ''
-      const folders = [...seen].filter(fp =>
-        fp !== currentParent &&
-        fp !== excludePath &&
-        !(excludePath && fp.startsWith(excludePath + '/')) &&
-        !excludePaths.some(path => fp === path || fp.startsWith(path + '/'))
-      ).sort()
-
       const overlay = document.createElement('div')
       overlay.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center'
 
       const modal = document.createElement('div')
+      modal.className = 'lib-move-picker'
+      modal.setAttribute('role', 'dialog')
+      modal.setAttribute('aria-label', title)
       modal.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:8px;width:320px;max-height:50vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-ui);font-size:12px'
 
       const hdr = document.createElement('div')
@@ -997,8 +1046,10 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       const list = document.createElement('div')
       list.style.cssText = 'flex:1;overflow-y:auto;padding:3px 8px'
 
+      if (!folders.length) list.textContent = 'No valid workspace destinations for this selection.'
       for (const fp of folders) {
         const row = document.createElement('div')
+        row.dataset.moveDestination = fp
         row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer'
         row.addEventListener('mouseenter', () => { row.style.background = '#21262d' })
         row.addEventListener('mouseleave', () => { row.style.background = '' })

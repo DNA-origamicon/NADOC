@@ -51,6 +51,7 @@ function mountDom() {
       <div id="snupi-jobs-body">
         <button id="snupi-jobs-coarse-btn">Coarse</button>
         <button id="snupi-jobs-fine-btn">Fine</button>
+        <div id="snupi-stop-row" style="display:none"><button id="snupi-jobs-stop-btn" disabled>Stop</button></div>
         <input id="snupi-jobs-n-steps" value="20">
         <input id="snupi-jobs-with-rmsf" type="checkbox" checked>
         <div id="snupi-jobs-list"></div>
@@ -113,5 +114,47 @@ it('leaving the engine stops hidden playback and resets its mode controls', asyn
   initSnupiJobsPanel({ snupiDisplay: display })
   window.dispatchEvent(new CustomEvent('nadoc:simulation-engine', { detail: { engine: 'cando' } }))
   expect(display.stopAndRestore).toHaveBeenCalledTimes(1)
+  expect(document.querySelector('.snupi-display-mode[value="off"]').checked).toBe(true)
+})
+
+
+it('shows Stop only while a job is active, independently of the selected result', async () => {
+  const { initSnupiJobsPanel } = await import('./snupi_jobs_panel.js')
+  mountDom()
+  _jobsOnServer = [{ job_id: 'result', status: 'completed' }]
+  const panel = initSnupiJobsPanel({})
+  const row = document.getElementById('snupi-stop-row')
+  const button = document.getElementById('snupi-jobs-stop-btn')
+  await panel.refresh()
+  expect(row.style.display).toBe('none')
+  expect(button.disabled).toBe(true)
+  for (const status of ['queued', 'preparing', 'running']) {
+    _jobsOnServer = [{ job_id: 'result', status: 'completed' }, { job_id: 'active', status }]
+    await panel.refresh()
+    await panel.selectJob('result')
+    expect(row.style.display).toBe('flex')
+    expect(button.disabled).toBe(false)
+  }
+  for (const status of ['completed', 'failed', 'stopped']) {
+    _jobsOnServer = [{ job_id: 'active', status }]
+    await panel.refresh()
+    expect(row.style.display).toBe('none')
+    expect(button.disabled).toBe(true)
+  }
+})
+
+it('defaults completed selections to coarse output and preserves an explicit Off choice', async () => {
+  const { initSnupiJobsPanel } = await import('./snupi_jobs_panel.js')
+  mountDom()
+  document.getElementById('snupi-jobs-body').insertAdjacentHTML('beforeend', '<input class="snupi-display-mode" type="radio" name="snupi-mode" value="cando">')
+  _jobsOnServer = [{ job_id: 'one', status: 'completed' }, { job_id: 'two', status: 'completed' }]
+  const display = { showCandoStyle: vi.fn(async () => ({ ok: true })), stopDeform: vi.fn(), deformActive: () => false, mode: () => null }
+  const panel = initSnupiJobsPanel({ snupiDisplay: display })
+  await panel.selectJob('one')
+  expect(display.showCandoStyle).toHaveBeenCalledTimes(1)
+  expect(document.querySelector('[value="cando"]').checked).toBe(true)
+  document.querySelector('.snupi-display-mode[value="off"]').click()
+  await panel.selectJob('two')
+  expect(display.showCandoStyle).toHaveBeenCalledTimes(1)
   expect(document.querySelector('.snupi-display-mode[value="off"]').checked).toBe(true)
 })

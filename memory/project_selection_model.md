@@ -21,6 +21,15 @@ Detailed phase notes and historical evidence are preserved in
 archive only when investigating a past decision. The live entry-path matrix is
 [selection_behavior_matrix.md](selection_behavior_matrix.md).
 
+## Move/Rotate explicit Clear action (2026-11-21)
+
+The popup's Clear selection action cancels/restores its pending cluster preview,
+clears canonical selection, and rearms cluster picking with disabled numeric fields.
+It must release the independent gizmo/activeClusterId as well as selection refs.
+Ordinary selection changes still do not activate or close Move/Rotate. The shared
+controller remains the sole writer of canonical refs; the tool owns its session.
+
+
 ## Camera gesture compatibility (2026-11-12)
 
 Shared desktop mouse bindings support Ctrl + right-drag (also Cmd + right-drag)

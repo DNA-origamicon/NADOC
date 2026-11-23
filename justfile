@@ -68,49 +68,46 @@ test-scientific TARGET *ARGS:
 test-scientific-list:
     uv run pytest tests/ --scientific --collect-only -q
 
-# The fast software suite: excludes slow tests and scientific opt-ins. Always allowed.
-# The guard reports tests over 5s and aggregate runtime over its 90s backstop in
-# .nadoc-slow-candidates.json — triage the cause, don't raise the budgets.
+# Broad regression commands are deliberate sweeps, not the routine edit loop.
+# Existing timing/resource limits and scientific exclusions remain in force.
 test-fast:
-    scripts/test_guard.sh "test-fast" 0 0 -- uv run pytest tests/ -n auto --dist loadfile -m "not slow"
+    scripts/validation_guard.sh scripts/test_guard.sh "test-fast" 0 1 -- uv run pytest tests/ -n auto --dist loadfile -m "not slow"
 
-# DEFAULT broad per-change test loop. Always allowed; outside a session runs fast tests.
-# Add test-focused for relevant slow coverage; deferred debt does not block that work.
-# Runs the fast suite and works out which HEAVY groups your changes have made stale
-# (vs .nadoc-test-watermark, the last full pass here). Outside a test-dedicated session
-# it does NOT run them — it parks them in .nadoc-slow-pending and tells you. Inside one,
-# it runs the owed groups too and clears the debt.
-# `just test-smart --dry-run` shows the decision without running; `--base origin/master`
-# overrides the watermark; forward pytest args after `--`.
+# Legacy accumulated selection is retained separately from current-task coverage.
+[positional-arguments]
+test-regression *ARGS:
+    scripts/validation_guard.sh scripts/test_guard.sh "test-regression" 0 1 -- uv run python scripts/select_tests.py --since-last-full "$@"
+
+test-regression-plan:
+    uv run python scripts/select_tests.py --since-last-full --dry-run
+
+# Default: explicit current-task sources/tests. Unknown sources require a reviewed
+# --test FILE list and --reason; no silent broad fallback or historical baseline.
+[positional-arguments]
 test-smart *ARGS:
-    scripts/validation_guard.sh scripts/test_guard.sh "test-smart" 0 0 -- uv run python scripts/select_tests.py --since-last-full {{ARGS}}
+    uv run python scripts/test_affected.py "$@"
 
-# Tightest inner loop: point pytest at the area you're editing. Pass file paths
-# and/or `-k pattern`; heavy solves are dropped (`-m 'not slow'`) so it stays
-# snappy. Examples:
-#   just test-affected tests/test_cando_deviation.py
-#   just test-affected tests/test_fem_solver.py -k rmsf
-#   just test-affected tests/test_overhang_geometry.py --lf   # only last failures
-# (True change-based impact analysis — pytest-testmon — is currently broken
-#  against pytest 9.x; see memory/project_test_parallelization.md.)
+[positional-arguments]
 test-affected *ARGS:
-    scripts/test_guard.sh "test-affected" 0 0 -- uv run pytest -m "not slow" {{ARGS}}
+    uv run python scripts/test_affected.py "$@"
 
-# One current-task file or node, including slow tests. No session or duration gate.
-# Explicit target required; directories/full-suite selection are rejected.
-# Examples: just test-focused tests/test_surface_visual_regression.py -k Voltron
-#           just test-focused tests/test_test_guard_budget.py
-# Scientific campaigns retain their separate explicit-authorization route.
+# One current-task file/node, including relevant slow tests; serialized and bounded.
+[positional-arguments]
 test-focused TARGET *ARGS:
-    uv run python scripts/test_focused.py {{quote(TARGET)}} {{ARGS}}
+    uv run python scripts/test_focused.py "$@"
 
 # Run a build or custom check with serialized, bounded desktop resources.
 validate-safe *COMMAND:
     scripts/validation_guard.sh {{COMMAND}}
 
-# Run frontend unit tests (Vitest), single pass
-test-frontend:
-    cd frontend && ../scripts/validation_guard.sh npm test
+# Explicit test files, or --related source files (paths relative to frontend/ or repo).
+[positional-arguments]
+test-frontend *ARGS:
+    uv run python scripts/test_frontend.py "$@"
+
+# Full frontend regression sweep requires a deliberate test session.
+test-frontend-all:
+    scripts/validation_guard.sh scripts/test_guard.sh "test-frontend-all" 0 1 -- npm --prefix frontend test
 
 # Build and run the headless native + Playwright ScryWrite proof of concept.
 test-scrywrite:
@@ -212,13 +209,14 @@ scrywrite-evidence SCENE="native/vr_viewer/examples/scrywrite_chiral_perspective
     native/vr_viewer/build/nadoc-vr-scrywrite-export {{SCENE}} {{SCRIPT}} {{OUTPUT}} --expect {{EXPECT}}
     node frontend/scrywrite/render_evidence.mjs {{OUTPUT}}
 
-# Tight loop: Vitest in watch mode — re-runs affected tests on save (sub-second)
-test-frontend-watch:
-    cd frontend && npx vitest
+# Explicit interactive watch; retains the validation lock until stopped.
+[positional-arguments]
+test-frontend-watch *ARGS:
+    uv run python scripts/test_frontend.py --watch "$@"
 
 # Backend FULL suite + frontend unit tests ("is everything green?").
 # TEST-DEDICATED SESSION ONLY (it runs the heavy sims). Day to day: `just test-smart`
-# for the backend, `just test-frontend` for the JS.
+# for explicit backend targets, `just test-frontend FILE` for the JS.
 test-all:
     scripts/test_guard.sh "test-all" 1 1 -- bash -c 'uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark && rm -f .nadoc-slow-pending'
     cd frontend && npm test
@@ -270,7 +268,7 @@ build-primitives:
 # Run a specific file fast-only. For current-task slow tests use test-focused FILE;
 # no test session is needed for that focused development validation.
 test-file FILE:
-    scripts/test_guard.sh "test-file" 0 0 -- uv run pytest -m "not slow" {{FILE}} -v
+    scripts/validation_guard.sh scripts/test_guard.sh "test-file" 0 0 -- uv run pytest -m "not slow" {{FILE}} -v
 
 # Format code
 fmt:

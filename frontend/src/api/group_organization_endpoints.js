@@ -4,26 +4,30 @@ const KINDS = new Set(['group-organize', 'group-create', 'group-update', 'group-
 const POSE_KINDS = new Set(['placement-update', 'placements-update'])
 
 export function createGroupOrganizationEndpoint({ store, request, syncDesign, getDocId,
-  currentRevision, documentRequests, path = '/design/group-organization/commands',
+  currentRevision, documentRequests, formatError = detail => typeof detail === 'string' ? detail : detail?.message, path = '/design/group-organization/commands',
   requestBody = (kind, inputs, revision) => ({ kind, inputs, expected_revision: revision }) }) {
-  return async function groupOrganizationCommand(kind, inputs) {
+  return async function groupOrganizationCommand(kind, inputs, { throwOnFailure = false } = {}) {
     const state = store.getState(), docId = getDocId(), designId = state.currentDesign?.id
     const revision = currentRevision(), generation = documentRequests.capture()
     const current = () => documentRequests.isCurrent(generation) && getDocId() === docId
       && store.getState().currentDesign?.id === designId && !store.getState().assemblyActive
     const fail = message => {
       if (current()) store.setState({ lastError: { code: 'group_edit_response', message } })
+      if (throwOnFailure) throw new Error(message)
       return null
     }
     if (!designId || state.assemblyActive || !Number.isSafeInteger(revision) || revision < 0)
       return fail('Refresh the current part before editing groups or placements.')
     if (!KINDS.has(kind) || !inputs || typeof inputs !== 'object' || Array.isArray(inputs))
       return fail('Choose a supported group or placement operation.')
-    let response
+    if (state.featureSeekPending) return fail('Wait for the selected history stage to finish loading before applying movement.')
+    let response, requestError
     try {
-      response = await request('POST', path, requestBody(kind, inputs, revision), { docId, protectedRetry: false, skipSimulationPrepare: true })
+      response = await request('POST', path, requestBody(kind, inputs, revision), { docId, protectedRetry: false, skipSimulationPrepare: true,
+        onError: (_status, detail) => { requestError = formatError(detail) } })
     } catch (error) { return fail(error?.message ?? 'The group edit failed.') }
-    if (!response || !current()) return null
+    if (!current()) return fail('The document changed while applying movement. Reopen Move/Rotate on the current part.')
+    if (!response) return fail(requestError || 'The move could not be confirmed. Pending movement has been retained.')
     if (response.design?.id !== designId || !Number.isSafeInteger(response.revision)
         || response.revision < revision || response.revision < currentRevision())
       return fail('The group edit response is no longer current. Your current part was kept.')
@@ -38,7 +42,8 @@ export function createGroupOrganizationEndpoint({ store, request, syncDesign, ge
     // Shared synchronization can skip an older reply, and subscribers can replace
     // the document during adoption. Neither outcome is an accepted edit receipt.
     if (!current() || currentRevision() !== response.revision
-        || store.getState().currentDesign !== response.design) return null
+        || store.getState().currentDesign !== response.design)
+      return fail('The move response could not be adopted by the current document. Refresh before retrying.')
     return response
   }
 }
@@ -47,5 +52,5 @@ export function createGroupOrganizationEndpoint({ store, request, syncDesign, ge
 export function createClusterPoseEndpoint(dependencies) {
   const command = createGroupOrganizationEndpoint({ ...dependencies, path: '/design/clusters/poses',
     requestBody: (_kind, inputs, revision) => ({ ...inputs, expected_revision: revision }) })
-  return placements => command('placements-update', { placements })
+  return placements => command('placements-update', { placements }, { throwOnFailure: true })
 }

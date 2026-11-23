@@ -8,6 +8,48 @@ metadata:
 
 # project runpod submission — topic guide
 
+## Managed SNUPI environment (2026-11-18)
+
+`solver_runpod_environment.py` provisions the default SNUPI interpreter on the
+network volume before preflight. Python 3.12, uv and CPU-worker dependency versions
+are pinned; a volume lock serializes setup and a successful-import marker avoids
+reinstalling on each pod. Custom paths and mrDNA/ARBD remain user-managed.
+Setup runs after the exact-pod watchdog starts and consumes the accepted budget.
+This repairs the missing `/workspace/nadoc-solver-env/bin/python` failure from
+BigO-poly coarse job `b6b1359b377e` (ISSUE-227). Remote tar extraction retains
+remote ownership, and bundles include core scaffold sequence/runtime data.
+Live retry `b958e97feeae` completed coarse + RMSF in 1129.96 s, returned 424,144
+finite positions, downloaded successfully and served display/RMSF HTTP 200.
+All retry pods were independently confirmed absent; combined compute cost $1.025.
+Original assembly and snapshot hashes were unchanged. Evidence:
+`.development-artifacts/snupi-runpod-environment-20261118/checks.json`.
+
+## SNUPI dynamics telemetry (2026-11-18)
+
+`solver_progress.py` transports bounded worker receipts without mutating job
+metadata. Dynamics progress uses actual integration counters (60,000 planned),
+not weighted setup fractions or the static load-step setting. Named setup phases
+are indeterminate; stale transport is labelled and suppresses ETA. Rate excludes
+setup and resets on retries. Live replacement job `bebad41f65e7` confirms receipt
+transport from RunPod. Original `4c9ec02f01e5` was stopped to deploy this change;
+its pod is gone. Combined old spend and new cap remain under $5. Completion of
+this Langevin job remains unconfirmed; inspect current status before retrying.
+Validation also exposed ISSUE-231: imported route workspace aliases let a test
+process falsely mark a live job's controller interrupted. Test startup now
+redirects those aliases; the running job was restored only after exact owner
+identity, remote process and fresh receipt checks. No new pod was created.
+
+## Solver allocation availability (2026-11-18)
+
+SNUPI/mrDNA use `solver_runpod_stock.py` to query GraphQL `gpuTypes.lowestPrice`
+with the selected network-volume datacenter, requested RAM (GiB converted to
+decimal GB), CPUs, Secure Cloud, public IP, CUDA and disk requirements. Global
+GPU availability is insufficient: failed SNUPI job `3869962f92e9` selected an
+A100 PCIe visible globally but unavailable at EU-RO-1 for 75 GiB/8 CPUs. No pod ID
+or spend was recorded. The REST volume parser accepts both `dataCenterId` and
+the current `dataCenter` field. Review and rental recheck capacity; supply races
+fail clearly with no automatic retry or GPU substitution.
+
 ## Topic navigation and current boundaries
 
 Reorganized October 17, 2026. Read the retained contracts here, then only the

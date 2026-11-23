@@ -1,4 +1,7 @@
+import { showSolverResourceDenial } from '../ui/solver_resource_denial.js'
 import { flexRangeQuery } from '../ui/md_flex_range.js'
+import { cancelHistoryPreview } from './history_preview.js'
+export { registerHistoryPreviewCanceller, cancelHistoryPreview } from './history_preview.js'
 import { createRecoverySerializer } from './recovery_serializer.js'
 const _serializeRecovery = createRecoverySerializer()
 import { sequenceActivity } from '../ui/sequence_activity.js'
@@ -111,10 +114,10 @@ export const assetOperationAPI = createAssetOperationRequests({ store, request: 
   syncDesign: _syncFromDesignResponse, showProgress: showAssetOperationProgress, saves: _assetSaves })
 export const groupOrganizationCommand = createGroupOrganizationEndpoint({ store, request: _request,
   syncDesign: _syncFromDesignResponse, getDocId, currentRevision: currentRevisionWatermark,
-  documentRequests: _documentRequests })
+  documentRequests: _documentRequests, formatError: errorDetailToMessage })
 export const commitClusterPoses = createClusterPoseEndpoint({ store, request: _request,
   syncDesign: _syncFromDesignResponse, getDocId, currentRevision: currentRevisionWatermark,
-  documentRequests: _documentRequests })
+  documentRequests: _documentRequests, formatError: errorDetailToMessage })
 const _extensionEndpoints = createExtensionEndpoints({
   getDesign: () => store.getState().currentDesign, getRevision: currentRevisionWatermark,
   getDocId, documentRequests: _documentRequests, request: _request, syncDesign: _syncFromDesignResponse,
@@ -1201,6 +1204,7 @@ async function _applyGetDesignResponse(json, metadataOnly) {
  * Returns null if nothing to undo (404 from server).
  */
 export async function undo({ onCommitted, deferGeometry = false } = {}) {
+  await cancelHistoryPreview()
   const trace = beginOperationTiming('Undo', { requestPath: '/design/undo' })
   const scope = _documentRequests.capture()
   const source = store.getState().currentDesign
@@ -1231,6 +1235,7 @@ export async function undo({ onCommitted, deferGeometry = false } = {}) {
  * Returns null if nothing to redo (404 from server).
  */
 export async function redo({ onCommitted, deferGeometry = false } = {}) {
+  await cancelHistoryPreview()
   const trace = beginOperationTiming('Redo', { requestPath: '/design/redo' })
   const scope = _documentRequests.capture()
   const source = store.getState().currentDesign
@@ -2707,6 +2712,19 @@ export async function relaxFlexibleSegments(transforms, label) {
   return _syncFromDesignResponse(json)
 }
 
+/** Joint solve and atomic feature commit; no optimistic geometry mutation. */
+export async function solveFlexibleSegments(scope = 'all', connId = null) {
+  const json = await _request('POST', '/design/flexible-relax',
+    { scope, conn_id: connId }, { timeoutMs: 180000 })
+  if (!json) throw new Error(lastErrorMessage() || 'Flexible relaxation failed')
+  if (!json.unchanged) {
+    if (json.diff_kind === 'cluster_only') await _syncClusterOnlyDiff(json)
+    else if (json.diff_kind === 'positions_only') await _syncPositionsOnlyDiff(json)
+    else await _syncFromDesignResponse(json)
+  }
+  return json.relaxation
+}
+
 export async function relaxOrigami() {
   const json = await _request('POST', '/design/relax-origami', {}, { timeoutMs: 180000 })
   if (!json) return null
@@ -2934,6 +2952,7 @@ async function _oxdnaJSONTransport(method, path, body = undefined, { signal, hea
   }
   if (!r.ok) {
     const json = await r.json().catch(() => null)
+    showSolverResourceDenial(path, json, r.status)
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     _emitRequestDiagnostic({
       phase: 'complete', id: diagnosticId, method, path,
@@ -4988,11 +5007,13 @@ export async function getLinkerGeometry() {
 }
 
 export async function undoAssembly() {
+  await cancelHistoryPreview()
   const json = await _request('POST', '/assembly/undo')
   return _syncFromAssemblyResponse(json)
 }
 
 export async function redoAssembly() {
+  await cancelHistoryPreview()
   const json = await _request('POST', '/assembly/redo')
   return _syncFromAssemblyResponse(json)
 }
@@ -5488,8 +5509,16 @@ export async function mkdirLibrary(path) {
   return _request('POST', '/library/mkdir', { path })
 }
 
-export async function renameLibrary(path, newName) {
-  return _request('PATCH', '/library/rename', { path, new_name: newName })
+export async function renameLibrary(path, newName, { onError } = {}) {
+  return _request('PATCH', '/library/rename', { path, new_name: newName }, {
+    onError: (status, detail) => onError?.(status, errorDetailToMessage(detail)),
+  })
+}
+
+export async function listLibraryMoveDestinations(paths) {
+  const query = new URLSearchParams()
+  for (const path of paths) query.append('path', path)
+  return _request('GET', `/library/move-destinations?${query}`)
 }
 
 export async function moveLibrary(path, destFolder) {
@@ -5827,3 +5856,5 @@ export const getSimulationSubmodel = (engine, id) => _oxdnaJSON('GET', `/${engin
 export const saveSimulationSubmodel = (engine, id, box) => _oxdnaJSON('PUT', `/${engine}/jobs/${id}/submodel`, { box })
 
 export const estimateSimulationSubmodel = (id, box) => _oxdnaJSON('POST', '/oxdna/jobs/' + id + '/submodel-estimate', { box })
+
+export const estimateSolverResources = (engine, body) => _oxdnaJSON('POST', `/${engine}/resource-estimate`, body)

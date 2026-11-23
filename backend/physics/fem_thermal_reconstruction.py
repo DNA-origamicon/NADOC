@@ -34,6 +34,7 @@ class ThermalReconstruction:
         for i, node in enumerate(mesh.nodes):
             by_helix.setdefault(node.helix_id, []).append(i)
         self.helices = []
+        self.normal_frames = []
         self.keys = []
         shown_points = []
         seen = Counter()
@@ -83,6 +84,8 @@ class ThermalReconstruction:
             ref_axis = np.array(
                 [start + (bp - helix.bp_start) * BDNA_RISE_PER_BP * axis for bp in bps]
             )
+            normals = np.asarray([n.base_normal for n in straight]).reshape(-1, 3)[keep]
+            self.normal_frames.append((normals, normals @ frame))
             self.helices.append(
                 (
                     indices,
@@ -156,6 +159,7 @@ class ThermalReconstruction:
             )
         core_columns = {tuple(k): i for i, k in enumerate(self.keys)}
         self.followers = []
+        self.follower_normals = np.asarray([[p["nx"], p["ny"], p["nz"]] for p in reference_positions[self.core_count:]]).reshape(-1, 3)
         for p in reference_positions[self.core_count :]:
             key = _key(p)
             anchor_col = core_columns[anchors[key]]
@@ -166,7 +170,7 @@ class ThermalReconstruction:
             self.followers.append((anchor_col, offset))
             self.keys.append(list(key))
 
-    def coordinates(self, u):
+    def coordinates(self, u, *, with_normals=False):
         from backend.physics.fem_solver import (
             _rmf_frames,
             _kabsch_transform,
@@ -175,8 +179,9 @@ class ThermalReconstruction:
 
         dofs = np.asarray(u).reshape(-1, 6)
         output = np.empty((len(self.keys), 3))
+        normals = np.empty_like(output) if with_normals else None
         cursor = 0
-        for (
+        for helix_index, (
             indices,
             reference,
             seed,
@@ -190,7 +195,7 @@ class ThermalReconstruction:
             near,
             rc,
             rs,
-        ) in self.helices:
+        ) in enumerate(self.helices):
             if len(indices) < 2:
                 wound = straight
             else:
@@ -208,13 +213,28 @@ class ThermalReconstruction:
                     + (x[right] - bps[-1])[:, None] * BDNA_RISE_PER_BP * tans[-1]
                 )
                 wound = pos + rc[:, None] * e1[near] + rs[:, None] * e2[near]
+            if with_normals:
+                straight_normals, coefficients = self.normal_frames[helix_index]
+                if len(indices) < 2:
+                    transported = straight_normals
+                else:
+                    transported = (coefficients[:, :1] * e1[near]
+                                   + coefficients[:, 1:2] * e2[near]
+                                   + coefficients[:, 2:] * tans[near])
+                    lengths = np.linalg.norm(transported, axis=1, keepdims=True)
+                    transported = np.divide(transported, lengths, out=transported, where=lengths > 1e-12)
+                normals[cursor:cursor + len(wound)] = transported
             output[cursor : cursor + len(wound)] = wound
             cursor += len(wound)
         core = output[: self.core_count]
-        core[:] = _apply_transform(core, *_kabsch_transform(core, self.target))
+        cs, cd, rotation = _kabsch_transform(core, self.target)
+        core[:] = _apply_transform(core, cs, cd, rotation)
+        if with_normals:
+            normals[:self.core_count] = normals[:self.core_count] @ rotation.T
+            normals[self.core_count:] = self.follower_normals
         for i, (anchor, offset) in enumerate(self.followers, self.core_count):
             output[i] = core[anchor] + offset
-        return output
+        return (output, normals) if with_normals else output
 
 
 def _key(p):

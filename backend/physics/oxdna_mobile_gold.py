@@ -33,13 +33,19 @@ def configure_mobile_gold_stages(stages):
             stage.steps = max(stage.steps, 10000)
             stage.kind = 'md_relax'
             stage.name = stage.name.replace('mc', 'gpu')
+            # CAD contacts can release enough energy to destroy the seed before
+            # ordinary Langevin MD damps them. Replace MC with a short overdamped
+            # startup; subsequent MD/equil/production retain their own settings.
+            stage.dt = min(stage.dt, 0.00001)
+            stage.diff_coeff = 0.0001
         stage.sim_type = 'MD'
         stage.backend = 'CUDA'
         stage.interaction = 'DNA2GOLD'
         stage.gold_file = 'mobile_gold.dat'
         stage.dt = min(stage.dt, 0.002)
         stage.thermostat = 'langevin'
-        stage.diff_coeff = 2.5
+        if stage.diff_coeff is None:
+            stage.diff_coeff = 2.5
         stage.refresh_vel = False
 
 

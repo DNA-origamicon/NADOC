@@ -50,7 +50,7 @@ PROOF_SNAPSHOT_KINDS = (
     | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
     | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | EXTENSION_KINDS
-    | frozenset({"nanoparticle-attach-overhang", "nanoparticle-connection-relax",
+    | frozenset({"flexible-relax", "nanoparticle-attach-overhang", "nanoparticle-connection-relax",
                  "nanoparticle-biotin-dna", "photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence",
                  "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste", "cluster-dissolve", "placement-poses"})
 )
@@ -123,6 +123,9 @@ def capabilities():
 
 
 def dependencies(kind, params):
+    if kind == "flexible-relax":
+        from backend.api.part_flexible_commands import dependencies as flex_dependencies
+        return flex_dependencies(params)
     if kind in PRESENTATION_KINDS:
         from backend.core.presentation_checkpoints import values
         try:
@@ -483,6 +486,9 @@ def _execute_candidate(kind, design, params, *, expensive):
     if "_frozen_legacy" in params:
         from backend.core.part_frozen_topology import build
         return build(kind, design, params)
+    if kind == "flexible-relax":
+        from backend.api.part_flexible_commands import execute as execute_flexible
+        return execute_flexible(design, params)
     if kind == "placement-poses":
         from backend.api.part_placement_pose_commands import build
         # Like cluster_op, complete absolute overlays perform no topology retry

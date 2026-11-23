@@ -9,9 +9,9 @@ Validated ≥ CanDo vs MD at $0 new MD (see ``memory/project_snupi_mimic.md``).
 
 Jobs live in ``workspace/snupi_jobs/{job_id}/job.json`` and survive server restarts.
 
-Like CanDo — and unlike oxDNA/mrDNA/NAMD — a SNUPI job is a PURE in-process Python
-solve (scipy sparse), so there is no subprocess, no CUDA device, and no availability
-probe.  The two "engines" are the two solver modes:
+SNUPI uses detached Python workers. Static solves use SciPy; linear Stokes
+dynamics can select an optional float64 CUDA backend with runtime memory admission.
+The two structural "engines" are the two solver modes:
 
   • **Coarse** = the LINEAR solve (``nonlinear=False``) — seconds, interactive preview.
   • **Fine**   = the geometrically-NONLINEAR corotational solve (``nonlinear=True``) —
@@ -117,6 +117,9 @@ class SnupiJob:
     design_fingerprint: Optional[str] = None
     feature_log_position: Optional[int] = None
     # Archival parity with oxDNA/mrDNA/CanDo jobs (job_archive is kind-generic).
+    execution: Optional[dict] = None  # actual CPU/CUDA backend, precision and RNG
+    execution_target: str = "local"
+    remote: Optional[dict] = None
     archived: bool = False
     archive_path: Optional[str] = None
 

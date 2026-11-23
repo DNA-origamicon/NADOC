@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { posEulerFromMatrix, eulerDegToQuat, stepEulerDeg } from './rotation_math.js'
+import { createToolPopup } from '../ui/tool_popup.js'
 import { showToast } from '../ui/toast.js'
 import { canonicalSelection } from './selection_model.js'
 import { createMoveRotateHistoryBinding } from './move_rotate_history_binding.js'
@@ -27,7 +28,7 @@ export function moveRotateSelectionLabels(state) {
 }
 
 /**
- * Move/Rotate right-sidebar panel — numeric transform inputs (tx/ty/tz, rx/ry/rz,
+ * Move/Rotate viewport popup — numeric transform inputs (tx/ty/tz, rx/ry/rz,
  * joint-angle) + pivot dropdown and a current-selection box with an explicit clear
  * action. Drives the
  * design cluster gizmo (clusterGizmo) and the assembly instance gizmo
@@ -59,6 +60,8 @@ export function initMoveRotatePanel({
   setClusterRotationPoint, clearSelection,
 }) {
   const _mrPanel         = document.getElementById('move-rotate-panel')
+  createToolPopup({ panel: _mrPanel, title: 'Move / Rotate',
+    onClose: () => document.getElementById('mr-cancel-btn')?.click() })
   const _mrSelectionBox  = document.getElementById('mr-current-selection')
   const _mrSessionHint   = document.getElementById('mr-session-hint')
   const _mrTxInp         = document.getElementById('mr-tx')
@@ -73,21 +76,17 @@ export function initMoveRotatePanel({
   const _mrJaSection     = document.getElementById('mr-joint-angle-section')
   const _mrSnapChk       = document.getElementById('mr-snap-45')
   const _mrFrameSel      = document.getElementById('mr-frame-sel')
+  document.getElementById('mr-tether-collisions')?.addEventListener('change', event => {
+    clusterGizmo.setCollisionDetection?.(event.target.checked)
+  })
   let   _mrPivotIsJoint  = false
   let   _mrAssemblyCtx   = null
   let   _proteinController = null
   let   _acceptedPivot = 'centroid'
   let   _pivotRequest = 0
 
-  // Attachment controllers (proteins and nanoparticles) are installed on the
-  // panel after subsystem construction.  Handle their buttons here, where the
-  // active controller is authoritative; the general translate/rotate tool's
-  // later listeners remain the fallback for clusters and nucleotides.
-  document.getElementById('mr-apply-btn')?.addEventListener('click', event => {
-    if (!_proteinController?.isAttached?.()) return
-    event.stopImmediatePropagation()
-    _proteinController.commit?.()
-  })
+  // Attachment Cancel/Reset use their preview controller. Apply is owned by the
+  // translate/rotate session so committing also closes the tool and popup.
   document.getElementById('mr-cancel-btn')?.addEventListener('click', event => {
     if (!_proteinController?.isAttached?.()) return
     event.stopImmediatePropagation()
@@ -171,7 +170,18 @@ export function initMoveRotatePanel({
     return null
   }
 
-  function _mrSetPivotOptions(joints, clusterId = null) {
+  let pivotOptionsRequest=0
+  function _mrSetPivotOptions(joints, clusterId = null, refresh = true) {
+    const request=++pivotOptionsRequest
+    if(refresh && clusterId && flexRelax.refreshFlexGates) {
+      const design=store.getState().currentDesign
+      void flexRelax.refreshFlexGates().then(()=>{
+        const state=store.getState()
+        if(request!==pivotOptionsRequest || state.currentDesign!==design ||
+            !state.translateRotateActive || state.activeClusterId!==clusterId || history.active())return
+        _mrSetPivotOptions(state.currentDesign?.cluster_joints?.filter(j=>j.cluster_id===clusterId)??[],clusterId,false)
+      })
+    }
     if (!_mrPivotSel) return
     // Preserve the current selection across a rebuild. A pivot-point change round-trips
     // to the server, whose fresh design makes cluster_joints a new array reference →

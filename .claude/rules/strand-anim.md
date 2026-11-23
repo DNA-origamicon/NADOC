@@ -155,8 +155,8 @@ they import nothing) — that is an unclaimed opportunity, not existing coverage
 
 ## Verify
 
-Frontend-only (no Python) → `just test-smart` decides `FAST`. There is nothing to run for this
-subsystem today; if you touch a pure builder, add the vitest file. Exercise the page (scenario ×
+Frontend-only changes use `just test-frontend TEST_FILE…` or `--related SOURCE…`;
+do not run backend sweeps. If you touch an untested pure builder, add its Vitest file. Exercise the page (scenario ×
 form × play, readouts + zero console errors) — and if you touched `params.js`, `melt.js`, or
 `strand_renderer.js`, **also exercise the editor's overhang strand animation**, because those
 three files ship in the main app. Not part of the routine E2E suite.

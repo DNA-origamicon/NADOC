@@ -1,5 +1,21 @@
 import * as THREE from 'three'
 
+/** Whole-helix deltas cannot represent partitioned or overlapping ownership. */
+export function requiresResolvedClusterGeometry(diffs, design) {
+  const clusters = design?.cluster_transforms ?? []
+  const affected = new Set(diffs.flatMap(d => d.helix_ids ?? []))
+  if (diffs.some(d => !clusters.some(c => c.id === d.cluster_id))) return true
+  const seen = new Set()
+  for (const cluster of clusters) {
+    const ids = (cluster.helix_ids ?? []).filter(id => affected.has(id))
+    if (!ids.length) continue
+    if (cluster.domain_ids?.length || cluster.base_ids?.length) return true
+    if (ids.some(id => seen.has(id))) return true
+    for (const id of ids) seen.add(id)
+  }
+  return false
+}
+
 /** Rebake `currentHelixAxes` for `helixIds` so its baked-in cluster transform
  *  matches `newCt` instead of `oldCt`. Plan B's commit/edit path keeps
  *  currentHelixAxes stale (skipGeometry: true), but downstream consumers that
@@ -145,6 +161,12 @@ export function initResponseDelta({
     if (!Array.isArray(clusterDiffs) || !clusterDiffs.length) return
     const helixCtrl = designRenderer.getHelixCtrl()
     if (!helixCtrl) return
+    if (requiresResolvedClusterGeometry(clusterDiffs, store.getState().currentDesign)) {
+      // Resolve all ownership and segmented axes through the native geometry
+      // path. Never commit whole-helix visual deltas for partial owners.
+      if (!await api.getGeometry()) throw new Error('Could not refresh geometry after cluster history change.')
+      return
+    }
     const clusterIds = clusterDiffs.map(d => d.cluster_id).filter(Boolean)
     const allHelixIds = new Set()
     let anyAxisRebake = false

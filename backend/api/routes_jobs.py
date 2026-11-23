@@ -416,7 +416,7 @@ def _collect_active() -> list[dict]:
                         "design_source_path": _activity_source_path(j, ws),
                         "status": j.status.value,
                         "created_at": getattr(j, "created_at", None),
-                        "execution_target": "local",
+                        "execution_target": getattr(j, "execution_target", "local"),
                         "resource_class": res,
                         "eta_seconds": None,
                     }
