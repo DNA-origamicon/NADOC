@@ -25,7 +25,9 @@ function specimen(direction, end, length) {
   geometry.push(...Array.from({ length }, (_, i) => ({
     ...common, helix_id: '__ext_tail', extension_id: 'tail', bp_index: i,
     domain_index: five ? -1 : 1, placement_source: 'native-full-extension-v1',
-    is_modification: false, slab_position: null, slab_quaternion: null,
+    is_modification: false,
+    slab_position: [.7 + (i + 1) * .68, .12, anchor * .334],
+    slab_quaternion: [0, 0, 0, 1],
     backbone_position: [1 + (i + 1) * .68, 0, anchor * .334],
     base_position: [.7 + (i + 1) * .68, 0, anchor * .334],
   })))
@@ -51,6 +53,41 @@ describe('Full representation extension attachment', () => {
         expect(internal).toHaveLength(length - 1)
         for (const bond of internal) {
           expect(bond.toNuc.bp_index - bond.fromNuc.bp_index).toBe(end === 'five_prime' ? -1 : 1)
+        }
+        const slabs = ctrl.slabEntries.filter(s => s.nuc.extension_id)
+        expect(slabs).toHaveLength(length)
+        for (const slab of slabs) {
+          const matrix = new THREE.Matrix4()
+          slab.instMesh.getMatrixAt(slab.id, matrix)
+          expect(new THREE.Vector3().setFromMatrixPosition(matrix).distanceTo(
+            new THREE.Vector3(...slab.nuc.slab_position))).toBeLessThan(1e-6)
+        }
+        for (const visible of [false, true]) {
+          ctrl.setExtensionsVisible(visible)
+          for (const slab of slabs) {
+            const matrix = new THREE.Matrix4()
+            slab.instMesh.getMatrixAt(slab.id, matrix)
+            expect(new THREE.Vector3().setFromMatrixScale(matrix).length() > 0).toBe(visible)
+          }
+        }
+        const arc = new Map([['tail', new Map(slabs.map(s => [s.nuc.bp_index,
+          new THREE.Vector3(...s.nuc.backbone_position).add(new THREE.Vector3(0, 4, 0))]))]])
+        ctrl.applyUnfoldOffsetsExtensions(arc, 1)
+        for (const slab of slabs) {
+          const matrix = new THREE.Matrix4()
+          slab.instMesh.getMatrixAt(slab.id, matrix)
+          expect(new THREE.Vector3().setFromMatrixPosition(matrix).distanceTo(
+            new THREE.Vector3(...slab.nuc.slab_position).add(new THREE.Vector3(0, 4, 0)))).toBeLessThan(1e-6)
+        }
+        ctrl.applyUnfoldOffsetsExtensions(arc, 0)
+        ctrl.captureClusterBase(['h'])
+        const shift = new THREE.Vector3(3, 2, -1)
+        ctrl.applyClusterTransform(['h'], new THREE.Vector3(), shift, new THREE.Quaternion())
+        for (const slab of slabs) {
+          const matrix = new THREE.Matrix4()
+          slab.instMesh.getMatrixAt(slab.id, matrix)
+          expect(new THREE.Vector3().setFromMatrixPosition(matrix).distanceTo(
+            new THREE.Vector3(...slab.nuc.slab_position).add(shift))).toBeLessThan(1e-6)
         }
         expect(geometry).toEqual(original)
       } finally {

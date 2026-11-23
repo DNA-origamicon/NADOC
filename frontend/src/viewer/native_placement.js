@@ -94,8 +94,9 @@ export function validateNativePlacement(nuc) {
   if (!acceptedSources.has(nuc?.placement_source)) {
     placementIntegrityFailure(nuc, 'placement_source', nuc?.placement_source, 'The geometry was not produced by the current canonical placement authority')
   }
-  const slabless = nuc.placement_source === 'native-full-extension-v1' || nuc.placement_source === 'chemical-modification-v1'
-  if (slabless) {
+  const extension = nuc.placement_source === 'native-full-extension-v1'
+  const slabless = nuc.placement_source === 'chemical-modification-v1' || (extension && nuc.slab_position === null)
+  if (extension || slabless) {
     const modification = nuc.placement_source === 'chemical-modification-v1'
     if (typeof nuc.extension_id !== 'string' || !nuc.extension_id.trim()
         || typeof nuc.strand_id !== 'string' || !nuc.strand_id.trim()

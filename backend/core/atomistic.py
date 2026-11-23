@@ -2608,7 +2608,8 @@ def build_atomistic_model(
             update={"deformations": [], "cluster_transforms": [], "nucleotide_transforms": []}
         )
         measured_geometry = _geometry_for_design(
-            placement_design, measured_positioning=True, junction_balance=True
+            placement_design, measured_positioning=True, junction_balance=True,
+            extension_slabs=False,  # Atomic construction consumes only host endpoints.
         )
         measured_by_key = {
             (g["helix_id"], g["bp_index"], Direction(g["direction"])): g

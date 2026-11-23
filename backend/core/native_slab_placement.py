@@ -96,6 +96,20 @@ def _expected_slab_pose(record):
                          **{key: record.get(key) for key in ("extension_id", "is_modification", "modification")}})
         for field in ("backbone_position", "base_position", "base_normal", "axis_tangent"):
             _vector(record, field)
+        if not is_modification and record.get("slab_position") is not None:
+            # Extension slabs are measured from atoms by extension_slabs, not
+            # registered against the independent coarse extension arc. Validate
+            # their transport here; atom/ring agreement is checked at projection.
+            center = _vector(record, "slab_position")
+            try:
+                quaternion = np.asarray(record.get("slab_quaternion"), dtype=float)
+                if (quaternion.shape != (4,) or not np.isfinite(quaternion).all()
+                        or abs(np.linalg.norm(quaternion) - 1) > 1e-6):
+                    raise ValueError("Invalid measured extension quaternion")
+                return center, Rotation.from_quat(quaternion).as_matrix()
+            except (TypeError, ValueError) as error:
+                raise NativePlacementError("Invalid atomistic extension slab pose.",
+                    details={"identity": _identity(record)}) from error
         return None
     if source != SOURCE and source not in AUTHORED_SOURCES:
         raise NativePlacementError("Native Full record has no recognized placement authority.",

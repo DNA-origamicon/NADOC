@@ -114,11 +114,11 @@ def test_real_extensions_and_modifications_keep_complete_identity_in_incremental
     design.extensions = [StrandExtension(id="tail", strand_id=design.strands[0].id,
         end="three_prime", sequence="TT", modification="cy3")]
     records = _geometry_for_design(design)
-    slabless = [row for row in records if row.get("extension_id")]
-    assert len(slabless) == 3
+    extensions = [row for row in records if row.get("extension_id")]
+    assert len(extensions) == 3
     buckets = _positions_by_helix(records)
-    for record in slabless:
-        assert authoritative_slab_pose(record) is None
+    for record in extensions:
+        assert (authoritative_slab_pose(record) is None) == record["is_modification"]
         bucket = buckets[record["helix_id"]][record["direction"]]
         index = bucket["bp"].index(record["bp_index"])
         for wire, field in (("sid", "strand_id"), ("extid", "extension_id"),

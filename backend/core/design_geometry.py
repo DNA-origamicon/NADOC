@@ -509,6 +509,7 @@ def _geometry_for_helices(
     measured_positioning: bool = True,
     junction_balance: bool = True,
     helix_axes: list[dict] | None = None,
+    extension_slabs: bool = True,
 ) -> list[dict]:
     """Compute nucleotide geometry for *design*.
 
@@ -745,6 +746,9 @@ def _geometry_for_helices(
     apply_cpd_context_geometry(result, design)
     if design.photoproduct_junctions:
         attach_native_slab_poses(result)
+    if extension_slabs:
+        from backend.core.extension_slabs import attach_extension_slabs
+        attach_extension_slabs(result, design)
     return result
 
 
@@ -871,6 +875,7 @@ def _geometry_for_design(
     *,
     measured_positioning: bool = True,
     junction_balance: bool = True,
+    extension_slabs: bool = True,
 ) -> list[dict]:
     """The sole native Full per-nucleotide geometry, including canonical slab poses."""
     return _geometry_for_helices(
@@ -879,6 +884,7 @@ def _geometry_for_design(
         compact_skips=compact_skips,
         measured_positioning=measured_positioning,
         junction_balance=junction_balance,
+        extension_slabs=extension_slabs,
     )
 
 

@@ -4,6 +4,8 @@ import { animationNativePosition } from './animation_native_position.js'
 import { revealSweepTube } from './sweep_animation_reveal.js'
 import { positionUpdateLookup } from '../viewer/geometry_codec.js'
 import { validateNativePlacement, placementIntegrityFailure, requireMappedNativePose, replaceNativePlacement, nativeMapPosition, validateNativePoseMap } from '../viewer/native_placement.js'
+import { slabInCluster } from './slab_cluster_scope.js'
+import { unfoldExtensionSlabs } from './extension_slab_display.js'
 import { nativeCorePaired } from '../shared/aptamer.js'
 /**
  * Helix renderer — builds Three.js instanced objects from geometry API data.
@@ -1221,8 +1223,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   if (!_skipSlabs) {
     for (const nuc of assignedGeometry) {
-      // Extension beads have no base-pair slabs.
-      if (nuc.helix_id.startsWith('__ext_')) continue
+      // Chemical labels have no DNA ring; extension bases have measured slabs.
+      if (nuc.slab_position == null) continue
       // The complete input was validated before any scene objects were added.
       const bnDir = new THREE.Vector3(...nuc.base_normal)
       const color = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
@@ -2669,8 +2671,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     // 3. Slabs — use straight bnDir/quaternion when straight maps are available.
     for (const slab of slabEntries) {
-      // Extension beads (__ext_) have no slabs.
-      if (slab.nuc.helix_id.startsWith('__ext_')) continue
       const entry = _nucToEntry.get(slab.nuc)
       if (!entry) continue
 
@@ -5397,8 +5397,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _cbEntries.set(entry.nuc, entry.pos.clone())
       }
       for (const slab of slabEntries) {
-        if (!helixSet.has(slab.nuc.helix_id)) continue
-        if (!inSelection(slab.nuc)) continue
+        if (!slabInCluster(slab.nuc, helixSet, inSelection, _extToRealHelix, _extToTerminalDomainKey, domainKeySet, baseKeys, forceAxes)) continue
         // Snapshot the ACTUAL rendered center. Re-solving it later from
         // nuc.base_position is invalid during a Plan-B preview because those
         // authoritative arrays intentionally remain unchanged until Apply.
@@ -5591,8 +5590,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       //    currentGeometry is deliberately not mutated during preview.
       const movedSlabs = []
       for (const slab of slabEntries) {
-        if (!helixSet.has(slab.nuc.helix_id)) continue
-        if (!inSelection(slab.nuc)) continue
+        if (!slabInCluster(slab.nuc, helixSet, inSelection, _extToRealHelix, _extToTerminalDomainKey, domainKeySet, baseKeys, forceAxes)) continue
         const entry    = _nucToEntry.get(slab.nuc)
         const baseData = _cbSlabs.get(slab.nuc)
         if (!entry || !baseData) continue
@@ -5811,8 +5809,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         entry.nuc.backbone_position[2] = entry.pos.z
       }
       for (const slab of slabEntries) {
-        if (!helixSet.has(slab.nuc.helix_id)) continue
-        if (slab.nuc.helix_id.startsWith('__ext_')) continue
+        if (!(slab.nuc.extension_id ? _extParentInSet(slab.nuc.extension_id) : helixSet.has(slab.nuc.helix_id))) continue
         slab.nuc.slab_position = slab.center.toArray()
         slab.nuc.slab_quaternion = slab.quat.toArray()
         if (slab.nuc.base_normal) {
@@ -6093,6 +6090,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       iFluoros.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors(unfoldExtensionSlabs(slabEntries, n => _nucToEntry.get(n), straightPosMap, slabParams))
     },
 
     /** Return fluorophore entries for raycasting and selection. */
@@ -6255,6 +6253,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const entry of fluoroEntries) {
         _setBeadScale(entry, s)
       }
+      for (const slab of slabEntries) {
+        if (!slab.nuc.extension_id) continue
+        rescaleInstanceInPlace(iSlabs, slab.id,
+          _tScale.set(s * slabParams.length, s * slabParams.width, s * slabParams.thickness),
+          _tMatrix, _tPos, _slabRescaleQ, _physDir)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
     },
 
     /**
