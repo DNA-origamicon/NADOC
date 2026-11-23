@@ -1,0 +1,12 @@
+{
+  "kind": "unaltered_external_cadnano_source",
+  "source_url": "https://api.nanobase.org/api/v1/structure/files/292/structure/6HB_fng_Final.json",
+  "source_filename": "6HB_fng_Final.json",
+  "publication_doi": "10.1021/acsnano.6b01537",
+  "retrieved_date": "2026-11-22",
+  "source_size_bytes": 423708,
+  "source_sha256": "38d5779198fbc6227faa55bf4f16077771e1169f31ac41adbda6cce7c3d21b33",
+  "fixture": "cadnano_gur_2016_6hb.json.gz",
+  "encoding": "gzip of exact downloaded bytes, mtime=0",
+  "changes_to_source": []
+}

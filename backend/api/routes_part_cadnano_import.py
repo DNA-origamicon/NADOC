@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.api import part_cadnano_commands as commands, state
 from backend.api.crud import _design_response
+from backend.api.import_bond_review import assess_import_bonds, attach_import_review, import_review_label
 from backend.api.part_recovery_budget import RecoveryBudget
 from backend.core.models import SnapshotLogEntry
 from backend.core.part_cadnano_source import MAX_SOURCE_BYTES
@@ -80,6 +81,10 @@ def _transport_error(detail, *, status=413):
 
 
 async def _read_source(request, *, format_name="caDNAno"):
+    # The two source families share transport mechanics, not capacity limits.
+    limit = MAX_SOURCE_BYTES
+    if format_name == "scadnano":
+        from backend.core.part_scadnano_source import MAX_SOURCE_BYTES as limit
     if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
         _transport_error(f"Send the original {format_name} JSON bytes as application/json.", status=415)
     if request.headers.get("content-encoding", "identity").lower() != "identity":
@@ -91,14 +96,14 @@ async def _read_source(request, *, format_name="caDNAno"):
         length = lengths[0]
         if not length.isascii() or not length.isdecimal() or len(length) > 19:
             _transport_error("Content-Length must be a nonnegative decimal integer.", status=400)
-        if int(length) > MAX_SOURCE_BYTES:
-            _transport_error(f"Pinned {format_name} source exceeds 100,000 bytes.")
+        if int(length) > limit:
+            _transport_error(f"Pinned {format_name} source exceeds {limit:,} bytes.")
     output = bytearray()
     async for chunk in request.stream():
         # Check before retaining/copying another chunk. ASGI transport buffers
         # are server-owned; the application never eagerly reads an entire body.
-        if len(chunk) > MAX_SOURCE_BYTES - len(output):
-            _transport_error(f"Pinned {format_name} source exceeds 100,000 bytes.")
+        if len(chunk) > limit - len(output):
+            _transport_error(f"Pinned {format_name} source exceeds {limit:,} bytes.")
         output.extend(chunk)
     return bytes(output)
 
@@ -116,7 +121,7 @@ def _prepare(raw, name_override, *, kind="cadnano-import"):
     source = describe(raw, format=source_format, media_type="application/json")
     initial = create_empty_part(name_override if name_override is not None else f"Imported {format_name}", "HONEYCOMB")
     initial = initial.copy_with(input_sources={source.sha256: embed(source, raw)})
-    params = {"_proof_version": 1, "lattice_import_version": 1, "importer_version": 1,
+    params = {"_proof_version": 1, "lattice_import_version": 1, "importer_version": 3 if kind == "cadnano-import" else 1,
         "source": source.model_dump(mode="json"), "history_seed": str(uuid4()),
         "identity_policy": "source-content-v1", "name_override": name_override}
     if kind == "scadnano-import":
@@ -127,9 +132,11 @@ def _prepare(raw, name_override, *, kind="cadnano-import"):
     evaluated = selected_commands.evaluate(kind, initial, params,
         resolver=EmbeddedResolver(initial.input_sources), **({"include_debug": True} if kind == "scadnano-import" else {}))
     candidate, warnings = evaluated[:2]
+    bond_review = assess_import_bonds(candidate)
     post, post_size = state.encode_design_snapshot(candidate)
     budget.charge(post)
-    entry = SnapshotLogEntry(op_kind=kind, label=f"Import {format_name} · {candidate.metadata.name}",
+    entry = SnapshotLogEntry(op_kind=kind,
+        label=import_review_label(f"Import {format_name} · {candidate.metadata.name}", bond_review),
         timestamp=datetime.now(timezone.utc).isoformat(), params=params,
         design_snapshot_gz_b64=pre, snapshot_size_bytes=pre_size,
         post_state_gz_b64=post, post_state_size_bytes=post_size)
@@ -140,6 +147,7 @@ def _prepare(raw, name_override, *, kind="cadnano-import"):
     response = _design_response(candidate, report, full_feature_log=True)
     if warnings:
         response["import_warnings"] = warnings
+    attach_import_review(response, bond_review)
     if kind == "scadnano-import":
         response["debug"] = evaluated[2]
         response["import_history"] = {"status": "reproduced_import", "native_editable": False,
@@ -150,7 +158,7 @@ def _prepare(raw, name_override, *, kind="cadnano-import"):
 @router.post("/design/features/import/cadnano", status_code=201,
     openapi_extra={"requestBody": {"required": True, "content": {"application/json": {
         "schema": {"type": "object", "required": ["vstrands"]},
-        "description": "Original UTF-8 caDNAno v2 JSON source, at most 100,000 bytes."}}}})
+        "description": f"Original UTF-8 caDNAno v2 JSON source, at most {MAX_SOURCE_BYTES:,} bytes."}}}})
 async def import_cadnano(request: Request, query: Annotated[ReplacementQuery, Query()]):
     """Import a pinned caDNAno recipe into a fresh empty active part, with one undo.
 

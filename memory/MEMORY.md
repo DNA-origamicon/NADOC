@@ -16,7 +16,7 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 - [Semantic document provenance](feedback_document_operation_provenance.md) — record meaningful document actions; no autosave feature rows; defer the visibility toggle and annotation/view-volume animation.
 - [Polymerization and extension scope](feedback_polymerization_extension_scope.md) — no implicit strand-to-extension conversion; correct Full attachment at ›1; defer long-tail molecular geometry beyond the feature-log/dependency overhaul.
 
-- [Visible helix labels](feedback_helix_labels.md) — use viewer labels in all communication and UI, never internal helix IDs.
+- [Visible helix labels](feedback_helix_labels.md) — use viewer labels in all communication and UI; never cell coordinates or internal IDs as helix names.
 
 - [Debug visibility](feedback_debug_visibility.md) — autonomously improve viewing conditions, preserve the behavior under test, verify user-visible output; reusable Codex skill.
 

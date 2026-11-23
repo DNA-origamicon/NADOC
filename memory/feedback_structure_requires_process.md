@@ -8,6 +8,43 @@ status: active
 
 # Structure requires its complete process
 
+## Mandatory quantitative bond review — November 22, 2026
+
+User instruction: an imported design with **more than 20%** of its bonds marked
+as forced ligations must trigger review. The same applies to any agent
+reconstruction with **more than 20%** of bonds longer than a standard crossover.
+This is an additional acceptance check; complete replay is still required.
+
+Count unique realized covalent backbone edges from the actual strand paths, and
+report both the whole-design fraction and the interhelix-junction fraction.
+Apply the threshold to either denominator so ordinary intrahelix bonds cannot
+hide systematic crossover substitution or stretch. Pending unligated crossover
+records are not bonds. Use the existing conservative **1.2 nm Full-view O5′
+endpoint separation** envelope: native HC crossover classes span approximately
+0.749–1.085 nm. This measures displayed backbone geometry, not an O3′–P chemical
+bond. Missing geometry is an incomplete review, never evidence of a pass.
+
+Stop acceptance when flagged; inspect representative junctions in 3D, report
+counts and examples using visible helix labels, and investigate lattice frame,
+phase, bp origin, import classification and routing before continuing. Do not
+remove/reclassify bonds merely to reduce the percentage. A legitimate exception
+requires a documented review tied to the exact design and report; it cannot
+waive provenance or authorize molecular changes. See
+[the executable workflow](../docs/design_bond_review.md).
+
+## Overhang and crossover semantics — November 22, 2026
+
+User correction following the rejected Gür 2016 reconstruction: **overhangs must
+never be created as extensions**. Use native overhang authoring, retaining the
+source routing, attachment and overhang identities. Do not replace ordinary
+crossovers with forced ligations to make a reconstruction pass validation.
+The combination of widespread forced ligations and extensions standing in for
+overhangs is a major diagnostic red flag, not an acceptable modeling shortcut.
+Investigate importer classification, lattice coordinates, phase and bp-index
+origins first. A replayable history or matching sequences cannot validate these
+substitutions. The 865-command Gür review file was rejected despite those checks;
+do not reuse it as a simulation seed or a successful construction precedent.
+
 User correction, November 1, 2026: the purpose of the feature revamp is that no
 structure can be generated without a complete feature log. A final geometry
 without the operations that produced it cannot be diagnosed. This is a hard

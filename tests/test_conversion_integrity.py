@@ -30,6 +30,8 @@ def test_cadnano_nonreciprocal_link_rejected():
 
 def test_cadnano_same_helix_jump_retains_exact_path():
     data = export_cadnano(bundle())
+    # Model edited external caDNAno topology without NADOC's source-bound metadata.
+    data.pop("nadoc_roundtrip", None)
     h = data["vstrands"][0]
     h["scaf"][2][2:] = [h["num"], 5]
     h["scaf"][5][:2] = [h["num"], 2]
@@ -46,6 +48,8 @@ def test_cadnano_same_helix_jump_retains_exact_path():
 
 def test_circular_cadnano_scaffold_keeps_all_bases():
     data = export_cadnano(bundle())
+    # Model edited external caDNAno topology without NADOC's source-bound metadata.
+    data.pop("nadoc_roundtrip", None)
     h = data["vstrands"][0]
     h["scaf"][0][:2] = [h["num"], 83]
     h["scaf"][83][2:] = [h["num"], 0]

@@ -2,6 +2,8 @@
 
 from typing import Literal
 
+from pydantic import Field, StrictInt
+
 from backend.api import part_cadnano_commands as lattice_commands
 from backend.core.part_input_sources import EmbeddedResolver, SourceContractError, verify
 from backend.core.part_scadnano_source import MAX_SOURCE_BYTES, parse_source
@@ -12,6 +14,8 @@ _OUTPUT_FIELDS = lattice_commands._OUTPUT_FIELDS | {"extensions"}
 
 
 class ImportRequest(lattice_commands.ImportRequest):
+    # caDNAno versions evolve independently of the unchanged scadnano builder.
+    importer_version: StrictInt = Field(ge=1, le=1)
     # Preserve, and explicitly disclose, the existing importer's losses. This
     # is not permission to invent conversion choices during replay.
     loss_policy: Literal["existing-importer-v1"]

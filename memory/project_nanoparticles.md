@@ -5,6 +5,43 @@ description: Display-layer nanoparticle authoring and automation.
 
 # Nanoparticles
 
+## Gür 2016 benchmark selected; sequence/topology audit (2026-11-22)
+
+**Importer repair authorized and implemented, November 22/23.** New imports use
+v3's complete existing native HC frame and active-span helix lengths. No locked
+constants, crossover indices or source routes were changed; v1/v2 remain pinned
+for historical replay. `workspace/Gur_2016_cadnano_v3_review.nadoc` was created
+through the real recorded Import caDNAno route and publication guard. Its saved,
+reopened feature log independently replays without recovery snapshots. All 167
+source paths match; there are 24 native overhangs and no terminal extensions.
+All 350 ordinary crossovers, including all 342 core junctions, have native Full
+O5′ endpoint separations below 1.2 nm (core maximum 1.085322 nm). The 16 genuine
+nonstandard helper/overhang-root forced ligations remain stretched; this repair
+does not validate those roots or establish a simulation-ready benchmark.
+Source sequences are still unassigned. Evidence and qualification script:
+`.development-artifacts/gur-hc-import-v3-20261123/`.
+
+Native canonical straight HC export/import now restores exact origins/extents
+and sequences using bounded explicit NADOC metadata alongside standard caDNAno
+vstrands; no atom/reference snapshot. Strict roundtrip tests compare every atom,
+bond and displayed base/backbone position without alignment. See
+`REFERENCE_CADNANO.md` for scope and metadata constraints.
+
+Existing native `workspace/6hb_e_test.nadoc` roundtrip independently compared
+4,924 Full nucleotide sites, 100,880 generated atoms, 113,056 bonds, 234 ordinary
+crossovers and 75 assigned sequences: zero coordinate/length differences, no
+alignment, original −21 bp origin restored. Source file unchanged. The live
+backend advertises importer 3; the actual Import menu was exercised with the
+original Gür source and confirmed version 3, no browser errors. Full viewer
+canvas was captured and visually inspected; isolated browser/server storage was
+removed and its absence verified. See `native_roundtrip_audit.json`,
+`live_backend_contract.json`, and `browser_review.json` in the v3 evidence folder.
+
+The mandatory >20% bond-review gate now checks both all backbone edges and
+interhelix junctions. Imports retain a review warning; agent publication requires
+a clean report or documented exact-design review alongside process replay. See
+[the workflow](../docs/design_bond_review.md).
+
 ## Move/Rotate Apply lifecycle (2026-11-21)
 
 Gold/quantum-dot and protein Apply use the shared tool confirmation path. A

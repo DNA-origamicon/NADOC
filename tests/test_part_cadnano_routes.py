@@ -12,7 +12,7 @@ from starlette.datastructures import Headers
 
 from backend.api import routes_part_cadnano_import as routes, state
 from backend.api.doc_context import DocContextMiddleware, reset_current_doc, set_current_doc
-from backend.api.part_proof_commands import dependencies, execute
+from backend.api.part_proof_commands import capabilities, dependencies, execute
 from backend.api.part_verification_worker import VerificationWorker
 from backend.core.models import Annotation, CameraPose, Design, DesignLoadout, Nanoparticle, SnapshotLogEntry
 from backend.core.part_history_contract import assess_part_history, create_empty_part
@@ -62,7 +62,12 @@ def test_openapi_documents_raw_source_and_required_replacement_guards(client):
     assert not parameters["name_override"]["required"]
     assert operation["requestBody"]["required"]
     assert set(operation["requestBody"]["content"]) == {"application/json"}
+    description = operation["requestBody"]["content"]["application/json"]["description"]
+    assert f"at most {routes.MAX_SOURCE_BYTES:,} bytes" in description
     assert "complete replacement" in operation["description"]
+    contract = capabilities()["cadnano_contract"]
+    assert contract["importer_version"] == 3
+    assert contract["replay_importer_versions"] == [1, 2, 3]
 
 
 @pytest.mark.parametrize("square", [False, True])
@@ -80,6 +85,7 @@ def test_replacement_pins_exact_bytes_new_root_full_history_and_one_undo_redo(cl
     assert not design.nanoparticles and len(design.feature_log) == len(design.input_sources) == 1
     entry = design.feature_log[0]
     assert entry.op_kind == "cadnano-import" and entry.params["name_override"] == "Explicit name"
+    assert entry.params["importer_version"] == 3
     assert "expected_revision" not in entry.params and "expected_design_id" not in entry.params
     descriptor = InputSource.model_validate(entry.params["source"])
     assert EmbeddedResolver(design.input_sources)(descriptor) == raw
@@ -113,6 +119,32 @@ def test_import_is_reproduced_in_fresh_worker_after_reload_with_poisoned_outputs
         assert worker.result()["status"] == "reproduced_import"
     finally:
         worker.close()
+
+
+def test_validated_native_roundtrip_preserves_original_frame_in_recorded_route(client):
+    from backend.core.cadnano import export_cadnano
+    from backend.core.lattice import make_bundle_design
+
+    native = make_bundle_design([(4, 6), (4, 7)], 42)
+    data = export_cadnano(native)
+    assert "nadoc_roundtrip" in data
+    response = post(client, raw=json.dumps(data).encode())
+    assert response.status_code == 201, response.text
+    imported = state.get_or_404()
+    assert imported.feature_log[0].params["importer_version"] == 3
+
+    def axes(design):
+        return sorted((helix.axis_start.x, helix.axis_start.y, helix.axis_start.z,
+                       helix.axis_end.x, helix.axis_end.y, helix.axis_end.z)
+                      for helix in design.helices)
+
+    # This source is deliberately away from the origin. The ordinary recenter
+    # step would silently translate it despite the validated frame metadata.
+    assert min(helix.axis_start.x for helix in native.helices) > 0
+    assert axes(imported) == axes(native)
+    row = imported.feature_log[0]
+    initial = state.decode_design_snapshot(row.design_snapshot_gz_b64)
+    assert axes(execute(row.op_kind, initial, row.params)) == axes(native)
 
 
 @pytest.mark.parametrize("change", [

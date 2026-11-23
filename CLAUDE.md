@@ -17,6 +17,24 @@ exception. Read [the binding process rule](memory/feedback_structure_requires_pr
 Compose only user-facing operations valid in the target editor. Private diagnostic
 steps and internal export/simulation helpers cannot become part-authoring features.
 
+**Overhangs must never be authored as terminal extensions.** Preserve them as
+native overhangs with their routing and attachment semantics. Do not substitute
+forced ligations for ordinary crossovers to bypass lattice-site validation.
+Widespread forced ligations or using extensions where overhangs are required are
+stop conditions: investigate coordinate conventions, bp origins and import
+classification before publication. Replay and sequence agreement alone do not
+establish a scientifically faithful design. See
+[the construction safeguards](memory/feedback_structure_requires_process.md).
+
+**Mandatory bond review:** an import with more than 20% forced-ligation bonds,
+or an agent reconstruction with more than 20% stretched backbone bonds, requires
+investigation before acceptance. Check both all realized backbone bonds and the
+interhelix junction subset; intrahelix bonds must not dilute a crossover defect.
+Use the shared bond-review report and publication gate, with the documented
+native crossover envelope and exact-design review receipt. Exactly 20% does not
+trigger this numerical rule; other topology/geometry failures still apply. See
+[bond review workflow](docs/design_bond_review.md).
+
 ### Three-Layer Law
 
 1. **Topological** — strand graph and crossover graph. Ground truth; edits happen here.
@@ -143,5 +161,11 @@ The human-operated two-computer synchronization procedure belongs in [START.md](
 Get explicit approval before deleting files, branches, or database-like state; rewriting history; modifying CI or hooks; pushing or posting remotely; bulk-migrating saved `.nadoc` files; weakening test guards; or touching locked phase constants.
 
 ## Communication
+
+**Identify helices only by their visible viewer labels in all user-facing
+communication. Never use lattice cell coordinates or internal IDs as helix
+names.** Resolve labels from the exact active design using the viewer's label
+fallback; do not infer them from coordinates or ID suffixes. See
+[visible helix labels](memory/feedback_helix_labels.md).
 
 The user has a PhD in biophysics specializing in DNA origami: use dense, precise domain language. Explain programming and infrastructure simply, with concrete examples and acronyms expanded on first use. Be terse. Ask rather than guess when scientific topology or directionality is uncertain.

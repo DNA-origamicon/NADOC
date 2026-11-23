@@ -6,16 +6,18 @@ import math
 from backend.core.part_input_sources import SourceContractError
 
 
-# Provisional qualification envelope, separate from document transport limits.
-MAX_SOURCE_BYTES = 100_000
+# Bounded single-module origami envelope, separate from document transport
+# limits. Sparse caDNAno arrays can substantially exceed the occupied bases:
+# the Gur 2016 source uses 13,020 slots for 14,514 occupied nucleotide sites.
+MAX_SOURCE_BYTES = 500_000
 MAX_HELICES = 32
 MAX_ARRAY_WIDTH = 2_048
-MAX_ARRAY_SLOTS = 8_192
+MAX_ARRAY_SLOTS = 16_384
 MAX_NUCLEOTIDES = 16_384
-MAX_STRANDS = 128
-MAX_DOMAINS = 512
+MAX_STRANDS = 256
+MAX_DOMAINS = 1_024
 MAX_JSON_DEPTH = 16
-_TOP_KEYS = frozenset({"name", "vstrands"})
+_TOP_KEYS = frozenset({"name", "vstrands", "nadoc_roundtrip"})
 _HELIX_KEYS = frozenset({"row", "col", "num", "scaf", "stap", "loop", "skip",
                          "stap_colors", "scaf_colors", "scafLoop", "stapLoop"})
 
@@ -82,7 +84,7 @@ def _json(text, source, *, format_name="caDNAno"):
 def parse_source(raw, source):
     """Return admitted JSON plus work counts; do not alter source declarations."""
     if len(raw) > MAX_SOURCE_BYTES:
-        _fail(source, "caDNAno source exceeds the initial 100 KB contract", limit=True)
+        _fail(source, f"caDNAno source exceeds the {MAX_SOURCE_BYTES:,}-byte import contract", limit=True)
     try:
         text = raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
@@ -90,7 +92,7 @@ def parse_source(raw, source):
                                   code="unsupported_source") from exc
     data = _json(text, source)
     if not isinstance(data, dict) or set(data) - _TOP_KEYS:
-        _fail(source, "caDNAno v1 accepts only the name and vstrands source fields")
+        _fail(source, "caDNAno accepts only name, vstrands, and bounded NADOC roundtrip metadata")
     if "name" in data and (not isinstance(data["name"], str) or len(data["name"]) > 1_024):
         _fail(source, "caDNAno source name must be bounded text")
     helices = data.get("vstrands")
@@ -163,6 +165,11 @@ def parse_source(raw, source):
     # Once checked, traversing each source slot once is safe and bounded.
     from backend.core.conversion_integrity import validate_cadnano_source
     validate_cadnano_source(data)
+    from backend.core.cadnano_roundtrip import validate_roundtrip_metadata
+    try:
+        validate_roundtrip_metadata(data)
+    except (ValueError, KeyError, TypeError) as exc:
+        _fail(source, f"Invalid NADOC caDNAno roundtrip metadata: {exc}")
     by_num = {helix["num"]: helix for helix in helices}
     visited = set()
 

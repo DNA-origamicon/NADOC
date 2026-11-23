@@ -106,7 +106,6 @@ export function initImportMenu(deps) {
     }
     if (importRelaxationMessage(result.relaxation)) showToast(importRelaxationMessage(result.relaxation), 8000)
     if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
-    showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
     api.addRecentFile(file.name, content, 'cadnano')
     renderRecentMenu()
 
@@ -220,7 +219,6 @@ export function initImportMenu(deps) {
       }
       if (importRelaxationMessage(result.relaxation)) showToast(importRelaxationMessage(result.relaxation), 8000)
       if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
-      showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
       api.addRecentFile(file.name, content, 'cadnano')
       renderRecentMenu()
       const design = store.getState().currentDesign

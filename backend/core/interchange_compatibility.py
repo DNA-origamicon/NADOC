@@ -191,7 +191,14 @@ def compatibility_report(design: Design, target: str) -> dict:
             "sequences",
             "Assigned strand sequences",
             sum(s.sequence is not None for s in active),
-            "caDNAno v2 JSON does not store strand sequences. Export the sequence table separately.",
+            "Standard caDNAno v2 readers do not retain sequences. Eligible straight native honeycomb exports include bounded NADOC metadata that restores sequences when reopened in NADOC; export the sequence table for other readers.",
+        )
+        from backend.core.cadnano_roundtrip import supports_native_roundtrip_frame
+        add(
+            "native_frame_roundtrip",
+            "Exact NADOC frame unavailable",
+            not supports_native_roundtrip_frame(design),
+            "This export preserves caDNAno routing, but does not include an exact NADOC frame roundtrip. Bent, posed, non-honeycomb, and noncanonical geometry must remain in the .nadoc document.",
         )
         add(
             "extensions",
@@ -345,12 +352,15 @@ def compatibility_report(design: Design, target: str) -> dict:
             "Not retained in this format; keep the .nadoc file to preserve this information.",
         )
 
-    # Raw axis placement/phase is not encoded by either lattice exporter.
+    # Standard readers reconstruct lattice geometry; the bounded NADOC extension
+    # additionally restores an eligible canonical HC frame, never arbitrary pose.
     add(
         "helix_geometry",
         "Helix coordinates and phase",
         len(design.helices),
-        "Only lattice cells, nucleotide paths and insertions/deletions are exported. Absolute axis placement, phase and custom twist are reconstructed by the receiving application.",
+        ("Standard caDNAno readers reconstruct geometry from lattice cells and nucleotide paths. Eligible straight native honeycomb exports additionally preserve the original NADOC frame in bounded metadata; custom phase, twist and arbitrary poses are not retained."
+         if target == "cadnano" else
+         "Only lattice cells, nucleotide paths and insertions/deletions are exported. Absolute axis placement, phase and custom twist are reconstructed by the receiving application."),
     )
     token = hashlib.sha256(
         (target + json.dumps(current, sort_keys=True, separators=(",", ":"))).encode()
