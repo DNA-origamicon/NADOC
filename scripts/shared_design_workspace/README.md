@@ -1,82 +1,48 @@
 # Shared Designs
 
-This is an independent Git repository inside NADOC's workspace. Open **Library →
-This computer → Shared Designs** to browse it, or choose the folder when saving.
-The outer NADOC repository still ignores `workspace/`; use Git from this folder
-to version these files. Synchronization is explicit, not a background service.
+Shared reconstructions belong in `workspace/Shared Designs/`. This folder is
+tracked directly in the main NADOC Git repository. A normal clone or pull of
+NADOC includes the folder and all committed designs; no separate remote or
+submodule initialization is needed.
 
-Use the identical `Shared Designs` folder name under each machine's workspace.
-The absolute NADOC installation paths can differ. Assemblies should reference
-parts as `Shared Designs/parts/name.nadoc`, with every referenced part and other
-input included in this repository. Keep separate candidates under distinct names.
+Open **Library → This computer → Shared Designs**. The default reconstruction
+layout is `Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc`. Keep required part and
+assembly dependencies in this folder, with workspace-relative references starting
+`Shared Designs/`. Keep complete native feature histories and source hashes.
 
-Keep generated designs and required document dependencies here. Development
-inputs, recipes and reports belong in the owning NADOC checkout under
-`.development-artifacts/all-origami/`. Preserve full construction histories
-and source hashes in the native documents themselves.
+## Save and synchronize
 
-## Connect the first machine
+Save and close affected designs before synchronizing. From the NADOC repository
+root, review `git status` and stage the specific reviewed files, then commit and
+push. On other computers, use `git pull --ff-only` with a clean checkout and
+refresh the Library. Saving a design alone does not publish it to Git.
+Do not automatically merge conflicting molecular JSON or discard local edits.
 
-From this folder, after choosing a private, empty Git remote:
-
-```bash
-git status
-git remote add origin REPOSITORY_URL
-git add README.md AGENTS.md .gitignore
-git commit -m "workspace: initialize shared designs"
-git push -u origin HEAD
-```
-
-The initializer does not perform these steps. Replace `REPOSITORY_URL` with the
-actual remote; Git hosting or an SSH-accessible bare repository can be used.
-
-## Connect the other machine
-
-From that machine's NADOC checkout (use the configured workspace if customized):
+Before committing agent-authored parts, run the required independent audit:
 
 ```bash
-git clone REPOSITORY_URL "workspace/Shared Designs"
+.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc"
 ```
 
-Do not initialize a second unrelated repository there. Both machines need NADOC's
-nested-hidden-directory listing fix so `.git` stays out of the Library.
+Author parts through `scripts.agent_structure_guard.publish`. Verify assemblies'
+recorded process and dependencies separately. Failed audits block publication;
+transfer does not certify scientific validity or simulation readiness.
 
-## Exchange a generation batch
+Keep simulation jobs, trajectories, credentials, and development evidence out of
+this folder. Development inputs and reports belong under
+`.development-artifacts/all-origami/`. Other workspace folders remain local.
 
-On the generator machine, audit each saved agent-authored part from the NADOC root:
+## Existing installations
 
-```bash
-.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/parts/name.nadoc"
-```
+The old setup script created a nested Git repository without connecting a remote.
+If `workspace/Shared Designs/.git` exists, inspect its status, history and remotes
+and preserve that metadata outside the workspace before adopting the main-repo
+layout. Do not delete an existing repository or overwrite local designs.
+If a pull reports untracked files would be overwritten, back up those exact files
+outside the workspace, compare them with the incoming versions, and reconcile
+before retrying. Do not force the pull.
 
-Check assembly histories/replay and every file dependency separately; the part
-guard does not certify assemblies. Record the NADOC commit, generation parameters,
-input hashes and validation verdicts in the native process and separate development report. From this repository,
-review `git status` and `git diff`, stage the specific batch files, commit and push.
-
-On the simulation machine, save/close affected documents, check `git status`, and
-run `git pull --ff-only` only with a clean checkout. Stop on divergence or conflict;
-do not automatically combine molecular JSON. Refresh the Library after pulling.
-Load the native document, verify dependencies and provenance, then run the target
-engine's preparation/readiness checks using a compatible NADOC revision before
-requesting a production run. Record both repository commits with the job.
-
-Simulation jobs stay in the host's ordinary workspace job folders or explicitly
-configured local storage. Keep reports with development evidence; do not put trajectories,
-live job state, credentials or large simulation packages into this repository.
-
-Git delivers exact saved inputs; it does not guarantee that every generated design
-is physically valid or supported by every simulation engine. Existing deferred
-polymerization and long-extension limitations still apply.
-
-## All Origami generation
-
-From the NADOC checkout, use `python -m tools.design_archive.shared_pipeline --help`.
-The standard destination is `Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc`.
-Only this standalone native file is shared. Hashed inputs, recipes and `run.json`
-remain in `.development-artifacts/all-origami/runs/` in the NADOC checkout.
-Blocked extraction runs create no Shared Designs entries. Reviewed command recipes produce parts only after complete saved/reopened
-feature replay; required unsupported fits block publication. The workflow does not
-commit or push. `simulation_ready` stays false until separate scientific preparation.
-See `tools/design_archive/README.md` in the matching NADOC code checkout for the
-recipe contract, supported extraction profiles and remaining reconstruction gaps.
+Git checks out this folder beneath the NADOC checkout. If `NADOC_WORKSPACE` points
+elsewhere, explicitly arrange for that workspace's `Shared Designs` to use this
+tracked folder (for example, a directory symlink where supported); changing the
+workspace setting does not move Git's checkout.

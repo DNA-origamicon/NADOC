@@ -71,11 +71,12 @@ width. The Feature Log designer guide excludes advanced repair proposals.
 
 ## Corrections from the 2026-07-31 audit (the archive is wrong about these)
 
-**Shared design folder (2026-11-04):** `scripts/setup_shared_design_workspace.py`
-initializes a separate Git repository at `workspace/Shared Designs` (honoring
-`NADOC_WORKSPACE`). It uses the existing Library folder navigation. Hidden
-directories are now pruned at every listing depth so nested `.git` data is not
-scanned or shown. Remote setup and synchronization remain explicit; see `START.md`.
+**Shared design folder (2026-11-23):** `workspace/Shared Designs/` is tracked in
+main NADOC Git, so ordinary clone/pull includes the folder and committed designs.
+Shared reconstructions go here; other workspace data remains ignored. The setup
+helper creates only a missing folder, never a nested repository. See `START.md`
+and the shared folder README for legacy nested repositories and custom workspaces.
+Hidden directories remain pruned from Library listing at every depth.
 
 | Archive claim | Reality |
 |---|---|

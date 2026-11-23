@@ -43,3 +43,12 @@ assemblies, generated parts, and files written directly by scripts.
 Reading an existing legacy file for diagnosis is permitted; it does not authorize
 creating another history-free structure. Molecular-geometry authorization remains
 a separate requirement and cannot be bypassed by adding a feature log.
+
+## Shared reconstruction destination
+
+Save shared reconstructions and their required portable dependencies under
+`workspace/Shared Designs/` (catalog runs use `All Origami/Dnnn/RUN/`). This folder
+is tracked by the main NADOC repository and travels with ordinary clone/pull.
+Do not create a nested Git repository. Keep simulation jobs and development
+evidence local. Publication and independent replay requirements above still apply.
+See `workspace/Shared Designs/README.md` for the synchronization workflow.

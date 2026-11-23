@@ -163,25 +163,16 @@ from then on.
 
 ### Shared design repository
 
-For an independent Git-synchronized folder selectable in the Library, initialize
-the first machine from the NADOC checkout:
+Shared reconstructions belong in `workspace/Shared Designs/`, tracked directly
+by the main NADOC repository. A normal clone or `git pull --ff-only` includes the
+folder and all committed designs. Open **Library → This computer → Shared Designs**.
+No separate repository or remote is required. Save/close designs, review and commit
+specific audited files, and push from the NADOC root to share new reconstructions.
 
-```bash
-python scripts/setup_shared_design_workspace.py
-```
-
-This creates `workspace/Shared Designs` (or beneath `NADOC_WORKSPACE`) without
-changing existing designs, committing, or connecting a remote. It refuses an
-existing folder. Follow its [README](scripts/shared_design_workspace/README.md)
-to connect a private remote and clone into the same workspace-relative location
-on the second machine. The folder is an ordinary Library entry, not a separate
-server tab or an automatic background synchronization service.
-
-The outer repository continues to ignore `workspace/`; the inner repository has
-its own Git history. Keep portable native parts/assemblies, construction process,
-required inputs and compact reports there. Simulation jobs remain local. A clean
-`git pull --ff-only` transfers saved inputs; receiving-engine preparation and
-provenance checks still determine whether a design is usable for simulation.
+Other workspace folders and simulation jobs remain local. Preserve complete native
+construction histories and portable dependencies; audit agent-authored parts before
+committing. See the [shared folder instructions](workspace/Shared%20Designs/README.md)
+for synchronization, existing nested repositories, and custom `NADOC_WORKSPACE` paths.
 
 ### Application code
 
