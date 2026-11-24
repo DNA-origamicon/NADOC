@@ -237,3 +237,54 @@ Master integration retains October 15–22 rendering, clipboard and upload-pacin
 evidence in [the archive](project_native_vr_archive.md). The October 22 standard-24HB
 recheck supersedes earlier baseline performance claims; physical comfort and strict
 no-drop editing remain unqualified. Rediscover runtime identities before use.
+
+## File sidebar (2026-11-23)
+
+Left File now connects New Part, Open (workspace parts), Save As and Close Session
+to browser file operations; New Assembly remains disabled. A versioned routing
+bridge carries the separate large filename keyboard and enlarged workspace list.
+New/Open save before switching and refresh the native scene; Close exits VR.
+Offline native key-hit validation passes all four profiles (variable_fast
+2099/2100 at 0.6 m with the standard QWERTY layout). App keyboard/picker cancellation flow and focused frontend
+contracts pass. Physical comfort/haptics and creation/save/load checks remain MV-71;
+do not interpret synthetic selection as measured human accuracy.
+See `docs/vr_sidebar_menus.md` and Debug → VR Tours & Tests → Left sidebar →
+File · filename keyboard accuracy.
+
+The File demo now uses `file_tour.py` / `file_probe.py` and real native/browser
+transport. It enlarges and frames the menu through controller placement/resize,
+shows the separate QWERTY keyboard, types/edits `demo2`, cancels before creation,
+navigates the Open folder list and closes its owned session. Native render gates
+now include standalone routing popups (previously the closed sidebar hid them).
+Debug entry: File menu · keyboard and cancellation. Offline QWERTY evidence:
+`.development-artifacts/vr-file-qwerty/offline/report.json`; live captures and
+review page: `.development-artifacts/vr-file-qwerty/live/index.html`.
+
+## File component gallery (2026-11-23)
+
+`file_gallery.hpp` adds six full-size selectable File-menu studies: essential,
+folder tiles, compact list, detail table, expandable folder tree and split
+inspector. The component gallery's `files` mode supports both VR and desktop;
+Debug → VR Component Gallery → File menus · six interactive styles exposes it.
+Sample data only, with selection/navigation and disabled New Assembly; no file
+writes or changes to the production File-menu style. `file_gallery_probe.py`
+validates all six under the four existing motion presets. Evidence destination:
+`.development-artifacts/vr-file-gallery/`. Frontend main.js delta for this task: 0.
+
+Gallery discoverability correction: `initVrTours` flattens the filtered Component
+Gallery into direct launch entries and refreshes on pointer re-entry. General
+VR Tours retains category flyouts. Live browser checks (1440×900, 1280×720) verify
+File VR/desktop/validation entries; five focused UI tests pass. The earlier
+instructions omitted the old Component evaluations submenu. main.js delta: 0.
+
+## Approved production File table (2026-11-23)
+
+User chose gallery option 4 for VR only. `file_table.hpp` lays out fixed file
+commands beside a six-row Name/Type/Modified/Size table. Selecting `tab:file`
+dispatches the existing browser Open path; New Part / Save As retain the QWERTY
+popup. `vr_files.js` can cancel/settle the current picker before switching file
+commands and publishes real metadata in routing detail; desktop CSS/behavior
+are unchanged. `file_probe.py` now drives the table's routed command IDs.
+Desktop component-gallery processes no longer reserve the headset in
+`routes_vr_tours._viewer_active`; an already open desktop gallery is preserved.
+Task-specific frontend main.js delta: 0. Evidence: `.development-artifacts/vr-file-table/`.

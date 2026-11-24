@@ -12,6 +12,7 @@ class SidebarRuntime {
     std::function<void(size_t,SolidUi&)> simulationDraw;
     std::array<bool,2> openedBefore{};
     double lastTabFrame=0;
+    std::array<nadoc_vr::FileHoverFeedback,2> fileHoverFeedback;
     std::array<nadoc_vr::SidebarMenu*,2> historyGrab{};
     void initialize() { for(auto& s:surfaces) s.initialize(); }
     void shutdown() { for(auto& s:surfaces) s.shutdown(); for(auto& s:raised)s.shutdown(); }
@@ -84,6 +85,7 @@ class SidebarRuntime {
     }
     template<class Action> std::array<bool,2> input(const std::array<nadoc_vr::HandPose,2>& hands,
             const std::array<bool,2>& clicked,const std::array<bool,2>& held,std::array<bool,2> blocked,const std::array<float,2>& foreground,double now,Action action) {
+        std::array<std::string,2> fileHover;
         for(auto& m:menus) {m.hovered.clear();if(now>=m.pressedUntil)m.pressed.clear();if(!m.open)m.focus.reset();}
         for(size_t h=0;h<2;++h)if(auto* m=historyGrab[h]) {
             const auto point=m->placement.rayPanelLocalPoint(hands[h],{-100,-100},{100,100});
@@ -119,6 +121,7 @@ class SidebarRuntime {
             auto c=target->hit(hands[h]);
             if(!c) continue;
             target->hovered=c->id;
+            if(c->enabled && (target->tab().key=="file-browser" || target->tab().key=="file-keyboard"))fileHover[h]=c->id+":"+c->label;
             if(c->id=="history:scrub" && c->enabled) {
                 if(clicked[h] && historyGrab[1-h]!=target){
                     const auto point=target->placement.rayPanelLocalPoint(hands[h],target->bounds().minimum,target->bounds().maximum);
@@ -131,6 +134,7 @@ class SidebarRuntime {
                 activate(*target,*c,h,hands,now,action);
             }
         }
+        for(size_t h=0;h<2;++h)if(fileHoverFeedback[h].enter(fileHover[h]) && !clicked[h])action("feedback:hover",h);
         const float dt=lastTabFrame>0?float(now-lastTabFrame):0.F;lastTabFrame=now;
         for(auto& m:menus)m.animateTabs(dt);
         return blocked;

@@ -11,6 +11,7 @@ import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.j
 import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
 import { createVRPrompts } from './scene/vr_prompts.js'
 import { setNativePromptHandler } from './ui/primitives/native_prompt.js'
+import { createVRFiles, saveBeforeVRFileSwitch } from './scene/vr_files.js'
 import { createVRRouting } from './scene/vr_routing.js'
 import { createSimulationRepresentations } from './scene/simulation_representations.js'
 import { createVRSimulations } from './scene/vr_simulations.js'
@@ -6336,7 +6337,14 @@ async function main() {
     onError: message => showToast(message, { severity: 'error' }),
   })
   setNativePromptHandler(opts => vrPrompts.ask(opts))
-  const vrRouting = createVRRouting({ onError: message => showToast(message, { severity: 'error' }) })
+  const vrFiles = createVRFiles({ api, newPart: onCreated => _newDesignModal.openModal({ onCreated }),
+    openPart: (...args) => _fileOpen.openPartFromServer(...args), openAssembly: path => _fileOpen.openAssemblyFromServer(path),
+    saveAs: () => _fileSave.saveAsDispatch(), closeSession: async () => { await _closeSession(); await api.stopNativeVR() },
+    refresh: () => api.refreshNativeVRScene({ expected_design_id: store.getState().currentDesign.id, expected_revision: api.currentRevisionWatermark() }),
+    beforeSwitch: () => saveBeforeVRFileSwitch({ store, api, fileIo: _fileIo, workspacePath: _workspacePath, assemblyPath: _assemblyWorkspacePath }),
+    onError: message => showToast(message, { severity: 'error' }),
+  })
+  const vrRouting = createVRRouting({ files: vrFiles, onError: message => showToast(message, { severity: 'error' }) })
   const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, api, onError: message => showToast(message, { severity: 'error' }) })
   const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, api, companion: engine => engine === 'namd' ? mdPanel?.trajectorySolvent : null, controller: engine => ({ namd: mdViz, oxdna: oxdnaDisplay, lammps: lammpsDisplay, snupi: snupiDisplay })[engine], ensureFull: () => _reprSwitcher.ensureSimulationRepresentation(), prepareFrame: () => _currentRepr === 'full' ? undefined : simulationRepresentations.prepare().then(() => simulationRepresentations.refresh()), scale: () => flexScale, delivery: () => vrViewTools.delivery, onFrame: () => vrViewTools.refresh(), onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
@@ -6997,6 +7005,7 @@ async function main() {
       scrywrite: new URLSearchParams(window.location.search).has('scrywrite') ? {
         dispatch: event => _handleNativeVREvent(event),
         publishFeatureHistory: () => vrFeatureLog.publish(),
+        publishFileControls: () => vrRouting.publish(),
         select: ref => selectionController.replace([ref]),
         snapshot: () => structuredClone({
           shell: _vrToolShellState,

@@ -39,14 +39,18 @@ class RoutingPanel {
         roots=std::move(r);controls=std::move(c);title=nextTitle;version=v;acknowledged=a;
         popup.open=!title.empty();
         if(opening){popup.placement=parent.placement;popup.placement.openDocked(parent.placement.worldPoint({0,0,.045F}),parent.placement.orientation());popup.placement.setScale(parent.placement.scale());}
-        SidebarTab tab{1,"routing-dialog",title,{}};
+        const bool keyboard=title=="Filename keyboard";
+        if(keyboard)popup.placement.setScale(kFileKeyboardScale);
+        else if(title=="Open / Save File")popup.placement.setScale(1.F);
+        SidebarTab tab{1,keyboard?"file-keyboard":title=="Open / Save File"?"file-browser":"routing-dialog",title,{}};
         tab.rows.push_back({"routing-title",title,"","",{}});
         const auto back=std::find_if(controls.begin(),controls.end(),[](const auto& row){return row.label=="Cancel"||row.label=="Done"||row.id=="dismiss";});
-        const auto info=std::find_if(controls.begin(),controls.end(),[](const auto& row){return row.id.starts_with("info-");});
+        auto info=std::find_if(controls.begin(),controls.end(),[](const auto& row){return row.id=="info-location";});
+        if(info==controls.end())info=std::find_if(controls.begin(),controls.end(),[](const auto& row){return row.id.starts_with("info-");});
         if(back!=controls.end())tab.rows.push_back({"routing:"+back->id,back->label,"","routing:"+back->id,{}});
         else tab.rows.push_back({"routing-back","Please wait...","","",{}});
         tab.rows.push_back({"routing-help",info!=controls.end()?info->label:"Point and trigger to choose","","",{}});
-        for(auto it=controls.begin();it!=controls.end();++it)if(it!=back && it!=info)tab.rows.push_back({"routing:"+it->id,it->label,"","routing:"+it->id,{}});
+        for(auto it=controls.begin();it!=controls.end();++it)if(it!=back && it!=info)tab.rows.push_back({"routing:"+it->id,it->label,it->detail,"routing:"+it->id,{}});
         popup.customTab=std::move(tab);
         const size_t total=popup.total();if(popup.offset()>=total)popup.offsets[popup.selected]=0;
         return true;

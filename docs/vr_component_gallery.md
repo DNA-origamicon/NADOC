@@ -457,3 +457,42 @@ Timing triage: the placement-report subprocess test dropped from 17.22 s to
 These exercise tiny synthetic data and process lifecycle, not heavy scientific
 work. No budgets or classifications changed. Disposable test/compiler/browser
 scratch was removed; captures, logs, build and active review scratch are retained.
+
+## File menus: six styles (2026-11-23)
+
+Debug → VR Component Gallery → **File menus · six interactive styles** opens the
+same native UI in VR or the desktop evaluator. Select 1–6 to compare at full size;
+Play demo cycles styles every four seconds. Reset returns to the minimal view.
+
+| Style | Information shown | Presentation |
+|---|---|---|
+| Essential | Actions, then two recent files on request | Raised wide buttons |
+| Folder tiles | Four file names and types | Large tabbed folder tiles |
+| Compact list | Six names | Tight outlined rows |
+| Detail table | Six names, types, modification times and sizes | Aligned columns |
+| Folder tree | Folder first, four files when expanded | Indented expandable rows |
+| Split inspector | Six names plus selected file details | List beside persistent inspector |
+
+All styles retain New Part, disabled New Assembly, Open, Save As and Close Session.
+File selection and folder navigation update local sample state. These are UI
+studies: names and metadata are illustrative, and actions never write or replace
+real documents. The production File menu remains unchanged by style selection.
+The gallery validation covers style switching, disabled New Assembly, file
+selection, tree expansion/collapse, stereo pixels and actual desktop delivery.
+
+The File study opens at scale 1.5 in VR, 1.30 m from the tracked viewpoint, and
+at scale 0.9 in the desktop evaluator. This replaces the initial too-small
+presentation. Native front/oblique text checks and offscreen negative controls
+pass for all six layouts. The component catalog/API checks pass (53 tests).
+Review captures: `.development-artifacts/vr-file-gallery/live-03/index.html`.
+These are UI interaction and visibility checks, not measured human comfort.
+
+Final live validation passed all 24 style/profile combinations, retaining 7 retry reaches among 91 total reaches. Six stereo/desktop captures passed visible-content and offscreen-negative checks. The owned viewer stopped and its temporary socket directory was removed.
+
+Gallery-menu discoverability fix: the filtered VR Component Gallery now lists
+its launchers directly, without the extra Component evaluations flyout. Reopening
+by pointer refreshes the catalog instead of retaining the initial list forever.
+The general VR Tours & Tests menu keeps its category hierarchy. Live localhost
+browser checks at 1440×900 and 1280×720 verified all three File launchers in the
+viewport and no duplicates after reopening. Evidence:
+`.development-artifacts/vr-gallery-menu-check/after-1280.png`.

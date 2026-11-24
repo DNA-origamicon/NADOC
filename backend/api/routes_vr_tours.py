@@ -51,6 +51,9 @@ def _viewer_active():
     for path in Path('/proc').glob('[0-9]*/comm'):
         try:
             if path.read_text().strip().startswith('nadoc-vr-viewer'):
+                argv = (path.parent/'cmdline').read_bytes().split(b'\0')
+                if any(argv[i:i+2] == [b'--gallery-desktop', b'on'] for i in range(len(argv)-1)):
+                    continue
                 return True
         except OSError:
             continue

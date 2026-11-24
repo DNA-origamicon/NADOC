@@ -15,7 +15,7 @@ export const ROUTING_ACTIONS = [
 const clean = text => String(text ?? '').replace(/\s+/g, ' ').trim()
 
 /** Desktop handlers own validation, design changes and history. Native receives only allowlisted controls. */
-export function createVRRouting({ doc = document, request = fetch, onError = console.error } = {}) {
+export function createVRRouting({ doc = document, request = fetch, onError = console.error, files = null } = {}) {
   let version = Math.floor(Math.random() * 1e9), acknowledged = 0, published, sending = false, epoch = 0
   let opened = false, editing = false, message = '', operation = '', invoking = false
   const pending = new Set()
@@ -38,6 +38,8 @@ export function createVRRouting({ doc = document, request = fetch, onError = con
   const busy = () => pending.size > 0 || !!doc.querySelector('#op-progress.visible')
   const enabled = el => !!el && !el.disabled && el.getAttribute('aria-disabled') !== 'true' && !el.classList.contains('disabled')
   function snapshot() {
+    const fileState = files?.snapshot()
+    if (fileState?.title) return fileState
     const waiting = busy()
     const roots = ROUTING_ACTIONS.map(([id, label]) => { const element = doc.getElementById(id); return { id, label, enabled: enabled(element) && !waiting, active: element?.getAttribute('aria-checked') === 'true' || !!element?.classList.contains('is-on') || !!element?.classList.contains('is-checked'), element } })
     const auto = doc.querySelector('#autoscaffold-modal.visible')
@@ -73,7 +75,7 @@ export function createVRRouting({ doc = document, request = fetch, onError = con
     }
     // Keep full messages readable by scrolling rather than truncating to one label.
     const info = (detail.match(/.{1,65}(?:\s|$)|.{1,65}/g) || []).map((label, i) => ({ id: `info-${i}`, label: clean(label), enabled: false, active: false }))
-    return { title, roots, controls: [...controls, ...info] }
+    return { title, roots: [...roots, ...(fileState?.roots || [])], controls: [...controls, ...info] }
   }
   const wire = state => JSON.parse(JSON.stringify(state, (key, value) => ['element', 'run'].includes(key) ? undefined : value))
   async function publish() {
@@ -104,7 +106,7 @@ export function createVRRouting({ doc = document, request = fetch, onError = con
     await publish()
   }
   return { snapshot, publish: () => publish().catch(() => {}), activate: event => activate(event).catch(error => onError(error.message)),
-    reset() { epoch++; published = null; acknowledged = 0; opened = false; editing = false; pending.clear() },
+    reset() { epoch++; published = null; acknowledged = 0; opened = false; editing = false; pending.clear(); files?.reset() },
     dispose() { observer.disconnect(); win?.removeEventListener('nadoc:api-request', diagnostic) },
   }
 }

@@ -116,7 +116,7 @@ def validate(live, output):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--component',choices=['thumbwheel','buttons','cards','lists','simulations','tabs'],default='thumbwheel')
+    parser.add_argument('--component',choices=['thumbwheel','buttons','cards','lists','simulations','tabs','files'],default='thumbwheel')
     parser.add_argument('--desktop',action='store_true')
     parser.add_argument('--validate',action='store_true')
     parser.add_argument('--output',type=Path)
@@ -135,7 +135,9 @@ def main():
         os.environ.setdefault('NADOC_VR_BUILD_DIR', str(storage/'build'))
         os.environ['TMPDIR'] = str(scratch)
         tempfile.tempdir = str(scratch)
-    from backend.api.routes_vr import _build_environment, _ensure_viewer_built, _start_steamvr, _VIEWER
+    from backend.api import routes_vr
+    from backend.api.routes_vr import _build_environment, _ensure_viewer_built, _start_steamvr
+    routes_vr._read_state()
     output=(args.output or ROOT/'.development-artifacts/vr-component-gallery'/uuid.uuid4().hex[:10]).resolve()
     output.mkdir(parents=True,exist_ok=True)
     _ensure_viewer_built()
@@ -145,7 +147,7 @@ def main():
         _start_steamvr()
     with tempfile.TemporaryDirectory(prefix='nadoc-gallery-') as temp:
         socket=str(Path(temp)/'viewer.sock')
-        command=[str(_VIEWER),
+        command=[str(routes_vr._VIEWER),
                  str(ROOT/'native/vr_viewer/examples/empty_authoring.nadocvr'),
                  '--component-gallery',args.component,'--gallery-output',str(output)]
         if args.desktop:command+=['--gallery-desktop','on']
@@ -160,12 +162,15 @@ def main():
                 deadline=time.monotonic()+45
                 while True:
                     try:
-                        live=LiveSession(Bridge(socket_path=socket))
+                        live=LiveSession(Bridge(socket_path=socket), physical=args.component == 'files')
                         if live.state.get('component_gallery',{}).get('active'):break
                     except (OSError,RuntimeError,ValueError):
                         if time.monotonic()>deadline or process.poll() is not None:raise
                     time.sleep(.2)
-                validate(live,output)
+                if args.component == 'files':
+                    from tools.vr_workflows.file_gallery_probe import validate as validate_files
+                    validate_files(live,output)
+                else: validate(live,output)
                 print('All four controller profiles passed.',flush=True)
             else:
                 print('Gallery ready. Try the controls or select Play demo. Close its window to finish.',flush=True)
@@ -176,6 +181,9 @@ def main():
                 process.terminate()
                 try:process.wait(timeout=10)
                 except subprocess.TimeoutExpired:process.kill();process.wait()
+            if args.component == 'files' and not args.desktop:
+                from tools.vr_workflows.sweep_view import dismiss_dashboard
+                dismiss_dashboard(output/'teardown')
 
 
 if __name__=='__main__':main()

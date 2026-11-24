@@ -1645,3 +1645,40 @@ contact metrics. Keyboard M before selection is tested with delayed gate replies
 The desktop GPU run additionally covers completed Full frames (gl.finish),
 120 updates across the relaxed and saved poses, max 171.8 ms on RTX 2080 SUPER.
 Subjective raycast/pointer feel near crowded contacts remains a manual check.
+
+### MV-71 — VR File popup comfort and physical feedback (PENDING, 2026-11-23)
+
+Open left File → New Part in the headset. Check that the sidebar closes and
+that all 42 large QWERTY keys and the filename remain comfortably visible. Type a name,
+change case, delete, cancel, and reopen. Verify single hover-entry and activation
+vibration on the pointing controller, including transitions to disabled controls.
+Open the part browser, navigate folders and scroll a long file list; compare text
+and metadata with the welcome library. Check Save As, overwrite confirmation,
+New Part creation, saving before Open, native model replacement, and Close Session.
+New Assembly must remain disabled. Offline production hit tests exceed 95% under
+all four synthetic profiles at 0.6 m; they do not qualify physical human accuracy,
+through-lens readability or comfort. The visible File demo additionally exercises
+real native IPC, standalone popup rendering, typing/editing, cancellation, folder
+navigation and session close with stereo and actual desktop evidence. It creates
+no molecular structures. See `.development-artifacts/vr-file-qwerty/live/`.
+Default placement and through-lens comfort still need human review; the demo
+explicitly positions the wider keyboard 1.10 m away without shrinking its keys.
+
+### VR File gallery styles — through-lens comparison (PENDING, 2026-11-23)
+
+Compare all six options under Debug → VR Component Gallery → File menus.
+Assess folder silhouettes, text density, selection visibility and comfortable
+controller targets at the default gallery distance. Verify switching from minimal
+recent files to the detail table and split inspector without moving the panel.
+Automated native interaction/render checks and synthetic controller profiles do
+not establish human preference, comfort or physical haptic feel. Sample actions
+are intentionally confined to gallery state and do not operate on documents.
+
+MV-71 update — approved option 4 is now the production VR File table, with
+six-row paging and fixed commands. Verify through-lens readability of the
+Modified/Size columns, long-name truncation, and default wrist placement on a
+large real library. Desktop browser styling is unchanged. Native layout/ray tests
+cover 14 entries over three pages; the live non-creating workflow checks actual
+folder metadata, command switching, keyboard cancellation and session close.
+Evidence: `.development-artifacts/vr-file-table/`. Commit-save, overwrite and
+loading a real saved structure remain outside the non-creating demo.

@@ -96,9 +96,9 @@ def s_shape_report(points, orientation):
             'second_lobe_m': negative, 'minimum_lobe_m': .012}
 
 
-def wait_for_headset(bridge, output, timeout=30, stable_frames=15, dismiss=None):
+def wait_for_headset(bridge, output, timeout=30, stable_frames=15, dismiss=None, message=None):
     """Retain readiness failures before LiveSession can own controller input."""
-    message = ('Waiting for tracked headset focus: wear the headset and close the SteamVR '
+    message = message or ('Waiting for tracked headset focus: wear the headset and close the SteamVR '
                'dashboard. The Sweep starts from an empty part; drawing has not started.')
     print(message, flush=True)
     deadline = time.monotonic()+timeout

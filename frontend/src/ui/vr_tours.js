@@ -6,7 +6,7 @@ export function initVrTours({ headers = () => ({}), request = fetch, store = {},
   const entry = document.getElementById(entryId)
   if (!entry) return null
   let run = null, busy = false, loaded = false, timer = null, disposed = false
-  const menu = el('div', { className: 'submenu vr-tours-menu', attrs: { role: 'menu' } })
+  const menu = el('div', { className: 'submenu vr-tours-menu'+(groupFilter ? ' vr-tours-leaves' : ''), attrs: { role: 'menu' } })
   const status = el('span', { className: 'vr-tours-status', attrs: { role: 'status' } })
   const stop = el('button', { className: 'dropdown-item', text: 'Stop tour', on: { click: () => action('/stop/'+run.id) } })
   entry.className = 'submenu-item'
@@ -51,13 +51,14 @@ export function initVrTours({ headers = () => ({}), request = fetch, store = {},
     } finally { busy = false }
     render()
   }
-  async function open() {
-    if (loaded || busy) return
+  async function open({ refresh = false } = {}) {
+    if ((loaded && !refresh) || busy) return
     busy = true; status.textContent = 'Loading tours…'
     try {
       const catalog = await api()
       if (disposed) return
       run = catalog.run
+      menu.querySelectorAll(':scope > [data-category], :scope > [data-start]').forEach(node => node.remove())
       for (const group of catalog.groups.filter(g => !groupFilter || g.id === groupFilter)) {
         const children = el('div', { className: 'submenu vr-tours-menu vr-tours-leaves', attrs: { role: 'menu' } })
         for (const tour of catalog.tours.filter(t => t.group === group.id)) {
@@ -71,11 +72,13 @@ export function initVrTours({ headers = () => ({}), request = fetch, store = {},
             }))
           }
         }
-        menu.insertBefore(el('div', { className: 'submenu-item', text: group.label,
+        if (groupFilter) {
+          for (const button of [...children.children]) menu.insertBefore(button, status)
+        } else menu.insertBefore(el('div', { className: 'submenu-item', text: group.label,
           dataset: { category: group.id }, attrs: { role: 'menuitem', tabindex: '0', 'aria-haspopup': 'menu', title: group.description },
           children: [el('span', { text: '›', attrs: { 'aria-hidden': 'true' } }), children] }), status)
       }
-      menu.append(stop); loaded = true; if (active()) poll()
+      menu.append(stop); loaded = true; position({ target: entry }); if (active()) poll()
     } catch (error) { status.textContent = error.message }
     finally { busy = false; if (loaded) render() }
   }
@@ -91,17 +94,18 @@ export function initVrTours({ headers = () => ({}), request = fetch, store = {},
     }
   }
   function position(event) {
-    const branch = event.target.closest('[data-category]')
+    const branch = event.target.closest('[data-category]') || (groupFilter ? entry : null)
     if (!branch) return
     const children = branch.querySelector(':scope > .submenu')
     const top = branch.getBoundingClientRect().top
     children.style.top = `${Math.max(8 - top, Math.min(0, window.innerHeight - top - children.getBoundingClientRect().height - 8))}px`
   }
+  const refresh = () => open({ refresh: true })
   entry.addEventListener('keydown', keyboard)
   entry.addEventListener('pointerover', position)
   entry.addEventListener('focusin', position)
-  entry.addEventListener('pointerenter', open)
+  entry.addEventListener('pointerenter', refresh)
   entry.addEventListener('focusin', open)
   entry.addEventListener('click', open)
-  return { open, dispose() { disposed = true; clearInterval(timer); entry.removeEventListener('keydown', keyboard); entry.removeEventListener('pointerover', position); entry.removeEventListener('focusin', position); entry.removeEventListener('pointerenter', open); entry.removeEventListener('focusin', open); entry.removeEventListener('click', open) } }
+  return { open, dispose() { disposed = true; clearInterval(timer); entry.removeEventListener('keydown', keyboard); entry.removeEventListener('pointerover', position); entry.removeEventListener('focusin', position); entry.removeEventListener('pointerenter', refresh); entry.removeEventListener('focusin', open); entry.removeEventListener('click', open) } }
 }

@@ -5162,7 +5162,7 @@ class Viewer {
     friend struct LiveViewerTest;
 #endif
   public:
-    void enableComponentGallery(bool buttons=false,bool cards=false,bool lists=false) { componentGallery_.active=true;componentGallery_.buttonMode=buttons;componentGallery_.cardMode=cards;componentGallery_.listMode=lists; }
+    void enableComponentGallery(bool buttons=false,bool cards=false,bool lists=false,bool files=false) { componentGallery_.fileMode=files;componentGallery_.active=true;componentGallery_.buttonMode=buttons;componentGallery_.cardMode=cards;componentGallery_.listMode=lists; }
     void loadControllerPath(const std::string& path) { controllerPaths_.load(path); }
 
     explicit Viewer(SceneData scene, std::string eventPath = {},
@@ -6373,7 +6373,7 @@ class Viewer {
             if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
             activateAuthoringTool(action=="tool:twist"?1:2);return;
         }
-        if(action.starts_with("routing:")) {if(routingPanel_.activate(action))publishEventState();return;}
+        if(action.starts_with("routing:")) {if(routingPanel_.activate(action)){if(action.starts_with("routing:file-"))sidebarMenus_.menus[0].open=false;publishEventState();}return;}
         if(action.starts_with("history:")) {if(featureLogPanel_.activate(action)){publishEventState();if(action.ends_with(":edit"))desktopPanel_.show(hands_[hand].position,hands_[hand].orientation);}return;}
         if(action=="simulation:local:frame"){activateSidebarAction("recenter",hand);return;}
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
@@ -6382,6 +6382,7 @@ class Viewer {
             if(shareAvailable(action)) {shareAction_=action.substr(6);++shareSequence_;publishEventState();}
             return;
         }
+        if(action=="feedback:hover") {pulse(hand,.12F);return;}
         if(action=="feedback:activate") {pulse(hand,.22F);return;}
         if(action.starts_with("move:")) {
             if(toolShell_.executionPending() || moveAwaitRefresh_)return;
@@ -9433,7 +9434,7 @@ class Viewer {
 
         featureLogPanel_.poll(eventPath_);
         pollSweepEdit();
-        routingPanel_.poll(eventPath_,routingPopup_.menus[1],sidebarMenus_.menus[1]);
+        routingPanel_.poll(eventPath_,routingPopup_.menus[1],sidebarMenus_.menus[routingPanel_.requested.starts_with("file-")?0:1]);
         if(auto packet=shareStream_.latest(eventPath_+".share")) {
           std::istringstream share(*packet);int active=0,perspective=0,busy=1,ack=0,failed=0;
             if(share>>active>>perspective>>busy>>ack>>failed) {shareActive_=active;sharePerspective_=perspective;shareBusy_=busy;shareAck_=ack;shareFailed_=failed; shareGuests_=shareWaiting_=0; share>>shareGuests_>>shareWaiting_; int canPerspective=1; if(share>>canPerspective)sharePerspectiveAvailable_=canPerspective; else sharePerspectiveAvailable_=true; int canStart=0; shareStartAvailable_=bool(share>>canStart) && canStart; int headset=0; shareHeadsetPerspective_=bool(share>>headset) && headset;}
@@ -10209,7 +10210,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || viewTools_.open || desktopPanel_.open) {
+        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || routingPopup_.anyOpen() || viewTools_.open || desktopPanel_.open) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection,int(index));
         }
@@ -10652,7 +10653,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || viewTools_.open || desktopPanel_.open) {
+        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || routingPopup_.anyOpen() || viewTools_.open || desktopPanel_.open) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection);
         }
@@ -11745,7 +11746,7 @@ int main(int argc, char** argv) {
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
     std::string controllerPath;
-    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false,gallerySimulations=false,galleryTabs=false;
+    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false,galleryFiles=false,gallerySimulations=false,galleryTabs=false;
     std::string galleryOutput;
     std::string witnessCaptureDirectory;
     std::string witnessVisualExpectationDirectory;
@@ -11768,8 +11769,8 @@ int main(int argc, char** argv) {
         const std::string option(argv[index]);
         if(option=="--component-gallery") {
             const std::string component=argv[index+1];
-            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists" && component!="simulations" && component!="tabs") {std::cerr<<"Unknown gallery component\n";return 2;}
-            galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";gallerySimulations=component=="simulations";galleryTabs=component=="tabs";
+            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists" && component!="simulations" && component!="tabs" && component!="files") {std::cerr<<"Unknown gallery component\n";return 2;}
+            galleryFiles=component=="files";galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";gallerySimulations=component=="simulations";galleryTabs=component=="tabs";
             componentGallery=true;
         }
         else if(option=="--gallery-desktop") {
@@ -11945,7 +11946,7 @@ int main(int argc, char** argv) {
         if((gallerySimulations||galleryTabs) && !galleryDesktop)throw std::runtime_error("Menu studies are desktop-only; use --gallery-desktop on");
         if(galleryDesktop) {
             if(!componentGallery)throw std::runtime_error("Desktop gallery requires --component-gallery thumbwheel");
-            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists,gallerySimulations,galleryTabs);
+            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists,gallerySimulations,galleryTabs,galleryFiles);
         }
         const auto processStarted = std::chrono::steady_clock::now();
         std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="
@@ -11973,7 +11974,7 @@ int main(int argc, char** argv) {
         viewer.configureSubmittedFrameMarker(submittedFrameMarker);
         if(savedPresentation)viewer.restorePresentationOnStartup(*savedPresentation);
         if(!loadingStatusPath.empty())viewer.beginStartup(argv[1],loadingStatusPath,startupOwners,startupKind);
-        if(componentGallery)viewer.enableComponentGallery(galleryButtons,galleryCards,galleryLists);
+        if(componentGallery)viewer.enableComponentGallery(galleryButtons,galleryCards,galleryLists,galleryFiles);
         viewer.loadControllerPath(controllerPath);
         const int result = viewer.run();
         const double milliseconds = std::chrono::duration<double, std::milli>(
