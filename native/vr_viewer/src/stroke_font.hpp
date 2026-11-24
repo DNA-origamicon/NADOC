@@ -72,6 +72,8 @@ inline std::array<uint8_t, 7> glyph(char value) {
         case '^': return {4,10,17,0,0,0,0};
         case '~': return {0,0,9,22,0,0,0};
         case '@': return {14,17,23,21,23,16,14};
+        case '$': return {4,15,20,14,5,30,4};
+        case '`': return {8,4,2,0,0,0,0};
         default: return {14,17,1,2,4,0,4};
     }
 }

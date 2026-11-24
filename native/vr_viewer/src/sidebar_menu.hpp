@@ -1,6 +1,8 @@
 #pragma once
 #include "sidebar_catalog.hpp"
 #include "file_table_style.hpp"
+#include "keyboard_slate.hpp"
+#include <map>
 #include "menu_layout.hpp"
 #include "stroke_font.hpp"
 #include "menu_focus.hpp"
@@ -83,6 +85,13 @@ class SidebarMenu {
     MenuFocus focus;
     std::string pressed;
     double pressedUntil=0;
+    std::map<std::string,float> keyboardPressure;
+    std::function<bool(const std::string&)> pressable;
+    bool textKeyboard()const{return customTab&&(tab().key=="text-keyboard"||tab().key=="file-keyboard");}
+    bool keyboardEnabled(const SidebarControl& c)const{return !c.action.empty()&&(pressable?pressable(c.action):c.enabled);}
+    float keyPressure(const SidebarControl& c)const{
+        const auto i=keyboardPressure.find(c.id);return keyboardEnabled(c)&&i!=keyboardPressure.end()?i->second:0.F;
+    }
     MenuLayoutAudit audit;
     std::function<std::string(const std::string&,const std::string&)> label = [](const auto&,const auto& fallback){return fallback;};
     std::function<bool(const std::string&)> visible = [](const auto&){return true;};
@@ -132,7 +141,7 @@ class SidebarMenu {
     MenuPanelBounds bounds() const {
         if(customTab && tab().key=="file-browser")return kFileTableBounds;
         if(dynamicActive()) return dynamicBounds();
-        if(customTab && tab().key=="file-keyboard")return kFileKeyboardBounds;
+        if(customTab && (tab().key=="file-keyboard" || tab().key=="text-keyboard"))return kFileKeyboardBounds;
         auto b=kSidebarBounds;
         if(toolFooter()) {b.minimum.y=footerY()-ui_style::footerHalfHeight-ui_style::raisedBottomOverhang-ui_style::gripRail-ui_style::contentPadding;return b;}
         if(customTab) b.minimum.y=.463F-float((customTab?3:0)+std::min(pageRows(),total())-1)*.12F-.054F-ui_style::gripRail-ui_style::contentPadding;
@@ -259,7 +268,7 @@ class SidebarMenu {
     }
     std::vector<SidebarControl> controls(bool animated=true) const {
         if(customTab && tab().key=="file-browser")return fileTableControls(tab(),offset(),available);
-        if(customTab && tab().key=="file-keyboard") {
+        if(customTab && (tab().key=="file-keyboard" || tab().key=="text-keyboard")) {
             auto keys=fileKeyboardControls(tab(),available);
             for(auto& key:keys)key.active=key.enabled&&isActive(key.action);
             return keys;
@@ -531,6 +540,7 @@ class SidebarMenu {
         return out;
     }
     float controlDepth(const SidebarControl& c) const {
+        if(textKeyboard()&&!c.action.empty())return keyboard_slate::depth(keyPressure(c));
         if(c.surfaceDepth)return *c.surfaceDepth;
         if(const auto wheel=extrudeWheelIndex(c.id))return extrudeWheelFront(*wheel).z;
         return c.id.starts_with("sim:j:")?.018F:raisedAction(c) ? (pressed==c.id?.026F:.035F) : 0.F;
@@ -542,7 +552,7 @@ class SidebarMenu {
         if(customTab && tab().key=="extrude")for(size_t i=0;i<kExtrudeWheelIds.size();++i)
             if(const auto hit=thumbwheelHit(extrudeWheelShape(),extrudeWheelCenter(i),placement,pose))return hit;
         if(std::abs(direction.z)>1e-7F)for(const auto& c:controls())if(raisedAction(c)) {
-            const float t=(controlDepth(c)-origin.z)/direction.z;
+            const float t=((textKeyboard()?keyboard_slate::restDepth:controlDepth(c))-origin.z)/direction.z;
             const auto p=origin+t*direction;
             if(t>0 && p.x>=c.bounds.minimum.x && p.x<=c.bounds.maximum.x &&
                p.y>=c.bounds.minimum.y && p.y<=c.bounds.maximum.y)return p;
@@ -591,8 +601,8 @@ class SidebarMenu {
             if(b.maximum.x>b.minimum.x && b.maximum.y>b.minimum.y)rawFill(b,color);
         };
         audit.reset(bounds());
-        if(customTab && tab().key=="file-browser"){
-            for(const auto& c:controls())audit.addControl(c.id,c.bounds,c.bounds,isScrollbar(c.id)?glm::vec2(.06F,.15F):glm::vec2(.15F,.065F));
+        if((customTab && tab().key=="file-browser")||textKeyboard()){
+            for(const auto& c:controls())audit.addControl(c.id,c.bounds,c.bounds,isScrollbar(c.id)?glm::vec2(.06F,.15F):textKeyboard()?glm::vec2(.13F,.13F):glm::vec2(.15F,.065F));
             audit.finish();return; // SolidUi renders the approved gallery mesh, not the generic sidebar texture.
         }
         fill(bounds(),ui_style::panel);
@@ -654,7 +664,7 @@ class SidebarMenu {
         if(toolFooter() && statusRow!=tab().rows.end())
             boundedText("tool-status",statusRow->section,{cx-titleHalf+.017F,.584F},.0023F,ui_style::text,
                 {title.minimum+glm::vec2(.012F,0),title.maximum-glm::vec2(.012F,0)});
-        else if(tab().key=="file-keyboard")text("page","POINT AND TRIGGER TO TYPE",{cx-titleHalf+.017F,.584F},.0023F,{.71F,.76F,.81F},title);
+        else if((tab().key=="file-keyboard" || tab().key=="text-keyboard"))text("page","POINT AND TRIGGER TO TYPE",{cx-titleHalf+.017F,.584F},.0023F,{.71F,.76F,.81F},title);
         else text("page",std::to_string(total()?offset()+1:0)+"-"+std::to_string(std::min(offset()+pageRows(),total()))+" / "+std::to_string(total())+(customTab && tab().key=="dimensions"?"   TRIGGER: PIN / RECALL":"   GRAY = UNAVAILABLE"),{cx-titleHalf+.017F,.584F},.0023F,{.71F,.76F,.81F},title);
         if(focus.active) text("input-mode",focus.id=="scrollbar"?"PAD UP/DOWN: SCROLL  LEFT/RIGHT: EXIT":"PAD: MOVE / TRIGGER: SELECT",{cx-titleHalf+.017F,.560F},.002F,ui_style::focus,title);
         }
@@ -704,7 +714,7 @@ class SidebarMenu {
                 const auto color=focus.active && c.id==focus.id?ui_style::focus:ui_style::selectedBorder;
                 ui_style::rounded({lo,hi},bg,color,line,[](MenuPanelBounds,glm::vec3){},ui_style::cornerRadius-.004F,.003F);
             }
-            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,c.id.starts_with("routing:file-key-")?glm::vec2(.13F,.13F):c.id.starts_with("dimension:value:")?glm::vec2(.14F,.065F):c.id.starts_with("sweep:axis:")?glm::vec2(.07F,.065F):c.id.ends_with("-wheel")?glm::vec2(.05F,.065F):(!c.icon.empty() || c.id.starts_with("volume:enabled:"))?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,CompactTabs::idleLength):glm::vec2(.15F,.065F));
+            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,(c.id.starts_with("routing:file-key-") || c.id.starts_with("routing:text-key-"))?glm::vec2(.13F,.13F):c.id.starts_with("dimension:value:")?glm::vec2(.14F,.065F):c.id.starts_with("sweep:axis:")?glm::vec2(.07F,.065F):c.id.ends_with("-wheel")?glm::vec2(.05F,.065F):(!c.icon.empty() || c.id.starts_with("volume:enabled:"))?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,CompactTabs::idleLength):glm::vec2(.15F,.065F));
             if(scrollbar) {
                 const auto thumb=dynamicActive()?dynamicThumb(c.id):scrollThumb();
                 const auto color=c.enabled?ui_style::disabledText:glm::vec3(.55F);
@@ -788,7 +798,7 @@ class SidebarMenu {
                     boundedText(c.id+":section",c.section,{content.minimum.x,content.maximum.y},.0022F,{.55F,.60F,.66F},content);
                     body.maximum.y-=.022F;
                 }
-                float maximumScale=c.id=="routing:file-key-delete"?.0032F:tab().key=="file-keyboard"?.004F:tab().key=="file-browser"?.0036F:.0032F;
+                float maximumScale=(c.id=="routing:file-key-delete" || c.id=="routing:text-key-delete")?.0032F:(tab().key=="file-keyboard" || tab().key=="text-keyboard")?.004F:tab().key=="file-browser"?.0036F:.0032F;
                 if(sweepValue) {
                     // Keep the number intact on one line below its axis label.
                     const auto separator=c.label.find(' ');

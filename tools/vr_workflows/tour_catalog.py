@@ -32,7 +32,7 @@ def catalog():
     add('production-lists', 'interaction', 'Feature history and production lists',
         'Review sweep rails, dimension tables, simulation job cards and the feature-history scrub rail. Runs bounded native interaction checks and retains production-rendered state images.', module='list_components_check')
     add('file-keyboard', 'left', 'File · filename keyboard accuracy',
-        'Offline production ray-hit validation: 42 keys, 50 matched seeds per key, 0.6 m ray distance. All four synthetic profiles; 95% minimum selection accuracy. Does not measure headset delivery or human accuracy.', module='file_keyboard_check')
+        'Offline production ray-hit validation: 43 keys at the 70% opening scale, 50 matched seeds per key, 0.6 m ray distance. All four synthetic profiles; 95% minimum selection accuracy. Does not measure headset delivery or human accuracy.', module='file_keyboard_check')
     add('compact-tabs', 'interaction', 'Full-height tabs · controller hit/miss comparison',
         'Production full-height sidebar tabs with shared spare space and bounded hover expansion. Matched seeds for all four profiles, no retries, acquisition and correct activation counts, stereo pixels. Isolated empty Part fixture.', module='compact_tabs_tour')
     add('tab-gallery', 'components', 'Long-label tabs A/B',
@@ -49,6 +49,10 @@ def catalog():
         'Six expandable card and list styles with selectable children.', ['--component', 'cards'], module='component_gallery_tour')
     add('button-gallery', 'components', 'Button styles',
         'Six button surfaces inspired by MRTK, visionOS, Material and Blender. Compare hover, press travel, selected and disabled states in the same desktop/VR gallery.', ['--component','buttons'], module='component_gallery_tour')
+    add('keyboard-gallery', 'components', 'Text keyboard · four button styles',
+        'Desktop-only: type sample text with the shared QWERTY geometry. Compare flat, beveled, soft capsule and mechanical keys; Shift, symbols, Backspace, disabled states and angled inspection. No document edits or VR style changes.',
+        ['--component', 'keyboards'], module='component_gallery_tour')
+    tours[-1]['modes'] = ['desktop']
     add('file-menu-gallery', 'components', 'File menus · six interactive styles',
         'Compare minimal actions, folder tiles, compact lists, detailed tables, expandable folders and a split inspector. UI-only sample files; no disk changes. Select styles 1–6 or Play demo.', ['--component', 'files'], module='component_gallery_tour')
     add('thumbwheel-gallery', 'components', 'Ridged thumbwheels',
@@ -58,7 +62,7 @@ def catalog():
     for tab in json.loads((ROOT/'native/vr_viewer/sidebar_catalog.json').read_text())['tabs']:
         if tab['side'] == 'left' and tab['key'] == 'file':
             add('left-file', 'left', 'File menu · keyboard and cancellation',
-                'Visible browser-backed workflow: approved option 4 File table with Name/Type/Modified/Size, fixed actions and disabled New Assembly, New Part keyboard typing/editing and Cancel before creation, Open folder navigation and Cancel, then Close Session. No structures are saved. Validation runs all four profiles with stereo and actual desktop checks.', module='file_tour')
+                'Visible browser-backed workflow: approved option 4 File table with Name/Type/Modified/Size, fixed actions and disabled New Assembly, New Part keyboard typing/editing, 70% opening size, trigger/grip border movement, trigger resize with persistent size, and Cancel before creation, Open folder navigation and Cancel, then Close Session. No structures are saved. Validation runs all four profiles with stereo and actual desktop checks.', module='file_tour')
             continue
         add(f"{tab['side']}-{tab['key']}", tab['side'], tab['label'] + ' menu',
             f"Tour every page of the {tab['side']} {tab['label']} tab; check disabled controls and pixels.",

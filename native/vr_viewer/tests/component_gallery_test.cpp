@@ -4,8 +4,11 @@
 
 void checkGallery(bool condition,const char* message) {if(!condition)throw std::runtime_error(message);}
 #include "file_table_parity.hpp"
+#include "keyboard_gallery_checks.hpp"
+#include "keyboard_slate_checks.hpp"
 int main(int argc,char** argv) {
     checkFileTableParity();
+    checkKeyboardSlate();
     ComponentGallery gallery;gallery.active=gallery.posed=true;
     gallery.placement.openDocked({0,0,0},glm::quat(glm::vec3(.12F,.42F,0)));
     std::array<nadoc_vr::HandPose,2> hands{};
@@ -206,6 +209,8 @@ int main(int argc,char** argv) {
         file.write(reinterpret_cast<const char*>(png.data()),png.size());
     }
     captureFileTableParity(output);
+    captureKeyboardSlate(output);
+    checkKeyboardGallery(output);
     gallery.ui.shutdown();glfwDestroyWindow(window);glfwTerminate();
     std::cout<<"Wheel, button, card, list, tab and six File menu interactions and rendered pixels passed\n";
 }

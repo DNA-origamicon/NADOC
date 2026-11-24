@@ -1682,3 +1682,25 @@ cover 14 entries over three pages; the live non-creating workflow checks actual
 folder metadata, command switching, keyboard cancellation and session close.
 Evidence: `.development-artifacts/vr-file-table/`. Commit-save, overwrite and
 loading a real saved structure remain outside the non-creating demo.
+
+MV-71 update (2026-11-24): shared QWERTY text entry now serves filenames and custom
+scaffold sequences; numeric pads remain separate. Verify through-lens comfort,
+Shift/symbol-page feedback and the new symbols target with real controllers.
+Four button styles are desktop-only studies, not a selected production style.
+Native images and synthetic controller profiles cannot close this comfort debt.
+
+MV-71 follow-up (2026-11-24): Bevel / Slate production keyboard now has analog
+6 mm local key travel. Native tests and all four synthetic ray profiles pass;
+first-profile live pressure/hold/release/partial Cancel checks pass. Complete
+four-profile live rerun and through-lens feel remain outstanding after SteamVR
+`VRInitError_Init_HmdNotFound`. Retained attempts and cleanup:
+`.development-artifacts/vr-keyboard-slate/`; see `docs/vr_text_keyboard.md`.
+
+MV-71 update (2026-11-24): keyboard opening scale 0.84 and visible border now pass
+all four browser/native motion profiles: trigger move/resize, physical grip move,
+pressure/typing and cancellation, with 57 stereo/desktop review stages. Native
+checks cover two-grip resize and acknowledgement persistence. Synthetic accuracy
+at the new scale is 96.419–100%. Prior live completion debt is resolved by
+`.development-artifacts/vr-keyboard-border/live-05/`; through-lens feel/comfort
+remains open. Failed attempts and observation changes are retained in the parent
+review directory. No structures saved; workspace/credentials/viewer cleanup verified.

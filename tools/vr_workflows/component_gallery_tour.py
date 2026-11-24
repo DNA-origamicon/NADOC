@@ -116,12 +116,12 @@ def validate(live, output):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--component',choices=['thumbwheel','buttons','cards','lists','simulations','tabs','files'],default='thumbwheel')
+    parser.add_argument('--component',choices=['thumbwheel','buttons','cards','lists','simulations','tabs','files','keyboards'],default='thumbwheel')
     parser.add_argument('--desktop',action='store_true')
     parser.add_argument('--validate',action='store_true')
     parser.add_argument('--output',type=Path)
     args=parser.parse_args()
-    if args.component in ('simulations', 'tabs') and not args.desktop:
+    if args.component in ('simulations', 'tabs', 'keyboards') and not args.desktop:
         parser.error('Menu studies are desktop-only; pass --desktop.')
     if args.desktop and args.validate:
         parser.error('Use the native unit/render tests for desktop validation.')

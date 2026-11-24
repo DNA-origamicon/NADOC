@@ -34,6 +34,14 @@ test('File demo visibly types and cancels New Part, browses folders, and closes 
   await page.goto('/?test=1&doc=__e2e__vr-file-tour&scrywrite=transactions')
   await expect.poll(() => wires.at(-1)?.roots.some(r => r.id === 'file-new')).toBe(true)
   expect(await page.evaluate(() => import('/src/state/store.js').then(({store}) => store.getState().currentDesign))).toBeNull()
+  await page.getByRole('button', { name: 'Debug', exact: true }).click()
+  await page.locator('#menu-debug-vr-gallery').hover()
+  const keyboardStudy = page.locator('#menu-debug-vr-gallery [data-start="keyboard-gallery"]')
+  await expect(keyboardStudy).toHaveCount(1)
+  await expect(keyboardStudy).toBeVisible()
+  await expect(keyboardStudy).toHaveAttribute('data-mode', 'desktop')
+  await page.screenshot({ path: path.join(out, 'keyboard-gallery-menu.png') })
+  await page.keyboard.press('Escape')
   try {
     const probe = execute(path.resolve('..', '.venv/bin/python'), ['-m', 'tools.vr_workflows.file_probe', status.scrywrite_socket, out],
       { cwd: path.resolve('..'), env: process.env, timeout: 540_000, maxBuffer: 4*1024*1024 })

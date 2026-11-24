@@ -5,7 +5,7 @@ import { createVRRouting } from './vr_routing.js'
 it('uses standard QWERTY rows with a number row and spacebar', () => {
   expect(FILE_KEY_ROWS.map(row => row.join(' '))).toEqual([
     '1 2 3 4 5 6 7 8 9 0 delete', 'q w e r t y u i o p',
-    'a s d f g h j k l', 'shift z x c v b n m dot dash underscore', 'space',
+    'a s d f g h j k l', 'shift z x c v b n m dot dash underscore', 'space symbols',
   ])
 })
 let bridge
@@ -22,7 +22,7 @@ it('opens the filename keyboard, edits keys and cancels through versioned native
   expect(files.snapshot().roots.find(r => r.id === 'file-assembly').enabled).toBe(false)
   await click('file-new')
   expect(bridge.snapshot().title).toBe('Filename keyboard')
-  expect(bridge.snapshot().controls.filter(c => c.id.startsWith('file-key-'))).toHaveLength(42)
+  expect(bridge.snapshot().controls.filter(c => c.id.startsWith('file-key-'))).toHaveLength(43)
   await click('file-key-a'); await click('file-key-shift'); await click('file-key-b'); await click('file-key-1'); await click('file-key-delete')
   expect(document.querySelector('input').value).toBe('aB')
   await click(bridge.snapshot().controls.find(c => c.label === 'Cancel').id)

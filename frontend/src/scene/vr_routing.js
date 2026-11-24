@@ -1,3 +1,4 @@
+import { createVRTextKeyboard } from './vr_text_keyboard.js'
 import { docHeaders } from '../shared/doc_id.js'
 
 export const ROUTING_ACTIONS = [
@@ -18,6 +19,7 @@ const clean = text => String(text ?? '').replace(/\s+/g, ' ').trim()
 export function createVRRouting({ doc = document, request = fetch, onError = console.error, files = null } = {}) {
   let version = Math.floor(Math.random() * 1e9), acknowledged = 0, published, sending = false, epoch = 0
   let opened = false, editing = false, message = '', operation = '', invoking = false
+  const textKeyboard = createVRTextKeyboard()
   const pending = new Set()
   const win = doc.defaultView
   const diagnostic = ({ detail: d }) => {
@@ -52,12 +54,10 @@ export function createVRRouting({ doc = document, request = fetch, onError = con
       const textarea = root.querySelector('#asc-custom-seq')
       if (editing && textarea) {
         title = 'Custom scaffold sequence'
-        detail = `${textarea.value.length} bases: ${textarea.value.slice(-60) || '(empty)'}`
-        const edit = fn => { textarea.value = fn(textarea.value); textarea.dispatchEvent(new win.Event('input', { bubbles: true })) }
-        add('key-done', 'Done', () => { editing = false })
-        for (const base of ['A', 'C', 'G', 'T', 'N']) add(`key-${base.toLowerCase()}`, `Add ${base}`, () => edit(value => value + base))
-        add('key-delete', 'Backspace', () => edit(value => value.slice(0, -1)))
-        add('key-clear', 'Clear sequence', () => edit(() => ''))
+        detail = `${textarea.value.length} bases: ${textarea.value.slice(-44) || '(empty)'}`
+        add('key-done', 'Done', () => { editing = false; textKeyboard.reset() })
+        controls.push(...textKeyboard.controls(textarea, { transform: value => value.toUpperCase(), accepts: value => /^[ACGTN]$/.test(value) }).map(row => ({ ...row, enabled: row.enabled && !waiting })))
+        add('key-clear', 'Clear sequence', () => { textarea.value = ''; textarea.dispatchEvent(new win.Event('input', { bubbles: true })) })
       } else {
         detail = clean(auto ? root.querySelector('input:checked')?.closest('label')?.querySelector('.as-desc')?.textContent || 'Choose seamed or seamless routing' : root.querySelector('.modal__body')?.textContent)
         for (const [i, el] of [...root.querySelectorAll('button,input[type=radio]')].entries()) {
@@ -106,7 +106,7 @@ export function createVRRouting({ doc = document, request = fetch, onError = con
     await publish()
   }
   return { snapshot, publish: () => publish().catch(() => {}), activate: event => activate(event).catch(error => onError(error.message)),
-    reset() { epoch++; published = null; acknowledged = 0; opened = false; editing = false; pending.clear(); files?.reset() },
+    reset() { epoch++; published = null; acknowledged = 0; opened = false; editing = false; pending.clear(); textKeyboard.reset(); files?.reset() },
     dispose() { observer.disconnect(); win?.removeEventListener('nadoc:api-request', diagnostic) },
   }
 }

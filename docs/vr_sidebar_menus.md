@@ -983,3 +983,21 @@ are retained: live-01 exposed the pixel check ignoring muted metadata on the `..
 row; live-02 captured the transient Working state during asynchronous Open.
 The checker now recognizes both actual gallery glyph colors without reducing
 its threshold; the probe requires a stable ready state before reviewing.
+
+Shared keyboard update (2026-11-24): filename and custom sequence entry now use
+one reusable text editor and native layout, recognized by key IDs rather than
+window title. It retains key size/scale, adds a symbol-page key (43 total), and
+supports caret/selection edits and host-specific character/length restrictions.
+See [VR text keyboard](vr_text_keyboard.md) for the integration contract and four
+desktop-only button studies in Component Gallery.
+
+The shared text keyboard now uses the gallery Bevel / Slate keycaps, including
+Cancel/Create/Save actions, with continuous 6 mm local analog trigger travel.
+Partial squeezes move the cap without activating it. See
+[the keyboard contract](vr_text_keyboard.md#production-bevel--slate-and-analog-travel).
+
+Keyboard border follow-up (2026-11-24): opening scale is now 0.84, 70% of the
+previous size. The solid keyboard draws standard grip rails/corners and participates
+in trigger/grip move/resize handlers. Acknowledgements no longer reset a user
+resize. The File tour now exercises these gestures before cancelling creation.
+See [keyboard contract and evidence](vr_text_keyboard.md).

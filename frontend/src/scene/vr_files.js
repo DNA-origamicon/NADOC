@@ -1,3 +1,4 @@
+import { createVRTextKeyboard, TEXT_KEY_ROWS } from './vr_text_keyboard.js'
 import { openFileBrowser } from '../ui/file_browser.js'
 
 export const FILE_ACTIONS = [
@@ -5,10 +6,7 @@ export const FILE_ACTIONS = [
   ['file-open', 'Open'], ['file-save', 'Save As'], ['file-close', 'Close Session'],
 ]
 
-export const FILE_KEY_ROWS = [
-  [...'1234567890', 'delete'], [...'qwertyuiop'], [...'asdfghjkl'],
-  ['shift', ...'zxcvbnm', 'dot', 'dash', 'underscore'], ['space'],
-]
+export const FILE_KEY_ROWS = TEXT_KEY_ROWS
 
 export function fileTableDetail(row) {
   const d = row.dataset, size = d.vrFileSize === '' || d.vrFileSize == null ? NaN : Number(d.vrFileSize)
@@ -20,7 +18,8 @@ export function fileTableDetail(row) {
 // File operations remain browser-owned. Native only sends versioned selections.
 export function createVRFiles({ doc = document, api, newPart, openPart, openAssembly,
   saveAs, closeSession, refresh = async () => {}, beforeSwitch = async () => true, onError = console.error } = {}) {
-  let active = false, busy = false, error = '', upper = false, keyboard = false
+  let active = false, busy = false, error = '', keyboard = false
+  const textKeyboard = createVRTextKeyboard()
   let task = Promise.resolve()
   const run = fn => {
     busy = true; error = ''
@@ -30,7 +29,7 @@ export function createVRFiles({ doc = document, api, newPart, openPart, openAsse
     if (await refresh() === null) throw new Error('File opened, but the VR scene could not refresh. Retry from File.')
   }
   function start(id) {
-    active = true; keyboard = id === 'file-new'; upper = false
+    active = true; keyboard = id === 'file-new'; textKeyboard.reset()
     run(async () => {
       if (id === 'file-new') { if (await beforeSwitch()) newPart(() => { run(async () => { await refreshScene(); active = false }) }); else active = false }
       if (id === 'file-save') await saveAs()
@@ -70,23 +69,13 @@ export function createVRFiles({ doc = document, api, newPart, openPart, openAsse
     const add = (id, label, fn, enabled = true, selected = false, detail = '') => controls.push({ id, label, enabled, active: selected, run: fn, ...(detail ? { detail } : {}) })
     if (modal || browser) {
       if (input && keyboard) {
-        const edit = fn => { input.value = fn(input.value).slice(0, 120); input.dispatchEvent(new doc.defaultView.Event('input', { bubbles: true })) }
-        for (const key of FILE_KEY_ROWS.flat()) {
-          const symbols = { space: ' ', dash: '-', underscore: '_', dot: '.' }
-          const labels = { space: 'Space', shift: 'Shift', delete: 'Backspace' }
-          const character = symbols[key] ?? (upper ? key.toUpperCase() : key)
-          add(`file-key-${key}`, labels[key] ?? character, () => {
-            if (key === 'shift') upper = !upper
-            else if (key === 'delete') edit(v => v.slice(0, -1))
-            else edit(v => v + character)
-          }, true, key === 'shift' && upper)
-        }
+        controls.push(...textKeyboard.controls(input, { prefix: 'file-key-', maxLength: 120 }))
         add('info-filename', input.value || 'Enter filename', null, false)
         if (browser) add('file-browse', 'Folders', () => { keyboard = false })
       } else if (browser) {
         controls.push(...roots)
         for (const [i, row] of [...browser.querySelectorAll('[data-vr-file-row]')].entries()) add(`file-entry-${i}`, row.dataset.vrFileName || row.dataset.vrFileRow, () => row.click(), true, false, fileTableDetail(row))
-        if (input) add('file-keyboard', 'Filename: ' + input.value, () => { keyboard = true })
+        if (input) add('file-keyboard', 'Filename: ' + input.value, () => { input.setSelectionRange(input.value.length, input.value.length); keyboard = true })
       }
       const buttons = modal ? [...modal.querySelectorAll('button')].filter(b => /^(Cancel|Create)$/.test(b.textContent.trim())) : [...browser.querySelectorAll('[data-vr-file-action]')]
       const uniqueButtons = buttons.filter((b, i) => buttons.findIndex(other => (other.dataset.vrFileAction || other.textContent.trim()) === (b.dataset.vrFileAction || b.textContent.trim())) === i)
@@ -100,7 +89,7 @@ export function createVRFiles({ doc = document, api, newPart, openPart, openAsse
     add('info-file', error || (busy ? 'Working...' : 'Finished'), null, false)
     return { roots, title: 'File', controls }
   }
-  return { snapshot, reset() { active = false; keyboard = false; error = '' } }
+  return { snapshot, reset() { textKeyboard.reset(); active = false; keyboard = false; error = '' } }
 }
 
 /** Do not replace an active document if its save failed or was cancelled. */

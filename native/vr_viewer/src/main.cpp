@@ -5800,6 +5800,7 @@ class Viewer {
         sidebarMenus_.initialize();
         routingPopup_.initialize();
         routingPopup_.menus[1].available=[this](const std::string& action){return routingPanel_.available(action);};
+        routingPopup_.menus[1].pressable=[this](const std::string& action){return routingPanel_.enabled(action);};
         routingPopup_.menus[1].isActive=[this](const std::string& action){return routingPanel_.active(action);};
         simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
         sidebarMenus_.menus[0].customSimulationDraw=[this]{return sidebarMenus_.menus[0].dynamicActive() && sidebarMenus_.menus[0].tab().key=="dynamics";};
@@ -7100,6 +7101,10 @@ class Viewer {
     std::vector<nadoc_vr::RemotePanelTarget> remotePanelTargets() {
         std::vector<nadoc_vr::RemotePanelTarget> targets;
         auto add=[&](auto& placement,auto bounds,float width=.025F){targets.push_back({&placement,bounds,bounds,width});};
+        if(routingPopup_.anyOpen()) {
+            for(auto& m:routingPopup_.menus)if(m.open)add(m.placement,m.bounds(),.04F);
+            return targets;
+        }
         for(auto& m:sidebarMenus_.menus)if(m.open)add(m.placement,m.bounds(),.04F);
         if(latticeOpen_)add(latticePlacement_,kLatticePanelBounds);
         if(viewTools_.open)add(viewTools_.placement,VRViewTools::panelBounds());
@@ -9287,17 +9292,22 @@ class Viewer {
             updateControllerGuides();return;
         }
         frameAudit_.mark("poses_buttons");
-        auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,routingPopup_.anyOpen()?std::array<bool,2>{}:radialToolMenu_.filter(selectionWheel_.filter(triggerClicked_)),routingPopup_.anyOpen()?std::array<bool,2>{}:radialToolMenu_.filter(selectionWheel_.filter(triggerPressed_)),witnessObserverPosition_,glfwGetTime());
+        auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,radialToolMenu_.filter(selectionWheel_.filter(triggerClicked_)),radialToolMenu_.filter(selectionWheel_.filter(triggerPressed_)),witnessObserverPosition_,glfwGetTime());
+        auto popupInputBlocked=remoteBlocked;
         if(routingPopup_.anyOpen())remoteBlocked.fill(true);
         remoteBlocked[0]=remoteBlocked[0]||selectionWheel_.blocksInput();
         remoteBlocked[1]=remoteBlocked[1]||radialToolMenu_.blocksInput()||referenceModels_.wheel.blocksInput();
         viewTools_.syncPose();
         const auto gripContacts=menuGripContacts();
+        if(routingPopup_.anyOpen()) {
+            const auto grabbed=routingPopup_.grips(gripContacts,gripClicked_,[this](size_t hand,float strength){suppressManipulationUntilRelease_=true;pulse(hand,strength);});
+            for(size_t h=0;h<2;++h)popupInputBlocked[h]=popupInputBlocked[h]||grabbed[h];
+        }
         const bool latticeOwnsGrip=latticeOpen_ && (latticePlacement_.dragHand() ||
             latticePlacement_.resizeActive() || latticeGrip_.held[0] || latticeGrip_.held[1]);
         const bool desktopOwnsGrip=desktopPanel_.open && (desktopPanel_.placement.dragHand() || desktopPanel_.placement.resizeActive());
         const bool viewOwnsGrip=viewTools_.open && (viewTools_.placement.dragHand() || viewTools_.placement.resizeActive());
-        std::array<bool, 2> menuGripTargeted = (routingPopup_.anyOpen() || latticeOwnsGrip || viewOwnsGrip || desktopOwnsGrip) ? std::array<bool,2>{} : sidebarMenus_.grips(gripContacts, gripClicked_, [this](size_t hand,float strength) { suppressManipulationUntilRelease_=true; pulse(hand,strength); });
+        std::array<bool, 2> menuGripTargeted = (routingPopup_.anyOpen() || latticeOwnsGrip || viewOwnsGrip || desktopOwnsGrip) ? (routingPopup_.anyOpen()?std::array<bool,2>{true,true}:std::array<bool,2>{}) : sidebarMenus_.grips(gripContacts, gripClicked_, [this](size_t hand,float strength) { suppressManipulationUntilRelease_=true; pulse(hand,strength); });
         if(!latticeOwnsGrip && !viewOwnsGrip)desktopPanel_.grips(gripContacts,gripClicked_,menuGripTargeted,[this](size_t hand,float strength){suppressManipulationUntilRelease_=true;pulse(hand,strength);});
         if(!latticeOwnsGrip)viewTools_.grips(gripContacts,gripClicked_,menuGripTargeted,[this](size_t hand,float strength){suppressManipulationUntilRelease_=true;pulse(hand,strength);});
         const auto latticeGripTargeted=latticeGrip_.update(latticePlacement_,gripContacts,gripClicked_,
@@ -9398,13 +9408,13 @@ class Viewer {
         for(size_t h=0;h<2;++h)sidebarBlocked[h]=sidebarBlocked[h]||volumeTargeted[h];
         sidebarBlocked=processTrajectoryInput(sidebarBlocked,foregroundDistance);
         if(routingPopup_.anyOpen()) {
-            routingPopup_.input(hands_,triggerClicked_,triggerPressed_,{false,false},{1e9F,1e9F},glfwGetTime(),
-                [&](const std::string& action,size_t hand){activateSidebarAction(action,hand);});
+            routingPopup_.input(hands_,triggerClicked_,triggerPressed_,popupInputBlocked,{1e9F,1e9F},glfwGetTime(),
+                [&](const std::string& action,size_t hand){activateSidebarAction(action,hand);},triggerValues_);
             sidebarBlocked.fill(true);
         }
         simulationPanel_.input(hands_,triggerClicked_,triggerPressed_,sidebarBlocked,frameDeltaSeconds_,[this]{publishEventState();});
         auto sidebarTargeted = sidebarMenus_.input(hands_, triggerClicked_, triggerPressed_, sidebarBlocked, foregroundDistance,glfwGetTime(),
-            [&](const std::string& action, size_t hand) { activateSidebarAction(action,hand); });
+            [&](const std::string& action, size_t hand) { activateSidebarAction(action,hand); },triggerValues_);
         std::array<bool, 2> menuControlTargeted = sidebarTargeted;
         if(routingPopup_.anyOpen())menuControlTargeted.fill(true);
         for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h]||volumeTargeted[h];
@@ -11746,7 +11756,7 @@ int main(int argc, char** argv) {
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
     std::string controllerPath;
-    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false,galleryFiles=false,gallerySimulations=false,galleryTabs=false;
+    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false,galleryFiles=false,gallerySimulations=false,galleryTabs=false,galleryKeyboards=false;
     std::string galleryOutput;
     std::string witnessCaptureDirectory;
     std::string witnessVisualExpectationDirectory;
@@ -11769,8 +11779,8 @@ int main(int argc, char** argv) {
         const std::string option(argv[index]);
         if(option=="--component-gallery") {
             const std::string component=argv[index+1];
-            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists" && component!="simulations" && component!="tabs" && component!="files") {std::cerr<<"Unknown gallery component\n";return 2;}
-            galleryFiles=component=="files";galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";gallerySimulations=component=="simulations";galleryTabs=component=="tabs";
+            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists" && component!="simulations" && component!="tabs" && component!="files" && component!="keyboards") {std::cerr<<"Unknown gallery component\n";return 2;}
+            galleryKeyboards=component=="keyboards";galleryFiles=component=="files";galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";gallerySimulations=component=="simulations";galleryTabs=component=="tabs";
             componentGallery=true;
         }
         else if(option=="--gallery-desktop") {
@@ -11943,10 +11953,10 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
-        if((gallerySimulations||galleryTabs) && !galleryDesktop)throw std::runtime_error("Menu studies are desktop-only; use --gallery-desktop on");
+        if((gallerySimulations||galleryTabs||galleryKeyboards) && !galleryDesktop)throw std::runtime_error("Menu studies are desktop-only; use --gallery-desktop on");
         if(galleryDesktop) {
             if(!componentGallery)throw std::runtime_error("Desktop gallery requires --component-gallery thumbwheel");
-            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists,gallerySimulations,galleryTabs,galleryFiles);
+            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists,gallerySimulations,galleryTabs,galleryFiles,galleryKeyboards);
         }
         const auto processStarted = std::chrono::steady_clock::now();
         std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="

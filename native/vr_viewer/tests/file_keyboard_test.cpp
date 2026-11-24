@@ -39,7 +39,7 @@ int main(int argc,char** argv) {
     SidebarTab tab{1,"file-keyboard","Filename keyboard",{}};
     tab.rows.push_back({"routing-help","test_part.nadoc","","",{}});
     for(const auto* label:{"Cancel","Create"})tab.rows.push_back({std::string("routing:")+label,label,"",std::string("routing:")+label,{}});
-    const auto keys=fileKeyboardKeys();assert(keys.size()==42);
+    const auto keys=fileKeyboardKeys();assert(keys.size()==43);
     std::string qwerty,home,bottom;
     for(const auto& key:keys) {
         if(key.row==1)qwerty+=key.key;

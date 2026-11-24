@@ -502,3 +502,15 @@ and geometry as option 4, rather than approximating it with generic sidebar
 controls. A frozen original-renderer regression protects its positions, colors,
 depth layers and typography. Production omits gallery selectors/demo buttons.
 Side-by-side and overlay review: `.development-artifacts/vr-file-exact/comparison.html`.
+
+## Shared text keyboard studies (2026-11-24)
+
+**Text keyboard · four button styles** is a desktop-only launcher directly in
+VR Component Gallery. It compares flat, beveled slate, soft capsule and detailed
+mechanical keycaps, with real sample typing and disabled/pressed states. All four
+reuse the production QWERTY geometry; selecting a study does not change VR styling.
+See [shared keyboard integration and evaluation](vr_text_keyboard.md).
+
+Production VR text entry now adopts Bevel / Slate (option 2) through the same
+keycap renderer as this evaluator. VR uses continuous trigger pressure; the
+desktop mouse evaluator retains full-press/release interaction.

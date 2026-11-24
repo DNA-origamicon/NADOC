@@ -258,7 +258,7 @@ def test_join_final_output_tour_uses_the_configured_recorder(client):
     assert arguments(tour, True) == ['-m', 'tools.vr_workflows.join_tour', '--capture-final', '--validate']
 
 
-@pytest.mark.parametrize("identifier,component", [("simulation-menu-gallery", "simulations"), ("tab-gallery", "tabs")])
+@pytest.mark.parametrize("identifier,component", [("simulation-menu-gallery", "simulations"), ("tab-gallery", "tabs"), ("keyboard-gallery", "keyboards")])
 def test_simulation_menu_study_is_desktop_only(client, monkeypatch, identifier, component):
     study = next(t for t in catalog()['tours'] if t['id'] == identifier)
     assert study['modes'] == ['desktop']

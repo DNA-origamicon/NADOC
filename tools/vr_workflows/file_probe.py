@@ -47,7 +47,7 @@ def run(socket, output):
     def control(identifier):
         return next((c for c in live.state['controls'] if c['id'] == identifier), None)
 
-    def click(identifier, preset, disabled=False):
+    def click(identifier, preset, disabled=False, activate=True):
         wait(lambda s: control(identifier) and (disabled or control(identifier)['enabled']))
         for attempt in range(3):
             target = control(identifier)
@@ -60,13 +60,13 @@ def run(socket, output):
             trial.update(control=identifier, attempt=attempt+1, preset=preset)
             trials.append(trial)
             if trial['acquired_with_feedback'] and acquired(live.state):
-                live.button('trigger', hand=1)
+                if activate: live.button('trigger', hand=1)
                 return
         raise RuntimeError('Could not acquire '+identifier)
 
     def review(name, required):
         print('Review: '+name, flush=True)
-        # Release the pointing trigger and park the hand clear of the lettering.
+        # Capture the current pressure unchanged, including partial-press stages.
         live.frame()
         destination = output/name
         evidence, _ = live.capture_to(destination, files=['left.png', 'right.png', 'mirror.png', 'evidence.json'], discard_source=True)
@@ -143,12 +143,31 @@ def run(socket, output):
             wait(lambda s: control('routing:file-key-d') is not None)
             assert not live.state['sidebars'][0]['open']
             keys = [c['id'] for c in live.state['controls'] if c['id'].startswith('routing:file-key-')]
-            assert len(keys) == 42
+            assert len(keys) == 43
             review(preset+'-new-part-keyboard', keys+['routing:file-button-0', 'routing:file-button-1', 'routing-help'])
+            from tools.vr_workflows.keyboard_pressure_probe import verify as verify_pressure
+            verify_pressure(live,output,preset,lambda identifier,p:click(identifier,p,activate=False),click,control,wait,review,keys)
             for key, expected in [('d', 'd'), ('e', 'de'), ('m', 'dem'), ('o', 'demo'), ('1', 'demo1'), ('delete', 'demo'), ('2', 'demo2')]:
                 click('routing:file-key-'+key, preset)
                 wait(lambda s: control('routing-help') and (' / '+expected+' [') in control('routing-help')['label'])
+            click('routing:file-key-shift', preset); click('routing:file-key-1', preset)
+            wait(lambda s: ' / demo2! [' in control('routing-help')['label'])
+            click('routing:file-key-delete', preset); click('routing:file-key-shift', preset)
+            click('routing:file-key-symbols', preset)
+            wait(lambda s: control('routing:file-key-r')['label'].startswith('RIGHT / $ '))
+            review(preset+'-symbols-keyboard', keys+['routing:file-button-0', 'routing:file-button-1', 'routing-help'])
+            for key, expected in [('r', 'demo2$'), ('dot', 'demo2$+'), ('dash', 'demo2$+`'), ('underscore', 'demo2$+`~')]:
+                click('routing:file-key-'+key, preset)
+                wait(lambda s: (' / '+expected+' [') in control('routing-help')['label'])
+            review(preset+'-symbols-typed', keys+['routing:file-button-0', 'routing:file-button-1', 'routing-help'])
+            for expected in ['demo2$+`', 'demo2$+', 'demo2$', 'demo2']:
+                click('routing:file-key-delete', preset)
+                wait(lambda s: (' / '+expected+' [') in control('routing-help')['label'])
+            click('routing:file-key-symbols', preset)
+            wait(lambda s: control('routing:file-key-r')['enabled'] and control('routing:file-key-r')['label'].startswith('RIGHT / r '))
             review(preset+'-typed-demo2-before-cancel', keys+['routing:file-button-0', 'routing:file-button-1', 'routing-help'])
+            from tools.vr_workflows.keyboard_border_probe import verify as verify_border
+            verify_border(live,output,preset,review,keys,click,wait)
             click('routing:file-button-0', preset)
             wait(lambda s: not s['routing_popup'][1]['open'])
             cancelled += 1

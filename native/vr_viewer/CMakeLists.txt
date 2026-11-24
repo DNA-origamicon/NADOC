@@ -652,3 +652,10 @@ if(BUILD_TESTING)
   target_compile_options(nadoc-vr-file-keyboard-test PRIVATE -UNDEBUG)
   add_test(NAME nadoc-vr-file-keyboard COMMAND nadoc-vr-file-keyboard-test)
 endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-extension-root-render-test tests/extension_root_render_test.cpp)
+  target_link_libraries(nadoc-vr-extension-root-render-test PRIVATE
+    PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  target_compile_options(nadoc-vr-extension-root-render-test PRIVATE -UNDEBUG -O0)
+endif()
