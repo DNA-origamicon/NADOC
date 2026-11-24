@@ -1,5 +1,6 @@
 #pragma once
 #include "sidebar_catalog.hpp"
+#include "file_table_style.hpp"
 #include "menu_layout.hpp"
 #include "stroke_font.hpp"
 #include "menu_focus.hpp"
@@ -157,7 +158,7 @@ class SidebarMenu {
         else if(canScroll(1)) offsets[selected]+=pageRows();
     }
     MenuPanelBounds scrollBounds() const {
-        if(customTab && tab().key=="file-browser")return {{.81F,-.345F},{.88F,.24F}};
+        if(customTab && tab().key=="file-browser")return {{file_table_style::rail.x,file_table_style::rail.y},{file_table_style::rail.x+file_table_style::rail.w,file_table_style::rail.y+file_table_style::rail.h}};
         const float cx=toolFooter()?0.F:hand==0?.058F:-.058F;
         if(customTab && tab().key=="sweep")return {{ui_style::toolHalfWidth-.062F,sweepPath()?-.234F:-.191F},{ui_style::toolHalfWidth,sweepPath()?.282F:.517F}};
         if(customTab && tab().key=="extrude")return {{ui_style::toolHalfWidth-.062F,-.339F},{ui_style::toolHalfWidth,.249F}};
@@ -590,6 +591,10 @@ class SidebarMenu {
             if(b.maximum.x>b.minimum.x && b.maximum.y>b.minimum.y)rawFill(b,color);
         };
         audit.reset(bounds());
+        if(customTab && tab().key=="file-browser"){
+            for(const auto& c:controls())audit.addControl(c.id,c.bounds,c.bounds,isScrollbar(c.id)?glm::vec2(.06F,.15F):glm::vec2(.15F,.065F));
+            audit.finish();return; // SolidUi renders the approved gallery mesh, not the generic sidebar texture.
+        }
         fill(bounds(),ui_style::panel);
         auto text=[&](const std::string& id,const std::string& value,glm::vec2 at,float scale,glm::vec3 color,const MenuPanelBounds& box,bool vertical=false) {
             std::string label=value;
@@ -655,10 +660,6 @@ class SidebarMenu {
         }
         if(sweepPath())text("sweep:set-count","POINTS "+std::to_string(total()?offset()+1:0)+"-"+std::to_string(std::min(offset()+pageRows(),total()))+" / "+std::to_string(total()),
             {-ui_style::toolHalfWidth,.301F},.002F,{.53F,.74F,.72F},{{-ui_style::toolHalfWidth,.283F},{ui_style::toolHalfWidth,.305F}});
-        if(customTab && tab().key=="file-browser"){
-            drawFileTableCells("file-columns",{"NAME","TYPE","MODIFIED","SIZE"},.285F,.365F,ui_style::text,boundedText);
-            if(total()==0)boundedText("file-empty","NO FILES IN THIS FOLDER",{-.415F,.20F},.0036F,ui_style::disabledText,{{-.43F,.12F},{.78F,.24F}});
-        }
         const auto listControls=controls();
         drawSidebarSets(listControls,line,fill);
         if(tab().key=="join")drawJoinSets(line,fill,text);
@@ -750,9 +751,6 @@ class SidebarMenu {
                     if(c.icon=="eye-off")stroke({-10,10},{10,-10});
                 }
                 continue;
-            }
-            if(customTab && tab().key=="file-browser" && fileTableEntry(c.id)){
-                drawFileTableCells(c.id,fileTableCells(c),b.minimum.y,b.maximum.y,fg,boundedText);continue;
             }
             if(c.vertical) {
                 const float s=tabFont(c.id),full=strokeTextWidth(c.label.size(),s);

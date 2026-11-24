@@ -32,9 +32,15 @@ def run(socket, output):
 
     def wait(predicate, timeout=12):
         until = time.monotonic()+timeout
+        settled_since = None
         while True:
             live.frame()
-            if predicate(live.state): return
+            # Open replaces an already visible picker asynchronously. A single
+            # matching frame can still be the old picker before Working appears.
+            if predicate(live.state):
+                if settled_since is None: settled_since = time.monotonic()
+                if time.monotonic()-settled_since >= .35: return
+            else: settled_since = None
             if time.monotonic() > until: raise RuntimeError('File workflow state did not settle')
             time.sleep(.05)
 
@@ -99,7 +105,7 @@ def run(socket, output):
         # Place the full-size keyboard inside the actual eye frustum; no headset
         # pose override and no reduced key hit boxes. The menu is enlarged separately.
         live.button('menu', hand=0)
-        def menu(distance=1.10):
+        def menu(distance=1.30):
             center = head+facing.apply([0, .1, -distance])
             spawn = center-wrist.apply(offset)
             if live.state['sidebars'][0]['open']: live.button('menu', hand=0)
@@ -122,8 +128,8 @@ def run(socket, output):
             live.frame()
         assert abs(live.state['sidebars'][0]['scale']-.8) < .002
         (output/'presentation.json').write_text(json.dumps({'method': 'observed wrist calibration and ordinary menu resize',
-            'menu_distance_m': 1.10, 'keyboard_distance_m': 1.10, 'menu_scale': .8, 'keyboard_scale_unchanged': 1.2,
-            'head': head.tolist(), 'keyboard_center': (head+facing.apply([0, .1, -1.10])).tolist()}, indent=2))
+            'menu_distance_m': 1.30, 'keyboard_distance_m': 1.30, 'menu_scale': .8, 'keyboard_scale_unchanged': 1.2,
+            'head': head.tolist(), 'keyboard_center': (head+facing.apply([0, .1, -1.30])).tolist()}, indent=2))
         for preset in FINAL_PRESETS if validate else ['steady_fast']:
             menu()
             click('tab:file', preset)

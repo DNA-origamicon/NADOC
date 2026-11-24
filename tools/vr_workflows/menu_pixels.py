@@ -69,9 +69,19 @@ def check(directory, evidence):
                 # These controls are ribbed cyan cylinders; their numeric labels
                 # sit beside, rather than inside, the physical hit surface.
                 neutral = ((pixels[:, 2].astype(int)-pixels[:, 0]>25) & (pixels[:, 1]>70)) if control["enabled"] else (pixels.min(axis=1)>30)
+            file_table = control.get("tab") == "file-browser"
+            if file_table:
+                # Option 4 uses solid slate surfaces and blue-grey disabled text,
+                # not the generic sidebar's neutral-grey stroke palette.
+                target = [89,194,255] if scrollbar else [230,240,255] if control["enabled"] or control["id"] == "routing-help" else [140,168,196]
+                neutral = np.all(np.abs(pixels.astype(int)-np.array(target)) <= 20, axis=1)
+                if control["id"].startswith("routing:file-entry-"):
+                    # The parent row's name is only "..". Its type/date/size
+                    # are also visible glyphs, in the gallery's muted palette.
+                    neutral |= np.all(np.abs(pixels.astype(int)-np.array([140,168,196])) <= 20, axis=1)
             text = int(neutral.sum())
             gray = True
-            if not control["enabled"]:
+            if not control["enabled"] and not (file_table and control["id"] == "routing-help"):
                 gray = bool(text and np.quantile(pixels[neutral].max(axis=1),.98)<230)
             active = True
             if control["active"]:

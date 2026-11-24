@@ -1,6 +1,7 @@
 #pragma once
 #include "sidebar_grips.hpp"
 #include "solid_ui.hpp"
+#include "file_table_draw.hpp"
 #include "job_card.hpp"
 #include "capture_ui_diagnostics.hpp"
 // Included after the native GL surface types; owns both sidebar panels.
@@ -199,6 +200,7 @@ class SidebarRuntime {
             menus[i].draw(line,fill);
             auto& ui=raised[i];ui.vertices.clear();
             const auto& menu=menus[i];
+            if(menu.customTab && menu.tab().key=="file-browser"){drawFileTable(ui,menu);continue;}
             for(const auto& c:menu.controls())if(menu.raisedAction(c) && !(menu.customSimulationDraw() && c.id.starts_with("sim:"))) {
                 const auto b=c.bounds;const auto size=b.maximum-b.minimum;
                 const bool hover=menu.hovered==c.id || (menu.focus.active && menu.focus.id==c.id);
@@ -235,7 +237,7 @@ class SidebarRuntime {
     }
     void render(const glm::mat4& projection) {
         for(size_t i=0;i<2;++i) if(menus[i].open) {
-            surfaces[i].render(projection,menus[i].placement,menus[i].bounds(),.002F);
+            if(!(menus[i].customTab && menus[i].tab().key=="file-browser"))surfaces[i].render(projection,menus[i].placement,menus[i].bounds(),.002F);
             const auto& p=menus[i].placement;
             raised[i].render(projection*glm::translate(glm::mat4(1),p.position())*glm::mat4_cast(p.orientation())*glm::scale(glm::mat4(1),glm::vec3(p.scale())));
         }

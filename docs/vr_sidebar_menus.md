@@ -955,3 +955,31 @@ Live evidence: `.development-artifacts/vr-file-table/live-02/index.html`
 among 79 reaches). Temporary workspace and credentials were removed; no
 structures were saved. `live-01` retains the interrupted first run and its
 verified cleanup record.
+
+### Exact gallery rendering correction (2026-11-23)
+
+The original production table still used the generic sidebar renderer, giving
+its commands different colors and spacing. It now shares option 4's literal
+layout, solid rounded mesh layers, slate palette, glyph sizes and state colors
+through `file_table_style.hpp`. `file_table_draw.hpp` renders the production
+table at the gallery's VR scale of 1.5. Gallery selectors and demo controls are
+omitted; functional Cancel, Save and filename controls remain. Dates display as
+YY-MM-DD inside the approved column, retaining full UTC dates in routing data.
+
+Frozen native regression checks compare every vertex and color against the
+original option 4 renderer in idle, hovered, selected and disabled states.
+Actual production-runtime and gallery captures cover front, oblique and offscreen
+views. The shared sample-content region has zero differing pixels out of 509,600.
+Review: `.development-artifacts/vr-file-exact/comparison.html`.
+Physical through-lens comfort remains manual validation debt.
+
+Live validation passed all four controller profiles with 25 stereo/desktop
+review stages and four cancelled New Part attempts, followed by Close Session.
+The 78 recorded reaches include 16 retry reaches; this validates completed
+interaction flows, not a new uncorrected first-attempt accuracy estimate.
+No structure files were created; temporary workspace and credentials were removed.
+Evidence: `.development-artifacts/vr-file-exact/live-03/index.html`. Earlier runs
+are retained: live-01 exposed the pixel check ignoring muted metadata on the `..`
+row; live-02 captured the transient Working state during asynchronous Open.
+The checker now recognizes both actual gallery glyph colors without reducing
+its threshold; the probe requires a stable ready state before reviewing.

@@ -496,3 +496,9 @@ The general VR Tours & Tests menu keeps its category hierarchy. Live localhost
 browser checks at 1440×900 and 1280×720 verified all three File launchers in the
 viewport and no duplicates after reopening. Evidence:
 `.development-artifacts/vr-gallery-menu-check/after-1280.png`.
+
+Production File styling now uses the same `file_table_style.hpp` mesh renderer
+and geometry as option 4, rather than approximating it with generic sidebar
+controls. A frozen original-renderer regression protects its positions, colors,
+depth layers and typography. Production omits gallery selectors/demo buttons.
+Side-by-side and overlay review: `.development-artifacts/vr-file-exact/comparison.html`.

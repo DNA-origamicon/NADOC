@@ -3,7 +3,9 @@
 #undef main
 
 void checkGallery(bool condition,const char* message) {if(!condition)throw std::runtime_error(message);}
+#include "file_table_parity.hpp"
 int main(int argc,char** argv) {
+    checkFileTableParity();
     ComponentGallery gallery;gallery.active=gallery.posed=true;
     gallery.placement.openDocked({0,0,0},glm::quat(glm::vec3(.12F,.42F,0)));
     std::array<nadoc_vr::HandPose,2> hands{};
@@ -203,6 +205,7 @@ int main(int argc,char** argv) {
         std::ofstream file(output/(std::string(mode>=5?("files-"+std::to_string(mode-5)+"-").c_str():mode==4?"tabs-":mode==3?"lists-":mode==2?"cards-":mode==1?"buttons-":"")+(view==0?"front.png":view==1?"oblique.png":"offscreen.png")),std::ios::binary);
         file.write(reinterpret_cast<const char*>(png.data()),png.size());
     }
+    captureFileTableParity(output);
     gallery.ui.shutdown();glfwDestroyWindow(window);glfwTerminate();
     std::cout<<"Wheel, button, card, list, tab and six File menu interactions and rendered pixels passed\n";
 }

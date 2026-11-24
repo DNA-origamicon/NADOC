@@ -288,3 +288,12 @@ are unchanged. `file_probe.py` now drives the table's routed command IDs.
 Desktop component-gallery processes no longer reserve the headset in
 `routes_vr_tours._viewer_active`; an already open desktop gallery is preserved.
 Task-specific frontend main.js delta: 0. Evidence: `.development-artifacts/vr-file-table/`.
+
+Exact option-4 correction: the production table had still used generic sidebar
+colors/spacing. `file_table_style.hpp` now supplies both gallery and production
+with the original rounded solid meshes, slate palette, depth layers, typography
+and literal bounds; production `file_table_draw.hpp` skips generic texture drawing.
+VR scale matches the gallery at 1.5; selectors/demo buttons are omitted. Frozen
+original mesh checks cover idle/hover/selected/disabled; shared sample pixels
+match exactly (509,600 pixels, zero differences). Review artifact:
+`.development-artifacts/vr-file-exact/comparison.html`. main.js delta: 0.

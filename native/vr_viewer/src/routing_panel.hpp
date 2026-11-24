@@ -41,7 +41,7 @@ class RoutingPanel {
         if(opening){popup.placement=parent.placement;popup.placement.openDocked(parent.placement.worldPoint({0,0,.045F}),parent.placement.orientation());popup.placement.setScale(parent.placement.scale());}
         const bool keyboard=title=="Filename keyboard";
         if(keyboard)popup.placement.setScale(kFileKeyboardScale);
-        else if(title=="Open / Save File")popup.placement.setScale(1.F);
+        else if(title=="Open / Save File")popup.placement.setScale(file_table_style::scale);
         SidebarTab tab{1,keyboard?"file-keyboard":title=="Open / Save File"?"file-browser":"routing-dialog",title,{}};
         tab.rows.push_back({"routing-title",title,"","",{}});
         const auto back=std::find_if(controls.begin(),controls.end(),[](const auto& row){return row.label=="Cancel"||row.label=="Done"||row.id=="dismiss";});

@@ -1,5 +1,6 @@
 #pragma once
 #include "solid_ui.hpp"
+#include "file_table_style.hpp"
 
 // UI-only sample data. No document creation, saving or filesystem operations.
 class FileGallery {
@@ -19,7 +20,7 @@ class FileGallery {
         std::vector<Control> c;
         for(int i=0;i<6;++i)c.push_back({i,-.73F+i*.245F,.43F,.228F,.07F,std::to_string(i+1)+" "+(i==0?"MINIMAL":i==1?"TILES":i==2?"LIST":i==3?"TABLE":i==4?"TREE":"SPLIT")});
         const char* actions[]={"NEW PART","NEW ASSEMBLY","OPEN","SAVE AS","CLOSE SESSION"};
-        for(int i=0;i<5;++i)c.push_back({10+i,-.73F,.265F-i*.125F,.32F,.095F,actions[i],i!=1&&!disabled});
+        for(int i=0;i<5;++i){const auto r=file_table_style::command(i);c.push_back({10+i,r.x,r.y,r.w,r.h,actions[i],i!=1&&!disabled});}
         if(variant==0&&!opened){c.push_back({20,-.32F,.18F,.97F,.16F,"SHOW RECENT FILES",!disabled});return c;}
         c.push_back({21,-.33F,.305F,.97F,.065F,folder?"< WORKSPACE / DESIGNS":"WORKSPACE / DESIGNS >",!disabled});
         if(variant==4){c.push_back({22,-.33F,.20F,.97F,.08F,expanded?"- DESIGNS":"+ DESIGNS",!disabled});if(!expanded)return c;}
@@ -28,7 +29,7 @@ class FileGallery {
             float x=-.33F,y=.19F-i*.09F,w=.97F,h=.075F;
             if(variant==0){y=.13F-i*.17F;h=.14F;}
             if(variant==1){x+=i%2*.50F;y=.04F-i/2*.245F;w=.47F;h=.215F;}
-            if(variant==3){y=.15F-i*.083F;h=.072F;}
+            if(variant==3){const auto r=file_table_style::row(i);x=r.x;y=r.y;w=r.w;h=r.h;}
             if(variant==4){x+=.06F;y=.09F-i*.105F;w-=.06F;h=.085F;}
             if(variant==5)w=.45F;
             c.push_back({30+i,x,y,w,h,files[i],!disabled});
@@ -64,6 +65,7 @@ class FileGallery {
         ui.text("FILE",-.73F,.39F,.0038F,muted);
         for(const auto& c:controls()){
             const bool focus=hover==c.id,chosen=c.id==variant||c.id==selected+30;
+            if(variant==3 && c.id>=10){file_table_style::control(ui,{c.x,c.y,c.w,c.h},c.label,c.enabled,focus,chosen,c.id>=30,{"PART","TODAY","24 KB"});continue;}
             const auto tint=!c.enabled?glm::vec3(.24F,.29F,.34F):chosen?glm::vec3(.15F,.38F,.48F):glm::vec3(.12F,.20F,.28F);
             const auto edge=focus?gold:chosen?accent:glm::vec3(.30F,.43F,.55F);
             if(variant==1&&c.id>=30){ // tabbed manila folder silhouette
@@ -76,7 +78,7 @@ class FileGallery {
             if(c.id>=30&&(variant==0||variant==1))ui.text("PART / LOCAL",c.x+.015F,c.y+.03F,.0026F,muted,.030F);
             if(c.id>=30&&variant==3)ui.text("PART   TODAY   24 KB",c.x+.41F,c.y+.043F,.0028F,muted,.030F);
         }
-        if(variant==3)ui.text("NAME                 TYPE   MODIFIED   SIZE",-.31F,.255F,.0028F,muted);
+        if(variant==3)file_table_style::headings(ui);
         if(variant==5){ui.rounded(.15F,-.30F,.50F,.57F,.015F,{.075F,.12F,.17F},.014F);
             ui.text("FILE DETAILS",.18F,.23F,.0037F,accent,.030F);
             ui.text(selected<0?"SELECT A FILE":files[selected],.18F,.13F,.0035F,ink,.030F);
