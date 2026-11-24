@@ -46,7 +46,7 @@ def _run(session, before, fn, state, *, retry=True, command=None):
     preserve_topology = command is not None and (
         metadata_policy(*command) or command[0] == "extension-delete"
         or command[0] in NUCLEOTIDE_KINDS
-        or command[0] in {"annotations-state", "view-volumes-state", "flexible-relax"})
+        or command[0] in {"annotations-state", "view-volumes-state", "flexible-relax", "corner"})
     result = fn(session.design)
     report = None
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):
@@ -58,6 +58,8 @@ def _run(session, before, fn, state, *, retry=True, command=None):
         report = result
     # Residue poses do not change topology or placement membership. Reconciliation
     # can widen a partial owner and move unselected material as a side effect.
+    # Corner explicitly rebuilds wedge membership and connections; inheritance
+    # from pre-corner clusters would undo that rebase and apply poses twice.
     if not preserve_topology:
         reconciled = state.reconcile_cluster_membership(before, session.design, report)
         session.design = state._retry_pending_ligations(before, reconciled) if retry else reconciled
@@ -117,7 +119,11 @@ def record_feature(session, op_kind, label, params, fn):
         from backend.api.part_proof_commands import PROOF_SNAPSHOT_KINDS
         if op_kind in PROOF_SNAPSHOT_KINDS:
             from backend.api.part_proof_commands import PROOF_VERSION
-            params = {**params, "_proof_version": PROOF_VERSION}
+            version = PROOF_VERSION
+            if op_kind == 'corner':
+                from backend.api.part_corner_commands import CornerCommand
+                version = CornerCommand.model_validate(params).proof_version
+            params = {**params, "_proof_version": version}
             if (op_kind == "bundle-create" and not before.feature_log and not before.helices
                     and before.recipe_root is not None):
                 session.design.recipe_root = before.recipe_root

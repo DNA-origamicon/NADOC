@@ -19,7 +19,10 @@ import json
 import threading
 from pathlib import Path
 
-from watchdog.events import FileSystemEventHandler
+from watchdog.events import (
+    FileSystemEventHandler, FileCreatedEvent, FileModifiedEvent,
+    FileDeletedEvent, FileMovedEvent,
+)
 from watchdog.observers import Observer
 
 from backend.core.workspace import is_internal_workspace_path
@@ -100,7 +103,12 @@ def start(workspace: Path) -> None:
     _workspace_dir = workspace
     workspace.mkdir(parents=True, exist_ok=True)
     obs = Observer()
-    obs.schedule(_WorkspaceHandler(workspace), str(workspace), recursive=True)
+    # Filter at the observer, before inotify queues events. Library scans and
+    # trajectory reads otherwise generate thousands of unused open/close events
+    # which compete with interactive geometry workers for the Python interpreter.
+    obs.schedule(_WorkspaceHandler(workspace), str(workspace), recursive=True,
+                 event_filter=[FileCreatedEvent, FileModifiedEvent,
+                               FileDeletedEvent, FileMovedEvent])
     obs.start()
     _observer = obs
 

@@ -1,5 +1,61 @@
 # Issues fix log
 
+## 2026-11-23 — ISSUE-266 / ISSUE-267: Smoke baseline and fixture-cache accounting
+
+- [ ] Assembly-exit fixture setup hits 60 seconds with and without Corner;
+  reproduced on untouched `afbc311c`. Full smoke: 26 passed, 2 skipped, 1 failed.
+- [x] Verified and removed only the isolated run's two legacy-fixture revision
+  snapshots; all test artifacts are gone and the main workspace is unchanged.
+- [ ] Add failure-safe ownership tracking for read-only smoke fixture caches;
+  do not weaken the existing prefix-only teardown guard.
+
+## 2026-11-23 — ISSUE-265: Keep extension display out of Corner atom inputs
+
+- [x] Reproduced recursive atom construction using native Corner → extension.
+- [x] Request only duplex endpoint geometry inside the Corner atom builder;
+  retain upstream measured extension slabs on the outer Full projection.
+- [x] Integrated regression, finite extension slabs and independent reopened
+  recipe replay pass; the ordinary extension-slab regression also passes.
+
+## 2026-11-23 — ISSUE-261 / ISSUE-264: Approved Corner provider and responsive progress
+
+- [x] Integrate the demonstrated two-pass molecular provider only for recorded
+  Corner inserts, after wedge deformation. Full representation uses its atoms.
+- [x] Preserve frozen coordinates, ordinary inserts and physical overrides;
+  test numerical-cache transport and disposable-worker cancellation.
+- [x] Stream actual fit progress without buffering and preserve immediate
+  cylinder previews. Verify native save/reopen and independent command replay.
+- [ ] Full preview still exceeds the requested 1–2 seconds. Production physical
+  simulations remain unvalidated; software checks are not stability evidence.
+
+## 2026-11-23 — ISSUE-263: Whole-preview Corner edit progress
+
+- [x] Reproduced premature completion; progress now includes source proof,
+  edited seams, later-feature replay/validation and Full projection.
+- [x] Two history/stream tests and the square-lattice app workflow pass. The
+  app checks monotonic completion and remaining-time estimates, plus actual
+  numeric arrows and history controls. No persisted test artifacts remain.
+
+## 2026-11-23 — ISSUE-262: Preserve Corner numeric increments
+
+- [x] Reproduced off-grid position snapping on both HC and square lattices.
+- [x] Native spinners now add 7/8 bp (or matching nm) and 15° from typed values.
+- [x] 13 focused frontend tests and the 6HB app workflow pass, including actual
+  arrow keys and history operations. Preview ready in 1.945 s, painted in 2.301 s.
+  Inspected preview; test part/revisions, browser captures, reports and bridge
+  credentials cleaned. No molecular placement changes.
+
+## 2026-11-23 — ISSUE-260: Corner source ownership at overlapping miter tips
+
+- [x] Reproduced ambiguous endpoint ownership using native Extrude → Auto
+  Scaffold → Make Cluster → Corner; added a regression for the exact failure.
+- [x] Preserve original endpoint ownership; v3 marks new tip sequence N and
+  leaves v1/v2 replay unchanged. Keep authored plane nicks unjoined.
+- [x] Focused backend/frontend checks and nicked/sequence-assigned routed 6HB
+  app checks pass. Routed preview ready in 1.687 s, painted in 2.040 s.
+- [x] This topology fix initially left molecular placement unchanged. The
+  candidate was subsequently approved and promoted under ISSUE-261.
+
 ## ISSUE-259 — NAMD runner scheduling fixture intermittently sees a busy lease (2026-11-22)
 
 [ ] Occupancy archive FAST validation failed in

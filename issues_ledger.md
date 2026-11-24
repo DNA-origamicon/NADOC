@@ -1,5 +1,129 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-267 — Read-only smoke fixture leaves a revision cache (2026-11-23)
+
+- **Evidence:** in a fresh isolated workspace with zero revision snapshots, the
+  renderer smoke test loads `Examples/2hb_xover_val.nadoc` and leaves two snapshots
+  under project `f16cfa15-b59d-4aef-803d-ab03872b6d24`. Their original `Bundle`
+  name correctly prevents prefix-only global teardown from deleting them.
+- **Disposition:** verified both snapshots belong to that exact read-only fixture
+  and removed only this newly-created isolated store after the run. The source
+  file and main workspace were unchanged. Both isolated workspaces finish with
+  zero snapshots, test parts, sessions, bridge keys or reports. Future smoke
+  runs need explicit before/after ownership tracking for this fixture cache;
+  never delete a pre-existing user project merely because its ID matches.
+
+## ISSUE-266 — Assembly-exit smoke fixture times out before exit (2026-11-23)
+
+- **Evidence:** the 60-second limit expires in `assemblyInstanceCandidates` at
+  `frontend/e2e/helpers/scene_harness.js:434`, while `loadAssemblyWithParts` is
+  preparing the fixture. Reproduced in the integrated Corner tree and a clean,
+  untouched `afbc311c` worktree, with a single worker and unchanged timeout.
+- **Status:** existing upstream/environment failure; cause not established.
+  The full smoke run had 26 passes, 2 skips and this one failure. The exit action
+  is not reached, so this is not a verified assembly-exit pass. No timeout,
+  test guard or upstream application code was changed to hide it.
+- **Evidence logs:** `.development-artifacts/corner-tool-audit/integrated-smoke.log`,
+  `integrated-assembly-exit-retry.log`, and `upstream-assembly-exit.log`.
+
+## ISSUE-265 — Corner and measured extension slabs recursively rebuild atoms (2026-11-23)
+
+- **Cause:** upstream extension slabs now derive from completed atoms. Corner's
+  endpoint-only internal geometry query also requested those slabs, recursively
+  re-entering the same atom builder after a native extension was added.
+- **Fix:** disable extension-slab projection only for that internal endpoint
+  query, alongside the existing Corner recursion guard. Ordinary Full rendering
+  still derives extension slabs from the completed model.
+- **Validation:** native bundle → Corner → terminal extension reproduces the
+  recursive call with a bounded assertion. The regression also checks finite
+  slabs, unchanged authoring state and independent reopened-command replay.
+  The regression, reopened replay and ordinary extension-slab checks pass.
+
+## ISSUE-264 — Corner progress buffered and cold Full fit too slow in the app (2026-11-23)
+
+- **Cause/evidence:** GZipMiddleware buffered the NDJSON guide/progress stream.
+  Small L-BFGS-B fits also spawned a workstation-sized BLAS pool. First app
+  attempts stayed at "Preparing cylinder preview" or exceeded the unchanged
+  30-second readiness check. No browser console error was reported.
+- **Changes:** explicit identity encoding streams observed work immediately;
+  Corner numerical scopes use one BLAS thread, loading SciPy runtimes first.
+  The provisional cylinder view now hides the detailed live DNA until Full is
+  ready, with cancellation restoring it.
+- **Status:** progress and responsive cancellation fixed. A disposable bounded
+  worker isolates Full calculation from server work; exact arithmetic, scoped
+  clash discovery, immutable fit setup reuse and numerical caching retain the
+  frozen approved atoms. No geometry oracle or timeout was relaxed.
+- **Validation:** six frozen/scoped-placement checks, exact numerical/clash
+  oracles, worker cancellation/equivalence and stream checks pass. The 6HB app
+  lifecycle and a separate delete/revert/save/reopen/replay test pass. All four
+  representative app cases pass; 174 backend and 114 frontend checks pass. Observed cold server preview: 14.09 s 6HB,
+  17.51 s square; parameter updates about 22–26 s including browser interaction.
+  The cylinder guide passes its 2 s check. The requested 1–2 s Full-preview
+  target remains open; physical simulation stability is not validated.
+
+
+## ISSUE-263 — Corner edit progress reaches 100% before Full preview is ready (2026-11-23)
+
+- **Cause:** the edited Corner's seam counter was displayed as whole-preview
+  completion, excluding later-feature replay, validation and Full projection.
+- **Change:** count four observed phases, refine seam-phase progress using its
+  work counter, and reserve 100% for completed projection. Report an approximate
+  remaining-time estimate from elapsed work; no timer-driven progress.
+- **Validation:** regression first reproduced the old progress contract. Two
+  focused history/stream tests pass. The 1×8 square app flow passes monotonic
+  streamed progress, ETA, actual number-control arrows, Apply, undo/redo and
+  history edit. Before molecular-provider promotion, preview was ready in
+  2.160 s / painted in 2.624 s; current timings are tracked in ISSUE-264.
+
+## ISSUE-262 — Corner arrows snap instead of adding a full increment (2026-11-23)
+
+- **Cause:** native number controls use the original HTML value/minimum as
+  their step origin. From 83 bp, Up produced 84 on HC or 88 on square.
+- **Change:** anchor native steps to each valid entered value, including the
+  linked nm field. Angle steps retain the nonnegative lower bound.
+- **Validation:** regressions first reproduced both lattice failures; all 13
+  focused popup, parameter and controller tests pass after the fix. The 6HB app
+  test passes actual arrow keys, Full preview, Apply, undo/redo, edit, delete,
+  and revert. Before molecular-provider promotion, preview was ready in
+  1.945 s; current timings are tracked in ISSUE-264. Visual/artifact checks passed.
+
+## ISSUE-261 — Native atomistic inserts use the wrong frame at Corner seams (2026-11-23)
+
+- **Status:** geometry approved November 23; scoped production provider integrated and frozen regression checks pass.
+- **Cause:** native inserts are built before deformation and transported through
+  one endpoint's helix frame. Nonparallel Corner wedges need both final endpoint
+  frames. The later terminal gamma adjustment can also reopen a closed bond.
+- **Evidence:** same-topology 6HB/flat 1×8 square comparisons and all 53 HC/SQ
+  2HB phase cases in `.development-artifacts/corner-tool-audit/`. Current has
+  nonfinite atoms in 16 phases. Candidate has zero nonfinite atoms, contacts
+  below the existing 0.08 nm threshold, or ring piercings; worst measured flexible
+  junction bond is 0.192629 nm. This is not a stability/VDW-clearance certificate.
+- **Review:** Help → geometry Review → Corner, also `?geometryReview=corner`.
+  Complete native source recipes and a separate candidate evaluation process
+  accompany Current/Candidate/displacement/defect panels and junction metrics.
+  The user explicitly approved the demonstrated provider. Native atom construction
+  and Full projection now consume it; cold preview performance remains under work.
+- **Scope follow-up:** the diagnostic defers all insert construction, so it now
+  rejects non-Corner insert records before patching or building atoms. A native
+  Corner → user Join → inserted bases recipe independently replays and is then
+  correctly refused by the candidate. Two focused scope/optimizer tests pass.
+  This guard does not implement the scoped production adapter or change the
+  demonstrated coordinates; the saved comparison is unchanged.
+
+## ISSUE-260 — Corner miter extensions duplicate source endpoint/sequence ownership (2026-11-23)
+
+- **Cause:** both wedges can occupy overlapping bp station ranges. The extended
+  copy could claim an original nick endpoint, rejecting a natively routed
+  scaffold, and could copy sequence belonging to the opposite source half.
+- **Change:** original endpoints retain their original side of the recorded
+  split. New command v3 assigns N to new tip bases; v1/v2 preserve their exact
+  recorded sequence behavior. Existing true plane nicks retain separate termini.
+- **Validation:** 29 routing/topology/command checks before the sequence fix;
+  23 command/history/preview/topology checks and 9 frontend checks afterward.
+  Native sequenced continuous-scaffold construction independently replays;
+  crossover identities/stations are preserved. Both nicked and routed 6HB app
+  flows pass preview, Apply, undo/redo and history edit; screenshots inspected.
+
 ## ISSUE-259 — NAMD runner scheduling fixture intermittently sees a busy lease (2026-11-22)
 
 [ ] Occupancy archive FAST validation failed in
