@@ -56,6 +56,15 @@ class ComponentClosure:
         free_set = set(self.free) | {i for _, i in self.branches}
         self.rigid = [np.array([i for i in ids if i not in free_set], dtype=int) for ids in self.bodies]
         self.owners = {int(i): b for b, ids in enumerate(self.bodies) for i in ids}
+        # These offsets and ownership lists are invariant for the entire fit.
+        # Keep their original subtraction and iteration order, but do it once
+        # instead of allocating the same arrays at every objective evaluation.
+        self.body_offsets = [self.original[ids]-pivot for ids, pivot in zip(self.bodies, self.pivots)]
+        self.rigid_offsets = [self.original[ids]-pivot for ids, pivot in zip(self.rigid, self.pivots)]
+        self.branch_offsets = [(p, o, self.original[o]-self.original[p], self.owners.get(o))
+                               for p, o in self.branches]
+        self.body_branches = [[(o, offset) for _, o, offset, owner in self.branch_offsets if owner == body]
+                              for body in range(len(self.bodies))]
         adjacent = {i: set() for i in range(len(model.atoms))}
         for i, j in model.bonds:
             adjacent[i].add(j)
@@ -73,12 +82,10 @@ class ComponentClosure:
         poses = x[:self.variable_start].reshape(-1, 6)
         rotations = Rotation.from_rotvec(poses[:, 3:]).as_matrix()
         xyz = self.original.copy()
-        for body, pivot, pose, rotation in zip(self.bodies, self.pivots, poses, rotations):
-            xyz[body] = (self.original[body]-pivot)@rotation.T + pivot + pose[:3]
+        for body, offset, pivot, pose, rotation in zip(self.bodies, self.body_offsets, self.pivots, poses, rotations):
+            xyz[body] = offset@rotation.T + pivot + pose[:3]
         xyz[self.free] = x[self.variable_start:].reshape(-1, 3)
-        for phosphorus, oxygen in self.branches:
-            offset = self.original[oxygen]-self.original[phosphorus]
-            owner = self.owners.get(oxygen)
+        for phosphorus, oxygen, offset, owner in self.branch_offsets:
             xyz[oxygen] = xyz[phosphorus] + (rotations[owner]@offset if owner is not None else offset)
         return xyz, rotations
 
@@ -107,12 +114,11 @@ class ComponentClosure:
                 scatter_add(gradient, own, (2*penetration/np.maximum(distance, 1e-12))[:, None]*delta)
         pose_gradient = np.zeros((len(self.bodies), 6))
         poses = x[:self.variable_start].reshape(-1, 6)
-        for body, (ids, pivot, rotation) in enumerate(zip(self.rigid, self.pivots, rotations)):
+        for body, (ids, offset, rotation) in enumerate(zip(self.rigid, self.rigid_offsets, rotations)):
             pose_gradient[body, :3] = gradient[ids].sum(axis=0)
-            torque = cross(self.original[ids]-pivot, gradient[ids]@rotation).sum(axis=0)
-            for phosphorus, oxygen in self.branches:
-                if self.owners.get(oxygen) == body:
-                    torque += cross(self.original[oxygen]-self.original[phosphorus], gradient[oxygen]@rotation)
+            torque = cross(offset, gradient[ids]@rotation).sum(axis=0)
+            for oxygen, branch_offset in self.body_branches[body]:
+                torque += cross(branch_offset, gradient[oxygen]@rotation)
             pose_gradient[body, 3:] = _right_jacobian(poses[body, 3:]).T@torque
         for phosphorus, oxygen in self.branches:
             gradient[phosphorus] += gradient[oxygen]

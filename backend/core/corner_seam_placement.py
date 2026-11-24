@@ -80,6 +80,7 @@ def _place_corner_seams(design, model, links):
     from backend.core import atomistic
     from backend.core.corner_seam_clashes import find_clashes
     from backend.core.corner_seam_closure import close_component
+    from backend.core.corner_seam_bridge_math import minimize_bridge
     from backend.core.design_geometry import _geometry_for_design
     from backend.core.geometry import NucleotidePosition
 
@@ -109,7 +110,7 @@ def _place_corner_seams(design, model, links):
     inputs = SimpleNamespace(crossovers=[], forced_ligations=links, strands=design.strands)
     atomistic._build_extra_base_atoms(design=inputs, atoms=model.atoms, bonds=model.bonds,
         serial=len(model.atoms), strand_to_chain=chains, nuc_pos_cache=cache, helix_map={},
-        bp_to_sugar_serials=sugar, exclude_helix_ids=None)
+        bp_to_sugar_serials=sugar, exclude_helix_ids=None, bridge_fn=minimize_bridge)
     angle = -np.deg2rad(atomistic._EXTRA_BASE_3PRIME_GAMMA_CW_DEG)
     for link in links:
         atomistic._rotate_built_gamma_branch(model.atoms, sugar[_endpoints(link)[1]], angle)

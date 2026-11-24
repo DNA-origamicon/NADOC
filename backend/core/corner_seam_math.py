@@ -37,6 +37,7 @@ def clearance_gradient(xyz, pairs, gradient):
     return penetration
 
 
+@njit(cache=True)
 def cross(a, b):
     result = np.empty_like(a)
     result[..., 0] = a[..., 1]*b[..., 2] - a[..., 2]*b[..., 1]

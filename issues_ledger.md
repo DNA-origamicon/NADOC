@@ -91,6 +91,21 @@
 
 ## ISSUE-264 — Corner progress buffered and cold Full fit too slow in the app (2026-11-23)
 
+- **Latest optimization:** measured routing/recording at 0.15–0.30 s; molecular
+  projection dominates. Preserve exact seed-cost arithmetic in a compiled helper,
+  reuse closure offsets/branch membership, compile existing cross products, and
+  avoid generic object introspection for scalar cache-charge leaves. Solver
+  iterations/tolerances, geometry and memory limits are unchanged. Paired cold
+  backend previews improve 13.30→10.13 s (6HB), 14.33→11.26 s (flat square);
+  15° input changes improve 11.23→9.99 s and 15.19→12.27 s respectively.
+  `scripts.benchmark_corner` provides native, in-memory reproduction. The
+  requested 1–2 s target remains open.
+- **Optimization validation:** 36 focused backend checks and both app flows
+  pass, including frozen geometry, preview handoff and history edit. The square
+  combined workflow reached its 240 s overall limit; an unchanged isolated rerun
+  passes in 3.9 min. Cold server previews under the software-rendered browser
+  remain 15.85 s / 18.93–19.17 s, so backend benchmark gains do not establish
+  equal end-to-end gains. All test artifacts were cleaned after both runs.
 - **Cause/evidence:** GZipMiddleware buffered the NDJSON guide/progress stream.
   Small L-BFGS-B fits also spawned a workstation-sized BLAS pool. First app
   attempts stayed at "Preparing cylinder preview" or exceeded the unchanged

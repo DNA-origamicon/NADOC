@@ -128,3 +128,22 @@ def bridge_cost_grad(c3, o3, p, o5, c5):
     a, b, c, d, e, f, g = terms
     cost = (a**2 + b**2 + c**2 + d**2) + 0.1*(e**2 + f**2 + g**2)
     return cost, *gradient
+
+
+def bridge_cost(c3, o3, p, o5, c5):
+    """Match the seed bridge's NumPy bond powers and Python angle powers.
+
+    The finite-difference solver is sensitive to even last-bit cost changes.
+    Its scalar types differ from the analytic-gradient closure above; keeping
+    those types is necessary to retain the approved starting conformation.
+    """
+    terms = _bridge_terms(c3, o3, p, o5, c5)[0]
+    a, b, c, d = map(_np.float64, terms[:4])
+    e, f, g = terms[4:]
+    return float((a**2 + b**2 + c**2 + d**2) + 0.1*(e**2 + f**2 + g**2))
+
+
+def minimize_bridge(atoms, source, destination):
+    from backend.core.atomistic_minimisers import _minimize_backbone_bridge
+
+    _minimize_backbone_bridge(atoms, source, destination, cost_fn=bridge_cost)

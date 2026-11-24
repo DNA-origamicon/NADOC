@@ -1,5 +1,28 @@
 # Issues fix log
 
+## 2026-11-23 — ISSUE-264: Profile and reduce Corner calculation overhead
+
+- [x] Profile native recording and both molecular projections separately.
+  Recording/routing is subsecond; closure, seed fitting and cache charging dominate.
+- [x] Accelerate seed costs with the original scalar types, cross products without
+  fastmath, immutable closure offsets and scalar memory accounting. Preserve the
+  native solver, two-pass order, exact cache keys and memory bounds.
+- [x] Paired cold backend previews improve by 21–24%; changed-direction previews
+  improve by 11–19%. Add a bounded native construction benchmark with no saved parts.
+- [x] Exact cost/seed-solver comparisons and all four approved geometry cases pass;
+  physical override isolation and unchanged unrelated junction atoms pass too.
+- [x] 36 focused backend checks pass, including cache ownership/charges,
+  worker cancellation, exact native projection equivalence, source isolation,
+  prepared Apply and independent native recipe replay. Backend/test and benchmark
+  lint pass. `main.js` LOC delta: 0.
+- [x] 6HB and square live workflows pass preview, Apply, undo/redo and history
+  edit; both axis displays were inspected. The combined square case exhausted
+  its 240 s total budget; a focused isolated rerun passes in 3.9 min with no
+  code or timing-limit change. Cleanup verified after both runs. App-run cold
+  previews remain about 16–19 s; do not claim the backend gain as a browser gain.
+- [ ] The 1–2 second Full-preview target is still unmet; approved seam fitting
+  remains the major cost. No production physical simulation was run.
+
 ## 2026-11-23 — ISSUE-268 / ISSUE-269 / ISSUE-270: Reuse Corner preview and clip axes
 
 - [x] Commit the exact recorded/replayed candidate and its Full/undeformed

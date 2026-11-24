@@ -49,3 +49,17 @@ def test_pair_clearance_preserves_norms_reduction_and_scatter_order():
     result = clearance_gradient(xyz, pairs, actual)
     np.testing.assert_array_equal(result, penetration)
     np.testing.assert_array_equal(actual, expected)
+
+
+def test_seed_bridge_cost_matches_native_finite_difference_objective_exactly():
+    from backend.core.atomistic_helpers import _backbone_bridge_cost
+    from backend.core.corner_seam_bridge_math import bridge_cost
+
+    rng = np.random.default_rng(821)
+    samples = [*rng.normal(size=(2000, 5, 3)), np.zeros((5, 3)),
+               np.full((5, 3), 1e-14)]
+    for points in samples:
+        assert bridge_cost(*points) == _backbone_bridge_cost(*points)
+        # Exercise the actual perturbation scale used by the seed fit too.
+        points[1, 0] += 1e-8
+        assert bridge_cost(*points) == _backbone_bridge_cost(*points)

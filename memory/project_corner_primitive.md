@@ -19,6 +19,57 @@ simulation stability or authorization for a physical production campaign.
 Keep the frozen comparison as an independent regression fixture. The assembly
 shared-source versus selected-instance ownership question is still unanswered.
 
+## Calculation profiling and exact optimizations — November 23, 2026
+
+Routing plus native recording takes about 0.15–0.30 s for the 168 bp 6HB and
+flat square benchmark. Full and undeformed molecular projections dominate.
+A serial 6HB cProfile run (both projections, 28.8 s including profiler overhead)
+attributes 13.2 s to seam closure, 4.8 s to initial bridge fitting, and 5.7 s to
+recursive cache memory accounting. Those instrumented numbers are hotspot
+evidence, not interactive latency predictions.
+
+Corner now accelerates the seed bridge's scalar cost while retaining the native
+finite-difference solver, initial guess, stopping criteria and atom scatter.
+The seed uses NumPy bond powers and Python angle powers; preserving these types
+retains its exact cost. Closure reuses invariant offsets/branch membership and
+compiles its existing cross-product arithmetic without fastmath. Memory charging
+short-circuits exact built-in scalar leaves while retaining identical charges,
+array/object handling, subclass traversal and cache limits.
+
+Paired backend measurements, including both worker projections:
+
+| Case / cache condition | Before | After |
+| --- | ---: | ---: |
+| 6HB, cold geometry caches | 13.30 s | 10.13 s |
+| 6HB, identical inputs | 5.99 s | 5.25 s |
+| 6HB, direction changed by 15° | 11.23 s | 9.99 s |
+| 1×8 square, cold geometry caches | 14.33 s | 11.26 s |
+| 1×8 square, identical inputs | 7.68 s | 6.32 s |
+| 1×8 square, direction changed by 15° | 15.19 s | 12.27 s |
+
+These are single paired runs on the development machine with the numerical
+compiler's disk cache already populated; they exclude HTTP and browser rendering.
+Reproduce with `just validate-safe uv run python -m scripts.benchmark_corner`.
+It builds through native recorded commands in disposable in-memory sessions and
+checks that preview does not mutate the source; it writes only timing JSON.
+The frozen geometry fixture and all solver limits remain unchanged. ISSUE-264's
+1–2 s target remains open; molecular fitting is still the dominant remaining cost.
+
+Validation: 36 focused backend checks pass, including exact scalar costs and seed
+solver output, the four frozen atom cases, ordinary/physical isolation, memory
+charges, worker cancellation, prepared Apply and native replay. Lint passes for
+backend/tests and the benchmark; `main.js` LOC delta is zero. Both 6HB and flat
+square app workflows pass through preview, Apply, undo/redo and history edit;
+both applied axis displays were inspected. The combined run's square case hit
+the unchanged 240 s overall limit during its last preview; the isolated rerun
+passes in 3.9 minutes without code or timeout changes. Cold server previews in
+these software-rendered app runs remain 15.85 s (6HB) and 18.93–19.17 s (square),
+so the isolated backend improvement must not be presented as an equivalent
+end-to-end browser speedup. Parameter-to-ready times were 15.74 / 20.54 s in the
+combined run. All test parts, revision stores, reports, sessions, scratch and
+isolated credentials were verified absent after both runs. No broader suite or
+physical simulation was run for this pure calculation optimization.
+
 ## Preview publication and cropped axis correction — November 23, 2026
 
 Apply now consumes the exact native candidate evaluated for Full preview. The
@@ -49,8 +100,9 @@ stream bodies immediately; the square rerun passes the unchanged time limits.
 
 Measured Apply response headers arrived in 0.38–0.82 s. Complete scene refresh
 still takes 4.3–5.1 s in the software-rendered browser; edits take 2.8–5.3 s. This
-is not an instantaneous UI promise. Full preview now prepares both view projections
-in about 16–22 s on these cases; the original 1–2 s target remains open (ISSUE-264).
+is not an instantaneous UI promise. Before the subsequent calculation optimization,
+Full preview prepared both projections in about 16–22 s in these app cases;
+the original 1–2 s target remains open (ISSUE-264).
 The frozen molecular fixture retains SHA-256
 `e5af0d648a6b0ab28a0397f84ac3bf2a9181481b6e3c1a5f88cb82dbaeccb5d2`.
 No production physical simulation ran. `main.js` LOC delta is zero.
