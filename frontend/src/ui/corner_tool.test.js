@@ -6,7 +6,7 @@ import { initCornerTool } from './corner_tool.js'
 
 let tool
 afterEach(() => { tool?.dispose(); vi.useRealTimers(); document.body.replaceChildren() })
-function setup() {
+function setup(options = {}) {
   vi.useFakeTimers()
   document.body.innerHTML = '<button id="menu-tools-corner">Corner</button>'
   const design = { id: 'part', lattice_type: 'SQUARE', helices: [{ id: 'h', bp_start: 0, length_bp: 168 }],
@@ -22,7 +22,8 @@ function setup() {
   const commit = vi.fn(async () => {}), showToast = vi.fn()
   tool = initCornerTool({ store, selectionManager: { clearSelection: selection.clear, setSelectionLevel: selection.setLevel },
     makePreview: () => preview, designRenderer: {}, showToast, calculate, commit,
-    capture: () => ({ docId: 'doc', expected_design_id: 'part', expected_revision: 3 }) })
+    capture: () => ({ docId: 'doc', expected_design_id: 'part', expected_revision: 3 }),
+    holdSaves: () => null, ...options })
   return { store, selection, preview, requests, commit, showToast }
 }
 async function selected(d) {
@@ -48,11 +49,11 @@ it('picks a cluster, shows cylinder then Full preview and commits the frozen sou
   expect(d.preview.guide).toHaveBeenCalledWith({ cuts: [] })
   request.onEvent({ type: 'progress', percent: 50, stage: 'Calculating seams', remaining_seconds: .4 })
   expect(document.querySelector('[role=status]').textContent).toContain('50%')
-  request.onEvent({ type: 'ready', candidate: { geometry: 'full' } })
+  request.onEvent({ type: 'ready', preview_token: 'prepared-corner', candidate: { geometry: 'full' } })
   expect(d.preview.full).toHaveBeenCalledWith({ geometry: 'full' })
   document.querySelector('.def-btn.primary').click()
   await Promise.resolve()
-  expect(d.commit).toHaveBeenCalledWith(request.source, request.parameters)
+  expect(d.commit).toHaveBeenCalledWith(request.source, request.parameters, 'prepared-corner')
   expect(request.signal.aborted).toBe(true)
 })
 it('aborts stale previews, ignores late Full results, and releases everything on document change', async () => {
@@ -61,7 +62,7 @@ it('aborts stale previews, ignores late Full results, and releases everything on
   const field = document.getElementById('corner-angleDeg')
   field.value = '75'; field.dispatchEvent(new Event('input'))
   expect(stale.signal.aborted).toBe(true)
-  stale.onEvent({ type: 'ready', candidate: {} })
+  stale.onEvent({ type: 'ready', preview_token: 'prepared-corner', candidate: {} })
   expect(d.preview.full).not.toHaveBeenCalled()
   expect(document.querySelector('.def-btn.primary').disabled).toBe(true)
   await vi.advanceTimersByTimeAsync(100)
@@ -85,14 +86,58 @@ it('edits a recorded Corner by feature identity without selecting or creating an
   const request = d.requests[0]
   expect(request.source.featureId).toBe('feature-1')
   expect(request.parameters).toEqual({ cluster_id: 'c', position_bp: 56, angle_deg: 75, direction_deg: 30 })
-  request.onEvent({ type: 'ready', candidate: {} })
+  request.onEvent({ type: 'ready', preview_token: 'prepared-corner', candidate: {} })
   let complete
   d.commit.mockImplementation(() => new Promise(resolve => { complete = resolve }))
   document.querySelector('.def-btn.primary').click()
   expect(document.querySelector('fieldset').disabled).toBe(true)
-  expect(d.commit).toHaveBeenCalledWith(request.source, request.parameters)
+  expect(d.commit).toHaveBeenCalledWith(request.source, request.parameters, 'prepared-corner')
   d.store.setState({ currentDesign: { id: 'other' } })
   expect(document.getElementById('corner-panel').style.display).toBe('none')
   complete(); await Promise.resolve()
+  expect(document.getElementById('corner-panel').style.display).toBe('none')
+})
+
+it('invalidates the completed result when a parameter changes and applies only its replacement', async () => {
+  const d = setup(); await selected(d)
+  d.requests[0].onEvent({ type: 'ready', preview_token: 'old', candidate: {} })
+  const field = document.getElementById('corner-angleDeg')
+  field.value = '75'; field.dispatchEvent(new Event('input'))
+  document.querySelector('.def-btn.primary').click()
+  expect(d.commit).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(100)
+  d.requests[1].onEvent({ type: 'ready', preview_token: 'replacement', candidate: {} })
+  document.querySelector('.def-btn.primary').click()
+  await Promise.resolve()
+  expect(d.commit).toHaveBeenCalledWith(d.requests[1].source,
+    { cluster_id: 'c', position_bp: 84, angle_deg: 75, direction_deg: 0 }, 'replacement')
+})
+
+it('drains an in-flight save before capturing the source and releases the save hold on close', async () => {
+  let saved
+  const release = vi.fn()
+  const holdSaves = vi.fn(() => ({ ready: new Promise(resolve => { saved = resolve }), release }))
+  const d = setup({ holdSaves })
+  document.getElementById('menu-tools-corner').click()
+  expect(d.requests).toHaveLength(0)
+  // The acknowledgement can replace the frontend model while the hold drains.
+  d.store.setState({ currentDesign: { ...d.store.getState().currentDesign } })
+  saved(); await Promise.resolve()
+  expect(d.store.getState().selection.level).toBe('cluster')
+  d.selection.replace([{ kind: 'cluster', id: 'c' }])
+  await Promise.resolve(); await vi.advanceTimersByTimeAsync(100)
+  expect(d.requests).toHaveLength(1)
+  tool.cancel()
+  expect(release).toHaveBeenCalledOnce()
+})
+it('releases a pending save hold on document reset and ignores its late completion', async () => {
+  let saved
+  const release = vi.fn()
+  const d = setup({ holdSaves: () => ({ ready: new Promise(resolve => { saved = resolve }), release }) })
+  document.getElementById('menu-tools-corner').click()
+  window.dispatchEvent(new Event('nadoc:document-reset'))
+  saved(); await Promise.resolve(); await vi.advanceTimersByTimeAsync(100)
+  expect(release).toHaveBeenCalledOnce()
+  expect(d.requests).toHaveLength(0)
   expect(document.getElementById('corner-panel').style.display).toBe('none')
 })

@@ -43,8 +43,8 @@ def test_cancel_during_fit_reaps_process_and_shared_memory(source, monkeypatch):
     created, names = [], []
     original = worker.CornerProjectionWorker
 
-    def capture(design):
-        value = original(design)
+    def capture(design, **kwargs):
+        value = original(design, **kwargs)
         created.append(value)
         names.extend(buffer.name for buffer in value._buffers)
         return value
@@ -59,7 +59,7 @@ def test_cancel_during_fit_reaps_process_and_shared_memory(source, monkeypatch):
     monkeypatch.setattr(worker, 'CornerProjectionWorker', capture)
     with pytest.raises(Cancelled):
         worker.project_corner_in_worker(source, on_progress=stop)
-    assert len(created) == 1 and not created[0].is_alive()
+    assert len(created) == 2 and all(not item.is_alive() for item in created)
     for name in names:
         with pytest.raises(FileNotFoundError):
             SharedMemory(name=name)

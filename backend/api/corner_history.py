@@ -80,11 +80,11 @@ def evaluate_corner_edit(source, inputs, feature_id, *, on_progress=None, on_gui
     # data from native commands. It never reads captured output as authority.
     operation_id = CornerCommand.model_validate(entry.params).operation_id
     with observe_evaluation(operation_id, progress, checkpoint):
-        candidate, _ = prepare_change(source, source, index, checkpoint,
+        candidate, validation = prepare_change(source, source, index, checkpoint,
             params=request.model_dump(mode='json'), input_binder=bind)
     status('Projecting Full preview including later features', 3)
     component = project_corner_in_worker(candidate, on_progress=lambda done, total:
         status('Fitting approved scaffold and staple geometry', 3 + .99 * done / total if total else 3))
     status('Full corner preview ready', 4)
     return {'candidate': component, 'feature_id': feature_id,
-            'junction_review_required': True}, candidate
+            'junction_review_required': True, '_validation': validation}, candidate

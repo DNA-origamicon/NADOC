@@ -19,6 +19,46 @@ simulation stability or authorization for a physical production campaign.
 Keep the frozen comparison as an independent regression fixture. The assembly
 shared-source versus selected-instance ownership question is still unanswered.
 
+## Preview publication and cropped axis correction — November 23, 2026
+
+Apply now consumes the exact native candidate evaluated for Full preview. The
+server retains its real recorded/replayed history, validation and both geometry
+projections under a single-use token bound to the document/session, source object,
+revision, feature selection, inputs and host policy. Publication uses the normal
+undoable replacement transaction; no fitting, routing or command replay is repeated.
+The cache is limited to four entries / 96 MiB serialized total and expires tokens
+after 15 minutes. Direct API authoring without a preview still uses native commands.
+
+Full and undeformed-view projections run independently in two bounded disposable
+workers so preparing the complete handoff does not serialize their numerical fits.
+Both are reaped on cancellation. Their output matches the unchanged serial native
+providers. This is software performance work, not a molecular geometry change.
+The existing editor save hold drains pending acknowledgements before source capture
+and defers autosave during the interaction; publication source guards remain strict.
+
+Curved axis tubes now honor even a single occupied domain. Corner's retained full
+indexed paths remain available for frame evaluation, while the visible axis stops
+at the actual domain boundaries. No helix path, base position or topology is changed.
+Issues 268–270 track these corrections. Nine selected backend tests and 59 frontend
+checks pass, including exact equality with the canonical response, ownership
+refusals, replay and both worker cancellations. App workflows pass for 6HB and
+flat 1×8 square creation/edit, plus native save/reopen/delete/revert/undo and
+independent recipe verification. Both applied axis displays were inspected.
+An initial Chromium response-body capture failure was corrected by collecting
+stream bodies immediately; the square rerun passes the unchanged time limits.
+
+Measured Apply response headers arrived in 0.38–0.82 s. Complete scene refresh
+still takes 4.3–5.1 s in the software-rendered browser; edits take 2.8–5.3 s. This
+is not an instantaneous UI promise. Full preview now prepares both view projections
+in about 16–22 s on these cases; the original 1–2 s target remains open (ISSUE-264).
+The frozen molecular fixture retains SHA-256
+`e5af0d648a6b0ab28a0397f84ac3bf2a9181481b6e3c1a5f88cb82dbaeccb5d2`.
+No production physical simulation ran. `main.js` LOC delta is zero.
+Lint passes. Smoke remains 26 passed / 2 skipped / 1 known assembly-fixture timeout
+at `scene_harness.js:434` (ISSUE-266, previously reproduced on untouched upstream).
+All isolated test artifacts and the verified legacy-fixture revision cache were
+removed; no user-workspace files were modified by these checks.
+
 ## Approved provider integrated and checked
 
 The native atom builder defers only recorded Corner seam inserts until the final
@@ -35,7 +75,7 @@ physical stability validation has run.
 
 Exact bridge/clearance arithmetic, ordered clash queries, reused fit setup and a
 bounded exact-coordinate cache reduce calculation cost without changing the
-approved oracle. A disposable worker now performs only detached Full projection;
+approved oracle. Bounded disposable workers perform detached display projection;
 source-bound native commands still own authoring. Cancellation reaps that worker
 and shared memory. Progress counts actual completed fits; ETA starts after
 observed fitting work. Identity encoding avoids GZip buffering. Library watchers

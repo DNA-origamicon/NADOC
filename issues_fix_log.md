@@ -1,5 +1,25 @@
 # Issues fix log
 
+## 2026-11-23 — ISSUE-268 / ISSUE-269 / ISSUE-270: Reuse Corner preview and clip axes
+
+- [x] Commit the exact recorded/replayed candidate and its Full/undeformed
+  projections using a bounded, source-owned, single-use preview token.
+- [x] Preserve source/session/revision/policy and parameter checks, native undo,
+  edit recovery, save/reopen and independent replay. No molecular refit on Apply.
+- [x] Prepare independent projections concurrently; test exact serial-provider
+  equivalence and cancellation cleanup for both numerical workers.
+- [x] Reuse the feature-editor save hold to avoid autosave invalidation during
+  preview; verify drain, cancel, document reset and real saved-file workflows.
+- [x] Draw curved axes within a single occupied domain too. Unit regressions and
+  6HB / flat square app checks pass; both applied views were inspected.
+- [x] Nine focused backend and 59 frontend tests pass; lint passes. Apply starts
+  responding in 0.38–0.82 s, with complete scene refresh in 4.3–5.1 s in software
+  rendering. Initial Full preview remains about 16–22 s (ISSUE-264 stays open).
+- [x] Smoke: 26 passed, 2 skipped; the known assembly-exit fixture timeout at
+  `scene_harness.js:434` remains (ISSUE-266, previously reproduced upstream).
+  Test parts, sessions, reports, bridge keys and the two verified legacy-fixture
+  cache snapshots were removed; the isolated workspace ends with zero snapshots.
+
 ## 2026-11-23 — ISSUE-266 / ISSUE-267: Smoke baseline and fixture-cache accounting
 
 - [ ] Assembly-exit fixture setup hits 60 seconds with and without Corner;

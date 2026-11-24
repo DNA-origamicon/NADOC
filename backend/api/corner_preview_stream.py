@@ -22,7 +22,7 @@ class PreviewCancelled(Exception):
     pass
 
 
-def corner_preview_response(source, body, *, feature_id=None):
+def corner_preview_response(source, body, *, feature_id=None, owner=None):
     inputs = {key: getattr(body, key) for key in CornerRequest.model_fields}
     context = copy_context()
 
@@ -66,14 +66,17 @@ def corner_preview_response(source, body, *, feature_id=None):
                 if feature_id is None:
                     guide = corner_guide(source, body.cluster_id, body.parameters())
                     emit({'type': 'guide', 'guide': guide})
-                    packet, _ = evaluate_corner_preview(source, inputs, on_progress=progress, check_cancel=check)
+                    packet, candidate = evaluate_corner_preview(source, inputs, on_progress=progress, check_cancel=check)
                 else:
                     from backend.api.corner_history import evaluate_corner_edit
-                    packet, _ = evaluate_corner_edit(source, inputs, feature_id,
+                    packet, candidate = evaluate_corner_edit(source, inputs, feature_id,
                         on_progress=progress, check_cancel=check,
                         on_guide=lambda guide: emit({'type': 'guide', 'guide': guide}))
                 check()
-                emit({'type': 'ready', **packet})
+                from backend.api.corner_prepared import retain
+                token = retain(owner, body, feature_id, candidate, packet)
+                packet = {key: value for key, value in packet.items() if not key.startswith('_')}
+                emit({'type': 'ready', **packet, 'preview_token': token})
             except PreviewCancelled:
                 pass
             except (ValueError, HTTPException) as error:

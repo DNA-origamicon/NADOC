@@ -67,7 +67,7 @@ def evaluate_corner_preview(source, inputs, *, on_progress=None, check_cancel=No
                      'Fitting approved scaffold and staple geometry'))
         progress(100, 100, 'Full corner preview ready')
         return {'candidate': after, 'feature_id': entry.id,
-                'junction_review_required': True}, candidate
+                'junction_review_required': True, '_validation': validation}, candidate
 
     # record_feature sets request revision/entry ContextVars. The detached
     # session and copied context prevent those stamps leaking into the host.

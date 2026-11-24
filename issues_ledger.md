@@ -1,5 +1,51 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-270 — Autosave invalidates a ready Corner candidate (2026-11-23)
+
+- **Evidence:** a native bundle followed immediately by preview/Apply failed
+  because its pending workspace save advanced the source revision during the
+  preview. The strict publication guard correctly refused the stale result.
+- **Fix:** reuse the shared feature-editor save hold. Drain in-flight save
+  acknowledgements before capturing Corner inputs; defer subsequent saves until
+  Apply, Cancel, disposal or document reset. Keep all backend revision, source,
+  session and policy checks. Surface the native refusal detail in the popup.
+- **Validation:** save-drain and cancellation lifecycle tests pass. Native app
+  save/reopen, delete/revert, undo and independent recipe verification pass.
+
+## ISSUE-269 — Corner axis extends through removed duplex stations (2026-11-23)
+
+- **Cause:** curved helices with exactly one occupied domain used the entire
+  indexed helix path. Corner retains that path for frame evaluation but trims
+  strand domains, so a full-path tube drew the removed continuation.
+- **Fix:** use the existing domain-segment axis renderer for a single occupied
+  interval too. Preserve the indexed paths, topology and approved molecular
+  coordinates. Deformation interpolation continues to use segment endpoints.
+- **Validation:** targeted renderer regression covers both incoming and outgoing
+  cropped intervals. The 6HB and flat 1×8 square app checks assert every visible
+  axis segment belongs to an occupied domain; both applied views were inspected.
+
+## ISSUE-268 — Apply recalculates an already completed Corner preview (2026-11-23)
+
+- **Cause:** ready previews discarded the native candidate and supplied only
+  display data. Apply generated another command identity, reran construction
+  (or history replay), and projected both Full and undeformed geometry again.
+- **Fix:** bounded server retention of the real recorded/replayed candidate,
+  validation and complete display projections. The Full and undeformed projections
+  run concurrently in two bounded, cancellable numerical workers per preview;
+  their existing providers and limits are unchanged. Ready carries a single-use token;
+  Apply checks parameters, feature identity, document/session, revision and host
+  policy, then publishes through the normal undoable replacement transaction.
+  No snapshot feature, molecular override or invented history is introduced.
+- **Bounds:** four retained results, 96 MiB serialized total, 15-minute lifetime,
+  latest ready result per document. Missing/stale tokens refuse with 409 rather
+  than silently recomputing. API callers without a preview retain direct authoring.
+- **Validation:** exact preview/commit/canonical-response equality, refusal/ownership,
+  native replay, undo/redo and saved/reopened history checks pass. In the 6HB and
+  square app runs, Apply response headers arrived in 0.38–0.82 s; the complete
+  software-rendered scene appeared in 4.3–5.1 s. Edits took 2.8–5.3 s to paint.
+  No numerical work repeats on Apply. Initial Full preview still takes roughly
+  16–22 s; the 1–2 s target remains open under ISSUE-264.
+
 ## ISSUE-267 — Read-only smoke fixture leaves a revision cache (2026-11-23)
 
 - **Evidence:** in a fresh isolated workspace with zero revision snapshots, the
@@ -14,6 +60,10 @@
   never delete a pre-existing user project merely because its ID matches.
 
 ## ISSUE-266 — Assembly-exit smoke fixture times out before exit (2026-11-23)
+
+- **Corner Apply follow-up:** same fixture timeout at `scene_harness.js:434`;
+  smoke again reports 26 passed / 2 skipped / 1 failed. Evidence:
+  `.development-artifacts/corner-tool-audit/preview-reuse-smoke.log`.
 
 - **Evidence:** the 60-second limit expires in `assemblyInstanceCandidates` at
   `frontend/e2e/helpers/scene_harness.js:434`, while `loadAssemblyWithParts` is

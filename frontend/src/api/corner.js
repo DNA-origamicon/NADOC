@@ -1,5 +1,5 @@
 import { docHeadersFor, getDocId } from '../shared/doc_id.js'
-import { _request, _syncFromDesignResponse, currentRevisionWatermark } from './client.js'
+import { _request, _syncFromDesignResponse, currentRevisionWatermark, lastErrorMessage } from './client.js'
 
 export function captureCornerSource(design) {
   return { docId: getDocId(), expected_design_id: design.id, expected_revision: currentRevisionWatermark() }
@@ -45,12 +45,12 @@ export async function previewCorner(source, parameters, { signal, onEvent }) {
   return readCornerStream(response, onEvent)
 }
 
-export async function applyCorner(source, parameters) {
+export async function applyCorner(source, parameters, previewToken) {
   const { docId, featureId, ...identity } = source
   const response = await _request(featureId ? 'PATCH' : 'POST',
     featureId ? `/design/corner/${encodeURIComponent(featureId)}` : '/design/corner',
-    { ...identity, ...parameters }, { docId })
-  if (!response) throw new Error('Corner could not be applied.')
+    { ...identity, ...parameters, preview_token: previewToken }, { docId })
+  if (!response) throw new Error(lastErrorMessage() || 'Corner could not be applied.')
   if (getDocId() === docId) await _syncFromDesignResponse(response)
   return response
 }

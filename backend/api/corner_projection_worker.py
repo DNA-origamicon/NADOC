@@ -38,11 +38,13 @@ def _project(input_name, input_size, output_name):
 
     try:
         try:
-            from backend.api.corner_preview_projection import project_corner_preview
+            from backend.api.corner_preview_projection import project_corner_preview, project_corner_straight
             from backend.core.corner_seam_cache import import_fits, export_fits
             request = pickle.loads(source.buf[:input_size])
             import_fits(request['fits'])
-            component = project_corner_preview(request['design'], on_progress=progress)
+            component = (project_corner_straight(request['design'], on_progress=progress)
+                if request['straight'] else
+                project_corner_preview(request['design'], on_progress=progress, include_straight=False))
             result = {'issues': [], 'component': component, 'fits': export_fits()}
             encoded = orjson.dumps(result, option=orjson.OPT_SERIALIZE_NUMPY)
             if len(encoded) > _RESULT_LIMIT:
@@ -57,11 +59,12 @@ def _project(input_name, input_size, output_name):
 
 
 class CornerProjectionWorker(VerificationWorker):
-    def __init__(self, design):
+    def __init__(self, design, *, straight=False):
         from backend.core.corner_seam_cache import export_fits
+        self._straight = straight
         stream = _BoundedInput(_INPUT_LIMIT)
         try:
-            pickle.dump({'design': design, 'fits': export_fits()}, stream, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump({'design': design, 'fits': export_fits(), 'straight': straight}, stream, protocol=pickle.HIGHEST_PROTOCOL)
         except WorkerLimit as error:
             raise ValueError('Corner preview source exceeds its calculation budget.') from error
         self._initialize_input((stream.getvalue(),), _target=_project,
@@ -76,30 +79,46 @@ class CornerProjectionWorker(VerificationWorker):
         result = self._read_result()
         if result['issues']:
             raise ValueError(result['issues'][0].get('detail', 'Corner geometry worker stopped.'))
-        if result.get('component', {}).get('component_kind') != 'corner-preview-dna':
+        valid = ('straight_positions_by_helix' in result.get('component', {}) if self._straight else
+                 result.get('component', {}).get('component_kind') == 'corner-preview-dna')
+        if not valid:
             raise ValueError('Corner geometry worker returned an invalid preview.')
         return result
 
 
 def project_corner_in_worker(design, *, on_progress=None):
+    """Prepare both independent views concurrently, within the preview's bounds.
+
+    The approved Full and undeformed providers are unchanged. Each disposable
+    process has one numerical thread; cancellation always reaps both processes.
+    """
     from backend.core.corner_seam_cache import import_fits
-    worker = CornerProjectionWorker(design)
+    workers, results = [], [None, None]
+    fractions = [0., 0.]
     deadline = monotonic() + 120
-    last_progress = (0, 0)
     try:
-        worker.start()
-        while True:
-            last_progress = worker.progress() or last_progress
-            if on_progress:
-                on_progress(*last_progress)
-            if monotonic() >= deadline:
-                raise ValueError('Corner Full preview exceeded its calculation time allowance.')
-            if worker.wait(.05):
-                break
+        workers.append(CornerProjectionWorker(design))
+        workers.append(CornerProjectionWorker(design, straight=True))
+        for worker in workers:
+            worker.start()
+        while any(result is None for result in results):
+            for index, worker in enumerate(workers):
+                if results[index] is not None:
+                    continue
+                done, total = worker.progress() or (0, 0)
+                fractions[index] = max(fractions[index], done / total if total else 0.)
+                if on_progress:
+                    on_progress(int(500 * sum(fractions)), 1000)
+                if monotonic() >= deadline:
+                    raise ValueError('Corner Full preview exceeded its calculation time allowance.')
+                if worker.wait(.025):
+                    results[index] = worker.result()
+                    fractions[index] = 1.
+        for result in results:
+            import_fits(result['fits'])
         if on_progress:
-            on_progress(*(worker.progress() or last_progress))
-        result = worker.result()
-        import_fits(result['fits'])
-        return result['component']
+            on_progress(1000, 1000)
+        return {**results[0]['component'], **results[1]['component']}
     finally:
-        worker.close()
+        for worker in workers:
+            worker.close()

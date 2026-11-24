@@ -14,7 +14,7 @@ from tests.conftest import SIX_HB_CELLS
 
 
 @pytest.mark.slow
-def test_corner_edit_previews_its_prefix_and_replays_later_corners_without_publishing():
+def test_corner_edit_previews_its_prefix_and_replays_later_corners_without_publishing(monkeypatch):
     with hb.scratch_session(LatticeType.HONEYCOMB):
         hb.create_bundle(SIX_HB_CELLS, 252, lattice=LatticeType.HONEYCOMB, separate_fresh_extrusions=False)
         hb.add_cluster('Corner source', [h.id for h in state.get_or_404().helices], log=True)
@@ -57,7 +57,16 @@ def test_corner_edit_previews_its_prefix_and_replays_later_corners_without_publi
         assert events[-1]['type'] == 'ready', events[-1]
         assert events[-1]['feature_id'] == selected.id
         assert [e for e in events if e['type'] == 'guide']
-        edit_corner(selected.id, body)
+        body = body.model_copy(update={'preview_token': events[-1]['preview_token']})
+        def forbidden(*args, **kwargs):
+            raise AssertionError('Apply must reuse the evaluated recipe and geometry')
+        with monkeypatch.context() as patch:
+            patch.setattr('backend.api.part_recipe_edit.prepare_change', forbidden)
+            patch.setattr('backend.api.crud._design_response_with_geometry', forbidden)
+            result = edit_corner(selected.id, body)
+        assert result['corner']['reused_preview'] is True
+        assert result['nucleotides'] == events[-1]['candidate']['nucleotides']
+        assert result['helix_axes'] == events[-1]['candidate']['helix_axes']
         updated = state.get_or_404()
         assert updated.helices == candidate.helices
         assert updated.strands == candidate.strands

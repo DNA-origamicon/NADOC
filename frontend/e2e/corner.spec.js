@@ -11,6 +11,25 @@ async function waitReady(popup) {
     .toMatchObject({ ready: true })
 }
 
+async function measureApplyClick(page) {
+  await page.evaluate(() => {
+    const panel = document.getElementById('corner-panel')
+    panel.querySelector('.def-btn.primary').addEventListener('click', () => {
+      const started = performance.now()
+      window.__cornerApplyTiming = null
+      const observer = new MutationObserver(() => {
+        if (getComputedStyle(panel).display !== 'none') return
+        observer.disconnect()
+        window.__cornerApplyTiming = { clickToCloseMs: performance.now() - started }
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          window.__cornerApplyTiming.clickToPaintMs = performance.now() - started
+        }))
+      })
+      observer.observe(panel, { attributes: true, childList: true, subtree: true })
+    }, { once: true, capture: true })
+  })
+}
+
 // Artifact inventory: native UI/API authoring only; all possible autosaved
 // parts use __e2e__corner-tool and are removed (with project revision stores)
 // by global-teardown.js. Session caching is disabled by playwright.config.js.
@@ -48,7 +67,7 @@ for (const crossSection of [
     window.__nadocTest.applyCameraPoseForTest({ target: [3, 3, 28], position: [70, 18, 28] })
   }, crossSection)
   await page.getByRole('button', { name: 'Tools', exact: true }).hover()
-  const initialPreview = page.waitForResponse(response => response.url().includes('/corner/preview'))
+  const initialPreview = page.waitForResponse(response => response.url().includes('/corner/preview')).then(response => response.text())
   await page.locator('#menu-tools-corner').click()
   const popup = page.locator('.tool-popup[data-tool-panel="corner-panel"]')
   await expect(popup).toBeVisible()
@@ -72,7 +91,7 @@ for (const crossSection of [
     console.log('Corner console errors:', errors)
     throw error
   }
-  const initialEvents = (await (await initialPreview).text()).trim().split('\n').map(line => JSON.parse(line))
+  const initialEvents = (await initialPreview).trim().split('\n').map(line => JSON.parse(line))
   console.log(`Corner ${crossSection.name} cold server preview seconds:`,
     initialEvents.filter(event => event.type === 'progress').at(-1)?.elapsed_seconds)
   await expect.poll(() => page.evaluate(() => !!window.__nadocTest.scene.getObjectByName('corner-full-preview'))).toBe(true)
@@ -140,11 +159,33 @@ for (const crossSection of [
   await page.evaluate(() => window.__nadocTest.applyCameraPoseForTest({
     target: [12, 4, 18], position: [65, 65, 95],
   }))
-  const screenshot = testInfo.outputPath('corner-preview.png')
-  await page.screenshot({ path: screenshot })
-  console.log(`Corner visual check: ${screenshot}`)
+  // Inspect the applied view below; it carries the same geometry plus the
+  // domain-clipped axis lines that are hidden in the private preview.
+  await measureApplyClick(page)
+  const appliedResponse = page.waitForResponse(response => response.url().endsWith('/api/design/corner') && response.request().method() === 'POST')
+  const applyStarted = Date.now()
   await popup.locator('.def-btn.primary').click()
-  await expect(popup).not.toBeVisible({ timeout: 30_000 })
+  await expect(popup).not.toBeVisible({ timeout: 5_000 })
+  const applied = await (await appliedResponse).json()
+  expect(applied.corner.reused_preview).toBe(true)
+  await page.waitForFunction(() => window.__cornerApplyTiming?.clickToPaintMs != null)
+  console.log('Corner actual Apply click timing:', await page.evaluate(() => window.__cornerApplyTiming))
+  console.log('Corner Apply HTTP timing:', (await appliedResponse).request().timing())
+  console.log(`Corner ${crossSection.name} Apply including scene refresh: ${Date.now() - applyStarted} ms`)
+  const axesClipped = await page.evaluate(() => {
+    const renderer = window.__nadocTest.getDesignRenderer()
+    const axes = renderer.getAxisArrows()
+    const design = window.__nadocTest.store.getState().currentDesign
+    return axes.length === design.helices.length && axes.every(axis =>
+      !axis.shaft && axis.segments.length > 0 && axis.segments.every(segment =>
+        design.strands.some(strand => strand.domains.some(domain => domain.helix_id === axis.helixId &&
+          Math.min(domain.start_bp, domain.end_bp) <= segment.bp_lo &&
+          Math.max(domain.start_bp, domain.end_bp) >= segment.bp_hi))))
+  })
+  expect(axesClipped).toBe(true)
+  const axisScreenshot = testInfo.outputPath('corner-applied-axes.png')
+  await page.screenshot({ path: axisScreenshot })
+  console.log(`Corner applied axis visual check: ${axisScreenshot}`)
   const after = await page.evaluate(() => {
     const d = window.__nadocTest.store.getState().currentDesign
     return { features: d.feature_log.length, kind: d.feature_log.at(-1).op_kind,
@@ -177,11 +218,11 @@ for (const crossSection of [
   await expect(popup.locator('h2')).toHaveText('Edit Corner')
   await expect(page.locator('#corner-angleDeg')).toHaveValue('90')
   const editedPreview = page.waitForResponse(response => response.url().includes('/corner/preview?feature_id=')
-    && response.request().postDataJSON()?.angle_deg === 75)
+    && response.request().postDataJSON()?.angle_deg === 75).then(response => response.text())
   await page.locator('#corner-angleDeg').fill('75')
   await expect.poll(async () => ({ ready: await popup.locator('.def-btn.primary').isEnabled(),
     status: await popup.locator('[role=status]').textContent() }), { timeout: 30_000 }).toMatchObject({ ready: true })
-  const editEvents = (await (await editedPreview).text()).trim().split('\n').map(line => JSON.parse(line))
+  const editEvents = (await editedPreview).trim().split('\n').map(line => JSON.parse(line))
   const editProgress = editEvents.filter(event => event.type === 'progress')
   expect(editProgress[0].percent).toBe(0)
   expect(editProgress.at(-1).percent).toBe(100)
@@ -189,8 +230,17 @@ for (const crossSection of [
   expect(editProgress.map(event => event.percent)).toEqual(editProgress.map(event => event.percent).sort((a, b) => a - b))
   expect(editProgress.some(event => event.remaining_seconds > 0)).toBe(true)
   expect(editEvents.at(-1).type).toBe('ready')
+  await measureApplyClick(page)
+  const editAppliedResponse = page.waitForResponse(response => response.url().includes('/api/design/corner/') && response.request().method() === 'PATCH')
+  const editApplyStarted = Date.now()
   await popup.locator('.def-btn.primary').click()
-  await expect(popup).not.toBeVisible({ timeout: 30_000 })
+  await expect(popup).not.toBeVisible({ timeout: 5_000 })
+  const editApplied = await (await editAppliedResponse).json()
+  expect(editApplied.corner.reused_preview).toBe(true)
+  await page.waitForFunction(() => window.__cornerApplyTiming?.clickToPaintMs != null)
+  console.log('Corner actual edit Apply click timing:', await page.evaluate(() => window.__cornerApplyTiming))
+  expect(editApplied.nucleotides).toEqual(editEvents.at(-1).candidate.nucleotides)
+  console.log(`Corner ${crossSection.name} edit Apply including scene refresh: ${Date.now() - editApplyStarted} ms`)
   expect(await page.evaluate(() => {
     const d = window.__nadocTest.store.getState().currentDesign
     return { id: d.feature_log.at(-1).id, angle: d.feature_log.at(-1).params.angle_deg,

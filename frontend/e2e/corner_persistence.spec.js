@@ -22,10 +22,17 @@ test('Corner delete/revert undo and saved recipe independently verify', async ({
     const corner = await import('/src/api/corner.js')
     await api.createBundle({ cells: [[0, 0], [0, 1]], lengthBp: 84,
       name: doc, latticeType: 'HONEYCOMB' })
-    const source = window.__nadocTest.store.getState().currentDesign
-    await corner.applyCorner(corner.captureCornerSource(source), {
-      cluster_id: source.cluster_transforms[0].id, position_bp: 42, angle_deg: 90, direction_deg: 15,
-    })
+    const saveHold = api.holdFeatureEditSaves()
+    try {
+      await saveHold.ready
+      const source = window.__nadocTest.store.getState().currentDesign
+      const identity = corner.captureCornerSource(source)
+      const parameters = { cluster_id: source.cluster_transforms[0].id, position_bp: 42, angle_deg: 90, direction_deg: 15 }
+      let token
+      await corner.previewCorner(identity, parameters, { onEvent(event) { if (event.type === 'ready') token = event.preview_token } })
+      const result = await corner.applyCorner(identity, parameters, token)
+      if (!result.corner.reused_preview) throw new Error('Apply did not use the prepared Corner')
+    } finally { saveHold.release() }
   }, doc)
   const featureId = await page.evaluate(() => window.__nadocTest.store.getState().currentDesign.feature_log.at(-1).id)
   const before = await page.evaluate(() => window.__nadocTest.store.getState().currentDesign.feature_log.length - 1)
