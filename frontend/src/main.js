@@ -6771,8 +6771,8 @@ async function main() {
   })
 
   document.getElementById('menu-help-image-evaluation')?.addEventListener('click', async () => {
-    const { showImageEvaluation } = await import('./ui/image_evaluation.js')
-    showImageEvaluation()
+    const { showArticleReconstruction } = await import('./ui/article_reconstruction.js')
+    showArticleReconstruction()
   })
 
   document.getElementById('menu-help-generate-design')?.addEventListener('click', async () => {

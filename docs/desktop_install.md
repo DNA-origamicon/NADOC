@@ -60,7 +60,7 @@ is not a general renderer replacement or a claim that all processing is faster.
 ## Acceptance fixture and reproduction
 
 The portable fixture lives under
-`workspace/Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/`.
+`workspace/Shared Designs/`.
 It uses the honeycomb cross-section and initial 126-bp length from
 `24hb_0xT.nadoc`. Native operations are Bundle → Seamed Autoscaffold → Full
 Autostaple → Route for polymerization. The part has 24 helices, 7,056 nucleotides
@@ -93,7 +93,7 @@ Run focused acceptance serially under the validation guard:
 scripts/validation_guard.sh node desktop/benchmark.cjs \
   --packaged --executable /absolute/installation/NADOC \
   --workspace workspace \
-  --fixture 'Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-30mer.nass' \
+  --fixture 'Shared Designs/HC24-30mer.nass' \
   --iterations 3 --workflows --cancel-check --require-useful-view \
   --output .development-artifacts/desktop-milestones/acceptance.json
 ```

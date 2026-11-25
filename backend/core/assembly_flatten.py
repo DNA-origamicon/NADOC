@@ -58,10 +58,11 @@ def _load_design(source) -> Design:
         # Match the assembly API's source semantics: ordinary .nass files store
         # workspace-relative part paths (for example ``BigO.nadoc``).  The old
         # flatten path omitted workspace and silently produced an empty Design.
+        from backend.core.shared_design_paths import resolve_shared_source
         raw = Path(source.path)
         candidates = [
             raw,
-            _WORKSPACE_DIR / raw,
+            resolve_shared_source(_WORKSPACE_DIR, raw),
             _PROJECT_ROOT / raw,
             _LIBRARY_DIR / raw,
         ]

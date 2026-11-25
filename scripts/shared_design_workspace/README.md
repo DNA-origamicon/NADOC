@@ -6,7 +6,7 @@ NADOC includes the folder and all committed designs; no separate remote or
 submodule initialization is needed.
 
 Open **Library → This computer → Shared Designs**. The default reconstruction
-layout is `Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc`. Keep required part and
+layout is `Shared Designs/DESIGN.nadoc`. Keep required part and
 assembly dependencies in this folder, with workspace-relative references starting
 `Shared Designs/`. Keep complete native feature histories and source hashes.
 
@@ -21,13 +21,13 @@ Do not automatically merge conflicting molecular JSON or discard local edits.
 Before committing agent-authored parts, run the required independent audit:
 
 ```bash
-.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc"
+.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/DESIGN.nadoc"
 ```
 
 For D003's human-reviewed corner motif, repeat the audit from the NADOC root:
 
 ```bash
-.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/All Origami/D003/recovered-20261104/D003.nadoc" --bond-review "workspace/Shared Designs/All Origami/D003/recovered-20261104/review/receipt.json"
+.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/D003.nadoc" --bond-review "workspace/Shared Designs/.provenance/D003/receipt.json"
 ```
 
 Its exact historical title exception is documented in

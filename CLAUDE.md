@@ -45,6 +45,8 @@ Never let physical or geometric layers mutate topology. If a fix appears to requ
 
 Any uncertainty about strand polarity, helix orientation, domain traversal, or scaffold path → ask the user and implement nothing. Read [DNA topology](memory/REFERENCE_DNA_TOPOLOGY.md).
 
+User-authorized clarification: bounded sequence searches for scaffold shift and nick position, including candidate traversal directions, are generally allowed without a clarification request. Score candidates against sequence evidence and retain unresolved alternatives. See [bounded sequence search](memory/feedback_bounded_sequence_search.md).
+
 Helical phase constants (`_PHASE_FORWARD`, `_PHASE_REVERSE`, `_SQ_PHASE_FORWARD`, `_SQ_PHASE_REVERSE`) are locked. Never change them without explicit approval.
 
 ### Molecular-geometry authorization gate

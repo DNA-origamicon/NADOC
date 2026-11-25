@@ -29,7 +29,8 @@ def audit(assembly, directory, *, workspace_root=None):
                 raise ProcessRequired('Guide assembly source must be a sibling part')
             key = str(path)
             root = Path(workspace_root).resolve() if workspace_root is not None else directory.resolve()
-            resolved = (root / path).resolve()
+            from backend.core.shared_design_paths import resolve_shared_source
+            resolved = resolve_shared_source(root, path).resolve()
             if not resolved.is_relative_to(root):
                 raise ProcessRequired('Assembly source escapes its portable workspace')
             design = Design.model_validate_json(resolved.read_text())

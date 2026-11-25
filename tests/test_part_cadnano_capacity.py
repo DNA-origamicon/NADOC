@@ -69,18 +69,24 @@ def test_exact_source_byte_boundary_and_next_byte():
     raw = json.dumps(source()).encode()
     raw += b" " * (limits.MAX_SOURCE_BYTES - len(raw))
     assert parse(raw=raw)[1]["strands"] == 4
-    with pytest.raises(SourceContractError, match="500,000-byte") as error:
+    with pytest.raises(SourceContractError, match=f"{limits.MAX_SOURCE_BYTES:,}-byte") as error:
         parse(raw=raw + b" ")
     assert error.value.code == "source_limit"
 
 
 def test_sparse_array_work_remains_bounded_independently_of_occupancy():
-    data = blank_source(8, 2048)
+    data = blank_source(12, 2048)
     assert parse(data)[1]["array_slots"] == limits.MAX_ARRAY_SLOTS
     # Common-width arrays just over the limit, still below the byte limit.
     with pytest.raises(SourceContractError, match="array work") as error:
-        parse(blank_source(17, 964))
+        parse(blank_source(13, 1891))
     assert error.value.code == "source_limit"
+
+
+def test_pointer_envelope_helix_limit_and_next_helix():
+    assert parse(blank_source(limits.MAX_HELICES, 1))[1]['helices'] == limits.MAX_HELICES
+    with pytest.raises(SourceContractError, match='helix count'):
+        parse(blank_source(limits.MAX_HELICES + 1, 1))
 
 
 def test_declared_nucleotide_limit_is_unchanged():
@@ -105,10 +111,13 @@ def test_exact_strand_fragmentation_limit_and_next_strand():
 
 
 def domain_source(count):
-    # Each skipped source position begins another same-helix domain. A single
-    # path isolates the domain bound from the independent strand count limit.
-    data = blank_source(1, 2 * count)
-    path_into(data, "scaf", [(0, 2 * index) for index in range(count)])
+    # Sparse positions on one path isolate domain work from strand count;
+    # spread the path across helices to retain the independent width bound.
+    per_helix = limits.MAX_ARRAY_WIDTH // 2
+    data = blank_source((count + per_helix - 1) // per_helix,
+                        min(count, per_helix) * 2)
+    path_into(data, "scaf", [(index // per_helix, 2 * (index % per_helix))
+                             for index in range(count)])
     return data
 
 

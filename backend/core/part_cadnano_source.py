@@ -9,13 +9,15 @@ from backend.core.part_input_sources import SourceContractError
 # Bounded single-module origami envelope, separate from document transport
 # limits. Sparse caDNAno arrays can substantially exceed the occupied bases:
 # the Gur 2016 source uses 13,020 slots for 14,514 occupied nucleotide sites.
-MAX_SOURCE_BYTES = 500_000
-MAX_HELICES = 32
+# The published 82-helix Pointer source has 606,540 bytes and 18,368
+# padded slots. Keep nucleotide and strand bounds independent of padding.
+MAX_SOURCE_BYTES = 1_000_000
+MAX_HELICES = 96
 MAX_ARRAY_WIDTH = 2_048
-MAX_ARRAY_SLOTS = 16_384
+MAX_ARRAY_SLOTS = 24_576
 MAX_NUCLEOTIDES = 16_384
 MAX_STRANDS = 256
-MAX_DOMAINS = 1_024
+MAX_DOMAINS = 2_048
 MAX_JSON_DEPTH = 16
 _TOP_KEYS = frozenset({"name", "vstrands", "nadoc_roundtrip"})
 _HELIX_KEYS = frozenset({"row", "col", "num", "scaf", "stap", "loop", "skip",

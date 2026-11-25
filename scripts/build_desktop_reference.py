@@ -55,13 +55,13 @@ def main():
         raise ValueError('Reference must contain one recorded HC 24HB bundle creation')
     params = rows[0]['params']
     cells, length = params['cells'], params['length_bp']
-    relative = Path('Shared Designs/Desktop Benchmarks/HC24-30mer-20261124')
+    relative = Path('Shared Designs')
     part_name = 'HC24-polymerization'
     part_rel, assembly_rel = relative / f'{part_name}.nadoc', relative / 'HC24-30mer.nass'
     if args.audit_existing:
         report_saved(root, relative, args.reference, reference_hash, params, args.report)
         return
-    if (root / 'workspace' / relative).exists():
+    if any((root / 'workspace' / path).exists() for path in (part_rel, assembly_rel)):
         raise FileExistsError('Reference destination already exists; never replace a benchmark silently')
     scratch = os.environ.get('NADOC_TEST_SCRATCH_ROOT') or os.environ.get('TMPDIR')
     with tempfile.TemporaryDirectory(prefix='__e2e__hc24-author-', dir=scratch) as tmp:

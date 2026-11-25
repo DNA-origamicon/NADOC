@@ -17,7 +17,7 @@ export function showImageEvaluation({ fetchImpl = globalThis.fetch } = {}) {
   body.innerHTML = `
     <p>Evaluate a caDNAno-style vector diagram. BP indices are hypotheses until calibrated; no design is modified.</p>
     <div class="ie-toolbar"><label>Import PDF <input data-file type="file" accept="application/pdf,.pdf"></label>
-      <button data-cancel disabled>Cancel import</button><span data-status role="status" aria-live="polite">Select a PDF (up to 25 MiB / 100 pages).</span></div>
+      <button data-cancel disabled>Cancel import</button><span data-status role="status" aria-live="polite">Select a PDF (up to 100 pages).</span></div>
     <details data-note-box hidden><summary>PDF scan notes</summary><div data-notes></div></details>
     <div class="ie-layout"><aside><h3>Recognized routing candidates</h3><div data-candidates></div></aside>
     <section class="ie-main"><div class="ie-toolbar">
@@ -109,7 +109,6 @@ export function showImageEvaluation({ fetchImpl = globalThis.fetch } = {}) {
   q('[data-file]').addEventListener('change', async event => {
     const file = event.target.files?.[0]; if (!file) return
     controller?.abort(); const current = ++revision; controller = new AbortController()
-    if (file.size > 25 * 1024 * 1024) { message(q('[data-status]'), 'PDF exceeds the 25 MiB limit.'); return }
     q('[data-cancel]').disabled = false; message(q('[data-status]'), 'Scanning PDF vector paths…')
     figure = null; brick.selectFigure(); result = null; q('[data-stage]').replaceChildren(); q('[data-candidates]').replaceChildren(); q('[data-flags]').replaceChildren(); q('[data-calibration]').replaceChildren(); q('[data-limits]').replaceChildren(); message(q('[data-summary]'), ''); message(q('[data-detail]'), ''); message(q('[data-notes]'), ''); q('[data-export]').disabled = true
     try {

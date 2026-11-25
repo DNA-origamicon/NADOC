@@ -41,6 +41,8 @@ def _load_seq(filename: str) -> str:
 
 M13MP18_SEQUENCE: str = _load_seq("m13mp18.txt")  # 7249 nt
 P7560_SEQUENCE: str = _load_seq("p7560.txt")  # 7560 nt
+# Additional reconstruction reference; provenance is in p7704.source.json.
+P7704_SEQUENCE: str = _load_seq("p7704.txt")  # 7704 nt
 P8064_SEQUENCE: str = _load_seq("p8064.txt")  # 8064 nt
 
 # Ordered list of (display_name, length, sequence) for the UI

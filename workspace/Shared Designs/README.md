@@ -1,14 +1,32 @@
 # Shared Designs
 
-Shared reconstructions belong in `workspace/Shared Designs/`. This folder is
-tracked directly in the main NADOC Git repository. A normal clone or pull of
-NADOC includes the folder and all committed designs; no separate remote or
-submodule initialization is needed.
+Open **Library → This computer → Shared Designs**. All saved designs are in this
+folder directly; there are no per-design or per-run folders to browse. A normal
+clone/pull of NADOC includes the committed designs and portable dependencies.
 
-Open **Library → This computer → Shared Designs**. The default reconstruction
-layout is `Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc`. Keep required part and
-assembly dependencies in this folder, with workspace-relative references starting
-`Shared Designs/`. Keep complete native feature histories and source hashes.
+| Design | Saved document / status |
+| --- | --- |
+| D003 — corner motif | [D003.nadoc](D003.nadoc); recorded construction, exact-design human bond review |
+| Dietz Pointer v1.12 — mrDNA reference | [Dietz_Pointer_v1_12_mrDNA.nadoc](Dietz_Pointer_v1_12_mrDNA.nadoc); reference import and scaffold assignment; not a publication-image reconstruction |
+| HC24 — periodic part | [HC24-polymerization.nadoc](HC24-polymerization.nadoc); upstream part for the 30-mer |
+| HC24 — 30-mer assembly | [HC24-30mer.nass](HC24-30mer.nass); 30 instances, 29 joins |
+| D005 — twisted bundle | Analysis only; 217/217 staples match; no saved native model |
+| D006 — twisted bundle | Analysis only; 209/209 staples match; lattice positions remain incomplete |
+| D007 — monolith | Analysis only; 144/144 staples match; native routing completion remains |
+| D008 — square nut | Analysis only; 148/148 staples match; native routing completion remains |
+| D009 — railed bridge | Analysis only; loop-supported candidate with a one-base scaffold discrepancy and penalized confidence; unresolved, no saved native model |
+
+Publication-analysis details and limitations: [routing extraction](../../../docs/publication_routing_extraction.md).
+The reconstruction UI retains analysis results in its session; these rows do not
+represent published molecular documents. Development reports remain local.
+
+Store future native designs directly here with unique, descriptive filenames.
+Required review evidence lives in `.provenance/`; historical read-only source
+paths resolve through `.relocations.json`, which binds their original SHA-256.
+The consolidation did not rewrite any native document, identity or feature log.
+Relocation aliases are for loading dependencies, not save destinations. Editing
+a relocated source changes its digest and invalidates the historical alias;
+record a new source selection rather than silently repointing old history.
 
 ## Save and synchronize
 
@@ -21,13 +39,13 @@ Do not automatically merge conflicting molecular JSON or discard local edits.
 Before committing agent-authored parts, run the required independent audit:
 
 ```bash
-.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc"
+.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/DESIGN.nadoc"
 ```
 
 For D003's human-reviewed corner motif, repeat the audit from the NADOC root:
 
 ```bash
-.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/All Origami/D003/recovered-20261104/D003.nadoc" --bond-review "workspace/Shared Designs/All Origami/D003/recovered-20261104/review/receipt.json"
+.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/D003.nadoc" --bond-review "workspace/Shared Designs/.provenance/D003/receipt.json"
 ```
 
 Its exact historical title exception is documented in
@@ -38,8 +56,8 @@ Author parts through `scripts.agent_structure_guard.publish`. Verify assemblies'
 recorded process and dependencies separately. Failed audits block publication;
 transfer does not certify scientific validity or simulation readiness.
 
-Keep compact publication review receipts and their referenced evidence beside
-the reviewed design so another computer can repeat its audit. Keep simulation
+Keep compact publication review receipts and their referenced evidence in `.provenance/` with
+relative receipt-to-evidence links preserved so another computer can repeat its audit. Keep simulation
 jobs, trajectories, credentials, and other development evidence out of this folder. Development inputs and reports belong under
 `.development-artifacts/all-origami/`. Other workspace folders remain local.
 
