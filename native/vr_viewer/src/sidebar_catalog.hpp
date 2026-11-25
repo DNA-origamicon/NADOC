@@ -6,6 +6,13 @@ namespace nadoc_vr {
 struct SidebarRow { std::string id, label, section, action; std::vector<std::string> parents; };
 struct SidebarTab { int hand; std::string key, label; std::vector<SidebarRow> rows; };
 inline const std::vector<SidebarTab> kSidebarTabs = {
+  {0, "file", "File", {
+    {"file-new", "New Part", "File", "routing:file-new", {}},
+    {"file-assembly", "New Assembly", "File", "", {}},
+    {"file-open", "Open", "File", "routing:file-open", {}},
+    {"file-save", "Save As", "File", "routing:file-save", {}},
+    {"file-close", "Close Session", "File", "routing:file-close", {}},
+  }},
   {0, "feature-log", "Feature Log", {
     {"section:feature-log:feature-log-panel-heading", "Feature Log", "", "section:feature-log:feature-log-panel-heading", {}},
     {"fl-target", "Target: Assembly / Part / Configurations", "Feature Log / Configurations", "", {"section:feature-log:feature-log-panel-heading"}},

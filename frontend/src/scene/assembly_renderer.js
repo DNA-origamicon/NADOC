@@ -312,7 +312,7 @@ function _updateInstanceExtraBaseCrossovers(entry) {
       xr.beadsMesh, xr.slabsMesh,
       ad.beadStartIdx, ad.beadCount,
       posA, _xoverCtrl, posB, ad.avgAx,
-      ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
+      ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence, ad.productGeometry, ad.cornerGeometry,
     )
     setExtraBaseSlabConnectors(
       xr.beadsMesh, xr.slabsMesh, xr.slabConnMesh,

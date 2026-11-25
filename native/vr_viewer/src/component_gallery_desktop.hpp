@@ -1,7 +1,7 @@
 #pragma once
 #include "component_gallery.hpp"
 
-inline int runComponentGalleryDesktop(const std::string& output,bool buttons=false,bool cards=false,bool lists=false,bool simulations=false,bool tabs=false) {
+inline int runComponentGalleryDesktop(const std::string& output,bool buttons=false,bool cards=false,bool lists=false,bool simulations=false,bool tabs=false,bool files=false,bool keyboards=false) {
     if(!glfwInit())throw std::runtime_error("Could not initialize the desktop display");
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
     glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);glfwWindowHint(GLFW_SAMPLES,4);
@@ -13,10 +13,13 @@ inline int runComponentGalleryDesktop(const std::string& output,bool buttons=fal
     if(lists)glfwSetWindowTitle(window,"NADOC VR Component Gallery - Scrollable sets | Click: row/action | Drag rail: scroll | F: front | O: angled | Space: demo | R: reset | Esc: close");
     if(simulations)glfwSetWindowTitle(window,"NADOC Simulation Menu Studies | Round 5 | A: Flat scrubber | B: Raised scrubber | F: front | O: angled | R: reset | S: capture | Esc: close");
     if(tabs)glfwSetWindowTitle(window,"NADOC Tab Studies | Fixed scrolling labels / Expanding tabs | R reset | S capture | Esc close");
-    ComponentGallery gallery;gallery.tabMode=tabs;gallery.simulationMode=simulations;gallery.listMode=lists;gallery.cardMode=cards;gallery.buttonMode=buttons;gallery.active=true;gallery.posed=true;gallery.desktop=true;
+    if(files)glfwSetWindowTitle(window,"NADOC File Menu Gallery | Six styles | S capture | Esc close");
+    if(keyboards)glfwSetWindowTitle(window,"NADOC Keyboard Gallery | Four desktop styles | Click keys | O angled | F front | S capture | Esc close");
+    ComponentGallery gallery;gallery.keyboardMode=keyboards;gallery.fileMode=files;gallery.tabMode=tabs;gallery.simulationMode=simulations;gallery.listMode=lists;gallery.cardMode=cards;gallery.buttonMode=buttons;gallery.active=true;gallery.posed=true;gallery.desktop=true;
     gallery.placement.openDocked({0,0,0},{1,0,0,0});
+    if(files||keyboards)gallery.placement.setScale(keyboards?.75F:.9F);
     struct View {float yaw=.30F,pitch=.14F,distance=1.25F;};
-    View view;if(simulations||tabs){view.yaw=view.pitch=0;}glfwSetWindowUserPointer(window,&view);
+    View view;if(simulations||tabs||files||keyboards){view.yaw=view.pitch=0;}glfwSetWindowUserPointer(window,&view);
     glfwSetScrollCallback(window,[](GLFWwindow* w,double,double y){auto& v=*static_cast<View*>(glfwGetWindowUserPointer(w));v.distance=std::clamp(v.distance-float(y)*.08F,.65F,2.5F);});
     std::array<bool,GLFW_KEY_LAST+1> previousKeys{};
     bool previousPressed=false,previousOrbit=false;double oldX=0,oldY=0,last=glfwGetTime();
@@ -26,7 +29,7 @@ inline int runComponentGalleryDesktop(const std::string& output,bool buttons=fal
         auto key=[&](int k){bool down=glfwGetKey(window,k)==GLFW_PRESS;bool clicked=down&&!previousKeys[k];previousKeys[k]=down;return clicked;};
         if(key(GLFW_KEY_ESCAPE) && !(simulations && gallery.simulationStyles.escape()))glfwSetWindowShouldClose(window,true);
         if(key(GLFW_KEY_F)){view.yaw=view.pitch=0;view.distance=1.25F;}
-        if(key(GLFW_KEY_O)){view.yaw=.48F;view.pitch=.20F;view.distance=1.25F;}
+        if(key(GLFW_KEY_O)){view.yaw=.48F;view.pitch=.20F;view.distance=keyboards?1.60F:1.25F;}
         if(key(GLFW_KEY_SPACE))gallery.toggleDemo();
         if(key(GLFW_KEY_R)){gallery.reset();gallery.demo=false;}
         if(simulations){
@@ -49,7 +52,7 @@ inline int runComponentGalleryDesktop(const std::string& output,bool buttons=fal
         auto far=glm::inverse(vp)*glm::vec4(ndc,1,1);far/=far.w;
         std::array<nadoc_vr::HandPose,2> hands{};
         hands[1]={true,false,eye,glm::rotation(glm::vec3(0,0,-1),glm::normalize(glm::vec3(far)-eye))};
-        if(tabs && !glfwGetWindowAttrib(window,GLFW_FOCUSED))hands[1].valid=false;
+        if((tabs||keyboards) && !glfwGetWindowAttrib(window,GLFW_FOCUSED))hands[1].valid=false;
         const bool pressed=glfwGetWindowAttrib(window,GLFW_FOCUSED) && glfwGetMouseButton(window,GLFW_MOUSE_BUTTON_LEFT)==GLFW_PRESS;
         if(simulations){
             gallery.simulationStyles.desktopPad(glfwGetWindowAttrib(window,GLFW_FOCUSED) && glfwGetKey(window,GLFW_KEY_SPACE)==GLFW_PRESS);

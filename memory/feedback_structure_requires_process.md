@@ -32,6 +32,19 @@ requires a documented review tied to the exact design and report; it cannot
 waive provenance or authorize molecular changes. See
 [the executable workflow](../docs/design_bond_review.md).
 
+## Corner-motif interpretation — November 23, 2026
+
+User clarification: D003's forced ligations are part of corner-motif construction,
+mainly joining four differently oriented clusters. Intentional corner seams are
+a valid reason for exceeding 20% forced ligations; the threshold requires review,
+not automatic rejection. Agents must inspect cluster orientations and recorded
+seam connections, account for all realized forced junctions, and document the
+supported motif explanation in the exact-design review receipt. Retain the raw
+fractions and distinguish user-provided intent from independently checked facts.
+This explanation does not automatically resolve long bonds, incomplete geometry,
+source/provenance failures, or authorize molecular changes. Follow the
+[corner-motif review procedure](../docs/design_bond_review.md#intentional-corner-motifs-and-differently-oriented-clusters).
+
 ## Overhang and crossover semantics — November 22, 2026
 
 User correction following the rejected Gür 2016 reconstruction: **overhangs must
@@ -107,3 +120,14 @@ a missing operation. The user rejects polymerization-strand conversion to ordina
 extensions, and defers general long-extension molecular geometry beyond the
 feature-log/dependency overhaul. Read
 [the scope decision](feedback_polymerization_extension_scope.md).
+
+## Explicit D003 metadata exception — November 23, 2026
+
+The user explicitly authorized the missing historical title change to `D003`:
+"Yes. allow the metadata exception." `scripts/agent_metadata_exceptions.py` binds
+this exception to the exact normalized document and its exact saved branch,
+originating from file SHA-256
+`c7bb0f69435dff5f2513d89617ef274f2308a4647b6cf5367b0ec453693f0d4c`.
+Only the original recipe title → `D003` comparison is exempted. No feature is
+fabricated; all construction commands, molecular state and other metadata must
+still independently reproduce. This is not a general legacy-name waiver.

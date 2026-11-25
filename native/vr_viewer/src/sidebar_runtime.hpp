@@ -1,6 +1,8 @@
 #pragma once
 #include "sidebar_grips.hpp"
 #include "solid_ui.hpp"
+#include "file_table_draw.hpp"
+#include "text_keyboard_draw.hpp"
 #include "job_card.hpp"
 #include "capture_ui_diagnostics.hpp"
 // Included after the native GL surface types; owns both sidebar panels.
@@ -12,6 +14,7 @@ class SidebarRuntime {
     std::function<void(size_t,SolidUi&)> simulationDraw;
     std::array<bool,2> openedBefore{};
     double lastTabFrame=0;
+    std::array<nadoc_vr::FileHoverFeedback,2> fileHoverFeedback;
     std::array<nadoc_vr::SidebarMenu*,2> historyGrab{};
     void initialize() { for(auto& s:surfaces) s.initialize(); }
     void shutdown() { for(auto& s:surfaces) s.shutdown(); for(auto& s:raised)s.shutdown(); }
@@ -31,7 +34,7 @@ class SidebarRuntime {
         return nearest;
     }
     void toggle(size_t hand,const glm::vec3& controller,const glm::quat& orientation) {
-        auto& m=menus.at(hand); m.open=!m.open; m.hovered.clear(); m.focus.reset(); m.pressed.clear();
+        auto& m=menus.at(hand); m.open=!m.open; m.hovered.clear(); m.focus.reset(); m.pressed.clear();m.keyboardPressure.clear();
         if(m.open) {
             // Freeze the invoking controller pose with a backward tablet tilt.
             // Border grip/resize and Dock/Follow retain the existing tablet contract.
@@ -83,8 +86,13 @@ class SidebarRuntime {
         if(!menu.open) menu.focus.reset();
     }
     template<class Action> std::array<bool,2> input(const std::array<nadoc_vr::HandPose,2>& hands,
-            const std::array<bool,2>& clicked,const std::array<bool,2>& held,std::array<bool,2> blocked,const std::array<float,2>& foreground,double now,Action action) {
-        for(auto& m:menus) {m.hovered.clear();if(now>=m.pressedUntil)m.pressed.clear();if(!m.open)m.focus.reset();}
+            const std::array<bool,2>& clicked,const std::array<bool,2>& held,std::array<bool,2> blocked,const std::array<float,2>& foreground,double now,Action action,const std::array<float,2>& trigger={-1.F,-1.F}) {
+        std::array<std::string,2> fileHover;
+        auto pressure=[&](nadoc_vr::SidebarMenu& menu,const nadoc_vr::SidebarControl& c,size_t h){
+            if(menu.textKeyboard()&&menu.keyboardEnabled(c))menu.keyboardPressure[c.id]=std::max(menu.keyboardPressure[c.id],
+                keyboard_slate::amount(trigger[h]<0?(held[h]?1.F:0.F):trigger[h]));
+        };
+        for(auto& m:menus) {m.keyboardPressure.clear();m.hovered.clear();if(now>=m.pressedUntil)m.pressed.clear();if(!m.open)m.focus.reset();}
         for(size_t h=0;h<2;++h)if(auto* m=historyGrab[h]) {
             const auto point=m->placement.rayPanelLocalPoint(hands[h],{-100,-100},{100,100});
             if(blocked[h] || !hands[h].valid || !m->open || m->tab().key!="feature-log" || !point){m->historyScrubCancel();historyGrab[h]=nullptr;continue;}
@@ -107,8 +115,10 @@ class SidebarRuntime {
                 owned.focus.pointer(target==&owned && ray?ray->id:rayId,now,held[h]);
                 if(owned.focus.active) {
                     blocked[h]=true;
-                    for(const auto& c:owned.controls()) if(c.id==owned.focus.id && clicked[h]) {
-                        activate(owned,c,h,hands,now,action);break;
+                    for(const auto& c:owned.controls()) if(c.id==owned.focus.id) {
+                        if(hands[h].valid)pressure(owned,c,h);
+                        if(clicked[h])activate(owned,c,h,hands,now,action);
+                        break;
                     }
                     continue;
                 }
@@ -118,7 +128,8 @@ class SidebarRuntime {
             if(target->focus.active) continue;
             auto c=target->hit(hands[h]);
             if(!c) continue;
-            target->hovered=c->id;
+            target->hovered=c->id;pressure(*target,*c,h);
+            if(c->enabled && (target->tab().key=="file-browser" || target->tab().key=="file-keyboard" || target->tab().key=="text-keyboard"))fileHover[h]=c->id+":"+c->label;
             if(c->id=="history:scrub" && c->enabled) {
                 if(clicked[h] && historyGrab[1-h]!=target){
                     const auto point=target->placement.rayPanelLocalPoint(hands[h],target->bounds().minimum,target->bounds().maximum);
@@ -131,6 +142,7 @@ class SidebarRuntime {
                 activate(*target,*c,h,hands,now,action);
             }
         }
+        for(size_t h=0;h<2;++h)if(fileHoverFeedback[h].enter(fileHover[h]) && !clicked[h])action("feedback:hover",h);
         const float dt=lastTabFrame>0?float(now-lastTabFrame):0.F;lastTabFrame=now;
         for(auto& m:menus)m.animateTabs(dt);
         return blocked;
@@ -195,6 +207,8 @@ class SidebarRuntime {
             menus[i].draw(line,fill);
             auto& ui=raised[i];ui.vertices.clear();
             const auto& menu=menus[i];
+            if(menu.customTab && menu.tab().key=="file-browser"){drawFileTable(ui,menu);continue;}
+            if(menu.textKeyboard()){drawTextKeyboard(ui,menu);continue;}
             for(const auto& c:menu.controls())if(menu.raisedAction(c) && !(menu.customSimulationDraw() && c.id.starts_with("sim:"))) {
                 const auto b=c.bounds;const auto size=b.maximum-b.minimum;
                 const bool hover=menu.hovered==c.id || (menu.focus.active && menu.focus.id==c.id);
@@ -231,7 +245,7 @@ class SidebarRuntime {
     }
     void render(const glm::mat4& projection) {
         for(size_t i=0;i<2;++i) if(menus[i].open) {
-            surfaces[i].render(projection,menus[i].placement,menus[i].bounds(),.002F);
+            if(!(menus[i].customTab && menus[i].tab().key=="file-browser")&&!menus[i].textKeyboard())surfaces[i].render(projection,menus[i].placement,menus[i].bounds(),.002F);
             const auto& p=menus[i].placement;
             raised[i].render(projection*glm::translate(glm::mat4(1),p.position())*glm::mat4_cast(p.orientation())*glm::scale(glm::mat4(1),glm::vec3(p.scale())));
         }
@@ -258,7 +272,9 @@ class SidebarRuntime {
                 const auto point=m.placement.worldPoint(local);
                 out<<'['<<point.x<<','<<point.y<<','<<point.z<<']';
             }
-            out<<"],\"collapsed_sections\":[";
+            out<<"],\"keyboard_pressure\":{";
+            bool firstPressure=true;for(const auto& [id,value]:m.keyboardPressure){if(!firstPressure)out<<',';firstPressure=false;out<<q(id)<<':'<<value;}out<<'}';
+            out<<",\"collapsed_sections\":[";
             bool first=true;
             for(const auto& row:m.tab().rows) if(m.collapsed.contains(row.id)) {
                 if(!first) out<<',';

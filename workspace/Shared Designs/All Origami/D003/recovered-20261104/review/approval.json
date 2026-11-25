@@ -1,0 +1,14 @@
+{
+  "status": "reviewed-for-sharing",
+  "human_design_approval": "D003 design is good. Approved by human reviewer.",
+  "human_metadata_exception": "Yes. allow the metadata exception.",
+  "approval_date": "2026-11-23",
+  "exception_scope": "Exact normalized D003 document and saved branch; original recipe title to D003 only. All construction and other state independently checked.",
+  "original_file_sha256": "c7bb0f69435dff5f2513d89617ef274f2308a4647b6cf5367b0ec453693f0d4c",
+  "published_file_sha256": "03d1bff9570cbebbe7cc96693567a116198424bd8a6c9f9b8ffe0f315e3b35bd",
+  "molecular_and_document_state_unchanged": true,
+  "publication_guard": "passed",
+  "independent_saved_reopened_audit": "passed",
+  "simulation_ready": false,
+  "notes": "Serialization is normalized by the mandatory publication guard. Original file remains untouched. Bond warnings are reviewed limitations, not removed flags."
+}

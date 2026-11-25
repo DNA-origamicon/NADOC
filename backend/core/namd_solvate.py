@@ -2829,7 +2829,9 @@ def build_namd_solvated_package(
     require_coating_simulation_support(design, 'NAMD solvated package')
     _check_ff_files()
 
-    name = (design.metadata.name or "design").replace(" ", "_")
+    from backend.core.namd_script import package_name_stem
+
+    name = package_name_stem(design.metadata.name)
     prefix = f"{name}_namd_solvated/"
 
     # 1. Build DNA-only PDB and complete PSF.  Legacy mode keeps the old

@@ -18,7 +18,8 @@
     "frontend/src/ui/multi_view.js": "d897f8b8f2bbe22a6ec27c5fb049e3710a3d5ff86733c6546f52f2461f2c9ab2",
     "frontend/src/ui/overhang_connections_panel.js": "db156312d0ff0826dbd0b735e2e78a6e3a360cedea213119d2e273d931e53b0f",
     "frontend/src/ui/right_sidebar_tabs.js": "731f16e100ccce83c36ad53f5f2b1198305d51ef5a9dd74ea12b572c9a10fdc5",
-    "frontend/src/ui/simulation_card_order.js": "b6029b02f5d7a852a81ed7491f8fb00e4f3e50608318b0a09cd8b4a105650aff"
+    "frontend/src/ui/simulation_card_order.js": "b6029b02f5d7a852a81ed7491f8fb00e4f3e50608318b0a09cd8b4a105650aff",
+    "frontend/src/scene/vr_files.js": "a7ab4e7a543bd23bb4ee502ab055829f95a259fea1c52dc95d7d2c309da57382"
   },
   "coloringMasks": [
     5,
@@ -35,6 +36,63 @@
     5
   ],
   "tabs": [
+    {
+      "side": "left",
+      "key": "file",
+      "label": "File",
+      "rows": [
+        {
+          "id": "file-new",
+          "label": "New Part",
+          "action": "routing:file-new",
+          "section": "File",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_files.js",
+          "reason": ""
+        },
+        {
+          "id": "file-assembly",
+          "label": "New Assembly",
+          "action": "",
+          "section": "File",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_files.js",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "file-open",
+          "label": "Open",
+          "action": "routing:file-open",
+          "section": "File",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_files.js",
+          "reason": ""
+        },
+        {
+          "id": "file-save",
+          "label": "Save As",
+          "action": "routing:file-save",
+          "section": "File",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_files.js",
+          "reason": ""
+        },
+        {
+          "id": "file-close",
+          "label": "Close Session",
+          "action": "routing:file-close",
+          "section": "File",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_files.js",
+          "reason": ""
+        }
+      ]
+    },
     {
       "side": "left",
       "key": "feature-log",

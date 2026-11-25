@@ -46,7 +46,8 @@ def normalize_geometry_copy_indices(nucleotides: list[dict]) -> list[dict]:
 
 def strand_nucleotide_order_key(nucleotide: dict) -> tuple[int, int, int]:
     """Desktop 5′→3′ order, including reverse loop-copy traversal."""
-    forward = nucleotide.get("direction") == "FORWARD"
+    forward = (int(nucleotide.get("domain_index") or 0) >= 0 if nucleotide.get("extension_id")
+               else nucleotide.get("direction") == "FORWARD")
     bp_index = int(nucleotide.get("bp_index") or 0)
     copy_k = int(nucleotide.get("copy_k") or nucleotide.get("ext_k") or 0)
     return (

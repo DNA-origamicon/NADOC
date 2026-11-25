@@ -3,7 +3,12 @@
 #undef main
 
 void checkGallery(bool condition,const char* message) {if(!condition)throw std::runtime_error(message);}
+#include "file_table_parity.hpp"
+#include "keyboard_gallery_checks.hpp"
+#include "keyboard_slate_checks.hpp"
 int main(int argc,char** argv) {
+    checkFileTableParity();
+    checkKeyboardSlate();
     ComponentGallery gallery;gallery.active=gallery.posed=true;
     gallery.placement.openDocked({0,0,0},glm::quat(glm::vec3(.12F,.42F,0)));
     std::array<nadoc_vr::HandPose,2> hands{};
@@ -132,6 +137,19 @@ int main(int argc,char** argv) {
     gallery.reset();checkGallery(tabs.rows[0].selected==0 && tabs.offset(1)==0,"tab reset failed");
     gallery.tabMode=false;
     // Render exact native meshes and retain front/oblique plus offscreen negative.
+    gallery.tabMode=gallery.listMode=gallery.cardMode=gallery.buttonMode=false;gallery.fileMode=true;
+    for(int v=0;v<6;++v){
+        gallery.reset();gallery.fileStyles.choose(v);hands={};
+        const auto click=[&](int id){const auto p=gallery.placement.worldPoint(gallery.fileStyles.target(id));
+            hands[1]={true,false,p+normal*.3F,gallery.placement.orientation()};
+            gallery.update(hands,{false,true},{false,true},.01F,{},{});
+            gallery.update(hands,{},{},.01F,{},{});};
+        click(11);checkGallery(gallery.fileStyles.clicks==0,"disabled New Assembly activated");
+        if(v==0)click(20);if(v==4)click(22);
+        click(30);checkGallery(gallery.fileStyles.selected==0,"file gallery selection failed");
+        if(v==4){click(22);checkGallery(gallery.fileStyles.hit({-.1F,.12F,0})==-1,"collapsed folder retains file target");}
+        click((v+1)%6);checkGallery(gallery.fileStyles.variant==(v+1)%6,"style selector failed");
+    }
     if(!glfwInit())return 77;
     glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
     auto* window=glfwCreateWindow(1280,1000,"Gallery validation",nullptr,nullptr);
@@ -140,8 +158,8 @@ int main(int argc,char** argv) {
     gallery.reset();gallery.demo=false;gallery.placement.openDocked({0,0,0},{1,0,0,0});
     const std::filesystem::path output=argc>1?argv[1]:"gallery-evidence";
     std::filesystem::create_directories(output);
-    for(int mode=0;mode<5;++mode)for(int view=0;view<3;++view) {
-        gallery.tabMode=mode==4;gallery.buttonMode=mode==1;gallery.cardMode=mode==2;gallery.listMode=mode==3;
+    for(int mode=0;mode<11;++mode)for(int view=0;view<3;++view) {
+        gallery.fileMode=mode>=5;gallery.placement.setScale(mode>=5?.9F:nadoc_vr::MenuPlacement::kDefaultScale);if(mode>=5){gallery.fileStyles.choose(mode-5);gallery.fileStyles.opened=gallery.fileStyles.expanded=true;}gallery.tabMode=mode==4;gallery.buttonMode=mode==1;gallery.cardMode=mode==2;gallery.listMode=mode==3;
         if(mode==2)for(auto& card:gallery.cardStyles.cards){card.open=true;card.reveal=1;}gallery.placement.openDocked({0,0,0},{1,0,0,0});
         const glm::vec3 eye=view==1?glm::vec3(.6F,.22F,1.1F):glm::vec3(0,0,1.25F);
         const auto vp=glm::perspective(glm::radians(52.F),1.28F,.01F,20.F)*glm::lookAt(eye,glm::vec3(0),glm::vec3(0,1,0));
@@ -150,7 +168,22 @@ int main(int argc,char** argv) {
         gallery.render(vp);glFinish();
         std::vector<uint8_t> rgb(1280*1000*3);glReadPixels(0,0,1280,1000,GL_RGB,GL_UNSIGNED_BYTE,rgb.data());
         int bright=0;for(size_t p=0;p<rgb.size();p+=3)if(rgb[p]>60 && rgb[p+1]>80 && rgb[p+2]>100)++bright;
-        if(mode!=4)checkGallery(view==2?bright==0:bright>18000,"gallery pixel coverage/negative control failed");
+        if(mode>=5){
+            for(const auto& c:gallery.fileStyles.controls()){
+                glm::vec2 lo(1280,1000),hi(0);int count=0;
+                for(float dx:{0.F,c.w})for(float dy:{0.F,c.h}){
+                    const auto clip=vp*glm::vec4(gallery.placement.worldPoint({c.x+dx,c.y+dy,.03F}),1);
+                    const auto pixel=(glm::vec2(clip)/clip.w*.5F+.5F)*glm::vec2(1280,1000);
+                    lo=glm::min(lo,pixel);hi=glm::max(hi,pixel);
+                }
+                for(int y=std::max(0,int(lo.y));y<std::min(1000,int(hi.y)+1);++y)
+                    for(int x=std::max(0,int(lo.x));x<std::min(1280,int(hi.x)+1);++x){
+                        const size_t p=(size_t(y)*1280+x)*3;
+                        if(rgb[p]>100&&rgb[p+1]>130&&rgb[p+2]>150)++count;
+                    }
+                checkGallery(view==2?count==0:count>20,"file control text missing/negative failed");
+            }
+        }else if(mode!=4)checkGallery(view==2?bright==0:bright>18000,"gallery pixel coverage/negative control failed");
         else {
             // This sparse two-row study has fewer lit pixels than the six/nine-control
             // galleries. Require visible text at every actual tab, including oblique.
@@ -172,9 +205,12 @@ int main(int argc,char** argv) {
             if(view==2)checkGallery(bright==0,"offscreen tab gallery visible");
         }
         auto png=nadoc_vr::scrywrite::encodeActorEyePng(rgb,1280,1000);
-        std::ofstream file(output/(std::string(mode==4?"tabs-":mode==3?"lists-":mode==2?"cards-":mode==1?"buttons-":"")+(view==0?"front.png":view==1?"oblique.png":"offscreen.png")),std::ios::binary);
+        std::ofstream file(output/(std::string(mode>=5?("files-"+std::to_string(mode-5)+"-").c_str():mode==4?"tabs-":mode==3?"lists-":mode==2?"cards-":mode==1?"buttons-":"")+(view==0?"front.png":view==1?"oblique.png":"offscreen.png")),std::ios::binary);
         file.write(reinterpret_cast<const char*>(png.data()),png.size());
     }
+    captureFileTableParity(output);
+    captureKeyboardSlate(output);
+    checkKeyboardGallery(output);
     gallery.ui.shutdown();glfwDestroyWindow(window);glfwTerminate();
-    std::cout<<"Wheel, button, card and six scrollable set interactions and rendered pixels passed\n";
+    std::cout<<"Wheel, button, card, list, tab and six File menu interactions and rendered pixels passed\n";
 }

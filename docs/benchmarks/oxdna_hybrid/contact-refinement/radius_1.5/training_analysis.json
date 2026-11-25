@@ -1,0 +1,8 @@
+{
+  "epochs": 200,
+  "frozen_bias_replay_max_error": 0.0,
+  "last_quarter_shape_rms_change_kbt": 0.589133545918531,
+  "last_quarter_shape_max_change_kbt": 1.0618712371285592,
+  "final_bias_range_kbt": 9.413126604886804,
+  "qualification": "Descriptive training drift, not a convergence or stopping test."
+}

@@ -41,6 +41,135 @@
 - [x] Eight frontend and ten backend tests pass; isolated app check covers untouched
   defaults, rejection, recovery and coated solve. Design hash unchanged and
   temporary artifacts removed. `main.js` task LOC delta: zero.
+## 2026-11-23 — ISSUE-264: Profile and reduce Corner calculation overhead
+
+- [x] Profile native recording and both molecular projections separately.
+  Recording/routing is subsecond; closure, seed fitting and cache charging dominate.
+- [x] Accelerate seed costs with the original scalar types, cross products without
+  fastmath, immutable closure offsets and scalar memory accounting. Preserve the
+  native solver, two-pass order, exact cache keys and memory bounds.
+- [x] Paired cold backend previews improve by 21–24%; changed-direction previews
+  improve by 11–19%. Add a bounded native construction benchmark with no saved parts.
+- [x] Exact cost/seed-solver comparisons and all four approved geometry cases pass;
+  physical override isolation and unchanged unrelated junction atoms pass too.
+- [x] 36 focused backend checks pass, including cache ownership/charges,
+  worker cancellation, exact native projection equivalence, source isolation,
+  prepared Apply and independent native recipe replay. Backend/test and benchmark
+  lint pass. `main.js` LOC delta: 0.
+- [x] 6HB and square live workflows pass preview, Apply, undo/redo and history
+  edit; both axis displays were inspected. The combined square case exhausted
+  its 240 s total budget; a focused isolated rerun passes in 3.9 min with no
+  code or timing-limit change. Cleanup verified after both runs. App-run cold
+  previews remain about 16–19 s; do not claim the backend gain as a browser gain.
+- [ ] The 1–2 second Full-preview target is still unmet; approved seam fitting
+  remains the major cost. No production physical simulation was run.
+
+## 2026-11-23 — ISSUE-268 / ISSUE-269 / ISSUE-270: Reuse Corner preview and clip axes
+
+- [x] Commit the exact recorded/replayed candidate and its Full/undeformed
+  projections using a bounded, source-owned, single-use preview token.
+- [x] Preserve source/session/revision/policy and parameter checks, native undo,
+  edit recovery, save/reopen and independent replay. No molecular refit on Apply.
+- [x] Prepare independent projections concurrently; test exact serial-provider
+  equivalence and cancellation cleanup for both numerical workers.
+- [x] Reuse the feature-editor save hold to avoid autosave invalidation during
+  preview; verify drain, cancel, document reset and real saved-file workflows.
+- [x] Draw curved axes within a single occupied domain too. Unit regressions and
+  6HB / flat square app checks pass; both applied views were inspected.
+- [x] Nine focused backend and 59 frontend tests pass; lint passes. Apply starts
+  responding in 0.38–0.82 s, with complete scene refresh in 4.3–5.1 s in software
+  rendering. Initial Full preview remains about 16–22 s (ISSUE-264 stays open).
+- [x] Smoke: 26 passed, 2 skipped; the known assembly-exit fixture timeout at
+  `scene_harness.js:434` remains (ISSUE-266, previously reproduced upstream).
+  Test parts, sessions, reports, bridge keys and the two verified legacy-fixture
+  cache snapshots were removed; the isolated workspace ends with zero snapshots.
+
+## 2026-11-23 — ISSUE-266 / ISSUE-267: Smoke baseline and fixture-cache accounting
+
+- [ ] Assembly-exit fixture setup hits 60 seconds with and without Corner;
+  reproduced on untouched `afbc311c`. Full smoke: 26 passed, 2 skipped, 1 failed.
+- [x] Verified and removed only the isolated run's two legacy-fixture revision
+  snapshots; all test artifacts are gone and the main workspace is unchanged.
+- [ ] Add failure-safe ownership tracking for read-only smoke fixture caches;
+  do not weaken the existing prefix-only teardown guard.
+
+## 2026-11-23 — ISSUE-265: Keep extension display out of Corner atom inputs
+
+- [x] Reproduced recursive atom construction using native Corner → extension.
+- [x] Request only duplex endpoint geometry inside the Corner atom builder;
+  retain upstream measured extension slabs on the outer Full projection.
+- [x] Integrated regression, finite extension slabs and independent reopened
+  recipe replay pass; the ordinary extension-slab regression also passes.
+
+## 2026-11-23 — ISSUE-261 / ISSUE-264: Approved Corner provider and responsive progress
+
+- [x] Integrate the demonstrated two-pass molecular provider only for recorded
+  Corner inserts, after wedge deformation. Full representation uses its atoms.
+- [x] Preserve frozen coordinates, ordinary inserts and physical overrides;
+  test numerical-cache transport and disposable-worker cancellation.
+- [x] Stream actual fit progress without buffering and preserve immediate
+  cylinder previews. Verify native save/reopen and independent command replay.
+- [ ] Full preview still exceeds the requested 1–2 seconds. Production physical
+  simulations remain unvalidated; software checks are not stability evidence.
+
+## 2026-11-23 — ISSUE-263: Whole-preview Corner edit progress
+
+- [x] Reproduced premature completion; progress now includes source proof,
+  edited seams, later-feature replay/validation and Full projection.
+- [x] Two history/stream tests and the square-lattice app workflow pass. The
+  app checks monotonic completion and remaining-time estimates, plus actual
+  numeric arrows and history controls. No persisted test artifacts remain.
+
+## 2026-11-23 — ISSUE-262: Preserve Corner numeric increments
+
+- [x] Reproduced off-grid position snapping on both HC and square lattices.
+- [x] Native spinners now add 7/8 bp (or matching nm) and 15° from typed values.
+- [x] 13 focused frontend tests and the 6HB app workflow pass, including actual
+  arrow keys and history operations. Preview ready in 1.945 s, painted in 2.301 s.
+  Inspected preview; test part/revisions, browser captures, reports and bridge
+  credentials cleaned. No molecular placement changes.
+
+## 2026-11-23 — ISSUE-260: Corner source ownership at overlapping miter tips
+
+- [x] Reproduced ambiguous endpoint ownership using native Extrude → Auto
+  Scaffold → Make Cluster → Corner; added a regression for the exact failure.
+- [x] Preserve original endpoint ownership; v3 marks new tip sequence N and
+  leaves v1/v2 replay unchanged. Keep authored plane nicks unjoined.
+- [x] Focused backend/frontend checks and nicked/sequence-assigned routed 6HB
+  app checks pass. Routed preview ready in 1.687 s, painted in 2.040 s.
+- [x] This topology fix initially left molecular placement unchanged. The
+  candidate was subsequently approved and promoted under ISSUE-261.
+
+## ISSUE-259 — NAMD runner scheduling fixture intermittently sees a busy lease (2026-11-22)
+
+[ ] Occupancy archive FAST validation failed in
+`test_analysis_contention_waits_cancellably_before_launch[False]` before its task
+started: `analysis_activity_lease()` raised `WorkloadBusy`. All 20 runner tests
+passed in an isolated retry (4.42 s). The fixture already sets a temporary memory
+budget directory; background activity sharing process state is a hypothesis, not
+an established cause. No runner or scheduling code changed for occupancy archival.
+Evidence: `.development-artifacts/occupancy-archive-backend.log` and
+`occupancy-archive-runner-retry.log`. Investigate worker/background lease isolation.
+
+
+
+## ISSUE-258 — NAMD row selection waits for full job-list refresh (2026-11-22)
+
+[x] Selecting Gerling R1 Alpine could leave a second spinning circle indefinitely.
+The unified list had saved job metadata, but the NAMD panel awaited its separate
+all-job status/provenance refresh before selecting a missing panel record. A stalled
+`GET /md/jobs` reproduced the unselected row with `data-selection-pending` intact.
+Pass the visible list snapshot to the panel, seed only missing NAMD records, and
+preserve already-refreshed panel records. Include parents so production settings
+remain available. Live status, artifact checks and launch validation still use their
+ordinary paths; selection does not wait for them. No backend or simulation changes.
+Regression covers an unresolved list request, parent settings, duplicate records,
+and engine isolation. Evidence: `.development-artifacts/gerling_job_selection_20261122/`.
+Validation: stalled-request live browser check passed; 404 focused tests passed.
+Full frontend: 10,712 passed, 1 skipped; one outdated call assertion corrected
+and verified by the focused rerun. Lint passed. Smoke: 22 passed, 2 skipped,
+2 existing Create/Close Session failures. Temporary sessions/screenshots cleaned;
+Gerling source checksum unchanged. Feature `main.js` LOC Δ: 0.
 
 
 ## 2026-11-21 — ISSUE-257: Close Move/Rotate after attachment Apply

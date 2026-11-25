@@ -295,3 +295,12 @@ def test_local_disk_quote_uses_actual_plan_and_reports_missing_hardware(
     assert (
         result["est_hours"] is None and "No timing coverage" in result["timing_note"]
     )
+
+
+def test_adaptive_minimum_plan_uses_controller_ceiling(tmp_path):
+    (tmp_path / "min.conf").write_text(
+        "# NADOC_ADAPTIVE_MIN_BEGIN\nset nadoc_min_max 756120\n"
+        "set nadoc_min_chunk 23640\nminimize $nadoc_min_this\n"
+    )
+    rows = prepared_stages(tmp_path, {"minimization": {"name": "min", "steps": 123}})
+    assert rows[0]["steps"] == 756120

@@ -99,7 +99,7 @@ def apply_nucleotide_transforms_to_geometry(nucleotides: list[dict], design: Des
             site["axis_point"] = (pivot + rotation @ (np.asarray(site["axis_point"]) - pivot) + translation).tolist()
             site["radial_hat"] = (rotation @ np.asarray(site["radial_hat"])).tolist()
             nuc["helical_site"] = site
-        for field in ("backbone_position", "base_position", "slab_position"):
+        for field in ("backbone_position", "base_position", "slab_position", "corner_native_backbone"):
             if nuc.get(field) is not None:
                 p = np.asarray(nuc[field], dtype=float)
                 nuc[field] = (pivot + rotation @ (p - pivot) + translation).tolist()
@@ -509,6 +509,8 @@ def _geometry_for_helices(
     measured_positioning: bool = True,
     junction_balance: bool = True,
     helix_axes: list[dict] | None = None,
+    extension_slabs: bool = True,
+    _corner_seams: bool = True,
 ) -> list[dict]:
     """Compute nucleotide geometry for *design*.
 
@@ -737,6 +739,9 @@ def _geometry_for_helices(
         result.extend(_strand_extension_geometry(design, nuc_pos_map, extension_ids))
     # Individual residue poses must not become construction inputs for connected,
     # unselected bridge residues. Apply them once after all material is emitted.
+    if _corner_seams:
+        from backend.core.corner_seam_projection import attach_corner_projection
+        attach_corner_projection(design, result)
     apply_nucleotide_transforms_to_geometry(result, design)
     pending_slabs.extend(result[emitted_count:])
     attach_native_slab_poses(pending_slabs)
@@ -745,6 +750,9 @@ def _geometry_for_helices(
     apply_cpd_context_geometry(result, design)
     if design.photoproduct_junctions:
         attach_native_slab_poses(result)
+    if extension_slabs:
+        from backend.core.extension_slabs import attach_extension_slabs
+        attach_extension_slabs(result, design)
     return result
 
 
@@ -871,6 +879,8 @@ def _geometry_for_design(
     *,
     measured_positioning: bool = True,
     junction_balance: bool = True,
+    extension_slabs: bool = True,
+    _corner_seams: bool = True,
 ) -> list[dict]:
     """The sole native Full per-nucleotide geometry, including canonical slab poses."""
     return _geometry_for_helices(
@@ -879,6 +889,8 @@ def _geometry_for_design(
         compact_skips=compact_skips,
         measured_positioning=measured_positioning,
         junction_balance=junction_balance,
+        extension_slabs=extension_slabs,
+        _corner_seams=_corner_seams,
     )
 
 
@@ -945,6 +957,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
                 "ismod": None,
                 "mod": None,
                 "base": None,
+                "corner": None,
             }
             helix_bucket[direction] = b
         b["bp"].append(n.get("bp_index"))
@@ -991,6 +1004,13 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
             b["mod"].append(mod)
         elif b["mod"] is not None:
             b["mod"].append(None)
+        corner = n.get("corner_inserts")
+        if corner is not None:
+            if b["corner"] is None:
+                b["corner"] = [None] * (len(b["bp"]) - 1)
+            b["corner"].append(corner)
+        elif b["corner"] is not None:
+            b["corner"].append(None)
         base = n.get("nucleobase")
         if base is not None:
             if b["base"] is None:
@@ -1002,7 +1022,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
     # tight when none of those fields apply.
     for helix_bucket in out.values():
         for b in helix_bucket.values():
-            for k in ("flex", "extid", "ismod", "mod", "base"):
+            for k in ("flex", "extid", "ismod", "mod", "base", "corner"):
                 if b.get(k) is None:
                     b.pop(k, None)
     return out

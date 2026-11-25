@@ -83,6 +83,11 @@ export function initGeometryReview({
   modal.addEventListener('cancel', cancel)
   // A modal owns its shortcuts; app history/selection shortcuts must not run beneath it.
   modal.addEventListener('keydown', event => event.stopPropagation())
+  const requestedCase = new URLSearchParams(window.location.search).get('geometryReview')
+  if (cases.some(entry => entry.id === requestedCase)) {
+    select.value = requestedCase
+    queueMicrotask(show)
+  }
   return { show, close, element: modal,
     isRendered: () => !!content?.isRendered(),
     dispose() {

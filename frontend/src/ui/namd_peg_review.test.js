@@ -72,9 +72,9 @@ it('creates a managed fast relaxation without starting it and announces its job'
 })
 
 it('shares Display, Flex, trajectory, solvent and Off controls without invoking DNA handlers', async () => {
-  const labels = ['viz-off', 'display-toggle', 'flex-toggle', 'traj-toggle', 'photoproduct-toggle', 'occupancy-toggle']
+  const labels = ['viz-off', 'display-toggle', 'flex-toggle', 'traj-toggle', 'photoproduct-toggle']
   document.body.innerHTML = labels.map(s => `<label><input id="md-jobs-${s}" name="md-viz" type="radio"></label>`).join('')
-    + '<input type="checkbox" id="md-jobs-water-toggle"><input type="checkbox" id="md-jobs-box-toggle"><input type="range" disabled id="md-jobs-traj-slider"><button id="md-jobs-traj-next"></button><p id="md-jobs-photoproduct-status"></p><p id="md-jobs-occupancy-status"></p>'
+    + '<input type="checkbox" id="md-jobs-water-toggle"><input type="checkbox" id="md-jobs-box-toggle"><input type="range" disabled id="md-jobs-traj-slider"><button id="md-jobs-traj-next"></button><p id="md-jobs-photoproduct-status"></p>'
   const data = { ...payload(), job_id: 'job1', stage: 'resident', raw_frames: 2,
     frames: [{ step: 1, coordinates_nm: payload().coordinates_nm },
       { step: 2, coordinates_nm: [[1.2, 1, .4], [1.2, 1, .5], [2, 2, 2]] }] }
@@ -106,7 +106,7 @@ it('shares Display, Flex, trajectory, solvent and Off controls without invoking 
   expect(card.dataset.mode).toBe('off')
   expect(scene.children[0].children[0].geometry.attributes.position.array[0]).toBeCloseTo(1)
   expect(document.getElementById('md-jobs-photoproduct-toggle').disabled).toBe(true)
-  expect(document.body.textContent).toContain('validated production')
+  expect(document.body.textContent).not.toContain('PEG occupancy')
   window.dispatchEvent(new CustomEvent('nadoc:peg-viz-availability', { detail: { job: { run_kind: 'production' } } }))
   expect(card.hidden).toBe(true)
   expect(scene.children[0].children).toHaveLength(0)

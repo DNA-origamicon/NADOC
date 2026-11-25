@@ -21,6 +21,37 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- Occupancy clouds archived (2026-11-22): removed from both engine cards, startup,
+  saved-scope handling and API registration. Historical algorithms and tests remain
+  archived; see [archive record](../docs/archived/occupancy_clouds.md).
+
+- 2-base maps (2026-11-22): the bottom of the NAMD Metrics card captures the current
+  or next single-base selection in two slots. Generate measures all selected-job
+  production frames with a percentage bar; Show offers four dropdown-selected
+  maps in a 2×2 grid (two position/two rotation defaults) from all 15 pairs of
+  x/y/z displacement and rotation-
+  vector components in base 1’s ring-centroid frame. Help lives in tooltips.
+  Inline Generate/Show/Export use the standard PNG/CSV export dialog; PNG follows
+  the current four maps, CSV includes all six measured coordinates.
+  Export-aware mapping and triclinic minimum-image geometry are read-only; complete
+  results are fingerprint-cached with the job. See [definitions](../docs/two_base_maps.md).
+
+- UV crosslinking analysis (2026-11-22): the NAMD card replaces the separate
+  photoproduct and designed-weld options with one native-position false-color map.
+  Intra/interstrand filters default on; T–T-only defaults off. All canonical DNA
+  pyrimidines share an explicitly exploratory geometry-window occupancy, not a
+  calibrated CT/TC/CC KIMMDY rate. Each base uses its strongest visible pair;
+  filtering does not renormalize the scale or reread trajectories. The flex scale
+  controls palette/range, preserved through representation changes. Job-owned
+  SQLite checkpoints commit each frame and its sufficient statistics atomically;
+  interrupted requests resume and complete caches avoid PSF/DCD parsing. Export
+  residue threading fixes the old terminal-extension offset. See
+  [the contract](../docs/uv_crosslinking_analysis.md). UV browser checks cover
+  native positions, filters, scales, cancellation and reload; unit checks cover
+  persistence, resume, PBC, chemistry, mapping and request ownership. Explanations
+  are hover tooltips on the UV option and Metrics header; the compact UV view
+  omits candidate counts and pair details.
+
 - Display MD measured slabs (2026-11-13): live WebSocket frames now reuse
   `md_base_frames` for ring centroids, plane normals, and named in-plane directions,
   including crossover inserts and O5'-anchored termini. `md_panel` preserves the
@@ -118,7 +149,7 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 - Simulation-job selection and visualization ownership are separate. Deselecting leaves the active
   visualization intact. In the NAMD tab, selecting a different job retargets Display MD to that
-  job's latest frame and recomputes an active flexibility map or occupancy cloud for that job; an
+  job's latest frame and recomputes an active flexibility map for that job; an
   active trajectory is instead turned Off because scrub/playback state must never cross job identity.
   Other queued/terminal-job inspection does not implicitly replace visualization run controls.
 - The display affine is computed once by the coordinate path and handed to every overlay; never

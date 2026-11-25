@@ -5162,7 +5162,7 @@ class Viewer {
     friend struct LiveViewerTest;
 #endif
   public:
-    void enableComponentGallery(bool buttons=false,bool cards=false,bool lists=false) { componentGallery_.active=true;componentGallery_.buttonMode=buttons;componentGallery_.cardMode=cards;componentGallery_.listMode=lists; }
+    void enableComponentGallery(bool buttons=false,bool cards=false,bool lists=false,bool files=false) { componentGallery_.fileMode=files;componentGallery_.active=true;componentGallery_.buttonMode=buttons;componentGallery_.cardMode=cards;componentGallery_.listMode=lists; }
     void loadControllerPath(const std::string& path) { controllerPaths_.load(path); }
 
     explicit Viewer(SceneData scene, std::string eventPath = {},
@@ -5800,6 +5800,7 @@ class Viewer {
         sidebarMenus_.initialize();
         routingPopup_.initialize();
         routingPopup_.menus[1].available=[this](const std::string& action){return routingPanel_.available(action);};
+        routingPopup_.menus[1].pressable=[this](const std::string& action){return routingPanel_.enabled(action);};
         routingPopup_.menus[1].isActive=[this](const std::string& action){return routingPanel_.active(action);};
         simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
         sidebarMenus_.menus[0].customSimulationDraw=[this]{return sidebarMenus_.menus[0].dynamicActive() && sidebarMenus_.menus[0].tab().key=="dynamics";};
@@ -6373,7 +6374,7 @@ class Viewer {
             if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
             activateAuthoringTool(action=="tool:twist"?1:2);return;
         }
-        if(action.starts_with("routing:")) {if(routingPanel_.activate(action))publishEventState();return;}
+        if(action.starts_with("routing:")) {if(routingPanel_.activate(action)){if(action.starts_with("routing:file-"))sidebarMenus_.menus[0].open=false;publishEventState();}return;}
         if(action.starts_with("history:")) {if(featureLogPanel_.activate(action)){publishEventState();if(action.ends_with(":edit"))desktopPanel_.show(hands_[hand].position,hands_[hand].orientation);}return;}
         if(action=="simulation:local:frame"){activateSidebarAction("recenter",hand);return;}
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
@@ -6382,6 +6383,7 @@ class Viewer {
             if(shareAvailable(action)) {shareAction_=action.substr(6);++shareSequence_;publishEventState();}
             return;
         }
+        if(action=="feedback:hover") {pulse(hand,.12F);return;}
         if(action=="feedback:activate") {pulse(hand,.22F);return;}
         if(action.starts_with("move:")) {
             if(toolShell_.executionPending() || moveAwaitRefresh_)return;
@@ -7099,6 +7101,10 @@ class Viewer {
     std::vector<nadoc_vr::RemotePanelTarget> remotePanelTargets() {
         std::vector<nadoc_vr::RemotePanelTarget> targets;
         auto add=[&](auto& placement,auto bounds,float width=.025F){targets.push_back({&placement,bounds,bounds,width});};
+        if(routingPopup_.anyOpen()) {
+            for(auto& m:routingPopup_.menus)if(m.open)add(m.placement,m.bounds(),.04F);
+            return targets;
+        }
         for(auto& m:sidebarMenus_.menus)if(m.open)add(m.placement,m.bounds(),.04F);
         if(latticeOpen_)add(latticePlacement_,kLatticePanelBounds);
         if(viewTools_.open)add(viewTools_.placement,VRViewTools::panelBounds());
@@ -9286,17 +9292,22 @@ class Viewer {
             updateControllerGuides();return;
         }
         frameAudit_.mark("poses_buttons");
-        auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,routingPopup_.anyOpen()?std::array<bool,2>{}:radialToolMenu_.filter(selectionWheel_.filter(triggerClicked_)),routingPopup_.anyOpen()?std::array<bool,2>{}:radialToolMenu_.filter(selectionWheel_.filter(triggerPressed_)),witnessObserverPosition_,glfwGetTime());
+        auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,radialToolMenu_.filter(selectionWheel_.filter(triggerClicked_)),radialToolMenu_.filter(selectionWheel_.filter(triggerPressed_)),witnessObserverPosition_,glfwGetTime());
+        auto popupInputBlocked=remoteBlocked;
         if(routingPopup_.anyOpen())remoteBlocked.fill(true);
         remoteBlocked[0]=remoteBlocked[0]||selectionWheel_.blocksInput();
         remoteBlocked[1]=remoteBlocked[1]||radialToolMenu_.blocksInput()||referenceModels_.wheel.blocksInput();
         viewTools_.syncPose();
         const auto gripContacts=menuGripContacts();
+        if(routingPopup_.anyOpen()) {
+            const auto grabbed=routingPopup_.grips(gripContacts,gripClicked_,[this](size_t hand,float strength){suppressManipulationUntilRelease_=true;pulse(hand,strength);});
+            for(size_t h=0;h<2;++h)popupInputBlocked[h]=popupInputBlocked[h]||grabbed[h];
+        }
         const bool latticeOwnsGrip=latticeOpen_ && (latticePlacement_.dragHand() ||
             latticePlacement_.resizeActive() || latticeGrip_.held[0] || latticeGrip_.held[1]);
         const bool desktopOwnsGrip=desktopPanel_.open && (desktopPanel_.placement.dragHand() || desktopPanel_.placement.resizeActive());
         const bool viewOwnsGrip=viewTools_.open && (viewTools_.placement.dragHand() || viewTools_.placement.resizeActive());
-        std::array<bool, 2> menuGripTargeted = (routingPopup_.anyOpen() || latticeOwnsGrip || viewOwnsGrip || desktopOwnsGrip) ? std::array<bool,2>{} : sidebarMenus_.grips(gripContacts, gripClicked_, [this](size_t hand,float strength) { suppressManipulationUntilRelease_=true; pulse(hand,strength); });
+        std::array<bool, 2> menuGripTargeted = (routingPopup_.anyOpen() || latticeOwnsGrip || viewOwnsGrip || desktopOwnsGrip) ? (routingPopup_.anyOpen()?std::array<bool,2>{true,true}:std::array<bool,2>{}) : sidebarMenus_.grips(gripContacts, gripClicked_, [this](size_t hand,float strength) { suppressManipulationUntilRelease_=true; pulse(hand,strength); });
         if(!latticeOwnsGrip && !viewOwnsGrip)desktopPanel_.grips(gripContacts,gripClicked_,menuGripTargeted,[this](size_t hand,float strength){suppressManipulationUntilRelease_=true;pulse(hand,strength);});
         if(!latticeOwnsGrip)viewTools_.grips(gripContacts,gripClicked_,menuGripTargeted,[this](size_t hand,float strength){suppressManipulationUntilRelease_=true;pulse(hand,strength);});
         const auto latticeGripTargeted=latticeGrip_.update(latticePlacement_,gripContacts,gripClicked_,
@@ -9397,13 +9408,13 @@ class Viewer {
         for(size_t h=0;h<2;++h)sidebarBlocked[h]=sidebarBlocked[h]||volumeTargeted[h];
         sidebarBlocked=processTrajectoryInput(sidebarBlocked,foregroundDistance);
         if(routingPopup_.anyOpen()) {
-            routingPopup_.input(hands_,triggerClicked_,triggerPressed_,{false,false},{1e9F,1e9F},glfwGetTime(),
-                [&](const std::string& action,size_t hand){activateSidebarAction(action,hand);});
+            routingPopup_.input(hands_,triggerClicked_,triggerPressed_,popupInputBlocked,{1e9F,1e9F},glfwGetTime(),
+                [&](const std::string& action,size_t hand){activateSidebarAction(action,hand);},triggerValues_);
             sidebarBlocked.fill(true);
         }
         simulationPanel_.input(hands_,triggerClicked_,triggerPressed_,sidebarBlocked,frameDeltaSeconds_,[this]{publishEventState();});
         auto sidebarTargeted = sidebarMenus_.input(hands_, triggerClicked_, triggerPressed_, sidebarBlocked, foregroundDistance,glfwGetTime(),
-            [&](const std::string& action, size_t hand) { activateSidebarAction(action,hand); });
+            [&](const std::string& action, size_t hand) { activateSidebarAction(action,hand); },triggerValues_);
         std::array<bool, 2> menuControlTargeted = sidebarTargeted;
         if(routingPopup_.anyOpen())menuControlTargeted.fill(true);
         for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h]||volumeTargeted[h];
@@ -9433,7 +9444,7 @@ class Viewer {
 
         featureLogPanel_.poll(eventPath_);
         pollSweepEdit();
-        routingPanel_.poll(eventPath_,routingPopup_.menus[1],sidebarMenus_.menus[1]);
+        routingPanel_.poll(eventPath_,routingPopup_.menus[1],sidebarMenus_.menus[routingPanel_.requested.starts_with("file-")?0:1]);
         if(auto packet=shareStream_.latest(eventPath_+".share")) {
           std::istringstream share(*packet);int active=0,perspective=0,busy=1,ack=0,failed=0;
             if(share>>active>>perspective>>busy>>ack>>failed) {shareActive_=active;sharePerspective_=perspective;shareBusy_=busy;shareAck_=ack;shareFailed_=failed; shareGuests_=shareWaiting_=0; share>>shareGuests_>>shareWaiting_; int canPerspective=1; if(share>>canPerspective)sharePerspectiveAvailable_=canPerspective; else sharePerspectiveAvailable_=true; int canStart=0; shareStartAvailable_=bool(share>>canStart) && canStart; int headset=0; shareHeadsetPerspective_=bool(share>>headset) && headset;}
@@ -10209,7 +10220,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || viewTools_.open || desktopPanel_.open) {
+        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || routingPopup_.anyOpen() || viewTools_.open || desktopPanel_.open) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection,int(index));
         }
@@ -10652,7 +10663,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || viewTools_.open || desktopPanel_.open) {
+        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || routingPopup_.anyOpen() || viewTools_.open || desktopPanel_.open) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection);
         }
@@ -11745,7 +11756,7 @@ int main(int argc, char** argv) {
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
     std::string controllerPath;
-    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false,gallerySimulations=false,galleryTabs=false;
+    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false,galleryFiles=false,gallerySimulations=false,galleryTabs=false,galleryKeyboards=false;
     std::string galleryOutput;
     std::string witnessCaptureDirectory;
     std::string witnessVisualExpectationDirectory;
@@ -11768,8 +11779,8 @@ int main(int argc, char** argv) {
         const std::string option(argv[index]);
         if(option=="--component-gallery") {
             const std::string component=argv[index+1];
-            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists" && component!="simulations" && component!="tabs") {std::cerr<<"Unknown gallery component\n";return 2;}
-            galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";gallerySimulations=component=="simulations";galleryTabs=component=="tabs";
+            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists" && component!="simulations" && component!="tabs" && component!="files" && component!="keyboards") {std::cerr<<"Unknown gallery component\n";return 2;}
+            galleryKeyboards=component=="keyboards";galleryFiles=component=="files";galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";gallerySimulations=component=="simulations";galleryTabs=component=="tabs";
             componentGallery=true;
         }
         else if(option=="--gallery-desktop") {
@@ -11942,10 +11953,10 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
-        if((gallerySimulations||galleryTabs) && !galleryDesktop)throw std::runtime_error("Menu studies are desktop-only; use --gallery-desktop on");
+        if((gallerySimulations||galleryTabs||galleryKeyboards) && !galleryDesktop)throw std::runtime_error("Menu studies are desktop-only; use --gallery-desktop on");
         if(galleryDesktop) {
             if(!componentGallery)throw std::runtime_error("Desktop gallery requires --component-gallery thumbwheel");
-            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists,gallerySimulations,galleryTabs);
+            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists,gallerySimulations,galleryTabs,galleryFiles,galleryKeyboards);
         }
         const auto processStarted = std::chrono::steady_clock::now();
         std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="
@@ -11973,7 +11984,7 @@ int main(int argc, char** argv) {
         viewer.configureSubmittedFrameMarker(submittedFrameMarker);
         if(savedPresentation)viewer.restorePresentationOnStartup(*savedPresentation);
         if(!loadingStatusPath.empty())viewer.beginStartup(argv[1],loadingStatusPath,startupOwners,startupKind);
-        if(componentGallery)viewer.enableComponentGallery(galleryButtons,galleryCards,galleryLists);
+        if(componentGallery)viewer.enableComponentGallery(galleryButtons,galleryCards,galleryLists,galleryFiles);
         viewer.loadControllerPath(controllerPath);
         const int result = viewer.run();
         const double milliseconds = std::chrono::duration<double, std::milli>(

@@ -1,0 +1,591 @@
+[
+  {
+    "case": "unbiased",
+    "coordinate": "mixed",
+    "temperature_c": 70.0,
+    "analysis_source_sha256": "b85b745026fdd2648f44b776249506b6ea2156e8e38a780528e1312139a5d953",
+    "wall_seconds": 198.63051490299404,
+    "replicas": [
+      {
+        "p_bound_box": 1.0,
+        "bulk_bound_fraction": 1.0,
+        "conditional_ci95": null,
+        "q_range": [
+          3,
+          8
+        ],
+        "cv_range": [
+          3.964633,
+          7.999931
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 173.53654885571305,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 3999.999999999999,
+        "approximate_correlated_weight_ess": 23.049899438335604,
+        "block_samples": 868,
+        "blocks": 4,
+        "half_run_probabilities": [
+          1.0,
+          1.0
+        ],
+        "bias_energy_max_error": 0.0,
+        "bias_energy_rounding_bound": 1e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 0,
+        "start": "bound"
+      },
+      {
+        "p_bound_box": 0.00025,
+        "bulk_bound_fraction": 0.00024993753123438373,
+        "conditional_ci95": null,
+        "q_range": [
+          0,
+          1
+        ],
+        "cv_range": [
+          0.100725,
+          1.086806
+        ],
+        "recorded_crossings": 2,
+        "statistical_inefficiency": 1.107905729035334,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 3999.999999999999,
+        "approximate_correlated_weight_ess": 3610.415484973477,
+        "block_samples": 6,
+        "blocks": 666,
+        "half_run_probabilities": [
+          0.0,
+          0.0005000000000000001
+        ],
+        "bias_energy_max_error": 0.0,
+        "bias_energy_rounding_bound": 1e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings"
+        ],
+        "replica": 1,
+        "start": "unbound"
+      },
+      {
+        "p_bound_box": 1.0,
+        "bulk_bound_fraction": 1.0,
+        "conditional_ci95": null,
+        "q_range": [
+          4,
+          8
+        ],
+        "cv_range": [
+          4.440255,
+          7.999908
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 164.65760863120215,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 3999.999999999999,
+        "approximate_correlated_weight_ess": 24.29283428352919,
+        "block_samples": 824,
+        "blocks": 4,
+        "half_run_probabilities": [
+          1.0,
+          1.0
+        ],
+        "bias_energy_max_error": 0.0,
+        "bias_energy_rounding_bound": 1e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 2,
+        "start": "bound"
+      },
+      {
+        "p_bound_box": 0.0,
+        "bulk_bound_fraction": 0.0,
+        "conditional_ci95": null,
+        "q_range": [
+          0,
+          0
+        ],
+        "cv_range": [
+          0.100725,
+          0.68937
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 1.283809562308025,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 3999.999999999999,
+        "approximate_correlated_weight_ess": 3115.7269095338593,
+        "block_samples": 7,
+        "blocks": 571,
+        "half_run_probabilities": [
+          0.0,
+          0.0
+        ],
+        "bias_energy_max_error": 0.0,
+        "bias_energy_rounding_bound": 1e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings"
+        ],
+        "replica": 3,
+        "start": "unbound"
+      }
+    ],
+    "p_bound_by_initial_state": {
+      "bound": 1.0,
+      "unbound": 0.000125
+    },
+    "initial_state_probability_gap": 0.999875,
+    "pooled_p_bound_box_provisional": 0.5000625,
+    "recorded_crossings": 2,
+    "tm_precision_certified": false,
+    "qualification": "Single-temperature diagnostics. No Tm precision certification; shared training bias is conditioned on, not independent campaign replication."
+  },
+  {
+    "case": "com",
+    "coordinate": "com",
+    "temperature_c": 70.0,
+    "analysis_source_sha256": "b85b745026fdd2648f44b776249506b6ea2156e8e38a780528e1312139a5d953",
+    "wall_seconds": 200.67803495400585,
+    "replicas": [
+      {
+        "p_bound_box": 0.9999999999999989,
+        "bulk_bound_fraction": 0.9999999666799911,
+        "conditional_ci95": null,
+        "q_range": [
+          3,
+          8
+        ],
+        "cv_range": [
+          0.0506,
+          0.9518
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 50.451352469996,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 1320.5177360467776,
+        "approximate_correlated_weight_ess": 26.174080007708508,
+        "block_samples": 253,
+        "blocks": 7,
+        "half_run_probabilities": [
+          0.9999999999999992,
+          0.9999999999999998
+        ],
+        "bias_energy_max_error": 0.0001444663704058824,
+        "bias_energy_rounding_bound": 0.00014798816972012873,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 0,
+        "start": "bound"
+      },
+      {
+        "p_bound_box": 0.0,
+        "bulk_bound_fraction": 0.0,
+        "conditional_ci95": null,
+        "q_range": [
+          0,
+          0
+        ],
+        "cv_range": [
+          1.2517,
+          6.5852
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 25.994950372969395,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 1295.1233251174144,
+        "approximate_correlated_weight_ess": 49.82211185385206,
+        "block_samples": 130,
+        "blocks": 15,
+        "half_run_probabilities": [
+          0.0,
+          0.0
+        ],
+        "bias_energy_max_error": 3.2306056828135254e-05,
+        "bias_energy_rounding_bound": 0.00014798816972012873,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 1,
+        "start": "unbound"
+      },
+      {
+        "p_bound_box": 0.97091453264775,
+        "bulk_bound_fraction": 0.8412512268179679,
+        "conditional_ci95": null,
+        "q_range": [
+          0,
+          8
+        ],
+        "cv_range": [
+          0.0149,
+          6.548
+        ],
+        "recorded_crossings": 1,
+        "statistical_inefficiency": 631.8135528714803,
+        "unbound_to_six_pairs_or_back_passages": 1,
+        "weight_ess": 463.3095468609598,
+        "approximate_correlated_weight_ess": 0.7333010581290956,
+        "block_samples": 3160,
+        "blocks": 0,
+        "half_run_probabilities": [
+          0.9999999999999996,
+          0.4895198419030581
+        ],
+        "bias_energy_max_error": 0.0001429325986417318,
+        "bias_energy_rounding_bound": 0.00014798816972012873,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 2,
+        "start": "bound"
+      },
+      {
+        "p_bound_box": 0.0,
+        "bulk_bound_fraction": 0.0,
+        "conditional_ci95": null,
+        "q_range": [
+          0,
+          0
+        ],
+        "cv_range": [
+          1.4107,
+          6.5816
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 19.863246565666962,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 1523.2883893106155,
+        "approximate_correlated_weight_ess": 76.68879225129162,
+        "block_samples": 100,
+        "blocks": 20,
+        "half_run_probabilities": [
+          0.0,
+          0.0
+        ],
+        "bias_energy_max_error": 3.202723788389705e-05,
+        "bias_energy_rounding_bound": 0.00014798816972012873,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings"
+        ],
+        "replica": 3,
+        "start": "unbound"
+      }
+    ],
+    "p_bound_by_initial_state": {
+      "bound": 0.9930975854071304,
+      "unbound": 0.0
+    },
+    "initial_state_probability_gap": 0.9930975854071304,
+    "pooled_p_bound_box_provisional": 0.950786459652657,
+    "recorded_crossings": 1,
+    "tm_precision_certified": false,
+    "qualification": "Single-temperature diagnostics. No Tm precision certification; shared training bias is conditioned on, not independent campaign replication."
+  },
+  {
+    "case": "hb_cutoff",
+    "coordinate": "hb_cutoff",
+    "temperature_c": 70.0,
+    "analysis_source_sha256": "b85b745026fdd2648f44b776249506b6ea2156e8e38a780528e1312139a5d953",
+    "wall_seconds": 241.68976602400653,
+    "replicas": [
+      {
+        "p_bound_box": 1.0,
+        "bulk_bound_fraction": 1.0,
+        "conditional_ci95": null,
+        "q_range": [
+          1,
+          8
+        ],
+        "cv_range": [
+          1.116522,
+          7.999743
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 348.76438265110517,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 905.191852679812,
+        "approximate_correlated_weight_ess": 2.5954251572338523,
+        "block_samples": 1744,
+        "blocks": 1,
+        "half_run_probabilities": [
+          0.9999999999999988,
+          0.9999999999999989
+        ],
+        "bias_energy_max_error": 7.953357262779903e-07,
+        "bias_energy_rounding_bound": 3.350861847490879e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 0,
+        "start": "bound"
+      },
+      {
+        "p_bound_box": 0.0,
+        "bulk_bound_fraction": 0.0,
+        "conditional_ci95": null,
+        "q_range": [
+          0,
+          0
+        ],
+        "cv_range": [
+          0.14389,
+          0.14389
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 1.0,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 2000.0000000000064,
+        "approximate_correlated_weight_ess": 2000.0000000000064,
+        "block_samples": 5,
+        "blocks": 400,
+        "half_run_probabilities": [
+          0.0,
+          0.0
+        ],
+        "bias_energy_max_error": 1.7759494896907313e-07,
+        "bias_energy_rounding_bound": 3.350861847490879e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings"
+        ],
+        "replica": 1,
+        "start": "unbound"
+      },
+      {
+        "p_bound_box": 1.0,
+        "bulk_bound_fraction": 1.0,
+        "conditional_ci95": null,
+        "q_range": [
+          3,
+          8
+        ],
+        "cv_range": [
+          3.089675,
+          7.999841
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 59.45094181120723,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 1573.0149357088337,
+        "approximate_correlated_weight_ess": 26.45904148506359,
+        "block_samples": 298,
+        "blocks": 6,
+        "half_run_probabilities": [
+          0.9999999999999998,
+          0.9999999999999991
+        ],
+        "bias_energy_max_error": 8.553258237231631e-07,
+        "bias_energy_rounding_bound": 3.350861847490879e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 2,
+        "start": "bound"
+      },
+      {
+        "p_bound_box": 1.0898287391968822e-07,
+        "bulk_bound_fraction": 1.0898286204242401e-07,
+        "conditional_ci95": null,
+        "q_range": [
+          0,
+          3
+        ],
+        "cv_range": [
+          0.14389,
+          3.089896
+        ],
+        "recorded_crossings": 1,
+        "statistical_inefficiency": 441.53228052363585,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 1565.0003411163596,
+        "approximate_correlated_weight_ess": 3.544475478124374,
+        "block_samples": 2208,
+        "blocks": 0,
+        "half_run_probabilities": [
+          0.0,
+          3.018728580271512e-07
+        ],
+        "bias_energy_max_error": 8.365200199200729e-07,
+        "bias_energy_rounding_bound": 3.350861847490879e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 3,
+        "start": "unbound"
+      }
+    ],
+    "p_bound_by_initial_state": {
+      "bound": 1.0,
+      "unbound": 4.784241461776145e-08
+    },
+    "initial_state_probability_gap": 0.9999999521575854,
+    "pooled_p_bound_box_provisional": 4.674610749712696e-06,
+    "recorded_crossings": 1,
+    "tm_precision_certified": false,
+    "qualification": "Single-temperature diagnostics. No Tm precision certification; shared training bias is conditioned on, not independent campaign replication."
+  },
+  {
+    "case": "mixed",
+    "coordinate": "mixed",
+    "temperature_c": 70.0,
+    "analysis_source_sha256": "b85b745026fdd2648f44b776249506b6ea2156e8e38a780528e1312139a5d953",
+    "wall_seconds": 245.6685929610394,
+    "replicas": [
+      {
+        "p_bound_box": 1.0,
+        "bulk_bound_fraction": 1.0,
+        "conditional_ci95": null,
+        "q_range": [
+          3,
+          8
+        ],
+        "cv_range": [
+          3.521008,
+          7.999909
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 211.80933456216619,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 1633.8915393416223,
+        "approximate_correlated_weight_ess": 7.713973242581875,
+        "block_samples": 1060,
+        "blocks": 1,
+        "half_run_probabilities": [
+          0.9999999999999997,
+          1.0
+        ],
+        "bias_energy_max_error": 8.577353118877085e-07,
+        "bias_energy_rounding_bound": 2.268045117435503e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 0,
+        "start": "bound"
+      },
+      {
+        "p_bound_box": 0.003516795101164898,
+        "bulk_bound_fraction": 0.003504513636701765,
+        "conditional_ci95": null,
+        "q_range": [
+          0,
+          5
+        ],
+        "cv_range": [
+          0.100725,
+          5.048201
+        ],
+        "recorded_crossings": 43,
+        "statistical_inefficiency": 251.35429359887843,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 716.2961259470006,
+        "approximate_correlated_weight_ess": 2.849746927697585,
+        "block_samples": 1257,
+        "blocks": 1,
+        "half_run_probabilities": [
+          0.0004438502065430978,
+          0.021644401019385223
+        ],
+        "bias_energy_max_error": 1.2753573320756217e-06,
+        "bias_energy_rounding_bound": 2.268045117435503e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 1,
+        "start": "unbound"
+      },
+      {
+        "p_bound_box": 0.9999999999999994,
+        "bulk_bound_fraction": 0.9999999764391957,
+        "conditional_ci95": null,
+        "q_range": [
+          3,
+          8
+        ],
+        "cv_range": [
+          4.184881,
+          7.999937
+        ],
+        "recorded_crossings": 0,
+        "statistical_inefficiency": 127.89847225624328,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 1680.099047327036,
+        "approximate_correlated_weight_ess": 13.136193245224812,
+        "block_samples": 640,
+        "blocks": 3,
+        "half_run_probabilities": [
+          1.0,
+          0.9999999999999994
+        ],
+        "bias_energy_max_error": 8.519324830036368e-07,
+        "bias_energy_rounding_bound": 2.268045117435503e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 20 recorded binding/unbinding crossings",
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 2,
+        "start": "bound"
+      },
+      {
+        "p_bound_box": 0.008317234308479776,
+        "bulk_bound_fraction": 0.008249189844274188,
+        "conditional_ci95": null,
+        "q_range": [
+          0,
+          5
+        ],
+        "cv_range": [
+          0.100727,
+          5.330213
+        ],
+        "recorded_crossings": 41,
+        "statistical_inefficiency": 140.2342323451971,
+        "unbound_to_six_pairs_or_back_passages": 0,
+        "weight_ess": 319.3114111579832,
+        "approximate_correlated_weight_ess": 2.2769861952962676,
+        "block_samples": 702,
+        "blocks": 2,
+        "half_run_probabilities": [
+          0.003375486630744716,
+          0.04688091818801182
+        ],
+        "bias_energy_max_error": 1.2772972346475342e-06,
+        "bias_energy_rounding_bound": 2.268045117435503e-06,
+        "reasons_precision_not_certified": [
+          "Fewer than 10 correlation-length blocks",
+          "Low importance-weighted effective sample size"
+        ],
+        "replica": 3,
+        "start": "unbound"
+      }
+    ],
+    "p_bound_by_initial_state": {
+      "bound": 1.0,
+      "unbound": 0.0049900475713126665
+    },
+    "initial_state_probability_gap": 0.9950099524286873,
+    "pooled_p_bound_box_provisional": 0.3766421862594159,
+    "recorded_crossings": 84,
+    "tm_precision_certified": false,
+    "qualification": "Single-temperature diagnostics. No Tm precision certification; shared training bias is conditioned on, not independent campaign replication."
+  }
+]

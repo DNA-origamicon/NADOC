@@ -241,8 +241,9 @@ Outputs are `published_for_review`, **never automatically simulation-ready**.
 Feature replay proves the recorded construction, not agreement with the publication,
 sequence chemistry, folded structure, or atomistic validity. Resolve scientific
 mapping/placement gaps before simulation preparation. Synchronization remains the
-normal Shared Designs Git workflow; that repository still needs a configured
-remote before another computer can fetch these runs.
+main NADOC Git workflow: commit audited reconstructions under
+`workspace/Shared Designs/` and push; other computers receive them with a normal
+pull. No separate design repository is required.
 
 Browser caDNAno/scadnano imports from the import menu, Library, and Recent Files expose the
 same opt-in **Relax after import** checkbox. It defaults off. The upload API accepts `relax_origami: true`; its

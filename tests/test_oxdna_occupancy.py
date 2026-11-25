@@ -410,7 +410,17 @@ def test_sampling_indices_skip_relaxation_and_the_seed_frame():
     assert _sampling_indices(seeded) == [1, 2, 3, 4]
 
 
-# ── Route layer ───────────────────────────────────────────────────────────────────
+# ── Archived handler compatibility (never registered on the production app) ──────
+def _archived_test_app():
+    from fastapi import FastAPI
+    from backend.api import routes_oxdna as ro
+
+    app = FastAPI()
+    app.get("/api/oxdna/jobs/{job_id}/occupancy")(ro.get_oxdna_occupancy)
+    app.get("/api/oxdna/jobs/{job_id}/occupancy-progress")(ro.get_oxdna_occupancy_progress)
+    return app
+
+
 class _FakeStage:
     def __init__(self, kind="production", status="done"):
         self.kind = kind
@@ -434,7 +444,7 @@ def occ_client(monkeypatch):
 
     import backend.api.routes_oxdna as ro
     import backend.core.oxdna_occupancy as occ
-    from backend.api.main import app
+    app = _archived_test_app()
 
     calls = []
 
@@ -508,7 +518,7 @@ def test_route_not_ready_without_a_sampling_stage(monkeypatch):
     from fastapi.testclient import TestClient
 
     import backend.api.routes_oxdna as ro
-    from backend.api.main import app
+    app = _archived_test_app()
 
     monkeypatch.setattr(ro, "_load_job", lambda job_id: _FakeJob())
     monkeypatch.setattr(ro, "_composite_inputs", lambda job, scope: (None, [], None))
@@ -523,7 +533,7 @@ def test_route_not_ready_without_a_sampling_stage(monkeypatch):
 def test_occupancy_progress_is_inactive_when_nothing_is_building():
     from fastapi.testclient import TestClient
 
-    from backend.api.main import app
+    app = _archived_test_app()
 
     assert TestClient(app).get("/api/oxdna/jobs/nobody/occupancy-progress").json() == {
         "active": False

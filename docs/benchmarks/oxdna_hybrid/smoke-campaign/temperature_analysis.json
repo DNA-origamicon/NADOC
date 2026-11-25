@@ -1,0 +1,45 @@
+{
+  "temperatures_c": [
+    60.0,
+    70.0,
+    80.0
+  ],
+  "replicas": [
+    {
+      "replica": 0,
+      "start": "bound",
+      "tm_c_provisional": null,
+      "bulk_bound_fraction": [
+        1.0,
+        1.0,
+        0.999999985098839
+      ],
+      "weight_ess": [
+        3.970812293500108,
+        3.999734385834348,
+        3.9587363200073473
+      ],
+      "frames": 4
+    },
+    {
+      "replica": 1,
+      "start": "unbound",
+      "tm_c_provisional": null,
+      "bulk_bound_fraction": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "weight_ess": [
+        3.9414338065856107,
+        3.9999999931111203,
+        3.9474091298509983
+      ],
+      "frames": 4
+    }
+  ],
+  "between_replica_ci95_provisional": null,
+  "analysis_seconds": 0.08281722385436296,
+  "tm_precision_certified": false,
+  "qualification": "Exact temperature-dependent energies; shared learned bias. Replica spread is descriptive, not a validated total uncertainty or repeated-look stopping criterion."
+}

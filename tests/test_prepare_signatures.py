@@ -50,6 +50,10 @@ def _prep_call_kwargs() -> set[str]:
             continue
         fn = node.func
         name = getattr(fn, "id", None) or getattr(fn, "attr", None)
+        if name == "prepare_for_target":
+            from backend.core.md_preparation import prepare_for_target
+            owned = set(inspect.signature(prepare_for_target).parameters)
+            return {kw.arg for kw in node.keywords if kw.arg is not None} - owned
         if name != "run_in_threadpool":
             continue
         first = node.args[0] if node.args else None

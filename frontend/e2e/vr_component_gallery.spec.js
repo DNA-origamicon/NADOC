@@ -27,7 +27,7 @@ test(`Debug ${component} gallery launches a real desktop without a headset`,asyn
   await page.goto('/?doc=e2e-component-gallery')
   await page.locator('#menu-item-debug > button').click()
   await page.locator('#menu-debug-vr-gallery').hover()
-  const group=page.locator('#menu-debug-vr-gallery [data-category=components]')
+  const group=page.locator('#menu-debug-vr-gallery')
   await group.hover()
   await expect(group.locator(`[data-start=${component}-gallery][data-mode=demo]`)).toHaveText(title+' VR demo')
   await expect(group.locator(`[data-start=${component}-gallery][data-mode=validate]`)).toBeVisible()

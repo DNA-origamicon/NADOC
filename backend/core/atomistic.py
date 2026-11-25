@@ -1778,7 +1778,7 @@ def _scaffold_holliday_bridge_bows(design: Design, position_for) -> dict:
     return bows
 
 
-def _apply_reciprocal_phosphate_clearance(model: AtomisticModel) -> dict:
+def _apply_reciprocal_phosphate_clearance(model: AtomisticModel, *, allowed_atom_serials=None, clash_finder=None) -> dict:
     """Apply the owner-authorized v7 clearance to colliding reciprocal phosphates.
 
     Production v6 clears the rigid 2xT insert residues themselves. The remaining
@@ -1812,7 +1812,7 @@ def _apply_reciprocal_phosphate_clearance(model: AtomisticModel) -> dict:
 
     def external_clashes() -> list[dict]:
         positions = _np.asarray([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
-        raw = _find_clashes(
+        raw = (clash_finder or _find_clashes)(
             positions,
             _np.isfinite(positions).all(axis=1),
             model.bonds,
@@ -1847,6 +1847,16 @@ def _apply_reciprocal_phosphate_clearance(model: AtomisticModel) -> dict:
         changed = False
         for hit in contacts:
             serial_a, serial_b = hit["serials"]
+            if allowed_atom_serials is not None:
+                touched = set()
+                for serial in (serial_a, serial_b):
+                    atom = model.atoms[serial]
+                    residue = by_residue[(atom.chain_id, atom.seq_num)]
+                    touched.update(residue[name] for name in ('P', 'OP1', 'OP2', "O5'") if name in residue)
+                    touched.update(other for other in bonded_to.get(residue.get('P'), ())
+                                   if model.atoms[other].name == "O3'")
+                if not touched <= allowed_atom_serials:
+                    continue
             point_a = _atom_pos(model.atoms, serial_a)
             point_b = _atom_pos(model.atoms, serial_b)
             separation = point_a - point_b
@@ -1909,6 +1919,7 @@ def build_atomistic_model(
     _extra_base_placement_sink: "list[dict] | None" = None,
     _two_base_default: bool = True,
     _two_base_phosphate_clearance: bool = True,
+    _corner_seam_placement: bool = True,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -1996,6 +2007,16 @@ def build_atomistic_model(
     ).model_copy(update={"nucleotide_transforms": residue_poses})
 
     helix_map = {h.id: effective_helix_for_geometry(h, design) for h in design.helices}
+
+    from backend.core.corner_seam_placement import corner_insert_links
+    corner_links = corner_insert_links(
+        design, exclude_helix_ids=exclude_helix_ids,
+    ) if (_corner_seam_placement and apply_design_geometry
+        and all(value is None for value in (nuc_pos_override, nuc_frame_override,
+            axis_override, frame_override, xb_pos_override, ext_pos_override))) else ()
+    corner_ids = {link.id for link in corner_links}
+    corner_destinations = {(link.five_prime_helix_id, link.five_prime_bp,
+                           link.five_prime_direction.value) for link in corner_links}
 
     seq_map = _build_sequence_map(design)
 
@@ -2608,7 +2629,9 @@ def build_atomistic_model(
             update={"deformations": [], "cluster_transforms": [], "nucleotide_transforms": []}
         )
         measured_geometry = _geometry_for_design(
-            placement_design, measured_positioning=True, junction_balance=True
+            placement_design, measured_positioning=True, junction_balance=True,
+            extension_slabs=False,  # Atomic construction consumes only host endpoints.
+            _corner_seams=False,
         )
         measured_by_key = {
             (g["helix_id"], g["bp_index"], Direction(g["direction"])): g
@@ -2646,13 +2669,14 @@ def build_atomistic_model(
         fast_bridges=fast_bridges,
         placement_sink=_extra_base_placement_sink,
         apply_two_base_default=_two_base_default,
+        exclude_connection_ids=corner_ids,
     )
 
     # Linker closure above re-seats P/O5′ on the downstream duplex residue.
     # Apply its 45°-CW γ torsion now, after closure, so the requested final
     # angle survives in both the fast display and exact MD/PDB build paths.
     _extra_base_gamma_rad = -_EXTRA_BASE_3PRIME_GAMMA_CW_DEG * _math.pi / 180.0
-    for _dst_key in extra_base_xover_dst | extra_base_forced_dst:
+    for _dst_key in (extra_base_xover_dst | extra_base_forced_dst) - corner_destinations:
         _dst_sugar = bp_to_sugar_serials.get(_dst_key)
         if _dst_sugar is not None:
             _rotate_built_gamma_branch(atoms, _dst_sugar, _extra_base_gamma_rad)
@@ -2715,7 +2739,7 @@ def build_atomistic_model(
         apply_deformations_to_atoms(atoms, design)
         if (
             _two_base_phosphate_clearance
-            and any(len(junction.extra_bases or ()) == 2
+            and any(len(junction.extra_bases or ()) == 2 and junction.id not in corner_ids
                     for junction in (*design.crossovers, *design.forced_ligations))
             and nuc_pos_override is None
             and nuc_frame_override is None
@@ -2727,6 +2751,9 @@ def build_atomistic_model(
             _apply_reciprocal_phosphate_clearance(
                 AtomisticModel(atoms=atoms, bonds=bonds)
             )
+        if corner_links:
+            from backend.core.corner_seam_placement import place_corner_seams
+            place_corner_seams(design, AtomisticModel(atoms=atoms, bonds=bonds), corner_links)
         # Saved residue poses are part of the authored design geometry too. A relaxed
         # CG frame already contains the final physical pose, so applying these deltas
         # after a simulation override would move the rendered/seeded residue away from
@@ -3806,6 +3833,7 @@ def _build_extra_base_atoms(
     fast_bridges: bool = False,
     placement_sink: "list[dict] | None" = None,
     apply_two_base_default: bool = True,
+    exclude_connection_ids: "set[str] | None" = None,
 ) -> int:
     """
     Place atomistic atoms for all extra crossover bases in the design.
@@ -3863,6 +3891,8 @@ def _build_extra_base_atoms(
 
     # Minimisation jobs collected here; run in parallel after all atoms are placed.
     for xo in xovers_with_extra:
+        if exclude_connection_ids and xo.id in exclude_connection_ids:
+            continue
         ha, hb = xo.half_a, xo.half_b
 
         # Skip if either helix is excluded

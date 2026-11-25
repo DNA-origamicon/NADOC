@@ -237,3 +237,130 @@ Master integration retains October 15–22 rendering, clipboard and upload-pacin
 evidence in [the archive](project_native_vr_archive.md). The October 22 standard-24HB
 recheck supersedes earlier baseline performance claims; physical comfort and strict
 no-drop editing remain unqualified. Rediscover runtime identities before use.
+
+## File sidebar (2026-11-23)
+
+Left File now connects New Part, Open (workspace parts), Save As and Close Session
+to browser file operations; New Assembly remains disabled. A versioned routing
+bridge carries the separate large filename keyboard and enlarged workspace list.
+New/Open save before switching and refresh the native scene; Close exits VR.
+Offline native key-hit validation passes all four profiles (variable_fast
+2099/2100 at 0.6 m with the standard QWERTY layout). App keyboard/picker cancellation flow and focused frontend
+contracts pass. Physical comfort/haptics and creation/save/load checks remain MV-71;
+do not interpret synthetic selection as measured human accuracy.
+See `docs/vr_sidebar_menus.md` and Debug → VR Tours & Tests → Left sidebar →
+File · filename keyboard accuracy.
+
+The File demo now uses `file_tour.py` / `file_probe.py` and real native/browser
+transport. It enlarges and frames the menu through controller placement/resize,
+shows the separate QWERTY keyboard, types/edits `demo2`, cancels before creation,
+navigates the Open folder list and closes its owned session. Native render gates
+now include standalone routing popups (previously the closed sidebar hid them).
+Debug entry: File menu · keyboard and cancellation. Offline QWERTY evidence:
+`.development-artifacts/vr-file-qwerty/offline/report.json`; live captures and
+review page: `.development-artifacts/vr-file-qwerty/live/index.html`.
+
+## File component gallery (2026-11-23)
+
+`file_gallery.hpp` adds six full-size selectable File-menu studies: essential,
+folder tiles, compact list, detail table, expandable folder tree and split
+inspector. The component gallery's `files` mode supports both VR and desktop;
+Debug → VR Component Gallery → File menus · six interactive styles exposes it.
+Sample data only, with selection/navigation and disabled New Assembly; no file
+writes or changes to the production File-menu style. `file_gallery_probe.py`
+validates all six under the four existing motion presets. Evidence destination:
+`.development-artifacts/vr-file-gallery/`. Frontend main.js delta for this task: 0.
+
+Gallery discoverability correction: `initVrTours` flattens the filtered Component
+Gallery into direct launch entries and refreshes on pointer re-entry. General
+VR Tours retains category flyouts. Live browser checks (1440×900, 1280×720) verify
+File VR/desktop/validation entries; five focused UI tests pass. The earlier
+instructions omitted the old Component evaluations submenu. main.js delta: 0.
+
+## Approved production File table (2026-11-23)
+
+User chose gallery option 4 for VR only. `file_table.hpp` lays out fixed file
+commands beside a six-row Name/Type/Modified/Size table. Selecting `tab:file`
+dispatches the existing browser Open path; New Part / Save As retain the QWERTY
+popup. `vr_files.js` can cancel/settle the current picker before switching file
+commands and publishes real metadata in routing detail; desktop CSS/behavior
+are unchanged. `file_probe.py` now drives the table's routed command IDs.
+Desktop component-gallery processes no longer reserve the headset in
+`routes_vr_tours._viewer_active`; an already open desktop gallery is preserved.
+Task-specific frontend main.js delta: 0. Evidence: `.development-artifacts/vr-file-table/`.
+
+Exact option-4 correction: the production table had still used generic sidebar
+colors/spacing. `file_table_style.hpp` now supplies both gallery and production
+with the original rounded solid meshes, slate palette, depth layers, typography
+and literal bounds; production `file_table_draw.hpp` skips generic texture drawing.
+VR scale matches the gallery at 1.5; selectors/demo buttons are omitted. Frozen
+original mesh checks cover idle/hover/selected/disabled; shared sample pixels
+match exactly (509,600 pixels, zero differences). Review artifact:
+`.development-artifacts/vr-file-exact/comparison.html`. main.js delta: 0.
+
+## Reusable text keyboard (2026-11-24)
+
+`vr_text_keyboard.js` supplies common DOM editing and key descriptors to filename
+and custom scaffold-sequence hosts; `text_keyboard.hpp` supplies shared QWERTY
+geometry. Native popup selection now recognizes key IDs instead of a filename
+window title. Existing scale/key sizes and hover haptics are retained, with one
+symbols-page key added (43 total). Numeric pads remain separate.
+`keyboard_gallery.hpp` provides four desktop-only styles through the ordinary
+Component Gallery launcher; native and API guards reject VR launches. Integration
+contract: `docs/vr_text_keyboard.md`. main.js delta: 0.
+
+Keyboard validation: 26 focused frontend tests, 55 tour/API tests, native keyboard/
+routing/gallery checks and 861 sidebar controls pass. Four styles pass actual
+desktop typing/disabled-key checks and eight front/angled screen captures. Final
+four-profile VR run passes 33 review stages including symbols and cancellation;
+147 reaches include 29 retries. Seeded uncorrected ray tests exceed 99.8% for all
+profiles (2,150 samples each). Review `.development-artifacts/vr-keyboard-studies/index.html`.
+Temporary windows, workspace and credentials were cleaned up; no structures saved.
+
+## Production slate keyboard and trigger travel (2026-11-24)
+
+Shared text keyboards now use gallery option 2 via `keyboard_slate.hpp` and
+`text_keyboard_draw.hpp`; all host action buttons receive the same caps.
+Real analog trigger input controls 6 mm local depression (7.2 mm at scale1.2),
+with existing .88/.60 activation/rearm thresholds. Resting hit planes stay fixed;
+semantic `pressable` is separate from acknowledgement-gated `available` so caps
+stay depressed while browser input settles. Disabled/tracking-lost/blocked/closed
+states reset pressure; two hands use max pressure. main.js delta: 0.
+
+Native mesh parity, continuous-input tests and 15 actual production captures pass.
+Offline accuracy: steady profiles100%, variable fast99.953%, deliberate99.814%.
+Live first-profile pressure, hold/release and partial Cancel passed. Full live
+workflow remains unvalidated: retained runs exposed corrected readout sampling
+and symbol-ack waits, a timing-limit failure, and final SteamVR HmdNotFound.
+Evidence and detailed attempt record: `docs/vr_text_keyboard.md` and
+`.development-artifacts/vr-keyboard-slate/index.html`. MV-71 remains open.
+
+## Keyboard border and extension root display (2026-11-24)
+
+Keyboard default scale is now0.84 (70% of 1.2). Solid renderer draws the shared
+continuous grip rails/corners and border gesture hint. Routing popups participate
+in existing trigger remote controls and physical grip handlers; border owners
+block key input. Routing refresh applies default scale only when entering/opening
+a keyboard, preserving user resize through typing. Native tests cover move,
+double-trigger resize, two-grip resize, release and refresh persistence.
+
+Construct4_Ext[1-1] copy and _2xT each had four root connectors missing from the
+native Full exporter: same-helix-only backbone rendering skipped synthetic
+extension IDs. `vr_extension_roots.py` recognizes only recorded strand terminal
+attachments at extension index 0. Extension order now follows 5′/3′ attachment,
+independent of helix direction, matching desktop. Both unchanged saved designs
+have all four connectors in actual native before/after renders. 545 shared
+primitives unchanged per model; two internal connector directions corrected.
+No molecular coordinates or saved files changed. main.js delta 0.
+Evidence: `.development-artifacts/vr-keyboard-border/index.html`.
+
+Final validation: `live-05` passed all four motion profiles with 57 stereo and
+actual desktop review stages and four cancelled New Part attempts. Pressure,
+trigger move/resize, physical grip movement, and size persistence during typing
+passed for every profile; native checks additionally cover two-grip resizing.
+Border acquisition uses the explicitly reached 0.6 m diagnostic approach above.
+This is completed workflow validation with correction/retry reaches, not measured
+human first-attempt accuracy. The owned viewer closed normally; temporary workspace
+and credentials were removed, with no saved structures. Through-lens comfort
+remains MV-71. Ten new export/connectivity checks and three existing export
+regressions pass; actual native renders verify all four roots in both models.

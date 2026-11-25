@@ -371,8 +371,6 @@ validation; see [scope and documentation](README.md#feature-overview).
   - RMSF flexibility maps
   - Deviation maps
   - Strain maps
-  - Conformational occupancy clustering
-  - Selection-scoped clustering
   - Metrics graphs
   - Metric export
 - **Simulation Health**

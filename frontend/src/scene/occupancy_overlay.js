@@ -1,3 +1,4 @@
+// ARCHIVED 2026-11-22: occupancy clouds are retired from NAMD/oxDNA. Not initialized by the app.
 /**
  * Occupancy clouds — superposed ghost copies of an oxDNA job's top-N configurations.
  *
@@ -272,7 +273,7 @@ export function initOccupancyOverlay({
       updateExtraBaseInstances(xo.beadsMesh, xo.slabsMesh, ad.beadStartIdx, ad.beadCount,
                                a, ctrlPt, b, ad.avgAx,
                                ad.simReversed, ad.localFrameReversed,
-                               ad.savedTransforms, ad.sequence)
+                               ad.savedTransforms, ad.sequence, ad.productGeometry, ad.cornerGeometry)
     }
     xo.beadsMesh.instanceMatrix.needsUpdate = true
     xo.slabsMesh.instanceMatrix.needsUpdate = true

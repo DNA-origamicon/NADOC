@@ -1,8 +1,8 @@
 /** Only the published job's display label crosses the sharing boundary. */
 const MODES = {
   display: 'Simulation structure', flex: 'Flexibility map (RMSF)', deviation: 'Deviation map',
-  strain: 'Strain map', occupancy: 'Occupancy clouds', traj: 'Trajectory',
-  'traj-full': 'Full trajectory', photoproduct: 'Photoproduct propensity',
+  strain: 'Strain map', traj: 'Trajectory',
+  'traj-full': 'Full trajectory', photoproduct: 'UV crosslinking analysis',
   'ion-paths': 'Nanopore ion paths', 'ion-vector-field': 'Ion vector field',
 }
 export function captureSharedVisualization(doc, job) {
@@ -19,6 +19,6 @@ export function validateSharedVisualization(value) {
   if (typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !['engine', 'jobId', 'jobName', 'runDate', 'mode'].includes(k)) ||
       !['oxdna', 'namd', 'lammps'].includes(value.engine) ||
       !['jobId', 'jobName', 'mode'].every(k => typeof value[k] === 'string' && value[k].length > 0 && value[k].length <= 200) ||
-      !Object.values(MODES).includes(value.mode) ||
+      ![...Object.values(MODES), 'Photoproduct propensity'].includes(value.mode) ||
       (value.runDate !== null && (typeof value.runDate !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value.runDate) || !Number.isFinite(Date.parse(value.runDate))))) throw new Error('Invalid shared visualization label')
 }

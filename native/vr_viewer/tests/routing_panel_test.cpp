@@ -25,5 +25,11 @@ int main() {
     write(3,2,"");assert(poll());assert(!popup.open);assert(parent.open && parent.offset()==4);
     {std::ofstream f(path+".routing");f<<"NADOC_ROUTING_1 4 2 500 0 \"bad\"\n";}
     assert(!poll());assert(panel.version==3);
+    {std::ofstream f(path+".routing");f<<"NADOC_ROUTING_1 4 2 0 3 \"Any text field\"\n\"text-key-a\" \"a\" \"\" 1 0\n\"done\" \"Done\" \"\" 1 0\n\"info-value\" \"Example\" \"\" 0 0\n";}
+    assert(poll());assert(popup.tab().key=="text-keyboard");assert(popup.placement.scale()==nadoc_vr::kTextKeyboardScale);
+    popup.placement.setScale(.63F);
+    {std::ifstream in(path+".routing");std::string data((std::istreambuf_iterator<char>(in)),{});data.replace(data.find(" 4 2 "),5," 5 2 ");std::ofstream out(path+".routing");out<<data;}
+    assert(poll());assert(popup.placement.scale()==.63F);
+    const auto keys=popup.controls();assert(std::any_of(keys.begin(),keys.end(),[](const auto& c){return c.id=="routing:text-key-a"&&c.bounds.maximum.x-c.bounds.minimum.x>.13F;}));
     std::filesystem::remove(path+".routing");
 }

@@ -16,8 +16,8 @@ const document = dom.window.document
 // Execute the desktop's section relocation and representation construction, with
 // only its stack/observer shell stubbed (no cloned views or persisted UI state).
 const source = fs.readFileSync(path.join(root, 'frontend/src/ui/right_sidebar_tabs.js'), 'utf8')
-const init = new Function('MutationObserver', 'initSidebarStack', source.replace(/^import .*$/gm, '').replace('export function', 'function') + '\nreturn initRightSidebarTabs;')
-init(dom.window.MutationObserver, () => ({ dispose() {} }))({ document, storage: null })
+const init = new Function('MutationObserver', 'initSidebarStack', 'initVisualizationCards', source.replace(/^import .*$/gm, '').replace('export function', 'function') + '\nreturn initRightSidebarTabs;')
+init(dom.window.MutationObserver, () => ({ dispose() {} }), () => () => {})({ document, storage: null })
 // Use the desktop's canonical engine-card order as well as its right-tab relocation.
 globalThis.document = document
 for (const id of ['oxdna-jobs-body','mrdna-jobs-body','cando-jobs-body','snupi-jobs-body','blade-jobs-body','md-jobs-panel-body']) standardizeSimulationCardOrder(document.getElementById(id))
@@ -36,7 +36,7 @@ const supported = {
   'repr-color-cluster': 'color:2', 'repr-color-cpk': 'color:3',
   'reset-btn': 'recenter',
 }
-const tabs = []
+let tabs = []
 for (const side of ['left', 'right']) {
   for (const button of document.querySelectorAll(`#${side}-tab-strip [data-tab]`)) {
     const key = button.dataset.tab
@@ -152,6 +152,10 @@ const routingActions = [
 ]
 for (const [id,label] of routingActions) tabs.find(tab=>tab.key==='tools').rows.push({id,label,action:`routing:${id}`,section:'Routing and Sequencing',kind:'button',options:[],source:'frontend/index.html',reason:''})
 
+tabs.unshift({side:'left',key:'file',label:'File',rows:[
+  ['file-new','New Part'], ['file-assembly','New Assembly'], ['file-open','Open'],
+  ['file-save','Save As'], ['file-close','Close Session'],
+].map(([id,label])=>({id,label,action:id==='file-assembly'?'':`routing:${id}`,section:'File',kind:'button',options:[],source:'frontend/src/scene/vr_files.js',reason:id==='file-assembly'?'Not supported in VR yet':''}))})
 tabs.push({side:'left',key:'vr',label:'VR',rows:[
   ['vr-desktop','View desktop','desktop'],
   ['vr-head-light','Head-following lighting: Off','vr:head-light'],
@@ -179,7 +183,17 @@ for (const tab of tabs) {
   }
 }
 const sources = [...new Set(['frontend/src/scene/coloring_modes.js', 'frontend/src/scene/vr_representations.js', 'frontend/index.html', 'frontend/src/ui/right_sidebar_tabs.js', 'frontend/scripts/vr-sidebar-sections.mjs', 'frontend/src/ui/simulation_card_order.js', ...tabs.flatMap(t=>t.rows.map(r=>r.source))])].sort()
-const sourceHashes = Object.fromEntries(sources.map(file=>[file,createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex')]))
+let sourceHashes = Object.fromEntries(sources.map(file=>[file,createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex')]))
+// Scoped regeneration avoids absorbing unrelated desktop work into a new tab.
+const onlyTab = process.argv.find(arg => arg.startsWith('--tab='))?.slice(6)
+if (onlyTab) {
+  const previous = JSON.parse(fs.readFileSync(path.join(root, 'native/vr_viewer/sidebar_catalog.json'), 'utf8'))
+  const replacement = tabs.find(tab => `${tab.side}:${tab.key}` === onlyTab)
+  if (!replacement) throw Error(`Unknown tab: ${onlyTab}`)
+  tabs = previous.tabs.filter(tab => `${tab.side}:${tab.key}` !== onlyTab)
+  tabs.unshift(replacement)
+  sourceHashes = { ...previous.sourceHashes, ...Object.fromEntries([...new Set(replacement.rows.map(row => row.source))].map(file => [file, sourceHashes[file]])) }
+}
 const coloringMasks = VR_REPRESENTATIONS.map(rep => ['strand','base','cluster','cpk'].reduce((mask,mode,i) => mask | (COLORING_SUPPORT[rep]?.has(mode) ? 1<<i : 0), 0))
 const report = JSON.stringify({ version:2, sourceHashes, coloringMasks, tabs }, null, 2) + '\n'
 const q = s => JSON.stringify(ascii(s))

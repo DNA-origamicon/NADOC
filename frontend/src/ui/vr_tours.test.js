@@ -58,3 +58,19 @@ it('offers only desktop for simulation menu studies in either Debug menu', async
   expect(buttons).toHaveLength(1)
   expect(buttons[0].dataset.mode).toBe('desktop')
 })
+
+it('shows File gallery launchers directly and refreshes a previously opened menu', async () => {
+  document.body.innerHTML='<div id="menu-debug-vr-gallery"></div>'
+  let tours=[]
+  const request=vi.fn(async()=>({ok:true,json:async()=>({groups:[{id:'components',label:'Components'}],tours})}))
+  ui=initVrTours({request,entryId:'menu-debug-vr-gallery',groupFilter:'components',modes:['demo','desktop','validate']})
+  await ui.open()
+  tours=[{id:'file-menu-gallery',group:'components',title:'File menus · six interactive styles',runnable:true}]
+  document.querySelector('#menu-debug-vr-gallery').dispatchEvent(new Event('pointerenter'))
+  await flush()
+  expect(document.querySelector('[data-category=components]')).toBeNull()
+  expect(document.querySelectorAll('#menu-debug-vr-gallery > .submenu > [data-start=file-menu-gallery]')).toHaveLength(3)
+  document.querySelector('#menu-debug-vr-gallery').dispatchEvent(new Event('pointerenter'))
+  await flush()
+  expect(document.querySelectorAll('[data-start=file-menu-gallery]')).toHaveLength(3)
+})

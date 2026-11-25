@@ -451,88 +451,12 @@ describe('helix_renderer materials are per-build (the ghost tint depends on it)'
   })
 })
 
-// ── The occupancy DOM contract, pinned against index.html ─────────────────────────
-// A missing id here is silent: the panel's getElementById returns null, every listener
-// is skipped with `?.`, and the feature simply never appears. These caught nothing at
-// runtime — they are here so a markup rename fails a test instead of a user.
-describe('index.html carries every element the occupancy UI binds', () => {
+// The archived renderer remains covered, but the product no longer exposes it.
+describe('occupancy clouds are archived from both engine cards', () => {
   const HTML = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8')
-
-  for (const id of [
-    'oxdna-jobs-occupancy-toggle',
-    'oxdna-jobs-occupancy-params',
-    'oxdna-jobs-occupancy-n',
-    'oxdna-jobs-occupancy-basis',
-    'oxdna-jobs-occupancy-rerun',
-    'oxdna-jobs-occupancy-status',
-    'oxdna-jobs-occupancy-legend',
-  ]) {
-    it(`has #${id}`, () => {
-      expect(HTML).toContain(`id="${id}"`)
-    })
-  }
-
-  it('puts the toggle in the mutually-exclusive oxdna-viz radio group', () => {
-    // Not being in the group would let occupancy coexist with the flexibility map, and
-    // both would fight over applyFemPositions.
-    const i = HTML.indexOf('id="oxdna-jobs-occupancy-toggle"')
-    const tag = HTML.slice(HTML.lastIndexOf('<input', i), HTML.indexOf('>', i) + 1)
-    expect(tag).toContain('name="oxdna-viz"')
-    expect(tag).toContain('type="radio"')
+  it('has no occupancy view or scope controls', () => {
+    expect(HTML).not.toMatch(/id="(?:md|oxdna)-(?:jobs-)?occupancy-/)
   })
-})
-
-describe('the scope picker is reused, not reimplemented', () => {
-  const HTML = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8')
-  const CTRL = readFileSync(resolve(process.cwd(), 'src/ui/occupancy_controls.js'), 'utf8')
-
-  it('instantiates the shared anchor widget rather than forking it', () => {
-    // initOxdnaAnchorsSetup already drives five engine cards off an `ids` override; a
-    // fork would drift from the chips / x-delete / purple-halo behaviour it provides.
-    expect(CTRL).toMatch(/initOxdnaAnchorsSetup\(/)
-    expect(CTRL).toMatch(/engine: 'occupancy'/)
-  })
-
-  it('carries the full id skeleton the widget needs', () => {
-    // The factory returns an inert stub when its toggle or body id is missing, so a
-    // typo'd skeleton silently yields a card where nothing can be added.
-    for (const id of ['toggle', 'arrow', 'body', 'add', 'clear', 'list', 'status', 'glow']) {
-      expect(HTML, `#oxdna-occupancy-scope-${id}`)
-        .toContain(`id="oxdna-occupancy-scope-${id}"`)
-    }
-  })
-
-  it('gives the scope list its own scroll container', () => {
-    const i = HTML.indexOf('id="oxdna-occupancy-scope-list"')
-    expect(HTML.slice(i, HTML.indexOf('>', i))).toMatch(/overflow-y:auto/)
-  })
-
-  it('offers whole-structure and specific-elements, defaulting to whole', () => {
-    const i = HTML.indexOf('id="oxdna-jobs-occupancy-scope"')
-    const block = HTML.slice(i, i + 500)
-    expect(block).toMatch(/value="all" selected/)
-    expect(block).toMatch(/value="selection"/)
-  })
-
-  // The fit frame decides what a scoped run MEANS — leave the whole-structure alignment
-  // on and the PCA reports where the region sat rather than what shape it took. Both
-  // engine cards carry it, and both hide it until a scope is chosen.
-  for (const prefix of ['oxdna', 'md']) {
-    it(`${prefix}: offers all three fit frames, defaulting to fit-on-selection`, () => {
-      const i = HTML.indexOf(`id="${prefix}-jobs-occupancy-fit"`)
-      expect(i, `#${prefix}-jobs-occupancy-fit`).toBeGreaterThan(-1)
-      const block = HTML.slice(i, i + 600)
-      expect(block).toMatch(/value="selection" selected/)
-      expect(block).toMatch(/value="local"/)
-      expect(block).toMatch(/value="global"/)
-    })
-
-    it(`${prefix}: hides the fit row until a scope is picked`, () => {
-      const i = HTML.indexOf(`id="${prefix}-occupancy-fit-row"`)
-      expect(i, `#${prefix}-occupancy-fit-row`).toBeGreaterThan(-1)
-      expect(HTML.slice(i, HTML.indexOf('>', i))).toMatch(/display:none/)
-    })
-  }
 })
 
 // ── Extra crossover bases and extension tails in the drawn states ─────────────────

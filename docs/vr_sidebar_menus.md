@@ -867,3 +867,137 @@ The historical tables above use different catalog sizes and trial counts.
 
 Evidence: `.development-artifacts/full-height-tabs-20261022/report.json`, with
 retained real-eye and desktop-mirror review images under `review/`.
+
+## File tab (2026-11-23)
+
+The left File tab provides New Part, Open, Save As and Close Session. New
+Assembly is disabled. New Part closes the sidebar and opens a separate filename
+keyboard. Open browses workspace parts with folder navigation, filenames and
+modified-time labels from the existing file browser. Save As uses that browser
+and offers the same keyboard. Popups have enlarged text, shared native hover
+borders, a short pulse on entering an enabled key/file row, and activation pulses.
+New/Open save the active document before replacement; a failed or cancelled save
+stops the switch. A successful part load/creation publishes a revision-checked
+native scene refresh. Close Session uses the existing save/close flow and exits VR.
+
+The 42-key keyboard uses 134 mm local key faces at 1.2 scale (160.8 mm in world
+space). The standard QWERTY layout has a number row, staggered QWERTY /
+ASDF / ZXCV letter rows, Shift, Backspace, punctuation and a wide spacebar. The filename can omit `.nadoc`. File operations remain in
+the browser and use versioned native selections; native code does not write
+parts or feature histories.
+
+Debug → VR Tours & Tests → Left sidebar → **File · filename keyboard accuracy**
+runs the production native ray hit test against synthetic controller reaches.
+Validation uses 50 unique seeds per key, matched across all four profiles, at
+0.6 m ray distance, with no retries or endpoint correction. In the November 23
+run, steady profiles each selected 2100/2100 keys, variable_fast 2099/2100
+(99.95%), and variable_deliberate 2096/2100 (99.81%). The threshold is 95%.
+These are offline selection results, not measured human accuracy, live-runtime
+input delivery or a through-lens comfort assessment. Default-size physical
+keyboard placement, legibility and haptics remain MV-71.
+
+Focused evidence: `.development-artifacts/vr-file-qwerty/offline/report.json` and
+`.development-artifacts/vr-files-browser/workspace/artifacts/`. The app exercise
+uses the real filename dialog and file browser with intercepted native transport;
+it types, edits and cancels without creating a structure. Unit tests additionally
+cover save failure, file selection, scene refresh and session close. A scoped
+catalog update is available via `node frontend/scripts/generate-vr-sidebar-catalog.mjs
+--tab=left:file`; it preserves unrelated desktop/catalog work.
+
+The separate **File menu · keyboard and cancellation** demo uses the real native
+runtime and browser dialogs. It places and enlarges the File menu through normal
+wrist placement and two-hand resizing, shows all five actions, attempts disabled
+New Assembly, opens New Part, types `demo1`, edits it to `demo2`, then cancels
+before creation. It also opens the file list, navigates an empty folder, cancels,
+and closes its isolated session. Review holds are outside measured reaches.
+`python -m tools.vr_workflows.file_tour --validate` runs all four motion profiles;
+the normal demo leaves five-second review holds. Stereo content checks, offscreen
+negative checks and actual desktop captures verify visibility. No saved structure
+fixtures or generated parts are used; committing Save As and loading an existing
+part remain separate checks. The renderer now includes standalone routing popups
+in its visibility gate, so closing the sidebar no longer hides the keyboard.
+
+QWERTY live validation passed all four profiles (25 visible review stages and
+four cancelled New Part attempts). Live acquisition retained 13 retry reaches
+among 70 total reaches; it is a workflow/visibility check, not the offline
+uncorrected key-accuracy measurement. Review `.development-artifacts/vr-file-qwerty/live/index.html`.
+Workspace and credentials were removed, with no `.nadoc` or `.nass` files created.
+Focused frontend tests: 29 passed; tour catalog/API tests: 52 passed.
+
+### Approved File table (2026-11-23)
+
+Option 4 from the component gallery is now the production **VR-only** File
+browser. Selecting the File tab opens it directly. A fixed left command column
+contains New Part, disabled New Assembly, Open, Save As, Close Session, and the
+current dialog's Cancel/Save buttons. Six visible rows on the right use aligned
+Name, Type, Modified and Size columns, with bounded text and the existing
+controller scroll rail. Filename editing and errors have dedicated footer space.
+The location remains visible while scrolling. Dates are UTC calendar dates;
+sizes use real byte counts, and unavailable metadata is shown as `--`.
+
+The browser publishes metadata through nonvisual DOM data attributes and the
+existing routing detail field. Desktop browser appearance and operations are
+unchanged. Switching commands from the table first cancels and settles the
+current picker; existing save-before-switch and scene-refresh paths remain in
+charge. New Part and filename edits retain the QWERTY keyboard. Shared native
+hover borders, activation feedback and hover haptics remain enabled.
+
+Native tests cover three pages, long filenames confined to their columns,
+fixed commands, disabled New Assembly, ray hits, empty lists and tab dispatch.
+The existing File workflow demonstrates the table, keyboard cancellation,
+folder selection and session close. Evidence: `.development-artifacts/vr-file-table/`.
+
+Approved table validation: 31 focused frontend tests, 54 tour/API tests, native
+keyboard/table/routing/sidebar checks (861 sidebar controls, no layout failures),
+and the real browser/native workflow under all four motion profiles passed.
+Live evidence: `.development-artifacts/vr-file-table/live-02/index.html`
+(25 visible stages, four cancelled New Part attempts, 17 retained retry reaches
+among 79 reaches). Temporary workspace and credentials were removed; no
+structures were saved. `live-01` retains the interrupted first run and its
+verified cleanup record.
+
+### Exact gallery rendering correction (2026-11-23)
+
+The original production table still used the generic sidebar renderer, giving
+its commands different colors and spacing. It now shares option 4's literal
+layout, solid rounded mesh layers, slate palette, glyph sizes and state colors
+through `file_table_style.hpp`. `file_table_draw.hpp` renders the production
+table at the gallery's VR scale of 1.5. Gallery selectors and demo controls are
+omitted; functional Cancel, Save and filename controls remain. Dates display as
+YY-MM-DD inside the approved column, retaining full UTC dates in routing data.
+
+Frozen native regression checks compare every vertex and color against the
+original option 4 renderer in idle, hovered, selected and disabled states.
+Actual production-runtime and gallery captures cover front, oblique and offscreen
+views. The shared sample-content region has zero differing pixels out of 509,600.
+Review: `.development-artifacts/vr-file-exact/comparison.html`.
+Physical through-lens comfort remains manual validation debt.
+
+Live validation passed all four controller profiles with 25 stereo/desktop
+review stages and four cancelled New Part attempts, followed by Close Session.
+The 78 recorded reaches include 16 retry reaches; this validates completed
+interaction flows, not a new uncorrected first-attempt accuracy estimate.
+No structure files were created; temporary workspace and credentials were removed.
+Evidence: `.development-artifacts/vr-file-exact/live-03/index.html`. Earlier runs
+are retained: live-01 exposed the pixel check ignoring muted metadata on the `..`
+row; live-02 captured the transient Working state during asynchronous Open.
+The checker now recognizes both actual gallery glyph colors without reducing
+its threshold; the probe requires a stable ready state before reviewing.
+
+Shared keyboard update (2026-11-24): filename and custom sequence entry now use
+one reusable text editor and native layout, recognized by key IDs rather than
+window title. It retains key size/scale, adds a symbol-page key (43 total), and
+supports caret/selection edits and host-specific character/length restrictions.
+See [VR text keyboard](vr_text_keyboard.md) for the integration contract and four
+desktop-only button studies in Component Gallery.
+
+The shared text keyboard now uses the gallery Bevel / Slate keycaps, including
+Cancel/Create/Save actions, with continuous 6 mm local analog trigger travel.
+Partial squeezes move the cap without activating it. See
+[the keyboard contract](vr_text_keyboard.md#production-bevel--slate-and-analog-travel).
+
+Keyboard border follow-up (2026-11-24): opening scale is now 0.84, 70% of the
+previous size. The solid keyboard draws standard grip rails/corners and participates
+in trigger/grip move/resize handlers. Acknowledgements no longer reset a user
+resize. The File tour now exercises these gestures before cancelling creation.
+See [keyboard contract and evidence](vr_text_keyboard.md).

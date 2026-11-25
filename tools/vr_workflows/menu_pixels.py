@@ -18,6 +18,7 @@ def check(directory, evidence):
             # Sample the interior, excluding outlines and the small section heading.
             vertical = control["id"].startswith("tab:")
             simulation = control["id"].startswith("sim:")
+            keyboard_readout = control["id"] == "routing-help" and control.get("tab") in ("text-keyboard", "file-keyboard")
             scrubber = control["id"] == "sim:local:t:311"
             range_wheel = control["id"] in ("sim:local:t:300", "sim:local:t:301", "sim:local:t:302")
             scrollbar = control["id"] == "scrollbar" or control["id"].startswith("sim:scroll:")
@@ -45,14 +46,19 @@ def check(directory, evidence):
                     & (y >= 0) & (y < eye["height"])))
                 pixels = (rgb[y.astype(int), x.astype(int)] if in_frame
                           else np.zeros((1, 3), dtype=np.uint8))
+                if in_frame and keyboard_readout:
+                    # A single glyph in a wide field needs pixel-density sampling.
+                    # Count distinct screen pixels, never duplicate grid samples.
+                    xy = np.unique(np.column_stack([x.astype(int), y.astype(int)]), axis=0)
+                    pixels = rgb[xy[:, 1], xy[:, 0]]
                 return in_frame, pixels
 
             # Simulation buttons put their label at the top inset, including
             # the tall side Play button. Inspect that interior as well as the
             # lower half; this is not a separate card section heading.
             valid, pixels = samples(
-                np.linspace(-1.08 if scrubber else -0.5 if scrollbar else -0.98, 1.08 if scrubber else 0.5 if scrollbar else 0.9, 180),
-                np.linspace(-0.98 if scrollbar or scrubber else -0.80, 0.98 if scrollbar or scrubber else 0.80 if vertical or footer or simulation else 0.15, 36),
+                np.linspace(-1.08 if scrubber else -0.5 if scrollbar else -0.98, 1.08 if scrubber else 0.5 if scrollbar else 0.9, 720 if keyboard_readout else 180),
+                np.linspace(-0.98 if scrollbar or scrubber else -0.80, 0.98 if scrollbar or scrubber else 0.80 if vertical or footer or simulation or keyboard_readout else 0.15, 72 if keyboard_readout else 36),
                 )
             # A scrollbar has a thumb rather than a text label. Disabled thumbs
             # use the desktop muted border color; demand visible neutral pixels.
@@ -69,9 +75,19 @@ def check(directory, evidence):
                 # These controls are ribbed cyan cylinders; their numeric labels
                 # sit beside, rather than inside, the physical hit surface.
                 neutral = ((pixels[:, 2].astype(int)-pixels[:, 0]>25) & (pixels[:, 1]>70)) if control["enabled"] else (pixels.min(axis=1)>30)
+            file_table = control.get("tab") in ("file-browser", "text-keyboard", "file-keyboard")
+            if file_table:
+                # The File table and Bevel / Slate keyboard use blue-grey disabled text,
+                # not the generic sidebar's neutral-grey stroke palette.
+                target = [89,194,255] if scrollbar else [230,240,255] if control["enabled"] or control["id"] == "routing-help" else [140,168,196]
+                neutral = np.all(np.abs(pixels.astype(int)-np.array(target)) <= 20, axis=1)
+                if control["id"].startswith("routing:file-entry-"):
+                    # The parent row's name is only "..". Its type/date/size
+                    # are also visible glyphs, in the gallery's muted palette.
+                    neutral |= np.all(np.abs(pixels.astype(int)-np.array([140,168,196])) <= 20, axis=1)
             text = int(neutral.sum())
             gray = True
-            if not control["enabled"]:
+            if not control["enabled"] and not (file_table and control["id"] == "routing-help"):
                 gray = bool(text and np.quantile(pixels[neutral].max(axis=1),.98)<230)
             active = True
             if control["active"]:

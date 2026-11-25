@@ -50,6 +50,7 @@ from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.core import job_archive
 from backend.core import md_chain_executor as _chain
+from backend.core.md_preparation_ownership import own_native_preparation
 from backend.core import md_plan
 from backend.core.md_image_clearance import (
     job_image_clearance,
@@ -130,6 +131,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["md"])
 router.include_router(electrode_router)
+from backend.api.md_two_base_maps import router as two_base_maps_router
+router.include_router(two_base_maps_router)
 
 # Background preparation tasks, kept referenced so the event loop doesn't GC them
 # mid-run (asyncio only holds weak references to tasks).
@@ -156,7 +159,6 @@ async def _write_prep_heartbeat(
 
 
 _TRAJ_PROGRESS_PATHS: dict[str, Path] = {}
-_PHOTOPRODUCT_PROGRESS_PATHS: dict[str, Path] = {}
 
 # Re-export for existing callers; request validation has no route dependencies.
 from backend.api.md_request_models import (
@@ -697,75 +699,15 @@ async def get_md_job_rmsf(job_id: str, request: Request, frame_range: dict = Dep
 
 
 @router.get("/md/jobs/{job_id}/photoproduct-likelihood")
-async def get_md_photoproduct_likelihood(
-    job_id: str,
-    request: Request,
-    max_frames: int = 2000,
-) -> dict:
-    """Relative per-thymine T-T photoproduct propensity over production frames.
-
-    This is a bounded, killable whole-design KIMMDY pass for the NAMD visualization
-    toggle.  It reports relative geometric propensity rather than an absolute quantum
-    yield or probability, and excludes restrained equilibration segments.
-    """
-
-    inputs = _md_traj_inputs(job_id)
-    if inputs is None:
-        return {
-            "ready": False,
-            "reason": "topology/reference or trajectory not found",
-            "base_likelihoods": [],
-        }
-    psf, ref, segments, design = inputs
-    bounded_frames = max(1, min(int(max_frames), 10_000))
-    fd, progress_name = tempfile.mkstemp(
-        prefix="nadoc_md_photoproduct_", suffix=".json"
-    )
-    os.close(fd)
-    progress_path = Path(progress_name)
-    _PHOTOPRODUCT_PROGRESS_PATHS[job_id] = progress_path
-    try:
-        return await _run_md_analysis(
-            request,
-            job_id,
-            "photoproduct",
-            "md_photoproduct_likelihood",
-            (
-                psf,
-                segments,
-                ref,
-                design,
-                bounded_frames,
-                5000,
-                "upstream",
-                str(progress_path),
-            ),
-            timeout_s=900.0,
-        )
-    finally:
-        if _PHOTOPRODUCT_PROGRESS_PATHS.get(job_id) == progress_path:
-            _PHOTOPRODUCT_PROGRESS_PATHS.pop(job_id, None)
-        progress_path.unlink(missing_ok=True)
+async def get_md_photoproduct_likelihood(job_id: str, request: Request) -> dict:
+    from backend.api.md_uv_crosslinking import result
+    return await result(job_id, request)
 
 
 @router.get("/md/jobs/{job_id}/photoproduct-progress")
 async def get_md_photoproduct_progress(job_id: str) -> dict:
-    """Live stage/frame progress for the active photoproduct analysis worker."""
-
-    path = _PHOTOPRODUCT_PROGRESS_PATHS.get(job_id)
-    if not path:
-        return {"active": False}
-    try:
-        return {"active": True, **json.loads(path.read_text() or "{}")}
-    except (OSError, ValueError):
-        return {
-            "active": True,
-            "phase": "preparing",
-            "fraction": 0.01,
-            "done": 0,
-            "total": 0,
-            "message": "Loading topology and production trajectories",
-        }
+    from backend.api.md_uv_crosslinking import progress
+    return await progress(job_id)
 
 
 from backend.api.routes_oxdna import OccupancySelection  # noqa: E402  (shared vocabulary)
@@ -913,7 +855,8 @@ async def _md_occupancy_impl(
     return result
 
 
-@router.get("/md/jobs/{job_id}/occupancy")
+
+# ARCHIVED 2026-11-22: retained for historical analysis; not registered as an API route.
 async def get_md_occupancy(
     job_id: str,
     request: Request,
@@ -954,7 +897,8 @@ async def get_md_occupancy(
     )
 
 
-@router.post("/md/jobs/{job_id}/occupancy")
+
+# ARCHIVED 2026-11-22: retained for historical analysis; not registered as an API route.
 async def post_md_occupancy(
     job_id: str, request: Request, body: MdOccupancyBody
 ) -> dict:
@@ -3204,6 +3148,14 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     }
 
 
+@router.post("/md/jobs/preparation-plan")
+async def md_preparation_plan(body: CreateJobRequest, job_id: Optional[str] = None) -> dict:
+    from backend.core.md_preparation import preparation_plan
+    frozen = _md_snapshot_design(_load_job(job_id)) if job_id else None
+    return await preparation_plan((frozen or design_state.get_or_404()).without_reference_geometry(),
+                                  _apply_relax_preset(body), _workspace())
+
+
 @router.post("/md/jobs/preflight-vram")
 async def preflight_md_vram(body: CreateJobRequest) -> dict:
     """Pre-flight whether the fully solvated system fits the selected local hardware."""
@@ -3813,6 +3765,7 @@ def _spawn_prep_job(
     return job
 
 
+@own_native_preparation
 async def _prepare_job_bg(
     *,
     job_id: str,
@@ -4023,15 +3976,12 @@ async def _prepare_job_bg(
             reference_profile = lookup(_workspace(), body.submodel_reference_job_id, body.design_source_path)
             seed_kwargs["package_builder"] = package_builder(body.submodel.model_dump(mode="json"), reference_profile=reference_profile)
             seed_kwargs["fixed_cell"] = True
-        from backend.core.namd_resources import prepare_with_memory_budget
-        # The validated preparation envelope covers explicit-solvent DNA; other
-        # material/protocol paths keep their separate preparation implementation.
+        from backend.core.md_preparation import prepare_for_target
         bounded_prep=body.protocol != IMPLICIT_GBIS_PROTOCOL and not seed_kwargs_graphene and seed_solute_coords is None
-        prepare_args=(prepare_with_memory_budget,prepare) if bounded_prep else (prepare,)
-        package_subdir, name_stem, segments = await run_in_threadpool(
-            *prepare_args,
-            local_design,
-            job_dir,
+        package_subdir, name_stem, segments = await prepare_for_target(
+            prepare, local_design, job_dir,
+            job_id=job_id, workspace=ws, body=body, bounded=bounded_prep,
+            finalize_graphene=seed_kwargs_graphene,
             ion_conc_mM=ion_conc_mM,
             mg_conc_mM=mg_conc_mM,
             salt_mode=body.salt_mode,
@@ -4073,99 +4023,6 @@ async def _prepare_job_bg(
             progress=tracker.report,
             **seed_kwargs,
         )
-        # NAMD consumes one fixedAtoms union; retain the semantic groups for the UI.
-        package_path = job_dir / package_subdir
-        manifest_path = package_path / "manifest.json"
-        if manifest_path.exists():
-            _manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            _manifest["anchor_groups"] = {
-                "structure": list(body.anchors or []),
-                "surface": list(body.surface_anchors or []),
-            }
-            if body.oxdna_job_id and (body.anchors or body.surface_anchors):
-                _manifest["anchor_inheritance"] = {
-                    "source_engine": "oxdna",
-                    "source_job_id": body.oxdna_job_id,
-                }
-            _text = json.dumps(_manifest, indent=2)
-            manifest_path.write_text(_text, encoding="utf-8")
-            mirror = package_path / "nadoc_md_run.json"
-            if mirror.exists():
-                mirror.write_text(_text, encoding="utf-8")
-        if body.graphene_nanopore and seed_kwargs_graphene is not None:
-            # The descriptor is deliberately package-local and in the same recentered
-            # frame as the DNA seed. The atomistic graphene builder consumes this file;
-            # keeping it beside the frozen package also makes previews/retries reproducible.
-            import json as _json
-            nanopore = seed_kwargs_graphene
-            package_path = job_dir / package_subdir
-            (package_path / "graphene_nanopore.json").write_text(
-                _json.dumps(nanopore, indent=2), encoding="utf-8"
-            )
-            # NAMD fixedAtoms reads the B column from a full-system PDB. Mark only the
-            # GRPH segment and force CUDA offload: GPU-resident NAMD rejects fixed atoms.
-            system_pdb = package_path / f"{name_stem}.pdb"
-            # Reuse the DNA-anchor marker when one exists: NAMD permits one fixedAtoms
-            # file, so that full-system marker must be the union of graphene + both DNA
-            # anchor sets. With no DNA anchors, create the graphene-only marker.
-            confs = list(package_path.glob("*.conf"))
-            existing_marker = None
-            for conf in confs:
-                for ln in conf.read_text(encoding="utf-8").splitlines():
-                    if ln.lstrip().startswith("fixedAtomsFile"):
-                        candidate = package_path / ln.split(None, 1)[1].strip()
-                        if candidate.exists():
-                            existing_marker = candidate
-                            break
-                if existing_marker:
-                    break
-            marker_source = existing_marker or system_pdb
-            marker_lines = []
-            for line in marker_source.read_text(encoding="utf-8").splitlines():
-                if line.startswith(("ATOM", "HETATM")):
-                    line = line.ljust(80)
-                    prior = float(line[60:66].strip() or 0.0)
-                    b = 1.0 if line[72:76].strip().startswith("GR") else prior
-                    line = line[:60] + f"{b:6.2f}" + line[66:]
-                marker_lines.append(line)
-            marker_name = existing_marker.name if existing_marker else "graphene_fixed.pdb"
-            (package_path / marker_name).write_text("\n".join(marker_lines) + "\n", encoding="utf-8")
-            fixed_block = (
-                f"fixedAtoms         on\nfixedAtomsFile     {marker_name}\n"
-                "fixedAtomsCol      B\n"
-            )
-            for conf in confs:
-                text_conf = conf.read_text(encoding="utf-8")
-                if "fixedAtomsFile" not in text_conf:
-                    anchor = next((ln for ln in text_conf.splitlines(True) if ln.lstrip().startswith("coordinates")), None)
-                    if anchor:
-                        text_conf = text_conf.replace(anchor, anchor + fixed_block, 1)
-                conf.write_text(text_conf, encoding="utf-8")
-            manifest_path = package_path / "manifest.json"
-            if manifest_path.exists():
-                manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
-                manifest["graphene_nanopore"] = nanopore
-                manifest["graphene_nanopore"]["fixed_atoms_file"] = marker_name
-                manifest["graphene_nanopore"]["model"] = (
-                    "fixed neutral CA sites using CHARMM aromatic-carbon Lennard-Jones parameters"
-                )
-                # Production children inherit this marker through the ordinary anchor
-                # channel, keeping the membrane fixed even when no DNA anchor exists.
-                manifest.setdefault("files", {})["anchors"] = marker_name
-                manifest_path.write_text(_json.dumps(manifest, indent=2), encoding="utf-8")
-        # The package, not the executor, defines the physics. Harmonicize every relax
-        # package that has DNA anchors and/or graphene so local, Alpine and RunPod stage
-        # byte-identical GPU-compatible confs. This was accidentally gated on oxDNA or
-        # graphene-only, leaving native DNA+graphene jobs on fixedAtoms.
-        if body.anchors or body.surface_anchors or body.graphene_nanopore:
-            _harmonicize_seed_anchors(
-                job_dir / package_subdir,
-                name_stem=name_stem,
-                force_constant=body.anchor_k or 0.02,
-                graphene_force_constant=50.0,
-                force_gpu_resident=(body.gpu_resident == "on"),
-            )
-        _audit_external_force_configs(job_dir / package_subdir)
         from backend.core.namd_input_provenance import capture as capture_namd_inputs
         receipt_job = MdJob.load(job_id, ws)
         receipt_job.package_subdir = package_subdir
@@ -4178,11 +4035,15 @@ async def _prepare_job_bg(
             len(segments),
         )
     except Exception as exc:
+        from backend.core.md_preparation_remote import RemotePreparationDetached
+        if isinstance(exc, RemotePreparationDetached):
+            hb.cancel()
+            return
         logger.error("prep %s: FAILED: %s", job_id, exc, exc_info=True)
         tracker.fail(str(exc))
         hb.cancel()
         job = MdJob.load(job_id, ws)
-        job.status = MdStatus.failed
+        job.status = MdStatus.stopped if job.user_stopped else MdStatus.failed
         msg = str(exc)
         if "threaded through a nucleotide ring" in msg:
             job.failure_kind = "seed_topology"
@@ -4193,7 +4054,12 @@ async def _prepare_job_bg(
 
     tracker.finish()
     hb.cancel()
+    await _complete_prepared_job(job_id, body, (package_subdir, name_stem, segments), ws)
 
+
+async def _complete_prepared_job(job_id, body, result, ws):
+    package_subdir, name_stem, segments = result
+    job_dir = MdJob.load(job_id, ws).job_dir(ws)
     job = MdJob.load(job_id, ws)
     job.package_subdir = package_subdir
     job.name_stem = name_stem
@@ -7423,7 +7289,7 @@ def _remote_resources(job: MdJob, profile, body: "SubmitRemoteRequest") -> dict:
         k: v for k, v in (body.resources or {}).items() if v not in (None, "")
     }
     requested = job.requested_resources or {}
-    partition = explicit.get("partition") or job.partition
+    partition = explicit.get("partition") or requested.get("partition") or job.partition
     gres_type = explicit.get("gres_type") or requested.get("gres_type")
     sizing = _size_prepared_job(
         job,
@@ -7436,7 +7302,8 @@ def _remote_resources(job: MdJob, profile, body: "SubmitRemoteRequest") -> dict:
         raise HTTPException(
             400, "Job is not prepared yet (no manifest.json) — cannot size resources."
         )
-    return {**_merge_requested(sizing["resources"], job), **explicit}
+    from backend.core.md_resource_floors import alpine_memory_floor
+    return alpine_memory_floor({**_merge_requested(sizing["resources"], job), **explicit}, sizing["resources"], profile)
 
 
 def _merge_requested(resources: dict, job: MdJob) -> dict:
@@ -7507,7 +7374,8 @@ def md_job_remote_recommendation(
     # same numbers the user chose next to the partition table rather than silently
     # re-deciding them.  Skipped when a partition is forced (that re-sizes consistently).
     elif not current and partition is None and gres_type is None and sizing is not None:
-        sizing = {**sizing, "resources": _merge_requested(sizing["resources"], job)}
+        from backend.core.md_resource_floors import alpine_memory_floor
+        sizing = {**sizing, "resources": alpine_memory_floor(_merge_requested(sizing["resources"], job), sizing["resources"], profile)}
     available = [
         {"name": p.name, "kind": p.kind, "gpu_model": p.gpu_model}
         for p in profile.partitions
@@ -8165,6 +8033,11 @@ async def _stop_md_job_impl(job_id: str, *, fetch_remote_output: bool = True) ->
     """Cancel a running job."""
     job = _load_job(job_id)
 
+    from backend.core.md_preparation_recovery import cancel_preparation
+    preparation_stop = await cancel_preparation(job, _workspace())
+    if preparation_stop is not None:
+        return preparation_stop
+
     # Local cancellation publishes through the native owner/idle-stop guard.
     # Remote supervisors retain their existing persisted cancellation intent.
     if job.execution_target != "local":
@@ -8271,11 +8144,17 @@ class EarlyStopRequest(BaseModel):
 
 @router.post("/md/jobs/{job_id}/early-stop")
 async def toggle_md_early_stop(job_id: str, body: EarlyStopRequest) -> dict:
-    """Flip the relaxation early-stop accelerator on a job WITHOUT relaunching.
+    """Flip the local relaxation early-stop accelerator WITHOUT relaunching.
 
-    If the job is running, the runner picks the new value up at its next chunk
-    boundary; if idle, it's persisted for the next start/resume."""
-    _load_job(job_id)  # 404s if the job doesn't exist
+    The local runner consumes changes at the next chunk boundary. Remote jobs
+    require settings changes followed by a new submission, not this live API."""
+    job = _load_job(job_id)  # 404s if the job doesn't exist
+    if job.execution_target in ("alpine", "runpod"):
+        raise HTTPException(
+            status_code=409,
+            detail="Remote skip acceleration is set at submission. Edit the job settings "
+                   "and submit/resume a new run; the live toggle cannot change a submitted run.",
+        )
     val = set_early_stop(job_id, body.enabled, _workspace())
     return {
         "ok": True,

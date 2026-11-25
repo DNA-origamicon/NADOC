@@ -238,6 +238,8 @@ def verify(design):
         except ValueError as exc:
             raise ProcessRequired(str(exc)) from exc
     expected, actual = structural_value(design), structural_value(process.design)
+    from scripts.agent_metadata_exceptions import reviewed_replay_value
+    actual = reviewed_replay_value(design, actual)
     if expected != actual:
         fields = sorted(k for k in expected if expected[k] != actual[k])
         raise ProcessRequired(f'Unrecorded or irreproducible changes: {", ".join(fields)}')

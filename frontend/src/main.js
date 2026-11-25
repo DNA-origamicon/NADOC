@@ -9,8 +9,10 @@ import { createVRFeatureLog } from './scene/vr_feature_log.js'
 import { initReferenceModels } from './scene/reference_models.js'
 import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
 import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
+import { initCornerTool } from './ui/corner_tool.js'
 import { createVRPrompts } from './scene/vr_prompts.js'
 import { setNativePromptHandler } from './ui/primitives/native_prompt.js'
+import { createVRFiles, saveBeforeVRFileSwitch } from './scene/vr_files.js'
 import { createVRRouting } from './scene/vr_routing.js'
 import { createSimulationRepresentations } from './scene/simulation_representations.js'
 import { createVRSimulations } from './scene/vr_simulations.js'
@@ -290,7 +292,6 @@ import { nadocBroadcast } from './shared/broadcast.js'
 import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared/doc_id.js'
 import { initMdOverlay }             from './scene/md_overlay.js'
 import { initMdSolventOverlay }      from './scene/md_solvent_overlay.js'
-import { initOccupancyOverlay }     from './scene/occupancy_overlay.js'
 import { auditRenderedObjects, compareRenderedObjects } from './scene/render_object_audit.js'
 import { initMdBoxOverlay }          from './scene/md_box_overlay.js'
 import { initMdSegmentationOverlay } from './scene/md_segmentation_overlay.js'
@@ -1278,7 +1279,6 @@ async function main() {
     // ion-path visualization acquires/releases its scene.
     onActiveChange: active => grapheneNanoporeOverlay.setSimulationActive(active, 'ion-paths'),
   })
-  const occupancyOverlay  = initOccupancyOverlay({ scene, getGeometry: () => store.getState().currentGeometry, getDesign: () => store.getState().currentDesign, getHelixAxes: () => store.getState().currentHelixAxes, getRepr: () => _currentRepr, setDesignVisible: (v) => designRenderer.setDesignVisible(v), onStatus: (s) => showToast(s.text, s.level) })
   const mdDisplayController = initMdPanel(store, {
     designRenderer, atomisticRenderer,
     onRestoreDesignHeavy: _restoreDesignHeavy,
@@ -1320,7 +1320,7 @@ async function main() {
     // mdViz is declared below (~after oxdnaDisplay): the MD trajectory-scrub +
     // flexibility-map tools reuse the oxDNA display controller via an MD api adapter.
     getMdViz: () => mdViz,
-    getOccupancyOverlay: () => occupancyOverlay, getAnchorSelection: _anchorSelectionState,
+    getAnchorSelection: _anchorSelectionState,
     getWeldOverlay: () => cpdWeldOverlay,
     // Explicit water / ions / periodic cell overlays for the Visualizations card.
     getSolventOverlay: () => mdSolventOverlay,
@@ -1355,7 +1355,6 @@ async function main() {
     // Toggle-off / job-switch: rebuild the atomistic + surface meshes from the
     // live design so they drop the oxDNA overlay (mirrors the animation player's
     // stop handler).
-    onOccupancyClear:     () => occupancyOverlay.clear(),
     onRestoreDesignHeavy: _restoreDesignHeavy,
     // A heavy (atomistic/surface) frame rebuild started/finished — forward to the
     // panel so it can show a "building…" spinner instead of looking frozen.
@@ -1380,7 +1379,6 @@ async function main() {
   // saved job/mode, then query __nadocDR.debugRenderedAudit() without brittle sidebar clicks.
   if (import.meta.env.DEV) window.__nadocOxdnaDisplay = oxdnaDisplay
   if (import.meta.env.DEV) {
-    window.__nadocOccupancy = occupancyOverlay
     window.__nadocScene = scene
     window.__nadocRenderAudit = {
       capture: () => auditRenderedObjects(scene),
@@ -1446,7 +1444,6 @@ async function main() {
     onRmsfProgress: detail => window.dispatchEvent(new CustomEvent('nadoc:md-flex-progress', { detail })),
     setDesignVisible: _setSimulationVisualizationVisible,
     restoreDesignVisible: _restoreNativeAfterSimulation,
-    onOccupancyClear:     () => occupancyOverlay.clear(),
     getAtomisticRenderer: () => atomisticRenderer,
     getSurfaceRenderer:   () => surfaceRenderer,
     getSurfaceParams: () => _atomSurface?.getSurfaceParams?.() ?? {},
@@ -1475,7 +1472,7 @@ async function main() {
     oxdnaDisplay, lammpsDisplay, oxdnaLive,
     getWorkspacePath: () => store.getState().assemblyActive
       ? _assemblyWorkspacePath : _workspacePath,
-    getOccupancyOverlay: () => occupancyOverlay, getAnchorSelection: _anchorSelectionState,
+    getAnchorSelection: _anchorSelectionState,
     flexScale,
     getRunElements: _oxdnaRunElements,
     getDesignLattice: () => store.getState().currentDesign?.lattice_type ?? null,
@@ -1620,19 +1617,11 @@ async function main() {
   const _anchorsByEngine = {}   // engine key → that card's last highlighted anchor set
   const _refreshAnchorGlow = () => {
     const engine = engineSelector?.getSelected?.() ?? 'oxdna'
-    // The occupancy-cloud SCOPE pickers are channels that are not engine tabs, so neither
-    // would ever be the "selected engine" — union them in, or their purple halo could
-    // never show. Each card gates its own contribution with its highlight checkbox.
-    // BOTH engines' cards: oxDNA registers as `occupancy` and NAMD as `md-occupancy`
-    // (`initOccupancyControls`), and listing only the first left the MD scope picker with
-    // chips but no halo — you could not see in the 3D view what you had picked.
     anchorGlow.setAnchors([...(_anchorsByEngine[engine] || []),
                            ...(engine === 'oxdna' && oxdnaFloorSetup?.isEnabled?.()
                              ? (_anchorsByEngine['oxdna-surface'] || []) : []),
                            ...(engine === 'namd' && document.getElementById('md-surface-enable')?.checked
-                             ? (_anchorsByEngine['namd-surface'] || []) : []),
-                           ...(_anchorsByEngine.occupancy || []),
-                           ...(_anchorsByEngine['md-occupancy'] || [])])
+                             ? (_anchorsByEngine['namd-surface'] || []) : [])])
   }
   // The card owns which anchors are lit (its "Highlight all anchors" toggle + any focused
   // chip) and ships that subset on the event, so the chips and the halo can't disagree.
@@ -3756,6 +3745,7 @@ async function main() {
   })
 
   const deformationToolLauncher = initDeformationToolLauncher({ store, selectionManager, showToast, deformView, watchDeformState: _watchDeformState, ownedEditor: featureEditor.creationEditor })
+  const cornerTool = initCornerTool({ store, selectionManager, scene, designRenderer, showToast })
 
   // Tools → Add Primitive: reveal the right-sidebar Primitives library.
   document.getElementById('menu-tools-add-primitive')?.addEventListener('click', () => {
@@ -5637,6 +5627,7 @@ async function main() {
       seekInstanceFeatures: _seekInstanceFeaturesFast,
     },
     onEditFeature: _onEditFeature,
+    onEditCorner: cornerTool.openEdit,
     onEditNanoparticle: async id => {
       const particle = store.getState().currentDesign?.nanoparticles?.find(item => item.id === id)
       if (!particle) return
@@ -6036,7 +6027,7 @@ async function main() {
   sharing.bindJobs({ getSelection: () => simulateJobs.getSelected(), getSource: engine => ({ controller: engine === 'namd' ? mdViz : oxdnaDisplay }), showNative: () => restoreNativePresentation({
     stopLive: () => oxdnaLive.stop(),
     setRepresentation: _setRepresentation,
-    clearSimulationVisuals: () => { occupancyOverlay.clear(); _resetSimulationSceneVisuals() },
+    clearSimulationVisuals: () => { _resetSimulationSceneVisuals() },
   }) })
 
   // oxDNA input geometry follows the same reference-visibility contract as the
@@ -6353,7 +6344,14 @@ async function main() {
     onError: message => showToast(message, { severity: 'error' }),
   })
   setNativePromptHandler(opts => vrPrompts.ask(opts))
-  const vrRouting = createVRRouting({ onError: message => showToast(message, { severity: 'error' }) })
+  const vrFiles = createVRFiles({ api, newPart: onCreated => _newDesignModal.openModal({ onCreated }),
+    openPart: (...args) => _fileOpen.openPartFromServer(...args), openAssembly: path => _fileOpen.openAssemblyFromServer(path),
+    saveAs: () => _fileSave.saveAsDispatch(), closeSession: async () => { await _closeSession(); await api.stopNativeVR() },
+    refresh: () => api.refreshNativeVRScene({ expected_design_id: store.getState().currentDesign.id, expected_revision: api.currentRevisionWatermark() }),
+    beforeSwitch: () => saveBeforeVRFileSwitch({ store, api, fileIo: _fileIo, workspacePath: _workspacePath, assemblyPath: _assemblyWorkspacePath }),
+    onError: message => showToast(message, { severity: 'error' }),
+  })
+  const vrRouting = createVRRouting({ files: vrFiles, onError: message => showToast(message, { severity: 'error' }) })
   const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, api, onError: message => showToast(message, { severity: 'error' }) })
   const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, api, companion: engine => engine === 'namd' ? mdPanel?.trajectorySolvent : null, controller: engine => ({ namd: mdViz, oxdna: oxdnaDisplay, lammps: lammpsDisplay, snupi: snupiDisplay })[engine], ensureFull: () => _reprSwitcher.ensureSimulationRepresentation(), prepareFrame: () => _currentRepr === 'full' ? undefined : simulationRepresentations.prepare().then(() => simulationRepresentations.refresh()), scale: () => flexScale, delivery: () => vrViewTools.delivery, onFrame: () => vrViewTools.refresh(), onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
@@ -7014,6 +7012,7 @@ async function main() {
       scrywrite: new URLSearchParams(window.location.search).has('scrywrite') ? {
         dispatch: event => _handleNativeVREvent(event),
         publishFeatureHistory: () => vrFeatureLog.publish(),
+        publishFileControls: () => vrRouting.publish(),
         select: ref => selectionController.replace([ref]),
         snapshot: () => structuredClone({
           shell: _vrToolShellState,

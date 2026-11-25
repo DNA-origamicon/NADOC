@@ -34,6 +34,7 @@ dependencies = [
     "psutil>=7.0",
     "boto3>=1.40",
     "primer3-py>=2.3",
+    "cloudpickle>=3.1,<4",
 ]
 
 # OpenMM's official pip package includes CPU/OpenCL/Reference.  The ``cuda12`` extra

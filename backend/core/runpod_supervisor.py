@@ -157,8 +157,10 @@ def start_job(
     budget = (
         DEFAULT_BUDGET_USD if configured_budget is None else float(configured_budget)
     )
+    from backend.core.md_resource_floors import runpod_budget_after_preparation
+    budget = runpod_budget_after_preparation(job, workspace_dir, budget)
     if budget <= 0:
-        raise ValueError("RunPod budget must be greater than $0.")
+        raise ValueError("RunPod budget must be greater than $0 after preparation costs.")
 
     n_atoms = n_atoms_for(job, workspace_dir)
     min_name = min_name_for(job, workspace_dir)
@@ -401,6 +403,9 @@ async def reap_orphan_pods(
                     job.job_id,
                     pod.id,
                 )
+                continue
+            from backend.core.md_preparation_recovery import owns_preparation
+            if job.status == MdStatus.preparing and owns_preparation(job, workspace_dir):
                 continue
             adoptable.append(job)
             log.info(

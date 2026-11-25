@@ -1690,8 +1690,12 @@ def _serialize_scene(
             aliases=nucleotide_owner_tokens(nucleotide),
         )
 
-    # Join sequential backbone beads. Long jumps are omitted so malformed or
-    # sparse strand metadata cannot draw a line across an entire structure.
+    from backend.core.vr_extension_roots import extension_root_anchors, is_extension_root_pair
+    extension_anchors = extension_root_anchors(design)
+
+    # Join sequential beads and recorded extension roots across synthetic IDs.
+    # Other cross-helix junctions use explicit connection records below. Long
+    # jumps are omitted so sparse metadata cannot draw across an entire structure.
     for strand_nucleotides in by_strand.values():
         strand_nucleotides.sort(
             key=lambda item: strand_nucleotide_order_key(item[0])
@@ -1705,7 +1709,8 @@ def _serialize_scene(
             strand_nucleotides, strand_nucleotides[1:]
         ):
             if (
-                first_nucleotide.get("helix_id") == second_nucleotide.get("helix_id")
+                (first_nucleotide.get("helix_id") == second_nucleotide.get("helix_id")
+                 or is_extension_root_pair(first_nucleotide, second_nucleotide, extension_anchors))
                 and float(np.linalg.norm(second - first)) <= 5.0
             ):
                 arrow_palette = palette_variant(palette, first_nucleotide, "#0288d1")

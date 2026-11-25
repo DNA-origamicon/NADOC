@@ -156,7 +156,6 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 **Simulate-panel overhaul:** [simulate_panel_overhaul](project_simulate_panel_overhaul.md) (P1; C half done — mrDNA+CanDo lack Run/Stop/Resume)
 
 **MD visualization / overlay:** [md_viz_tools](project_md_viz_tools.md)·[md_panel_status](project_md_panel_status.md)·[md_sidebar_audit](project_md_sidebar_audit.md)·[md_live_model_cache](project_md_live_model_cache.md) ·
-**[oxdna_occupancy_clouds](project_oxdna_occupancy_clouds.md)** (top-N configs superposed; read before ensemble clustering) ·
 **[atomistic_base_orient](project_atomistic_base_orient.md)** (`base_orient="oxdna_a3"`, default-on; pending visual check)
 
 **Automation / jobs infra:** [staleness_diagnostics](project_staleness_diagnostics.md)·[job_activity_spinner](project_job_activity_spinner.md)·[job_disk_usage](project_job_disk_usage.md)·[job_archive](project_job_archive.md)·[runpod_submission](project_runpod_submission.md)·[af25/26 log sync](project_af25_af26_job_log_sync.md)

@@ -31,6 +31,8 @@ def catalog():
         'Seek backward and forward through a temporary part using native history event dispatch. Checks desktop geometry and the current design/revision sent to VR. Isolated browser with intercepted VR transport; keeps the physical headset session running.', module='history_refresh_check')
     add('production-lists', 'interaction', 'Feature history and production lists',
         'Review sweep rails, dimension tables, simulation job cards and the feature-history scrub rail. Runs bounded native interaction checks and retains production-rendered state images.', module='list_components_check')
+    add('file-keyboard', 'left', 'File · filename keyboard accuracy',
+        'Offline production ray-hit validation: 43 keys at the 70% opening scale, 50 matched seeds per key, 0.6 m ray distance. All four synthetic profiles; 95% minimum selection accuracy. Does not measure headset delivery or human accuracy.', module='file_keyboard_check')
     add('compact-tabs', 'interaction', 'Full-height tabs · controller hit/miss comparison',
         'Production full-height sidebar tabs with shared spare space and bounded hover expansion. Matched seeds for all four profiles, no retries, acquisition and correct activation counts, stereo pixels. Isolated empty Part fixture.', module='compact_tabs_tour')
     add('tab-gallery', 'components', 'Long-label tabs A/B',
@@ -47,11 +49,21 @@ def catalog():
         'Six expandable card and list styles with selectable children.', ['--component', 'cards'], module='component_gallery_tour')
     add('button-gallery', 'components', 'Button styles',
         'Six button surfaces inspired by MRTK, visionOS, Material and Blender. Compare hover, press travel, selected and disabled states in the same desktop/VR gallery.', ['--component','buttons'], module='component_gallery_tour')
+    add('keyboard-gallery', 'components', 'Text keyboard · four button styles',
+        'Desktop-only: type sample text with the shared QWERTY geometry. Compare flat, beveled, soft capsule and mechanical keys; Shift, symbols, Backspace, disabled states and angled inspection. No document edits or VR style changes.',
+        ['--component', 'keyboards'], module='component_gallery_tour')
+    tours[-1]['modes'] = ['desktop']
+    add('file-menu-gallery', 'components', 'File menus · six interactive styles',
+        'Compare minimal actions, folder tiles, compact lists, detailed tables, expandable folders and a split inspector. UI-only sample files; no disk changes. Select styles 1–6 or Play demo.', ['--component', 'files'], module='component_gallery_tour')
     add('thumbwheel-gallery', 'components', 'Ridged thumbwheels',
         'Compare 20%, 35% and 50% exposed wheels for ranges 0-10, 0-100 and 0-1000. Interactive desktop needs no headset; VR uses the same mesh and inertia. Play demo, reset, or grab any wheel.', module='component_gallery_tour')
     add('all', 'overview', 'Complete sidebar tour', 'Open every tab, scroll every page, and check controls and rendered pixels.')
     add('quick', 'overview', 'Quick tab overview', 'Show the first page of every tab. A short demo, not full coverage.', ['--quick'])
     for tab in json.loads((ROOT/'native/vr_viewer/sidebar_catalog.json').read_text())['tabs']:
+        if tab['side'] == 'left' and tab['key'] == 'file':
+            add('left-file', 'left', 'File menu · keyboard and cancellation',
+                'Visible browser-backed workflow: approved option 4 File table with Name/Type/Modified/Size, fixed actions and disabled New Assembly, New Part keyboard typing/editing, 70% opening size, trigger/grip border movement, trigger resize with persistent size, and Cancel before creation, Open folder navigation and Cancel, then Close Session. No structures are saved. Validation runs all four profiles with stereo and actual desktop checks.', module='file_tour')
+            continue
         add(f"{tab['side']}-{tab['key']}", tab['side'], tab['label'] + ' menu',
             f"Tour every page of the {tab['side']} {tab['label']} tab; check disabled controls and pixels.",
             ['--tab', f"{tab['side']}:{tab['key']}"])
@@ -183,7 +195,7 @@ def arguments(tour, validate=False):
             args += ['--validate']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('compact_tabs_tour', 'quiver_tour', 'tablet_controls_tour', 'quiver_reactivation_check', 'history_refresh_check', 'list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'join_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('file_tour', 'file_keyboard_check', 'compact_tabs_tour', 'quiver_tour', 'tablet_controls_tour', 'quiver_reactivation_check', 'history_refresh_check', 'list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'join_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

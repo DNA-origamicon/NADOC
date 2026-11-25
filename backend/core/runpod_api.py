@@ -573,12 +573,11 @@ class RunpodClient:
             "terminateAfter": payload["terminateAfter"],
             "volumeMountPath": payload.get("volumeMountPath", "/workspace"),
         }
-        gql_input = {k: v for k, v in gql_input.items() if v not in (None, "", [])}
-        # Solver jobs specify host RAM/CPU minima as well as the GPU type.
-        # GraphQL PodFindAndDeployOnDemandInput documents both fields.
+        # Provider-enforced host resources are independent of GPU VRAM.
         for key in ("minMemoryInGb", "minVcpuCount"):
-            if key in payload:
-                gql_input[key] = int(payload[key])
+            if payload.get(key) is not None:
+                gql_input[key] = max(1, int(payload[key]))
+        gql_input = {k: v for k, v in gql_input.items() if v not in (None, "", [])}
         query = """
         mutation createPod($input: PodFindAndDeployOnDemandInput!) {
           podFindAndDeployOnDemand(input: $input) {

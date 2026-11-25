@@ -42,6 +42,7 @@ export function initNewDesignModal({
   resetForNewDesign, setFileName, hideWelcome, setWorkspacePath, setFileHandle,
   getLibraryPanel, spawnDocTabIfBusy,
 }) {
+  let onCreated = async () => {}
   let _newDesignModalCtrl = null   // { open, close, ... } from createModal
   let _newDesignBody      = null   // detached body element with form fields
 
@@ -76,7 +77,8 @@ export function initNewDesignModal({
     })
   }
 
-  function openModal() {
+  function openModal(options = {}) {
+    onCreated = options.onCreated || (async () => {})
     _buildNewDesignModalOnce()
     if (!_newDesignModalCtrl) {
       // HTML body not in the DOM (no template) — fast-create an Untitled part
@@ -125,6 +127,7 @@ export function initNewDesignModal({
       setWorkspacePath(wsResult.path)
       getLibraryPanel()?.refresh()
     }
+    await onCreated()
   }
 
   document.getElementById('menu-file-new')?.addEventListener('click', async () => {

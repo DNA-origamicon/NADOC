@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { decodeAssemblyGeometry, expandCompactNucleotides } from './geometry_codec.js'
+import { decodeAssemblyGeometry, expandCompactNucleotides, positionUpdateLookup } from './geometry_codec.js'
 
 const compact = () => ({ h1: { FORWARD: { bp: [7, 8], bb: [[1, 2, 3], [4, 5, 6]],
   bs: [[2, 3, 4], [5, 6, 7]], bn: [[1, 0, 0], [1, 0, 0]], at: [[0, 0, 1], [0, 0, 1]],
@@ -51,4 +51,14 @@ it('retains flexible flags when compact geometry replaces relaxed helices', () =
   expect(expandCompactNucleotides(source).map(n => n.is_flexible_segment)).toEqual([true, false])
   delete source.h1.FORWARD.flex
   expect(expandCompactNucleotides(source).map(n => n.is_flexible_segment)).toEqual([false, false])
+})
+
+
+it('retains approved Corner inserts through full and partial compact decoding', () => {
+  const payload = compact()
+  const corner = { seam: { 0: { backbone_position: [1, 2, 3], base_position: [4, 5, 6], frame_rotation: [0, 0, 0, 1] } } }
+  payload.h1.FORWARD.corner = [corner, null]
+  expect(expandCompactNucleotides(payload)[0].corner_inserts).toEqual(corner)
+  expect(positionUpdateLookup(payload).get('h1:7:FORWARD:0').corner_inserts).toEqual(corner)
+  expect(expandCompactNucleotides(payload)[1].corner_inserts).toBeUndefined()
 })

@@ -1,5 +1,24 @@
 # Strand extensions → oxDNA + NAMD (terminal ssDNA tails)
 
+**November 23 — Full extension base slabs:** extension DNA now renders the
+standard measured-ring slab (centroid, fitted plane, named in-plane ring span)
+from the current cached atomistic model via `extension_slabs.py`. Coarse extension
+backbone/base frames, atom coordinates and simulation placement stay unchanged;
+chemical modification markers remain slabless. Full rendering, incremental pose
+transport, cluster motion, unfold and extension visibility include the slabs.
+Atomic construction requests host-only display geometry to avoid a projection
+cycle. First-time Full geometry for designs with extensions now requires an
+atomistic build and its existing memory admission; a large legacy app check was
+refused for insufficient available RAM. No guard was weakened.
+Validation: 147 focused backend tests passed (2 optional tests skipped), 139
+frontend tests passed; the isolated app checks all 16 A/C/G/T tail bases across
+both termini/directions, with face/edge visual inspection. Run
+`just validate-safe uv run python -m scripts.check_extension_slabs_app` to recreate
+the five-command, independently replayed specimen and overlay check. The runner
+removes the specimen/workspace afterward; compact evidence goes under
+`.development-artifacts/extension-slabs/app/`. This verifies display alignment,
+not general long-tail stereochemistry (ISSUE-164).
+
 **November 2, 2026 scope correction:** polymerization strands must not be converted
 to these ordinary extensions (ISSUE-163). Long-extension molecular geometry was
 not fully developed and belongs to separate follow-on work after the feature-log/

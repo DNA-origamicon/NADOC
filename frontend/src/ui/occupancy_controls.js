@@ -1,3 +1,4 @@
+// ARCHIVED 2026-11-22: occupancy clouds are retired from NAMD/oxDNA. Not initialized by the app.
 /**
  * Occupancy-clouds panel section — owns its own DOM, parameters and network.
  *

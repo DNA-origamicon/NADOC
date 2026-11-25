@@ -730,6 +730,7 @@ def pod_payloads_for(
     n_atoms: int,
     *,
     network_volume_id: str,
+    workspace_dir: Path | None = None,
     interruptible: bool = False,
     budget_usd: float = DEFAULT_BUDGET_USD,
 ) -> list[dict]:
@@ -799,7 +800,9 @@ def pod_payloads_for(
                 ),
             )
         )
-    return payloads
+    from backend.core.md_resource_floors import runpod_memory_floor
+    return runpod_memory_floor(payloads, n_atoms, resident=plan["gpu_resident"],
+                               package=job.package_dir(workspace_dir) if workspace_dir is not None else None)
 
 
 def pod_payload_for(
@@ -860,6 +863,7 @@ async def run_job_on_pod(
         job,
         n_atoms,
         network_volume_id=network_volume_id,
+        workspace_dir=workspace_dir,
         interruptible=interruptible,
         budget_usd=budget_usd,
     )

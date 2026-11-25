@@ -115,7 +115,7 @@ source tree; engine availability, hardware, and model support vary by workflow.
 | **Shape and assemble** | Bend/twist geometry, introduce loop/skip deformations, group helices into clusters, assemble reusable parts with connectors and joints, and animate gears, belts, and repeating units. |
 | **Functionalize** | Add overhangs, ssDNA/dsDNA linkers, protein/biotin attachments, imported DNA aptamers, thiolated gold particles, quantum dots, and fluorophore labels. Support for simulation depends on the attachment and engine. |
 | **Inspect and compare** | Switch among eleven representations, including atomistic and coarse-grained previews; compare panels or overlays; inspect local view volumes and sections; measure distances and visualize scalar maps. |
-| **Simulate and analyze** | Use CanDo/SNUPI FEM, mrDNA, oxDNA, or NAMD; manage jobs and resources; inspect relaxed shapes, trajectories, RMSF, deviation, and conformational clusters. See [simulation scope](#simulation-engines-and-analysis). |
+| **Simulate and analyze** | Use CanDo/SNUPI FEM, mrDNA, oxDNA, or NAMD; manage jobs and resources; inspect relaxed shapes, trajectories, RMSF, and deviation. See [simulation scope](#simulation-engines-and-analysis). |
 | **Render and present** | Use Photo Mode, high-resolution PNG output, camera/keyframe animations, video export, and STL/3MF print exports. Experimental browser sharing and native VR provide additional presentation workflows. |
 | **Save and collaborate** | Keep native parts/assemblies, undoable feature history, loadouts and immutable versions; package selected simulation artifacts; synchronize workspaces over Tailscale with leases and conflict preservation. |
 | **Exchange and automate** | Import/export caDNAno and scadnano with compatibility review; export atomistic structures and simulation packages; build designs and assemblies through scripts and the backend API. |
@@ -279,8 +279,7 @@ by the engine and configured target; they are not interchangeable for every mode
 | **NAMD** | Atomistic relaxation and production, explicit solvent or supported GBIS protocols, and live trajectories. | [NAMD setup](docs/namd_setup.md); complete sequences, topology preparation, and suitable resources are required to run. |
 
 Result tools include aligned playback/scrubbing, frame ranges, average structures,
-RMSF flexibility, deviation/strain maps, metrics export, and conformational
-occupancy clustering, including selection-scoped clustering where supported.
+RMSF flexibility, deviation/strain maps, and metrics export.
 Anchors, electric fields, and surface constraints are engine-specific controls.
 Specialized research workflows include
 [nanopore ion transport](docs/namd_nanopore_transport.md),

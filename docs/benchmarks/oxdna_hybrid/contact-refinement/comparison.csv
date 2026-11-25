@@ -1,0 +1,3 @@
+method,wall_minutes,p_bound_bound_start,p_bound_unbound_start,initial_state_gap,q0_crossings,q0_q6_passages,mean_correlated_weight_ess,tm_precision_certified
+radius_0.5,4.111546238081064,1.0,0.005828083230674961,0.994171916769325,42,1,6.555600241465815,False
+radius_1.5,4.100402218215944,0.9999999999999987,7.455935310175923e-05,0.9999254406468969,1,0,11.541641494721203,False

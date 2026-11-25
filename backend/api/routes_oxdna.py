@@ -3647,7 +3647,8 @@ async def get_oxdna_trajectory_progress(job_id: str) -> dict:
     return {"active": True, **p}
 
 
-@router.get("/oxdna/jobs/{job_id}/occupancy")
+
+# ARCHIVED 2026-11-22: retained for historical analysis; not registered as an API route.
 async def get_oxdna_occupancy(
     job_id: str,
     request: Request,
@@ -3818,7 +3819,8 @@ class OccupancyBody(BaseModel):
     fit: str = "selection"
 
 
-@router.post("/oxdna/jobs/{job_id}/occupancy")
+
+# ARCHIVED 2026-11-22: retained for historical analysis; not registered as an API route.
 async def post_oxdna_occupancy(
     job_id: str, request: Request, body: OccupancyBody
 ) -> dict:
@@ -3857,7 +3859,8 @@ async def post_oxdna_occupancy(
     )
 
 
-@router.get("/oxdna/jobs/{job_id}/occupancy-progress")
+
+# ARCHIVED 2026-11-22: retained for historical analysis; not registered as an API route.
 async def get_oxdna_occupancy_progress(job_id: str) -> dict:
     """Live frames-processed progress for an in-flight occupancy build.
 

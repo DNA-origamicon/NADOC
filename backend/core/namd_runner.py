@@ -741,6 +741,10 @@ def _reconcile_preparing(job: MdJob, workspace_dir: Path) -> MdJob:
     if is_active_preparation(job.job_id):
         return job
 
+    from backend.core.md_preparation_recovery import owns_preparation
+    if owns_preparation(job, workspace_dir):
+        return job
+
     sidecar = job.job_dir(workspace_dir) / PREP_PROGRESS_FILENAME
     try:
         age = time.time() - sidecar.stat().st_mtime

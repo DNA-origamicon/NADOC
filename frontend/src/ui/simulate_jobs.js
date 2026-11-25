@@ -1141,7 +1141,7 @@ export function initSimulateJobs({
                     blade: bladePanel, namd: mdPanel }[node.engine]
     if (!panel) return
     engineSelector?.select?.(node.engine)     // reveal that engine's detail host
-    if (node.engine === 'namd') return panel?.selectJob?.(node.job_id, { explicit })
+    if (node.engine === 'namd') return panel?.selectJob?.(node.job_id, { explicit, snapshotJobs: _nodes })
     return node.engine === 'oxdna' && thermalStage ? panel?.selectJob?.(node.job_id, { thermalStage }) : panel?.selectJob?.(node.job_id)
   }
 

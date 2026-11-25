@@ -19,6 +19,8 @@ const loadAttachment = options => loadEvidence(attachmentURL, options)
 const loadDirect = options => loadEvidence(directURL, options)
 const loadNativeDirect = options => loadEvidence(nativeDirectURL, options)
 const loadDirectRenderer = () => import('./direct_linker_review.js')
+const loadCorner = options => loadEvidence(new URL('./geometry_review_data/corner-closure.json.gz', import.meta.url).href, options)
+const loadCornerRenderer = () => import('./corner_placement_review.js')
 
 // Add future prepared issues here, using their own loader and content renderer.
 // Entries sharing a loader share one in-memory bundle until the workspace closes.
@@ -30,4 +32,8 @@ export const geometryReviewCases = [
   { id: 'direct-native', title: 'Direct — native Extrude, unreachable layout', load: loadDirect, loadRenderer: loadDirectRenderer, control: 'native' },
   { id: 'direct-contact', title: 'Direct — phase control with atom contact', load: loadDirect, loadRenderer: loadDirectRenderer, control: 'contact' },
   { id: 'direct-reachable', title: 'Direct — same-cluster strain exemption', load: loadNativeDirect, loadRenderer: loadDirectRenderer },
+  { id: 'corner', title: 'Corner — 6HB seam closure candidate', load: loadCorner, loadRenderer: loadCornerRenderer },
+  { id: 'corner-square', title: 'Corner — flat 1×8 square', load: loadCorner, loadRenderer: loadCornerRenderer, control: 'square' },
+  { id: 'corner-hc2', title: 'Corner — 2HB honeycomb control', load: loadCorner, loadRenderer: loadCornerRenderer, control: 'hc2' },
+  { id: 'corner-sq2', title: 'Corner — 2HB square control', load: loadCorner, loadRenderer: loadCornerRenderer, control: 'sq2' },
 ]

@@ -1,3 +1,4 @@
+import { initUvCrosslinking } from './uv_crosslinking.js'
 import { initMdFlexSettings, showMappedFlexScale } from './md_flex_settings.js'
 import { mergeCreatingJobs } from '../api/sim_job_creation.js'
 import { showConfirm } from './primitives/confirm.js'
@@ -20,7 +21,6 @@ import { initMdIonPathsControls } from './md_ion_paths_controls.js'
  * Falls back to REST polling for completed jobs.
  */
 
-import { initOccupancyControls } from './occupancy_controls.js'
 import { flexProgressView } from './md_flex_progress.js'
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
@@ -31,7 +31,7 @@ import {
   selectionUpdatesVisualization,
 } from './visualization_selection_policy.js'
 import { jobOutOfDate, ensureJobCurrent, restoreSubmittedDesign } from './job_staleness.js'
-import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram } from '../api/client.js'
+import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram, planMdPreparation } from '../api/client.js'
 import { getRunDir, recommendArchive, archiveRecommendation } from './run_location.js'
 import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
@@ -43,7 +43,6 @@ import { isPegJob } from './namd_peg_visualization.js'
 import { updatePegVisualization } from './namd_peg_viz_controls.js'
 import { shouldForceDisplayReload, mdReadinessIndicator, mdDisplayReadinessFromMeta } from './md_display_state.js'
 import { initMdSolventControls } from './md_solvent_controls.js'
-import { initMdWeldControls } from './md_weld_controls.js'
 import {
   initOxdnaAnchorsSetup, initAnchorTransferControls, setAnchorSectionEnabled,
 } from './oxdna_anchors_setup.js'
@@ -54,6 +53,8 @@ import { repKind } from './oxdna_display.js'
 import { initTrajPrebuildPlan } from './traj_prebuild_plan.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { openGpuDecisionModal, hasPendingGpuDecision } from './md_gate_b.js'
+import { admitMdPreparation } from './md_preparation_admission.js'
+import { mergeMdSelectionSnapshot } from './md_selection_snapshot.js'
 import { gateAMessage, openGateAModal } from './md_gate_a.js'
 import { store } from '../state/store.js'
 import { formatBytes } from './format_bytes.js'
@@ -1306,10 +1307,26 @@ export function mdEarlyStopToggleState(job, busy = false) {
   return { checked, pending: serverPending || !!busy }
 }
 
+export function mdEarlyStopControl(job, busy = false) {
+  const remote = mdIsRemoteJob(job)
+  const live = job?.status === 'running' && !mdIsProductionChild(job)
+  const state = mdEarlyStopToggleState(job, busy)
+  const target = job?.execution_target === 'alpine' ? 'Alpine' : 'RunPod'
+  return {
+    visible: !!job && !mdIsProductionChild(job) && (live || remote),
+    checked: remote ? !!job?.early_stop_relax : state.checked,
+    pending: !remote && state.pending,
+    disabled: remote || !live || state.pending,
+    explanation: remote
+      ? `${target}: skip acceleration is set at submission. To change it, edit the job settings and submit/resume a new run; this control cannot change the submitted run.`
+      : 'Applies at the next checkpoint of the running local relaxation.',
+  }
+}
+
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ submodel = null, mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getIonPathsOverlay = null, getCurrentRepr = null, getWeldOverlay = null, onJobCreated = null } = {}) {
+export function initMdJobsPanel({ submodel = null, mdDisplayController = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getIonPathsOverlay = null, getCurrentRepr = null, getWeldOverlay = null, onJobCreated = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -1387,7 +1404,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   // lost trajectory, failed load).
   function _syncVizOffRadio() {
     if (!vizOffRadio) return
-    const anyOn = [displayToggle, flexToggle, photoproductToggle, trajToggle, occupancyToggle, ionPathsToggle, ionVectorFieldToggle]
+    const anyOn = [displayToggle, flexToggle, photoproductToggle, trajToggle, ionPathsToggle, ionVectorFieldToggle]
       .some(t => t?.checked)
     vizOffRadio.checked = !(anyOn || _trajJobId || _trajLoadJobId)
   }
@@ -1427,17 +1444,9 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   const flexLegend   = document.getElementById('md-jobs-flex-legend')
   const photoproductToggle = document.getElementById('md-jobs-photoproduct-toggle')
   const photoproductStatus = document.getElementById('md-jobs-photoproduct-status')
-  const photoproductProgress = document.getElementById('md-jobs-photoproduct-progress')
-  const photoproductProgressFill = document.getElementById('md-jobs-photoproduct-progress-fill')
-  const photoproductProgressLabel = document.getElementById('md-jobs-photoproduct-progress-label')
-  const photoproductLegend = document.getElementById('md-jobs-photoproduct-legend')
   const trajToggle   = document.getElementById('md-jobs-traj-toggle')
-  // With its peers, not beside the occupancy card below: _syncVizOffRadio reads this in
-  // its `anyOn` array and runs during init, so a later `const` is a TDZ that kills boot.
-  const occupancyToggle = document.getElementById('md-jobs-occupancy-toggle')
   // Declared HERE, with the elements, not beside the controls factory ~1100 lines below:
   // _updateVizToggles reads it during init, and a `let` declared later is a TDZ.
-  let _occupancyReady = false
   const trajStatus   = document.getElementById('md-jobs-traj-status')
   const trajLoadProgress = document.getElementById('md-jobs-traj-load-progress')
   const trajControls = document.getElementById('md-jobs-traj-controls')
@@ -1836,10 +1845,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       void trajPlayer.prepare().finally(() => trajPlayer.setLoading(null))
     },
   })
-  // CPD weld pair — markers on the designed extra-base UV weld. Owns its own DOM +
-  // readout ticker; the panel only tells it which job is selected. Most designs have no
-  // weld pair, which the control reports as information rather than an error.
-  const weld = initMdWeldControls({ api, getWeldOverlay })
 
   _updateVizToggles(null)   // no job selected yet → only "Off" is selectable
 
@@ -2837,7 +2842,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
 
   function _startMdDisplay() {
     if (!displayToggle) return
-    if (_occupancyIsActive()) _setOccupancyOff()
     _setFlexOff()                     // live display + flex/traj are mutually exclusive
     _setPhotoproductOff()
     _setTrajOff()
@@ -2855,7 +2859,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     // socket on (re)connect, so ordering against the WS handshake doesn't matter.
     solvent?.setEnabled(true, 'live')
     solvent?.setJob(_selectedId)
-    weld?.setJob(_selectedId)
   }
 
   function _stopMdDisplay(status = 'Off') {
@@ -2892,10 +2895,8 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   // "Off" radio: turn every view off (native positions).  The browser already
   // unchecked whichever view was active; run each teardown (all idempotent) so
   // the model is restored and any in-flight analysis is cancelled.
-  // Off is an idempotent action, not merely a radio transition. A stale already-checked
-  // Off control must still clear shared occupancy scene ownership when clicked.
+  // Off remains an idempotent action when the radio is already checked.
   vizOffRadio?.addEventListener('click', () => {
-    if (_occupancyReady && _occupancyIsActive()) _setOccupancyOff()
     _setFlexOff()
     _setPhotoproductOff()
     _setTrajOff()
@@ -3028,51 +3029,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       `<span>${max.toFixed(2)} nm</span></div>` +
       `<div style="font-size:9px;color:${_C.dim}">rigid → flexible (RMSF)</div>`
   }
-  // The SAME card the oxDNA panel uses, on the md- id prefix with its own fetch.
-  // Only production (unrestrained) dynamics is ever clustered — see mdHasFreeSampling.
-  const _occupancy = initOccupancyControls({
-    api,
-    engine: 'md',
-    getOverlay: () => getOccupancyOverlay?.() ?? null,
-    getDisplay: () => getMdViz?.() ?? null,
-    getSelectedJobId: () => _selectedId,
-    getAnchorSelection,
-    fetchOccupancy: ({ jobId, params, selection, refetch, signal }) => {
-      const opts = { ...params, refetch }
-      return selection
-        ? api.postMdOccupancy(jobId, signal, { ...opts, selection })
-        : api.getMdOccupancy(jobId, signal, opts)
-    },
-  })
-
-  _occupancyReady = true
-
-  function _setOccupancyOff() {
-    _occupancy?.off()
-    // Occupancy setup is asynchronous; teardown must also invalidate the interval before
-    // the display has published mode='occupancy', or a late completion leaves states up.
-    getMdViz?.()?.stopAndRestore()
-    if (occupancyToggle) occupancyToggle.checked = false
-    _syncVizOffRadio()
-  }
-  function _occupancyIsActive() {
-    return !!_occupancy?.isActive() || getMdViz?.()?.mode?.() === 'occupancy'
-  }
-  occupancyToggle?.addEventListener('change', async () => {
-    if (!occupancyToggle.checked) { _setOccupancyOff(); return }
-    if (!_selectedId) {
-      occupancyToggle.checked = false
-      showToast('Select an MD job first', 'warn')
-      _syncVizOffRadio()
-      return
-    }
-    if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-    _setFlexOff()
-    _setPhotoproductOff()
-    _setTrajOff()
-    await _occupancy?.refresh()
-  })
-
   const flexSettings = initMdFlexSettings({ button: document.getElementById('md-jobs-flex-settings'),
     getJobId: () => _selectedId, getCounts: _loadTrajRawCounts,
     onApply: () => { _setFlexOff(); flexToggle.checked = true; flexToggle.dispatchEvent(new Event('change')) } })
@@ -3128,7 +3084,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         flexToggle.checked = false; _setFlexStatus('No trajectory frames yet', _C.warn); _syncVizOffRadio(); return
       }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-      if (_occupancyIsActive()) _setOccupancyOff()
       _setPhotoproductOff()
       _setTrajOff()
       await _refreshFlex()
@@ -3137,136 +3092,23 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     }
   })
 
-  let _photoproductAbort = null
-  function _setPhotoproductStatus(text, color = _C.dim) {
-    if (photoproductStatus) {
-      photoproductStatus.textContent = text
-      photoproductStatus.style.color = color
-    }
-  }
-  function _setPhotoproductLegend(show) {
-    if (!photoproductLegend) return
-    photoproductLegend.style.display = show ? '' : 'none'
-    photoproductLegend.innerHTML = show
-      ? `<div style="display:flex;align-items:center;gap:5px;font-size:9px;color:${_C.dim};margin-top:3px">`
-        + `<span>0</span><span style="flex:1;height:7px;border-radius:3px;background:`
-        + `linear-gradient(90deg,#000004,#51127c,#b73779,#fc8961,#fcfdbf)"></span>`
-        + `<span>1</span></div><div style="font-size:9px;color:${_C.dim}">`
-        + `low → high relative T–T propensity · unscored bases use 0</div>`
-      : ''
-  }
-  function _paintPhotoproductProgress(progress = null) {
-    if (!photoproductProgress) return
-    if (!progress) {
-      photoproductProgress.style.display = 'none'
-      photoproductProgress.setAttribute('aria-valuenow', '0')
-      if (photoproductProgressFill) photoproductProgressFill.style.width = '0%'
-      if (photoproductProgressLabel) photoproductProgressLabel.textContent = ''
-      return
-    }
-    const { percent, count, message, tone } = photoproductProgressView(progress)
-    photoproductProgress.style.display = ''
-    photoproductProgress.dataset.loading = String(tone !== 'error' && tone !== 'complete')
-    photoproductProgress.setAttribute('aria-valuenow', String(percent))
-    photoproductProgress.setAttribute('aria-valuetext', `${message}${count}`)
-    if (photoproductProgressFill) {
-      photoproductProgressFill.style.width = `${percent}%`
-      photoproductProgressFill.style.background = tone === 'error'
-        ? _C.err : tone === 'complete' ? _C.ok : _C.purple
-    }
-    if (photoproductProgressLabel) {
-      photoproductProgressLabel.textContent = `${message} · ${percent}%${count}`
-    }
-    _setPhotoproductStatus(`${message}${count}`,
-      tone === 'error' ? _C.err : tone === 'complete' ? _C.ok : _C.accent)
-  }
-  function _setPhotoproductOff() {
-    _photoproductAbort?.abort()
-    _photoproductAbort = null
-    if (_selectedId) api.cancelMdAnalysis(_selectedId, 'photoproduct')
-    if (getMdViz?.()?.mode?.() === 'photoproduct') getMdViz().stopAndRestore()
-    if (photoproductToggle) photoproductToggle.checked = false
-    getFlexScale?.()?.hide?.()
-    _setPhotoproductStatus('', _C.dim)
-    _paintPhotoproductProgress(null)
-    _setPhotoproductLegend(false)
-    _syncVizOffRadio()
-  }
-  async function _refreshPhotoproduct() {
-    const v = getMdViz?.()
-    if (!_selectedId || !v) return
-    const jobId = _selectedId
-    _photoproductAbort?.abort()
-    const controller = new AbortController()
-    _photoproductAbort = controller
-    _paintPhotoproductProgress({
-      phase: 'preparing', fraction: 0.01,
-      message: 'Loading topology and production trajectories',
-    })
-    const poll = setInterval(async () => {
-      if (controller.signal.aborted || jobId !== _selectedId
-          || !photoproductToggle?.checked) return
-      const progress = await api.getMdPhotoproductProgress(jobId).catch(() => null)
-      if (controller.signal.aborted || jobId !== _selectedId
-          || !photoproductToggle?.checked) return
-      if (progress?.active) _paintPhotoproductProgress(progress)
-    }, 250)
-    try {
-      const response = await api.getMdPhotoproductLikelihood(jobId, {
-        signal: controller.signal, maxFrames: 2000,
-      })
-      if (controller.signal.aborted || jobId !== _selectedId
-          || !photoproductToggle?.checked) return
-      _paintPhotoproductProgress({
-        phase: 'coloring', fraction: 0.995,
-        done: response.n_display_bases, total: response.n_display_bases,
-        message: 'Applying per-base false colors',
-      })
-      const result = v.displayPhotoproduct(jobId, response)
-      if (!result.ok) throw new Error(result.reason || 'no photoproduct data')
-      _setPhotoproductLegend(true)
-      getFlexScale?.()?.show?.({
-        title: 'Relative T–T photoproduct propensity', min: 0, max: 1,
-        mapType: 'photoproduct',
-        onRecolor: (lo, hi, cmap) => getMdViz?.()?.recolorPhotoproduct?.(lo, hi, cmap),
-      })
-      const cap = result.truncated ? ' · candidate cap reached' : ''
-      _paintPhotoproductProgress({
-        phase: 'complete', fraction: 1,
-        message: `Ready · ${result.nPositive}/${result.n} thymine bases with candidate partners`
-          + ` · ${result.nFrames ?? '?'} sampled frames${cap}`,
-      })
-      if (result.truncated) _setPhotoproductStatus(
-        `Ready · candidate cap reached; inspect the status before interpreting the map`,
-        _C.warn,
-      )
-    } catch (error) {
-      if (controller.signal.aborted) return
-      _paintPhotoproductProgress({
-        phase: 'error', fraction: 1,
-        message: error?.message || 'Photoproduct analysis failed',
-      })
-      if (photoproductToggle) photoproductToggle.checked = false
-      _syncVizOffRadio()
-    } finally {
-      clearInterval(poll)
-      if (_photoproductAbort === controller) _photoproductAbort = null
-    }
-  }
-  photoproductToggle?.addEventListener('change', async () => {
-    if (!photoproductToggle.checked) { _setPhotoproductOff(); return }
-    if (!_selectedId || !mdHasProductionRun(_selectedJob())) {
-      photoproductToggle.checked = false
-      showToast('A free production trajectory is required', 'warn')
-      _syncVizOffRadio()
-      return
-    }
-    if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-    if (_occupancyIsActive()) _setOccupancyOff()
-    _setFlexOff()
-    _setTrajOff()
-    await _refreshPhotoproduct()
+  const uvAnalysis = initUvCrosslinking({
+    api, getJobId: () => _selectedId, getDisplay: getMdViz, getScale: getFlexScale,
+    onOff: _syncVizOffRadio,
+    activate: () => {
+      if (!_selectedId || !mdHasProductionRun(_selectedJob())) {
+        showToast('A free production trajectory is required', 'warn')
+        return false
+      }
+      if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+      _setFlexOff()
+      _setTrajOff()
+      return true
+    },
   })
+  function _setPhotoproductStatus(text) { if (photoproductStatus) photoproductStatus.textContent = text }
+  function _setPhotoproductOff() { uvAnalysis.off() }
+  async function _refreshPhotoproduct() { await uvAnalysis.refresh() }
 
   function _setTrajStatus(text, color = _C.ok) {
     if (trajStatus) { trajStatus.textContent = text; trajStatus.style.color = color }
@@ -3290,7 +3132,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     onOff: _syncVizOffRadio,
     activate: () => {
       _stopMdDisplay('Native positions restored')
-      if (_occupancyIsActive()) _setOccupancyOff()
       _setFlexOff()
       _setPhotoproductOff()
       _setTrajOff()
@@ -3511,7 +3352,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       solvent?.setEnabled(true, 'traj')
       await solvent?.setJob(jobId, { stride: interval, nFrames: r.n_frames })
       if (_trajLoadJobId !== jobId) return
-      weld?.setJob(jobId)
       solvent?.showFrame(0)
       // Readiness includes DNA, ions/cell, and the first spline neighbourhood.
       if (!await trajPlayer.prepare() && _trajJobId === jobId) {
@@ -3532,7 +3372,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
       }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-      if (_occupancyIsActive()) _setOccupancyOff()
       _setFlexOff()
       _setPhotoproductOff()
       await _refreshTraj()
@@ -3576,7 +3415,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   // across selections, even when the selected job has no frames of its own.
   function _updateVizToggles(job = _selectedJob()) {
     const peg = updatePegVisualization(job)
-    if (gateStorageVisualization(job, [displayToggle, flexToggle, trajToggle, photoproductToggle, occupancyToggle])) {
+    if (gateStorageVisualization(job, [displayToggle, flexToggle, trajToggle, photoproductToggle])) {
       ionPaths?.setEnabled(false)
       solvent?.setEnabled(false)
       return
@@ -3589,20 +3428,14 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     _setRadioEnabled(flexToggle, hasTraj)
     _setRadioEnabled(trajToggle, hasTraj && !_trajLoading)
     if (trajToggle && _trajJobId) trajToggle.checked = !_selectedId || _selectedId === _trajJobId
-    // Occupancy needs PRODUCTION dynamics, not merely frames: clustering the relaxation
-    // ladder describes the schedule. Gated tighter than the flexibility map on purpose.
+    // UV analysis requires free production dynamics.
     const hasFree = mdHasProductionRun(job)
     _setRadioEnabled(photoproductToggle, hasFree)
-    _setRadioEnabled(occupancyToggle, hasFree)
     if (!hasFree && !photoproductToggle?.checked) {
       _setPhotoproductStatus(_PHOTO_NEEDS_PRODUCTION, _C.dim)
     } else if (hasFree && photoproductStatus?.textContent === _PHOTO_NEEDS_PRODUCTION) {
       _setPhotoproductStatus('', _C.dim)
     }
-    // `_ready` guards the `const _occupancy` this tears down: _updateVizToggles runs
-    // during init, before that const exists, and touching it there is a TDZ that aborts
-    // the whole panel's boot (it did once — see the occupancyToggle note above).
-    if (!hasFree && occupancyToggle?.checked && _occupancyReady) _setOccupancyOff()
     if (!hasFree && photoproductToggle?.checked) _setPhotoproductOff()
     if (!hasJob && displayToggle?.checked) _stopMdDisplay('Native positions restored')
     if (!hasTraj) { if (flexToggle?.checked) _setFlexOff(); if (trajToggle?.checked && !_trajJobId && !_trajLoadJobId) _setTrajOff() }
@@ -4396,6 +4229,12 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       draftId ? 'Sizing the solvated system…' : 'Saving job settings…',
       { indeterminate: true })
 
+    if (draftId && !await admitMdPreparation(payload, {
+      plan: request => planMdPreparation(request, draftId),
+      progress: message => showOpProgress('Relax', message, { indeterminate: true }),
+      notify: showToast,
+    })) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
+
     let memoryAdvice = null
     // Gate A — verify that the fully solvated system fits before starting the build.
     // Seeded drafts are sized later because their atomistic model is not available yet.
@@ -4546,10 +4385,8 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     if (_selectedId) _submitReview.open(_selectedId, { mode: 'resume' })
   })
 
-  // Is the selected job one the early-stop toggle can control LIVE (a running LOCAL
-  // relaxation — not Alpine, not a production child)?  This is now the toggle's ONLY
-  // job: its launch-default counterpart moved into the Job Wizard, so the card is simply
-  // hidden when nothing live is selected rather than quietly meaning something else.
+  // Only a running local relaxation consumes live changes. Remote cards display
+  // a disabled toggle; launch settings are edited in the Job Wizard.
   function _isLiveRelax(job) {
     return !!job && job.status === 'running' && mdIsLocalTarget(job.execution_target) && !mdIsProductionChild(job)
   }
@@ -4577,9 +4414,11 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       showToast(enabled ? 'Early-stop enabled (applies at next checkpoint)'
                         : 'Early-stop disabled', 'info')
     } catch (err) {
-      earlyStopChk.checked = !enabled   // revert on failure
+      // Selection may have moved to a remote job while the request was pending.
+      const state = mdEarlyStopControl(_selectedJob())
+      earlyStopChk.checked = state.checked
       if (earlyStopPending) earlyStopPending.style.display = 'none'
-      earlyStopChk.disabled = false
+      earlyStopChk.disabled = state.disabled
       console.warn(`[${_ts()}] md-jobs: early-stop toggle failed`, err)
       showToast('Early-stop toggle failed', 'warn')
     } finally {
@@ -4862,7 +4701,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       display: displayToggle?.checked,
       flex: flexToggle?.checked,
       photoproduct: photoproductToggle?.checked,
-      occupancy: occupancyToggle?.checked,
       trajectory: trajToggle?.checked,
     })
     _selectedId = jobId
@@ -4920,7 +4758,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     if (storageUnavailable(job)) return
     if (isPegJob(job)) {
       _stopMdDisplay(); _setFlexOff(); _setPhotoproductOff(); _setTrajOff()
-      if (_occupancyReady) _setOccupancyOff()
       openPegQualification(job, action)
       return
     }
@@ -4931,15 +4768,11 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         : _setTrajOff(),
       display: async () => {
         solvent?.setJob(_selectedId)
-        weld?.setJob(_selectedId)
         await _refreshMdDisplay()
       },
       flex: () => _mdHasTrajectory(job) && flexToggle?.checked ? _refreshFlex() : undefined,
       photoproduct: () => mdHasProductionRun(job) && photoproductToggle?.checked
         ? _refreshPhotoproduct()
-        : undefined,
-      occupancy: () => mdHasProductionRun(job) && occupancyToggle?.checked
-        ? _occupancy?.refresh()
         : undefined,
       // Alpine selection has a dedicated one-shot download + prewarm pipeline. Do not
       // race it with the generic remote guard, which would close the socket it just opened.
@@ -5234,16 +5067,17 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     // The primary run control covers start/stop/resume for a local job and the Alpine
     // hand-off (⟳ Preparing… → ☁ Submit to Alpine).
     _paintRunControl()
-    // The live early-stop card is shown ONLY for a running local relaxation, because
-    // that is the only state in which it does anything. mdEarlyStopToggleState honours
-    // the in-flight override so a 3 s state push can't snap the box back off.
-    const live = _isLiveRelax(job)
-    if (liveControlsCard) liveControlsCard.style.display = live ? '' : 'none'
-    if (earlyStopChk && live) {
-      const { checked, pending } = mdEarlyStopToggleState(job, _earlyStopBusy)
-      earlyStopChk.checked = checked
-      earlyStopChk.disabled = pending
-      if (earlyStopPending) earlyStopPending.style.display = pending ? '' : 'none'
+    // Remote launch scripts cannot consume live changes. Keep their control
+    // visibly disabled and explain the submission boundary.
+    const earlyStop = mdEarlyStopControl(job, _earlyStopBusy)
+    if (liveControlsCard) liveControlsCard.style.display = earlyStop.visible ? '' : 'none'
+    if (earlyStopChk) {
+      earlyStopChk.checked = earlyStop.checked
+      earlyStopChk.disabled = earlyStop.disabled
+      earlyStopChk.closest('label')?.setAttribute('title', earlyStop.explanation)
+      if (earlyStopPending) earlyStopPending.style.display = earlyStop.pending ? '' : 'none'
+      const note = document.getElementById('md-jobs-early-stop-note')
+      if (note) note.textContent = earlyStop.explanation
     }
     // Submitting a prepared job is the PRIMARY control's job now (☁ Submit to Alpine),
     // so there is no separate button here to show or hide.
@@ -5885,7 +5719,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       _setFlexOff()
       _setTrajOff()
       _setPhotoproductOff()
-      if (_occupancyIsActive()) _setOccupancyOff()
     },
     onChange: enabled => {
     setAnchorSectionEnabled(document.getElementById('md-surface-anchors-section'), enabled)
@@ -5953,13 +5786,12 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
      *  main.js, because md_panel owns the socket and this panel owns the toggles. */
     acceptLiveSolvent: (buf) => solvent?.liveBlob(buf),
 
-    captureSetupSelections: () => ({anchors:_anchorsCard.getAnchors(),surfaceAnchors:_surfaceAnchorsCard.getAnchors(),occupancyScope:_occupancy.scope()?.getAnchors?.() || []}),
+    captureSetupSelections: () => ({anchors:_anchorsCard.getAnchors(),surfaceAnchors:_surfaceAnchorsCard.getAnchors()}),
     applySetupSelections: (settings, sameDesign) => {
       _anchorsCard.applyConfig(sameDesign ? settings.anchors || [] : [])
       _surfaceAnchorsCard.applyConfig(sameDesign ? settings.surfaceAnchors || [] : [])
-      _occupancy.scope()?.applyConfig?.(sameDesign ? settings.occupancyScope || [] : [])
-      return !sameDesign && (settings.anchors?.length || settings.surfaceAnchors?.length || settings.occupancyScope?.length)
-        ? 'Anchor or occupancy selections belong to another design; reselect them here.' : ''
+      return !sameDesign && (settings.anchors?.length || settings.surfaceAnchors?.length)
+        ? 'Anchor selections belong to another design; reselect them here.' : ''
     },
     getSelectedJob: _selectedJob,
     // Immediately re-fetch the job list (used when a job is spawned from somewhere other
@@ -5973,8 +5805,9 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     },
     // Select a job in this panel's list (highlight + populate cards) as a row click does.
     // Refetches first if the job isn't listed yet (a just-spawned job).
-    selectJob: async (jobId, { explicit = false } = {}) => {
+    selectJob: async (jobId, { explicit = false, snapshotJobs = [] } = {}) => {
       if (!jobId) return
+      _jobs = mergeMdSelectionSnapshot(_jobs, jobId, snapshotJobs)
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
       return _selectJob(jobId, explicit)
     },

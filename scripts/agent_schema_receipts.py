@@ -18,18 +18,22 @@ def raw_snapshot(payload):
 
 
 def matches_source_receipt(design, expected, digest):
-    # Exact-base clustering added an empty membership field to every legacy
-    # cluster. Document metadata edits may have no retained pre-edit snapshot.
-    # Verify the independently replayed value against that precise older schema;
-    # never discard nonempty membership or accept a merely similar state.
-    legacy = deepcopy(expected)
-    changed = False
-    for cluster in legacy.get('cluster_transforms', []):
-        if cluster.get('base_ids') == []:
-            del cluster['base_ids']
-            changed = True
-    if changed and content_digest(legacy) == digest:
-        return True
+    from scripts.agent_metadata_exceptions import reviewed_replay_value
+    expected = reviewed_replay_value(design, expected)
+    # Known optional cluster fields were added in separate schema revisions.
+    # Check each historical default-only projection; never omit authored values
+    # or relax the original receipt digest (including document metadata).
+    for fields in (('base_ids',), ('folding_order',), ('base_ids', 'folding_order')):
+        legacy = deepcopy(expected)
+        changed = False
+        for cluster in legacy.get('cluster_transforms', []):
+            for field in fields:
+                default = [] if field == 'base_ids' else None
+                if field in cluster and cluster[field] == default:
+                    del cluster[field]
+                    changed = True
+        if changed and content_digest(legacy) == digest:
+            return True
     payloads = []
     for row in design.feature_log:
         for field in ('design_snapshot_gz_b64', 'post_state_gz_b64', 'pre_state_gz_b64'):

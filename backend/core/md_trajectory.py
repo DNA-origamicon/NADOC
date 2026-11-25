@@ -2693,7 +2693,7 @@ def md_occupancy(
     selection=None,
     fit: str = "selection",
 ) -> dict:
-    """Top-N most likely CONFIGURATIONS of a NAMD ensemble.
+    """ARCHIVED 2026-11-22: top-N configurations; no active UI/API entry point.
 
     The NAMD counterpart of :func:`backend.core.oxdna_occupancy.production_occupancy`.
     Everything downstream of the feature matrix — PCA, k-means, the medoid, the

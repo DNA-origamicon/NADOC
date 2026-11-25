@@ -1095,7 +1095,25 @@ describe('mdHasMetrics', () => {
   })
 })
 
-import { mdEarlyStopToggleState } from './md_jobs_panel.js'
+import { mdEarlyStopToggleState, mdEarlyStopControl } from './md_jobs_panel.js'
+
+describe('mdEarlyStopControl', () => {
+  it.each(['alpine', 'runpod'])('disables %s and ignores ineffective pending overrides', execution_target => {
+    for (const status of ['draft', 'queued', 'running', 'paused', 'completed']) {
+      const state = mdEarlyStopControl({ execution_target, status, early_stop_relax: false, early_stop_pending: true })
+      expect(state).toMatchObject({ visible: true, disabled: true, checked: false, pending: false })
+      expect(state.explanation).toContain('set at submission')
+      expect(state.explanation).toContain('submit/resume')
+    }
+  })
+  it('keeps local live controls available and honors pending changes', () => {
+    expect(mdEarlyStopControl({ execution_target: 'local', status: 'running' }))
+      .toMatchObject({ visible: true, disabled: false, pending: false })
+    expect(mdEarlyStopControl({ status: 'running', early_stop_pending: true }))
+      .toMatchObject({ visible: true, disabled: true, checked: true, pending: true })
+    expect(mdEarlyStopControl({ status: 'stopped' })).toMatchObject({ visible: false, disabled: true })
+  })
+})
 
 describe('mdEarlyStopToggleState', () => {
   it('settled: no override → reflects the persisted flag, not pending', () => {
@@ -1533,6 +1551,20 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     $('md-jobs-panel-arrow').classList.add('is-collapsed')
   })
   afterEach(() => { clearDom(); vi.useRealTimers() })
+
+  it('selects saved Alpine metadata without waiting for an outstanding full job list', async () => {
+    const job = { job_id: 'alpine-saved', engine: 'namd', status: 'running',
+      execution_target: 'alpine', prep_params: { padding_nm: 6 }, segments: [] }
+    mdApi.listMdJobs.mockReturnValue(new Promise(() => {}))
+    mdApi.getMdJob.mockResolvedValue(job)
+    const panel = initMdJobsPanel()
+    let accepted = false
+    void panel.selectJob(job.job_id, { explicit: true, snapshotJobs: [job] }).then(() => { accepted = true })
+    await flushMicro()
+    expect(accepted).toBe(true)
+    expect(panel.getSelectedJob()).toMatchObject({ job_id: job.job_id, execution_target: 'alpine' })
+    panel.deselectJob()
+  })
 
   it('restores the submodel on job selection and returns to the draft on deselection', async () => {
     const job = { job_id: 'region-job', status: 'draft', prep_params: {} }
@@ -2625,7 +2657,7 @@ describe('initMdJobsPanel — Health card tile states', () => {
   })
 })
 
-describe('mdHasProductionRun — occupancy is only offered for production dynamics', () => {
+describe('mdHasProductionRun — UV analysis requires production dynamics', () => {
   const seg = (stage, status = 'done') => ({ stage, status, name: stage })
 
   it('rejects the terminal unrestrained equilibration stage', () => {
@@ -2658,7 +2690,7 @@ describe('mdHasProductionRun — occupancy is only offered for production dynami
   })
 
   it('requires the production stage to have actually written frames', () => {
-    // Queued is not sampling — offering occupancy there would fetch nothing.
+    // Queued is not sampling — offering UV analysis there would fetch nothing.
     expect(mdHasProductionRun({ segments: [seg('5 ns production run', 'pending')] })).toBe(false)
     expect(mdHasProductionRun({ segments: [seg('5 ns production run', 'running')] })).toBe(true)
   })

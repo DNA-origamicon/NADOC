@@ -5,6 +5,7 @@ import { initAtomisticRenderer } from '../scene/atomistic_renderer.js'
 import { buildHelixObjects, buildStapleColorMap } from '../scene/helix_renderer.js'
 import { buildCrossoverConnections } from '../scene/crossover_connections.js'
 import { filterAuditAtomData } from './molecular_placement_audit.js'
+import { buildCornerReviewFullLayer } from './corner_review_full_layer.js'
 
 const key = a => `${a.strand_id}:${a.helix_id}:${a.bp_index}:${a.direction}`
 function disposeTree(root) {
@@ -76,7 +77,10 @@ export function createAttachmentReviewViewer(host, id, bundle, representation) {
   function layer(side, serials=null, ghost=false) {
     const design = bundle[`${side}_design`], data=bundle[side]
     let root, dispose
-    if (representation === 'full') {
+    if (representation === 'full' && data.full_model?.projection === 'diagnostic-atom-landmarks-v1') {
+      const ctrl = buildCornerReviewFullLayer(scene, data.full_model, bundle.strand_colors, serials)
+      root = ctrl.root; dispose = ctrl.dispose
+    } else if (representation === 'full') {
       const keys = serials && new Set(serials.map(i => key(data.atoms[i])))
       const geometry = keys ? data.nucleotides.filter(n => keys.has(key(n))) : data.nucleotides
       const custom = Object.fromEntries(bundle.strand_colors)
@@ -107,18 +111,33 @@ export function createAttachmentReviewViewer(host, id, bundle, representation) {
       layer('current', id === 'defects' ? [...new Set([...affected,...bundle.defect_atom_serials.current])] : null, true)
       layer('candidate', id === 'defects' ? [...new Set([...affected,...bundle.defect_atom_serials.candidate])] : affected)
       diagnostics('current'); diagnostics('candidate')
-      if (id === 'difference') for (const row of bundle.displacement.vectors) line([row.from,row.to],0xffd33d)
+      if (id === 'difference') {
+        const rows = bundle.displacement.vectors
+        const stride = bundle.max_displacement_vectors ? Math.max(1, Math.ceil(rows.length / bundle.max_displacement_vectors)) : 1
+        for (let i = 0; i < rows.length; i += stride) line([rows[i].from,rows[i].to],0xffd33d)
+      }
     }
     render()
   }
-  function fit() {
-    const box = new THREE.Box3()
-    for (const side of ['current','candidate']) for (const a of bundle[side].atoms) box.expandByPoint(new THREE.Vector3(a.x,a.y,a.z))
+  function frame(box) {
     const center=box.getCenter(new THREE.Vector3()), radius=Math.max(box.getSize(new THREE.Vector3()).length()/2,0.8)
     controls.target.copy(center)
     camera.position.copy(center).add(new THREE.Vector3(radius*1.35,radius*.9,radius*1.8))
     camera.near=Math.max(radius/1000,.001); camera.far=Math.max(radius*50,100)
     camera.updateProjectionMatrix(); controls.update(); render()
+  }
+  function fit() {
+    const box = new THREE.Box3()
+    for (const side of ['current','candidate']) for (const a of bundle[side].atoms) box.expandByPoint(new THREE.Vector3(a.x,a.y,a.z))
+    frame(box)
+  }
+  function focusAtoms(serials) {
+    const box = new THREE.Box3()
+    for (const side of ['current', 'candidate']) for (const serial of serials) {
+      const atom = bundle[side].atoms[serial]
+      if (atom && [atom.x, atom.y, atom.z].every(Number.isFinite)) box.expandByPoint(new THREE.Vector3(atom.x, atom.y, atom.z))
+    }
+    if (!box.isEmpty()) frame(box.expandByScalar(.5))
   }
   function resize() {
     const width = Math.max(host.clientWidth, 2), height = Math.max(host.clientHeight, 2)
@@ -128,7 +147,7 @@ export function createAttachmentReviewViewer(host, id, bundle, representation) {
   const observer=new ResizeObserver(resize); observer.observe(host)
   controls.addEventListener('change',render)
   resize(); rebuild(); fit()
-  return {camera, controls, fit, setRepresentation:rebuild,
+  return {camera, controls, fit, focusAtoms, setRepresentation:rebuild,
     isRendered:()=>completed>0 && completed===requested, dispose() {
     alive=false; cancelAnimationFrame(pending); observer.disconnect(); controls.dispose()
     for (const dispose of layers) dispose()

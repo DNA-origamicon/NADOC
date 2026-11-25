@@ -19,9 +19,9 @@ describe('selectionUpdatesVisualization', () => {
 })
 
 describe('applyMdVisualizationJobSwitch', () => {
-  it.each(['off', 'display', 'flex', 'photoproduct', 'occupancy', 'trajectory', 'none'])('runs only the %s handler', async (action) => {
+  it.each(['off', 'display', 'flex', 'photoproduct', 'trajectory', 'none'])('runs only the %s handler', async (action) => {
     const handlers = Object.fromEntries(
-      ['off', 'display', 'flex', 'photoproduct', 'occupancy', 'trajectory', 'none'].map(key => [key, vi.fn()]),
+      ['off', 'display', 'flex', 'photoproduct', 'trajectory', 'none'].map(key => [key, vi.fn()]),
     )
     await applyMdVisualizationJobSwitch(action, handlers)
     expect(handlers[action]).toHaveBeenCalledOnce()
@@ -36,7 +36,6 @@ describe('mdVisualizationJobSwitchAction', () => {
     [{ display: true }, 'display'],
     [{ flex: true }, 'flex'],
     [{ photoproduct: true }, 'photoproduct'],
-    [{ occupancy: true }, 'occupancy'],
     [{ trajectory: true }, 'trajectory'],
     [{}, 'none'],
   ])('maps the active view to the job-switch action', (state, action) => {

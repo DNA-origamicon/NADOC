@@ -1655,3 +1655,62 @@ contact metrics. Keyboard M before selection is tested with delayed gate replies
 The desktop GPU run additionally covers completed Full frames (gl.finish),
 120 updates across the relaxed and saved poses, max 171.8 ms on RTX 2080 SUPER.
 Subjective raycast/pointer feel near crowded contacts remains a manual check.
+
+### MV-71 — VR File popup comfort and physical feedback (PENDING, 2026-11-23)
+
+Open left File → New Part in the headset. Check that the sidebar closes and
+that all 42 large QWERTY keys and the filename remain comfortably visible. Type a name,
+change case, delete, cancel, and reopen. Verify single hover-entry and activation
+vibration on the pointing controller, including transitions to disabled controls.
+Open the part browser, navigate folders and scroll a long file list; compare text
+and metadata with the welcome library. Check Save As, overwrite confirmation,
+New Part creation, saving before Open, native model replacement, and Close Session.
+New Assembly must remain disabled. Offline production hit tests exceed 95% under
+all four synthetic profiles at 0.6 m; they do not qualify physical human accuracy,
+through-lens readability or comfort. The visible File demo additionally exercises
+real native IPC, standalone popup rendering, typing/editing, cancellation, folder
+navigation and session close with stereo and actual desktop evidence. It creates
+no molecular structures. See `.development-artifacts/vr-file-qwerty/live/`.
+Default placement and through-lens comfort still need human review; the demo
+explicitly positions the wider keyboard 1.10 m away without shrinking its keys.
+
+### VR File gallery styles — through-lens comparison (PENDING, 2026-11-23)
+
+Compare all six options under Debug → VR Component Gallery → File menus.
+Assess folder silhouettes, text density, selection visibility and comfortable
+controller targets at the default gallery distance. Verify switching from minimal
+recent files to the detail table and split inspector without moving the panel.
+Automated native interaction/render checks and synthetic controller profiles do
+not establish human preference, comfort or physical haptic feel. Sample actions
+are intentionally confined to gallery state and do not operate on documents.
+
+MV-71 update — approved option 4 is now the production VR File table, with
+six-row paging and fixed commands. Verify through-lens readability of the
+Modified/Size columns, long-name truncation, and default wrist placement on a
+large real library. Desktop browser styling is unchanged. Native layout/ray tests
+cover 14 entries over three pages; the live non-creating workflow checks actual
+folder metadata, command switching, keyboard cancellation and session close.
+Evidence: `.development-artifacts/vr-file-table/`. Commit-save, overwrite and
+loading a real saved structure remain outside the non-creating demo.
+
+MV-71 update (2026-11-24): shared QWERTY text entry now serves filenames and custom
+scaffold sequences; numeric pads remain separate. Verify through-lens comfort,
+Shift/symbol-page feedback and the new symbols target with real controllers.
+Four button styles are desktop-only studies, not a selected production style.
+Native images and synthetic controller profiles cannot close this comfort debt.
+
+MV-71 follow-up (2026-11-24): Bevel / Slate production keyboard now has analog
+6 mm local key travel. Native tests and all four synthetic ray profiles pass;
+first-profile live pressure/hold/release/partial Cancel checks pass. Complete
+four-profile live rerun and through-lens feel remain outstanding after SteamVR
+`VRInitError_Init_HmdNotFound`. Retained attempts and cleanup:
+`.development-artifacts/vr-keyboard-slate/`; see `docs/vr_text_keyboard.md`.
+
+MV-71 update (2026-11-24): keyboard opening scale 0.84 and visible border now pass
+all four browser/native motion profiles: trigger move/resize, physical grip move,
+pressure/typing and cancellation, with 57 stereo/desktop review stages. Native
+checks cover two-grip resize and acknowledgement persistence. Synthetic accuracy
+at the new scale is 96.419–100%. Prior live completion debt is resolved by
+`.development-artifacts/vr-keyboard-border/live-05/`; through-lens feel/comfort
+remains open. Failed attempts and observation changes are retained in the parent
+review directory. No structures saved; workspace/credentials/viewer cleanup verified.

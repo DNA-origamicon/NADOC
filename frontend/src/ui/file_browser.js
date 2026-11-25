@@ -89,6 +89,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
 
     // ── Overlay + modal ──────────────────────────────────────────────────────
     const overlay = document.createElement('div')
+    overlay.dataset.vrFileBrowser = mode
     overlay.style.cssText = `position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center`
 
     const modal = document.createElement('div')
@@ -105,6 +106,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     titleEl.textContent = title
     titleEl.style.cssText = `color:${S.text};font-size:13px;font-weight:500`
     const closeBtn = btn('×', `background:none;border:none;color:${S.muted};font-size:18px;cursor:pointer;line-height:1;padding:0`)
+    closeBtn.dataset.vrFileAction = 'Cancel'
     closeBtn.addEventListener('click', () => _finish(null))
     headerEl.append(titleEl, closeBtn)
 
@@ -141,6 +143,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     toolbarEl.style.cssText = `display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid ${S.border2}`
 
     const breadcrumbEl = document.createElement('div')
+    breadcrumbEl.dataset.vrFileLocation = ''
     breadcrumbEl.style.cssText = 'flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:2px;min-width:0;overflow:hidden'
 
     const newFolderBtn = btn('+ Folder', [
@@ -189,6 +192,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       nameLabel.style.cssText = `color:${S.muted};flex-shrink:0;font-size:11px`
 
       nameInputEl = inp('filename', suggestedName, 'flex:1;min-width:0')
+      nameInputEl.dataset.vrFilename = ''
 
       extSelectEl = document.createElement('select')
       extSelectEl.style.cssText = [
@@ -207,6 +211,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
         `flex-shrink:0;padding:5px 12px;background:${S.bg};border:1px solid ${S.border}`,
         `color:${S.muted};border-radius:3px;cursor:pointer;font-size:11px`,
       ].join(';'))
+      cancelBtn.dataset.vrFileAction = 'Cancel'
       cancelBtn.addEventListener('click', () => _finish(null))
 
       const saveBtn = btn('Save', [
@@ -215,6 +220,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       ].join(';'))
       saveBtn.addEventListener('mouseenter', () => { saveBtn.style.background = '#2d5a3e' })
       saveBtn.addEventListener('mouseleave', () => { saveBtn.style.background = '#1f3d2a' })
+      saveBtn.dataset.vrFileAction = 'Save'
       saveBtn.addEventListener('click', _commitSave)
       nameInputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') _commitSave() })
       nameInputEl.addEventListener('input', () => {
@@ -223,6 +229,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       })
 
       footerErrorEl = document.createElement('div')
+      footerErrorEl.dataset.vrFileError = ''
       footerErrorEl.style.cssText = `display:none;color:${S.red};font-size:var(--text-xs);padding-left:2px`
 
       footerRow.append(nameLabel, nameInputEl, extSelectEl, cancelBtn, saveBtn)
@@ -493,7 +500,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       // ".." row
       if (_dir) {
         const up = _makeRow({
-          icon: '↑', label: '..', dim: 'parent folder', actions: [],
+          icon: '↑', label: '..', dim: 'parent folder', actions: [], vrType: 'Parent',
           onClick: () => { const parts = _dir.split('/'); parts.pop(); _navigateTo(parts.join('/')) },
         })
         listEl.appendChild(up)
@@ -530,7 +537,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       for (const folder of folders) {
         const folderName = folder.path.split('/').pop()
         const row = _makeRow({
-          icon: '📁', label: folderName, dim: null,
+          icon: '📁', label: folderName, dim: null, vrType: 'Folder', vrModified: folder.mtime_iso,
           actions: _activePeerId ? [] : [
             { label: '✎', title: 'Rename', fn: () => _startRename(row, folder) },
             { label: '×', title: 'Delete', color: S.red, fn: async () => {
@@ -561,7 +568,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
         const icon = file.type === 'assembly' ? '⬡' : '◈'
 
         const row = _makeRow({
-          icon, label: fileName, dim: ago,
+          icon, label: fileName, dim: ago, vrType: file.type === 'assembly' ? 'Assembly' : 'Part', vrModified: file.mtime_iso, vrSize: file.size_bytes,
           actions: _activePeerId ? [] : [
             { label: '✎', title: 'Rename', fn: () => _startRename(row, file) },
             { label: '↗', title: 'Move',   fn: () => _startMove(file) },
@@ -582,11 +589,16 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     }
 
     // ── Row factory ───────────────────────────────────────────────────────────
-    function _makeRow({ icon, label, dim, actions, onClick }) {
+    function _makeRow({ icon, label, dim, actions, onClick, vrType, vrModified, vrSize }) {
       const row = document.createElement('div')
       row.style.cssText = `display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;cursor:pointer`
       row.addEventListener('mouseenter', () => { row.style.background = S.hover })
       row.addEventListener('mouseleave', () => { row.style.background = 'transparent' })
+      row.dataset.vrFileName = label
+      row.dataset.vrFileType = vrType || ''
+      row.dataset.vrFileModified = vrModified || ''
+      row.dataset.vrFileSize = vrSize == null ? '' : String(vrSize)
+      row.dataset.vrFileRow = `${icon} ${label}${dim ? '  ' + dim : ''}`
       row.addEventListener('click', onClick)
 
       const iconEl = document.createElement('span')

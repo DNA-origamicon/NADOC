@@ -312,7 +312,8 @@ function component(value) {
     const k = key(n.helix_id, n.bp_index, n.direction, n.copy_k ?? 0), ext = extensions.get(k), owner = expected.get(k)
     if (seen.has(k)) fail('duplicate occupied record'); seen.add(k)
     if (ext) {
-      if (n.extension_id !== ext.id || n.strand_id !== ext.strand_id || n.slab_position !== null || n.slab_quaternion !== null
+      if (n.extension_id !== ext.id || n.strand_id !== ext.strand_id
+          || (n.is_modification && (n.slab_position !== null || n.slab_quaternion !== null))
           || !['native-full-extension-v1', 'chemical-modification-v1'].includes(n.placement_source)
           || n.is_modification !== (n.placement_source === 'chemical-modification-v1')
           || (n.is_modification && !n.modification)) fail('invalid slabless record')

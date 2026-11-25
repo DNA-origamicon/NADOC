@@ -82,3 +82,25 @@ def test_pre_base_membership_source_digest_without_recovery_snapshot():
     expected = deepcopy(before)
     expected['helices'][0]['length_bp'] += 1
     assert not matches_source_receipt(no_receipts, expected, digest)
+
+
+@pytest.mark.parametrize('removed', [('folding_order',), ('base_ids', 'folding_order')])
+def test_legacy_cluster_defaults_preserve_authored_values_and_metadata(removed):
+    from copy import deepcopy
+    from types import SimpleNamespace
+
+    expected = branch_value(part().design)
+    historical = deepcopy(expected)
+    for cluster in historical['cluster_transforms']:
+        for field in removed:
+            cluster.pop(field)
+    digest = content_digest(historical)
+    no_receipts = SimpleNamespace(feature_log=[], loadouts=[])
+    before = deepcopy(expected)
+    assert matches_source_receipt(no_receipts, expected, digest)
+    assert expected == before
+    expected['cluster_transforms'][0]['folding_order'] = 1
+    assert not matches_source_receipt(no_receipts, expected, digest)
+    expected = deepcopy(before)
+    expected['metadata']['name'] = 'Unrecorded rename'
+    assert not matches_source_receipt(no_receipts, expected, digest)

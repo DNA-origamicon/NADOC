@@ -258,7 +258,7 @@ def test_join_final_output_tour_uses_the_configured_recorder(client):
     assert arguments(tour, True) == ['-m', 'tools.vr_workflows.join_tour', '--capture-final', '--validate']
 
 
-@pytest.mark.parametrize("identifier,component", [("simulation-menu-gallery", "simulations"), ("tab-gallery", "tabs")])
+@pytest.mark.parametrize("identifier,component", [("simulation-menu-gallery", "simulations"), ("tab-gallery", "tabs"), ("keyboard-gallery", "keyboards")])
 def test_simulation_menu_study_is_desktop_only(client, monkeypatch, identifier, component):
     study = next(t for t in catalog()['tours'] if t['id'] == identifier)
     assert study['modes'] == ['desktop']
@@ -292,3 +292,42 @@ def test_compact_tab_profile_report_keeps_misses():
                       "selection_misses": 1, "selection_hit_rate": 2/3, "non_tab_endpoints": 0}
     entry = next(t for t in catalog()["tours"] if t["id"] == "compact-tabs")
     assert arguments(entry, True) == ["-m", "tools.vr_workflows.compact_tabs_tour", "--validate"]
+
+
+def test_file_keyboard_accuracy_is_discoverable_and_validates_all_profiles():
+    from tools.vr_workflows.tour_catalog import arguments, catalog
+    tour = next(t for t in catalog()['tours'] if t['id'] == 'file-keyboard')
+    assert tour['group'] == 'left'
+    assert tour['module'] == 'file_keyboard_check'
+    assert '--validate' in arguments(tour, validate=True)
+    assert '--validate' not in arguments(tour, validate=False)
+
+
+def test_file_menu_demo_runs_visible_browser_workflow_not_inventory_only():
+    tour = next(t for t in catalog()['tours'] if t['id'] == 'left-file')
+    assert tour['module'] == 'file_tour'
+    assert 'Cancel before creation' in tour['description']
+    assert arguments(tour) == ['-m', 'tools.vr_workflows.file_tour']
+    assert arguments(tour, True) == ['-m', 'tools.vr_workflows.file_tour', '--validate']
+
+
+def test_file_menu_gallery_is_available_in_component_menu_and_desktop(client, monkeypatch):
+    tour = next(t for t in catalog()['tours'] if t['id'] == 'file-menu-gallery')
+    assert tour['group'] == 'components'
+    assert arguments(tour, True) == ['-m', 'tools.vr_workflows.component_gallery_tour', '--component', 'files', '--validate']
+    process = Mock(pid=987654); process.poll.return_value = None
+    popen = Mock(return_value=process); monkeypatch.setattr(tours.subprocess, 'Popen', popen)
+    result = client.post('/api/vr/tours/start', json={'tour': 'file-menu-gallery', 'mode': 'desktop'})
+    assert result.status_code == 200, result.text
+    assert '--desktop' in popen.call_args.args[0]
+
+
+def test_desktop_gallery_does_not_reserve_the_headset(monkeypatch, tmp_path):
+    monkeypatch.setattr(tours, '_read_state', lambda: None)
+    process=tmp_path/'123'; process.mkdir()
+    (process/'comm').write_text('nadoc-vr-viewer')
+    (process/'cmdline').write_bytes(b'viewer\0--gallery-desktop\0on\0')
+    monkeypatch.setattr(tours.Path, 'glob', lambda self, pattern: [process/'comm'])
+    assert not tours._viewer_active()
+    (process/'cmdline').write_bytes(b'viewer\0--component-gallery\0files\0')
+    assert tours._viewer_active()
