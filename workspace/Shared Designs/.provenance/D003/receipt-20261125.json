@@ -1,0 +1,27 @@
+{
+  "schema": "nadoc-design-bond-review-v1",
+  "design_sha256": "60f8ab55c555450724d16cae66fdcc097b987d9cebd87b2ce8dd48e2fb5c792c",
+  "report_sha256": "021c4b3ce5caac296a1d9ccf414f253b55203714f9e1357ec8443d54ab5e3a4d",
+  "reviewer": "Codex \u2014 read-only update of the previously human-approved D003 review",
+  "reviewed_at": "2026-11-25T21:31:52.305164+00:00",
+  "decision": "reviewed-for-publication",
+  "rationale": "D003 molecular content and all construction history are unchanged. NADOC\u2019s ordinary welcome-screen identity migration updated only identity_last_known_path and identity_confirmed_at; this review binds the actual currently owned file including those stamps. Opened the complete saved part through the welcome-screen Library and inspected its Full rendering and recorded feature history. Recomputed the complete 75-record seam census, including all recorded construction feature references: 43 records connect differently oriented clusters (1\u20133:11, 1\u20134:11, 2\u20133:10, 2\u20134:11), and 32 are within clusters (8 each). All 75 match realized paths. Cluster quaternions, posed axes, visible helix labels, endpoint base positions, insert sequences and every measured interhelix segment are retained in seam-census-20261125.json. The user previously approved the unchanged corner motif for sharing; this is an agent investigation of updated measurement coverage, not a claim of renewed human approval or corrected molecular geometry. The elevated forced fraction remains an intentional seam classification. Current projection measures all 266 previously unmeasured insert-chain segments; 151 exceed the existing 1.2 nm screen. All other measured-edge counts are unchanged. Retaining this existing design for inspection is justified with its unresolved geometric limitations made explicit.",
+  "limitations": "Current Full-view O5 endpoint screen: 572/687 interhelix segments exceed 1.2 nm (421 previously measured plus 151 newly measured insert segments). All 14,070 backbone segments are now measured. No bond was repaired, relabeled, removed or relaxed. Screen distances are not chemical O3\u2013P bond lengths. Four-panel intent does not certify those long segments, sterics, equilibrium geometry or simulation readiness. Independent process replay is still mandatory. Historical human approval applies to the unchanged design, not an endorsement of these newly computed measurements.",
+  "evidence": [
+    {
+      "kind": "visual",
+      "path": "visual-review-20261125.png",
+      "sha256": "b032cd5909bd18e05d408296e852dd7c5e2137a9d2f8aec87917694e6829cd9c"
+    },
+    {
+      "kind": "visual",
+      "path": "visual-front-20261125.png",
+      "sha256": "b990813df847750bc21f53f03a858306fa4aacc97794714bda700b9b4ad4c218"
+    },
+    {
+      "kind": "bond-report",
+      "path": "bond-report-20261125.json",
+      "sha256": "c02b1a6906c5ac53a03c391f7d83d79dd5629b211ca49d0d2260e367564b3a39"
+    }
+  ]
+}

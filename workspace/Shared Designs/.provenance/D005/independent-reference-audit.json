@@ -1,0 +1,24 @@
+{
+  "comparison": {
+    "scaf": {
+      "reference_sites": 7560,
+      "recovered_sites": 7560,
+      "missing_sites": 0,
+      "extra_sites": 0,
+      "wrong_pointers": 0
+    },
+    "stap": {
+      "reference_sites": 7559,
+      "recovered_sites": 7559,
+      "missing_sites": 0,
+      "extra_sites": 0,
+      "wrong_pointers": 0
+    }
+  },
+  "relative_lattice_cells_exact": true,
+  "insertions_exact": true,
+  "native_reference_used_only_after_publication": true,
+  "reference_sha256": "6e8cf81f09bdde65466479e2255e584cbb3995b131c4dcea954e1b692f2dc84f",
+  "nucleotides": 15983,
+  "model_sha256": "126a5982806876b5a5508b934afa1a5c12e5401e5786a5901cec241e87f7516c"
+}

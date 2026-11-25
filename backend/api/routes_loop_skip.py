@@ -9,7 +9,7 @@ passes.
 
 Routes
 ------
-  POST   /design/loop-skip/insert   — insert/remove a single loop or skip
+  POST   /design/loop-skip/insert   — set/remove a loop insertion count or skip
   POST   /design/loop-skip/twist    — apply twist via loop/skip strain
   POST   /design/loop-skip/bend     — apply bend via loop/skip strain
   GET    /design/loop-skip/limits   — query physical min/max
@@ -25,7 +25,7 @@ in crud.py for now (out of scope for 10-F; deferred to a follow-up).
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 
@@ -40,14 +40,14 @@ router = APIRouter()
 class LoopSkipInsertRequest(BaseModel):
     helix_id: str
     bp_index: int
-    delta: int  # +1 = loop (insertion), -1 = skip (deletion), 0 = remove existing
+    delta: int = Field(strict=True, ge=-1, le=512)  # 1..512 = inserted bases, -1 = single deletion, 0 = remove existing
 
 
 @router.post("/design/loop-skip/insert", status_code=200)
 def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
     """Insert or remove a single loop/skip modification at a bp position.
 
-    delta=+1 inserts a loop (extra bp), delta=-1 inserts a skip (deleted bp),
+    delta=1..512 sets a loop insertion count, delta=-1 inserts a skip (deleted bp),
     delta=0 removes any existing modification at that position.
     """
     from backend.api.part_routing_recording import record_loop_skip

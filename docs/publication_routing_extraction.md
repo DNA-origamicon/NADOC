@@ -192,3 +192,10 @@ Regression tests: `tests/test_publication_loop_search.py`, including unchanged
 inputs, both directions, nonzero shifts, exact-length loops, +/-1 cases, bounds,
 ambiguous partitions and paired-base mutations. PDF-only sequence-audit reports
 now hash the loop-search implementation as well.
+
+## Saved native construction (2026-11-25)
+
+D005 is now published through ordinary recorded editor operations and independently
+replayed. See [native publication workflow](publication_native_authoring.md).
+D006–D009 remain blocked; the interactive Reconstruct button is still disabled.
+Native D005 publication currently uses the documented command-line workflow.

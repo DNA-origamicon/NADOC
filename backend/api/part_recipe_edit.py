@@ -41,7 +41,7 @@ def supports_recipe_edit(design, entry):
     try:
         return all(
             dependencies(kind, params).known
-            for _, kind, params in command_rows(design, 2000)
+            for _, kind, params in command_rows(design, 4000)
         )
     except (ValueError, KeyError, TypeError):
         return False

@@ -12,7 +12,7 @@ from scripts.agent_structure_guard import audit
 
 def audit_image_history(design):
     from backend.core.part_history_proof import command_rows
-    for _, kind, _ in command_rows(design, 2000):
+    for _, kind, _ in command_rows(design, 4000):
         if 'import' in kind:
             raise ProcessRequired('Image-only authoring cannot substitute an import command for construction')
     return audit(design)
@@ -51,7 +51,7 @@ def construct(recipe, *, progress=None):
     from backend.api.part_proof_commands import PROOF_MINOR_KINDS
 
     if (recipe.get('version') != 1 or type(recipe.get('operations')) is not list
-            or not 1 <= len(recipe['operations']) <= 1900):
+            or not 1 <= len(recipe['operations']) <= 3800):
         raise ProcessRequired('A version-1, nonempty editor-operation recipe is required')
     if type(recipe.get('unresolved')) is not list:
         raise ProcessRequired('Recipe must explicitly list unresolved selections (empty only when reviewed)')

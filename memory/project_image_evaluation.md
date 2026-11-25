@@ -876,3 +876,15 @@ reconstruction evidence alongside the original unresolved annotations. D009 full
 validation remains false (10 table rows unmatched, 276 unknown partner bases).
 This supersedes the previous blanket D009 alignment blocker. Native construction
 and geometry remain unfinished.
+
+Native publication follow-up (2026-11-25): D005 is now built from the PDF through
+2,681 ordinary recorded actions, published by the guard and independently replayed
+from the saved file. A separate post-publication native reference comparison is
+exact for all scaffold/staple pointers, relative lattice cells and insertion
+counts. The original supplement and pinned extraction implementations travel in
+Shared Designs/.provenance/D005. D006–D009 remain unsupported for complete native
+publication; the compiler rejects missing lattice, unresolved routing/sequence
+and unexplained unpaired scaffold runs. Do not imply README analysis rows appear
+in the welcome library. Native loop-count/history editing now admits 1–512 bases;
+process/document/history traversal remains bounded at 4,000 rows. The interactive
+Reconstruct button remains disabled; publication currently uses the CLI workflow.
