@@ -41,3 +41,27 @@ it('keeps stationary and moved straight-axis segments separate through history r
   expect(lines.map(o => o.position.x)).toEqual([5, 0])
   scene.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
 })
+
+
+it('clips a single curved Corner domain instead of extending its axis through empty stations', () => {
+  const helix = { id: 'h', bp_start: 0, length_bp: 85,
+    axis_start: { x: 0, y: 0, z: 0 }, axis_end: { x: 0, y: 0, z: 84 } }
+  // Incoming and outgoing wedges retain the original indexed path for frame
+  // evaluation, but each has only one occupied domain after the cut.
+  for (const [lo, hi] of [[0, 30], [49, 83]]) {
+    const start = [lo * .1, 0, lo], end = [(hi + 1) * .1, 0, hi + 1]
+    const samples = Array.from({ length: 13 }, (_, i) => [i * .7, 0, i * 7])
+    const axes = { h: { start: samples[0], end: samples.at(-1), samples,
+      segments: [{ strand_id: 's', domain_index: 0, bp_lo: lo, bp_hi: hi, start, end }] } }
+    const scene = new THREE.Scene()
+    const ctrl = buildHelixObjects([], { helices: [helix], strands: [] }, scene, {}, [], axes)
+    const arrow = ctrl.getAxisArrows()[0]
+    expect(arrow.shaft).toBeFalsy()
+    expect(arrow.segments).toHaveLength(1)
+    const curve = arrow.segments[0].tubeMesh.geometry.parameters.path
+    expect(curve.points[0].toArray()).toEqual(start)
+    expect(curve.points.at(-1).toArray()).toEqual(end)
+    expect(curve.points.every(p => p.z >= lo && p.z <= hi + 1)).toBe(true)
+    scene.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
+  }
+})

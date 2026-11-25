@@ -305,6 +305,16 @@ section — open only the one being processed.
   reachable. Fixture: any autostapled 6HB part. See
   `docs/audits/feature_history_20261014/session_handoff.md` (region autostaple).
 
+- **MV-EM-SMOOTH — Full Run1 GPU playback appearance (2026-11-25), PENDING.**
+  In Plasmonic_test.nadoc, run trajectory EM and play Run1 with Smooth enabled.
+  Inspect moving hotspots at close/far particle gaps with the full molecular
+  scene visible, including pause/scrub and stage/loop boundaries. Software checks
+  verify unequal adaptive-cloud opacity transitions, endpoint buffering, and
+  exact-frame restoration; the app flow passes with gold/EM rendered and dense
+  DNA hidden for software WebGL. Full-scene hardware frame pacing and subjective
+  crossfade appearance remain manual coverage. Intermediate fields are visual
+  approximations, not independently solved Maxwell fields.
+
 ## MV-PANELS-1 — Sidebar stack (layout accepted; broader real-file checks remain)
 
 **SETUP:** Open any part, optionally `small_plate.nadoc` as a real-file example.

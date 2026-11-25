@@ -108,7 +108,7 @@ export function normalizeTrajJobs(oxJobs, mdJobs, partPath) {
   return [..._trajEntriesForEngine(ox, 'oxdna'), ..._trajEntriesForEngine(md, 'namd')]
 }
 
-export function initAnimationPanel(store, { player, captureCurrentCamera, captureThumbnail, api, exportVideo, renderer, scene, camera, controls, pinToFeature, getWorkspacePath, trajectoryKeyframes = null, zoomVolume = null, viewVolumes = null }) {
+export function initAnimationPanel(store, { player, captureCurrentCamera, captureThumbnail, api, exportVideo, renderer, scene, camera, controls, pinToFeature, getWorkspacePath, trajectoryKeyframes = null, zoomVolume = null, viewVolumes = null, getPhotoMode = () => null }) {
   const panelEl    = document.getElementById('animation-panel')
   const heading    = document.getElementById('animation-panel-heading')
   const arrow      = document.getElementById('animation-panel-arrow')
@@ -170,7 +170,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, captur
     stopPreview: _stopPreview, onError: error => onPlayerEvent({ type: 'baking_error', message: error.message }) })
 
   const presentationCompiler = initAnimationCompile({ anchor: document.getElementById('anim-start-presentation-btn'),
-    player, renderer, scene, camera, controls, captureCamera: captureCurrentCamera, getAnimation: _getActiveAnim,
+    getPhotoMode, player, renderer, scene, camera, controls, captureCamera: captureCurrentCamera, getAnimation: _getActiveAnim,
     onCompiledStatus: states => readinessBar.setCompiled(states),
     getSource: () => _partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'],
     beforeCompile: () => { localPresentation.exit(); _stopPreview(); player.stop() },

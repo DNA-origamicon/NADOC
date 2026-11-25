@@ -2,11 +2,11 @@ import { expect, it, vi } from 'vitest'
 import { initTrajectoryInterpolationClock } from './trajectory_interpolation_clock.js'
 
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve() }
-function fixture(ensure = vi.fn(async () => true), canBlend = () => true) {
+function fixture(ensure = vi.fn(async () => true), canBlend = () => true, frameDuration) {
   let time = 0, cursor = 0, callback = null
   const draw = vi.fn(), commit = vi.fn(i => { cursor = i }), buffering = vi.fn(), failed = vi.fn()
   const clock = initTrajectoryInterpolationClock({ current: () => cursor, count: () => 6, fps: 10,
-    ensure, canBlend, draw, commit, buffering, failed, now: () => time,
+    ensure, canBlend, frameDuration, draw, commit, buffering, failed, now: () => time,
     request: cb => { callback = cb; return 1 }, cancel: () => { callback = null } })
   return { clock, draw, commit, ensure, buffering, failed,
     async tick(t) { time = t; const cb = callback; callback = null; cb?.(t); await flush() },
@@ -60,4 +60,12 @@ it('does not blend across stage boundaries or drain a suspended-tab backlog', as
   await v.tick(20025)
   expect(v.draw).toHaveBeenLastCalledWith(2, 3, .25)
   v.clock.stop()
+})
+
+it('uses longer smooth EM intervals without changing saved-frame progression',async()=>{
+ const v=fixture(undefined,undefined,()=>500);await v.start()
+ await v.tick(125);expect(v.draw).toHaveBeenLastCalledWith(0,1,.25)
+ expect(v.commit).not.toHaveBeenCalled()
+ await v.tick(500);expect(v.commit).toHaveBeenLastCalledWith(1)
+ v.clock.stop()
 })

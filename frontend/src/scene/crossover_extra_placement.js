@@ -159,7 +159,7 @@ export function crossoverTwoBaseDefaultDirectionalPose(extraBaseK, localFrameRev
 /** Build one canonical placement per insert, in geometric A→B order. */
 export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, pointB,
   helixAxis, sequence = '', simReversed = false, localFrameReversed = false,
-  savedTransforms = new Map(), productGeometry = new Map() }) {
+  savedTransforms = new Map(), productGeometry = new Map(), cornerGeometry = new Map() }) {
   const out = []
   const runBow = new THREE.Vector3().lerpVectors(pointA, pointB, 0.5)
     .sub(control).negate()
@@ -218,6 +218,12 @@ export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, po
       .add(sourceCenter).clone()
     // CPDs supply the shared O5′ and ring-centroid landmarks from their current
     // local conformation. Both precede the same saved unit pose.
+    const corner = cornerGeometry.get(simK)
+    if (corner) {
+      sourceCenter.set(...corner.backbone_position)
+      sourceBaseCenter.set(...corner.base_position)
+      frameQuaternion.set(...corner.frame_rotation)
+    }
     const product = productGeometry.get(simK)
     if (product) {
       if (!product.backbone_fixed) sourceCenter.set(...product.backbone_position)

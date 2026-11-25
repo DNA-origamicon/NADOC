@@ -2,10 +2,9 @@ import { requestTrajectoryFrame, cancelTrajectoryFrame } from './trajectory_rend
 
 /** Playback-only subframes, with one prepared segment ahead of the display. */
 export function initTrajectoryInterpolationClock({ current, count, fps, ensure, draw, commit,
-  canBlend = () => true, buffering = () => {}, failed = () => {},
+  frameDuration = () => 1000 / fps, canBlend = () => true, buffering = () => {}, failed = () => {},
   request = requestTrajectoryFrame, cancel = cancelTrajectoryFrame, now = () => performance.now() }) {
   let generation = 0, raf = null, active = false, blended = false
-  const duration = 1000 / fps
   const live = token => active && token === generation
   function prepare(from, token) {
     const to = from + 1 < count() ? from + 1 : 0
@@ -25,6 +24,7 @@ export function initTrajectoryInterpolationClock({ current, count, fps, ensure, 
     let start = now(), next = prepare(segment.to, token)
     const tick = timestamp => {
       if (!live(token)) return
+      const duration = Math.max(1, Number(frameDuration()) || 1000 / fps)
       if (timestamp >= start + duration) {
         blended = false
         commit(segment.to)
