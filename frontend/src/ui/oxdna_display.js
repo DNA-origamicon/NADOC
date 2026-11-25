@@ -26,7 +26,7 @@ import { mdInsetAtoms } from '../scene/md_inset_atoms.js'
  */
 
 import { Matrix4, Quaternion, Vector3 } from 'three'
-import { previewIndices, previewPair, previewRuns } from '../scene/trajectory_preview.js'
+import { loadedPreviewFrames, previewIndices, previewPair, previewRuns } from '../scene/trajectory_preview.js'
 import { createVRExactAtomCache } from '../scene/vr_exact_atom_cache.js'
 import { expandMdAtomFrame } from '../scene/md_atom_frames_bin.js'
 import { bindSurfaceMotion } from '../scene/surface_motion.js'
@@ -870,6 +870,7 @@ export function initOxdnaDisplay({
   const _interpolationAtoms = new TrajectoryMemoryMap()
   let _interpolationRequest = 0
   let _interpolationPair = null, _interpolationCg = null
+  let _emTransition = null, _emPreparation = null, _emPreparationVersion = 0
   let _surfaceMotion = null
   async function _pushAtomistic(arr, epoch, live, colorByKey = null) {
     const ar = getAtomisticRenderer?.()
@@ -1150,6 +1151,7 @@ export function initOxdnaDisplay({
   function setPlaying(on) {
     _playing = !!on
     if (!on) {
+      _emTransition = null
       ++_interpolationRequest
       _prebuildToken++
       const hadMotion = !!_surfaceMotion
@@ -2048,10 +2050,11 @@ export function initOxdnaDisplay({
     const oxdnaStreaming = typeof api.getOxdnaTrajectoryMeta === 'function'
     const streaming = (api.progressiveTrajectory || oxdnaStreaming) && !preparationOnly && range.frameStart == null && range.frameEnd == null
     if (streaming && _repKind() === 'atomistic') api.prefetchTrajectory?.(jobId, stride)
+    const downloads = trajectoryDownloads.foreground()
     let opened, resp
     try {
       opened = streaming ? await loadProgressiveTrajectory({
-        jobId, spec, downloads: trajectoryDownloads, signal, onProgress,
+        jobId, spec, downloads, signal, onProgress,
         metadata: () => oxdnaStreaming ? api.getOxdnaTrajectoryMeta(jobId, scope, stride) : api.getTrajectoryMeta(jobId, stride),
         ...(oxdnaStreaming ? { budgetBytes: Math.min(256, (globalThis.navigator?.deviceMemory || 4) * 64) * 1024 * 1024 } : {}),
         live: () => epoch === _epoch && !signal.aborted,
@@ -2065,7 +2068,7 @@ export function initOxdnaDisplay({
         },
         evict: i => { _bakedAtom?.byIdx.delete(i); _bakedSurf?.byIdx.delete(i) },
       }) : null
-      resp = opened?.resp ?? await trajectoryDownloads.get(jobId, spec, { signal, onProgress })
+      resp = opened?.resp ?? await downloads.get(jobId, spec, { signal, onProgress })
     } catch (error) {
       opened?.dispose()
       if (signal.aborted || epoch !== _epoch) return { ok: false, reason: 'superseded' }
@@ -2110,8 +2113,8 @@ export function initOxdnaDisplay({
       await new Promise(resolve => requestAnimationFrame(resolve))
       if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     }
-    if (_stream) await _stream.ensure(0)
-    showFrame(0)
+    if (_stream) await ensureTrajectoryFrame(0)
+    showFrame(0, { heavy: !_stream })
     if (_stream) await _applyHeavy({ strict: true })
     if (epoch !== _epoch || signal.aborted) return { ok: false, reason: 'superseded' }
     _completedTrajectoryLoad = _loadAbort
@@ -2137,9 +2140,9 @@ export function initOxdnaDisplay({
       Math.floor(64 * 1024 * 1024 / atomBytes))
     const indices = previewIndices(_traj.frames.length, _traj.markers, cap)
     if (!indices.length) return null
-    const preview = { key, indices, frames: new Map(), atoms: new Map(), motion: null, scratch: null }
+    const preview = { key, indices, frames: loadedPreviewFrames(_traj.frames, indices, _traj.keys.length), atoms: new Map(), motion: null, scratch: null }
     onProgress?.(0, indices.length)
-    for (const run of previewRuns(indices)) {
+    for (const run of previewRuns(indices.filter(i => !preview.frames.has(i)))) {
       const buf = await api.getOxdnaTrajectoryBin(_jobId, { align: _align, scope: _trajScope, stride: _trajStride,
         frameStart: sourceFrame(run.start), frameEnd: sourceFrame(run.end), frameStep: run.step,
         signal: _loadAbort?.signal })
@@ -2186,6 +2189,7 @@ export function initOxdnaDisplay({
     const [lo, hi, t] = previewPair(p.indices, position, _traj.markers)
     const a = p.frames.get(lo), b = p.frames.get(hi)
     p.scratch = cubicCoordinates(null, a, b, null, t, p.scratch)
+    _emTransition = null
     proteinRenderer?.applyOxdnaTransforms?.(interpolateProteinTransforms(_traj.keys, a, b, t))
     nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, p.scratch)
     // Reuse the small per-base records during animation instead of generating
@@ -2266,7 +2270,7 @@ export function initOxdnaDisplay({
       return
     }
     _stream?.cancelPendingSeeks()
-    _frameIdx = idx
+    _frameIdx = idx; _emTransition = null
     void insetSource?.frame(_jobId, sourceFrame(idx), _trajStride)
     _stream?.prefetch(idx)
     proteinRenderer?.applyOxdnaTransforms?.(trajectoryProteinTransforms(_traj.keys, _traj.frames[idx]))
@@ -2275,7 +2279,8 @@ export function initOxdnaDisplay({
     if (heavy) _applyHeavy()   // atomistic/surface follow the scrub (coarse=snap, fine=exact)
   }
 
-  async function ensureTrajectoryFrame(index, { latest = false, heavy = true } = {}) {
+  async function ensureTrajectoryFrame(index, { latest = false, heavy = true, overlay = true } = {}) {
+    if (overlay && await _emPreparation?.([sourceFrame(index)]) === false) return false
     await insetSource?.prepare(_jobId, [sourceFrame(index)], _trajStride)
     if (!_stream) return true
     const stream = _stream
@@ -2317,12 +2322,13 @@ export function initOxdnaDisplay({
     const live = () => epoch === _epoch && request === _interpolationRequest
     from -= offset; to -= offset
     if (_mode !== 'trajectory' || !_traj) return false
+    if (await _emPreparation?.([sourceFrame(from), sourceFrame(to)]) === false || !live()) return false
     const frames = [...new Set([from, to, before == null ? null : before - offset,
       after == null ? null : after - offset].filter(i => i != null))]
     await insetSource?.prepare(_jobId, frames.map(sourceFrame), _trajStride)
     if (!live()) return false
     for (const index of frames) {
-      if (!await ensureTrajectoryFrame(index, {heavy: _repKind() !== 'surface'}) || !live()) return false
+      if (!await ensureTrajectoryFrame(index, {heavy: _repKind() !== 'surface', overlay:false}) || !live()) return false
     }
     if (_repKind() === 'surface') {
       const settings = _syncSurfaceSettings()
@@ -2390,6 +2396,7 @@ export function initOxdnaDisplay({
     const a = _traj.frames[from], b = _traj.frames[to]
     if (!a || !b || a.length !== b.length) return
     _interpolationCg = cubicCoordinates(_traj.frames[before], a, b, _traj.frames[after], t, _interpolationCg)
+    _emTransition = {from:sourceFrame(from), to:sourceFrame(to), t, frame:_interpolationCg}
     proteinRenderer?.applyOxdnaTransforms?.(interpolateProteinTransforms(_traj.keys, a, b, t))
     nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _interpolationCg)
     _applyFem(framesToUpdates(_traj.keys, _interpolationCg))
@@ -2569,7 +2576,9 @@ export function initOxdnaDisplay({
     retainTrajectoryDownloads: requests => trajectoryDownloads.retain(requests),
     showFrame: i => showFrame(i - (_traj?.frame_start ?? 0)),
     ensureInterpolationFrames, showInterpolatedFrame,
-    trajectoryPreparationKey: () => `${_epoch}|${getCurrentRepr?.()}|${surfaceSettingsKey()}`,
+    setEMPlaybackPreparation: fn => { _emPreparation = fn; _emPreparationVersion++ },
+    smoothFrameDuration: () => _emPreparation ? 500 : undefined,
+    trajectoryPreparationKey: () => `${_epoch}|${getCurrentRepr?.()}|${surfaceSettingsKey()}|${_emPreparationVersion}`,
     async showFrameForExport(i) {
       if (_mode !== 'trajectory' || !_traj) throw new Error('Load a trajectory before preparing a clip')
       const index = i - (_traj.frame_start ?? 0)
@@ -2610,6 +2619,18 @@ export function initOxdnaDisplay({
       return { ...state, done: state.readyIndices.length, total,
         phase: total > 0 && state.readyIndices.length === total ? 'ready' : 'frames' }
     },
+    emTrajectory: () => _mode === 'trajectory' && _traj ? { key:`${_epoch}:${_jobId}`,
+      keys:_traj.keys, frames:_traj.frames, currentIndex:sourceFrame(_frameIdx), playing:_playing, transition:_emTransition,
+      readFrame: (() => {
+        const trajectory = _traj, stream = _stream
+        return async index => {
+          if (trajectory !== _traj) throw new Error('Trajectory changed during EM preparation.')
+          if (!trajectory.frames[index] && stream) await stream.ensure(index)
+          if (trajectory !== _traj || !trajectory.frames[index]) throw new Error('Unable to read EM trajectory frame.')
+          return trajectory.frames[index]
+        }
+      })(),
+      frameStart:_traj.frame_start ?? 0, frameStep:_vrPage ? (_traj.frame_step ?? 1) : 1 } : null,
     trajectoryMarkers: () => _traj?.markers ?? [],
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
       // atomSerials/nNucleotides let a caller price an all-atom prebuild: the exact

@@ -166,6 +166,7 @@ import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
 import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
 import { initProteinSubsystem }    from './scene/protein_subsystem.js'
 import { initNanoparticleAttach } from './ui/nanoparticle_attach.js'
+import { initEMAnalysis } from './ui/em_analysis.js'
 import { initNanoparticleSubsystem } from './scene/nanoparticle_subsystem.js'
 import { promptGoldNanosphereDiameter } from './ui/nanoparticle_dialog.js'
 import { openGoldCreationDialog } from './ui/gold_creation_dialog.js'
@@ -6141,6 +6142,9 @@ async function main() {
   document.getElementById('menu-view-extra-base-spacing')?.addEventListener('click', () => {
     expandedSpacing.toggleExtraBaseAdjust()   // pill syncs via the onModeChange dep
   })
+
+  initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRenderer, api, addFrameCallback, removeFrameCallback, camera, controls,
+    simulationDisplays: { oxdna: () => oxdnaDisplay, md: () => mdViz.isActive() ? mdViz : mdDisplayController } })
 
   // ── Help / Hotkeys modal ─────────────────────────────────────────────────────
   document.getElementById('menu-help-open-log')?.addEventListener('click', openProcessLog)

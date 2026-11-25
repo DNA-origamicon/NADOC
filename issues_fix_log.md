@@ -1,5 +1,48 @@
 # Issues fix log
 
+## 2026-11-25 — EM smooth playback and calculated-field crossfades
+
+- [x] EM uses 500 ms smooth segments and joins both fields to molecular endpoint
+  preparation. Cache misses hold a saved endpoint; pause/scrub restores its solve.
+- [x] Unequal adaptive clouds crossfade by opacity without per-subframe geometry
+  uploads, numerical field invention, or changes to archive/molecular histories.
+- [x] Protect active/pending fields, including background reads promoted to demand.
+- [x] 246 focused frontend tests and the real-EM application flow pass. Gold and
+  EM remain rendered; dense DNA is consistently hidden in the software-WebGL
+  test. Full-scene hardware appearance is tracked in MV-EM-SMOOTH.
+- [x] Main.js task delta: zero. Original source hash unchanged.
+- Smoke: 26 passed, two skipped, one assembly setup timeout at its part-save
+  request (scene_harness.js:355). No EM failure; test artifacts cleaned.
+
+## 2026-11-24 — ISSUE-267: Complete EM scope and sustained playback buffering
+
+- [x] Stable selected-frame count; missing pages collected into optical inputs.
+- [x] Playback no longer cancels every unfinished field request.
+- [x] Direct NumPy serialization and bounded compact field storage measured.
+- [x] 194 frontend tests, six API tests, and the real-EM app flow pass.
+- [x] Source design hash unchanged; main.js task delta zero.
+
+## 2026-11-24 — ISSUE-266: Foreground trajectory download ownership
+
+- [x] Animation cache pruning preserves active visualization page reads; explicit
+  cancellation still stops them. Foreground leases end when reads settle.
+- [x] Six download tests and 166 shared visualization-controller tests pass.
+- [x] The isolated browser loads the Plasmonic test trajectory across the
+  representation transition, calculates both EM frames, changes persistent dot
+  size and disables the overlay without console errors. Original source hash
+  remains unchanged. Dense DNA is hidden only in the software-WebGL trajectory
+  check; gold positions and EM rendering remain live. The separate standalone
+  EM browser check exercises the DNA and gold scene together.
+
+## 2026-11-24 — ISSUE-265: EM default-shell rejection detail
+
+- [x] Preserve API error details and report actual gap/shell dimensions.
+- [x] Offer explicit bare-mode recovery without changing model assumptions silently.
+- [x] Eight frontend and ten backend tests pass; isolated app check covers untouched
+  defaults, rejection, recovery and coated solve. Design hash unchanged and
+  temporary artifacts removed. `main.js` task LOC delta: zero.
+
+
 ## 2026-11-21 — ISSUE-257: Close Move/Rotate after attachment Apply
 
 - [x] Gold/quantum-dot and protein Apply now use shared session confirmation;

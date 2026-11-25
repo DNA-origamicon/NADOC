@@ -552,6 +552,8 @@ app.include_router(part_inputs_router, prefix="/api")
 app.include_router(part_recipe_recovery_router, prefix="/api")
 app.include_router(photoproducts_router, prefix="/api")
 app.include_router(nanoparticles_router, prefix="/api")
+from backend.api.routes_em_analysis import router as em_analysis_router
+app.include_router(em_analysis_router, prefix="/api")
 from backend.api.routes_nanoparticle_attachment import router as nanoparticle_attachment_router
 app.include_router(nanoparticle_attachment_router, prefix="/api")
 from backend.api.routes_history_conversion import router as history_conversion_router
