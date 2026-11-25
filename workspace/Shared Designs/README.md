@@ -6,7 +6,7 @@ clone/pull of NADOC includes the committed designs and portable dependencies.
 
 | Design | Saved document / status |
 | --- | --- |
-| D003 — corner motif | [D003.nadoc](D003.nadoc); recorded construction, exact-design human bond review |
+| D003 — corner motif | [D003.nadoc](D003.nadoc); existing design retained unchanged; historical human review needs renewal under current geometry code |
 | Dietz Pointer v1.12 — mrDNA reference | [Dietz_Pointer_v1_12_mrDNA.nadoc](Dietz_Pointer_v1_12_mrDNA.nadoc); reference import and scaffold assignment; not a publication-image reconstruction |
 | HC24 — periodic part | [HC24-polymerization.nadoc](HC24-polymerization.nadoc); upstream part for the 30-mer |
 | HC24 — 30-mer assembly | [HC24-30mer.nass](HC24-30mer.nass); 30 instances, 29 joins |
@@ -47,6 +47,15 @@ For D003's human-reviewed corner motif, repeat the audit from the NADOC root:
 ```bash
 .venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/D003.nadoc" --bond-review "workspace/Shared Designs/.provenance/D003/receipt.json"
 ```
+
+D003 is retained as an existing shared artifact, not recertified by this cleanup.
+Its construction replay passed before upstream integration. With integrated
+geometry code, the saved receipt fails `DESIGN_BOND_REVIEW_REQUIRED` because the
+report changed: 266 previously unmeasured bonds are now measured, and long
+interhelix segments increase from 421/687 to 572/687. The design digest is
+unchanged. Keep the historical receipt/evidence intact; a new review is required
+before further publication or scientific acceptance. Do not rewrite the receipt
+to manufacture a pass.
 
 Its exact historical title exception is documented in
 `scripts/agent_metadata_exceptions.py`. A changed design requires a fresh audit
