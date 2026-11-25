@@ -7041,6 +7041,29 @@
                #3f464f→#20252b gradient on border-box — which is what makes them
                pop out even when packed flush. Chevron sits LEFT of the title. -->
           <div class="pxr-cards">
+          <div class="ox-card" id="photo-materials-panel">
+            <div id="photo-materials-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photo-materials-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Art &amp; materials</span>
+            </div>
+            <div id="photo-materials-body" class="ox-card__body">
+              <div class="pxr-col">
+                <label class="pxr-row"><span class="pxr-lbl">Art Themes</span><select id="photo-art-theme" class="pxr-sel"></select></label>
+                <div class="pxr-note">A complete look: lighting, materials, background, lens and figure effects. Your molecular colors and export size stay unchanged.</div>
+                <label class="pxr-row"><span class="pxr-lbl">Material</span><select id="photo-material" class="pxr-sel"></select></label>
+                <div id="photo-material-note" class="pxr-note"></div>
+                <details id="photo-advanced">
+                  <summary style="cursor:pointer;padding:8px 0">Advanced</summary>
+                  <div class="pxr-col">
+                    <label class="pxr-row"><span class="pxr-lbl">Exposure</span><input id="photo-exposure" class="pxr-rng" type="range" min="0.1" max="4" step="0.05" value="1"><span id="photo-exposure-label" class="pxr-val">1.00</span></label>
+                    <label class="pxr-row"><span class="pxr-lbl">Contrast</span><input id="photo-contrast" class="pxr-rng" type="range" min="0.5" max="1.5" step="0.01" value="1"><span id="photo-contrast-label" class="pxr-val">1.00</span></label>
+                    <label class="pxr-row"><span class="pxr-lbl">Saturation</span><input id="photo-saturation" class="pxr-rng" type="range" min="0" max="2" step="0.05" value="1"><span id="photo-saturation-label" class="pxr-val">1.00</span></label>
+                    <div class="pxr-note">Applied to preview, images and photo videos. Annotations keep their original colors.</div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+
           <div class="ox-card" id="photo-lighting-panel">
             <div id="photo-lighting-heading" class="ox-card__header" style="color:#c9d1d9">
               <span id="photo-lighting-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Lighting</span>
@@ -7269,39 +7292,6 @@
                     <input id="photo-bg-color" type="color" value="#0b0d10"
                            style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="ox-card" id="photo-materials-panel">
-            <div id="photo-materials-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photo-materials-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Materials</span>
-            </div>
-            <div id="photo-materials-body" class="ox-card__body">
-              <div class="pxr-col">
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="Backbone beads, base slabs, 5′ cones and fluorophores.">Full</span>
-                  <select id="photo-mat-full" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="Helix and overhang cylinders.">Cylinders</span>
-                  <select id="photo-mat-cylinders" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="The marching-cubes molecular surface. Its SSS presets (wax, skin, gummy) only read below full opacity.">Surface</span>
-                  <select id="photo-mat-surface" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="Atoms and bonds in the VDW / ball-and-stick representations.">Atomistic</span>
-                  <select id="photo-mat-atomistic" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-note">
-                  The <b>Flat</b> presets kill the specular lobe entirely
-                  (<code style="color:#8b949e">specularIntensity: 0</code>) — no highlight
-                  anywhere, so shape is read from the cast shadow rather than from a glint.
-                  That is the molecular-figure convention; the glossy/metallic presets are
-                  the product-render look.
                 </div>
               </div>
             </div>
