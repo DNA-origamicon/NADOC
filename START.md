@@ -174,6 +174,11 @@ construction histories and portable dependencies; audit agent-authored parts bef
 committing. See the [shared folder instructions](workspace/Shared%20Designs/README.md)
 for synchronization, existing nested repositories, and custom `NADOC_WORKSPACE` paths.
 
+An Archive-backed installation may select its existing runtime storage with an
+ignored `.nadoc-workspace` directory symlink at the checkout root, then link that
+runtime workspace’s `Shared Designs` to the tracked folder. `NADOC_WORKSPACE`
+overrides this local setting. See the shared folder README before migrating.
+
 ### Application code
 
 This is a human-operated synchronization procedure, not an automatic agent action.

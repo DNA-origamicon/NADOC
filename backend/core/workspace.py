@@ -17,9 +17,11 @@ stays api-free; the api wrapper translates it to a 400.
 from __future__ import annotations
 
 import json
+from itertools import chain
 from pathlib import Path
 
 from backend.core.models import Assembly, PartSourceFile
+from backend.core.workspace_location import SHARED_FOLDER, linked_shared_root
 
 
 # Workspace roots owned by NADOC's engines or development tooling.  They live beside
@@ -64,6 +66,16 @@ def safe_workspace_path(rel_path: str, workspace_dir: Path) -> Path:
     Raises ValueError if the resolved path escapes the workspace.
     """
     workspace_dir.mkdir(parents=True, exist_ok=True)
+    relative = Path(rel_path)
+    shared = linked_shared_root(workspace_dir)
+    if shared is not None and relative.parts and relative.parts[0] == SHARED_FOLDER:
+        if ".." in relative.parts or relative.is_absolute():
+            raise ValueError("Invalid path: outside workspace")
+        candidate = workspace_dir / relative
+        if not candidate.resolve().is_relative_to(shared):
+            raise ValueError("Invalid path: outside shared folder")
+        # Retain the logical workspace path for rename/move/reference bookkeeping.
+        return candidate
     resolved = (workspace_dir / rel_path).resolve()
     if not resolved.is_relative_to(workspace_dir.resolve()):
         raise ValueError("Invalid path: outside workspace")
@@ -103,7 +115,11 @@ def patch_nass_files(workspace_dir: Path, old_ref: str, new_ref: str) -> list[st
     Pure filesystem side effect; does not touch in-memory state.
     """
     patched: list[str] = []
-    for nass_file in workspace_dir.rglob("*.nass"):
+    linked = (
+        (workspace_dir / SHARED_FOLDER).rglob("*.nass")
+        if linked_shared_root(workspace_dir) else ()
+    )
+    for nass_file in chain(workspace_dir.rglob("*.nass"), linked):
         try:
             raw = nass_file.read_text(encoding="utf-8")
             data = json.loads(raw)

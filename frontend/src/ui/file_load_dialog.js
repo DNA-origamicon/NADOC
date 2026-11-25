@@ -17,6 +17,7 @@
  *            expandDetails:Function, showSuccess:Function, showError:Function}}
  */
 import { formatElapsed, copyText } from './op_progress.js'
+import { beginDesktopLoad, markDesktopLoad, desktopLoadReady, endDesktopLoad } from '../perf/desktop_loading.js'
 
 export function initFileLoadDialog() {
   const _flProgress   = document.getElementById('file-load-progress')
@@ -29,6 +30,21 @@ export function initFileLoadDialog() {
   const _flActionsEl  = document.getElementById('flp-actions')
   const _flElapsedEl  = document.getElementById('flp-elapsed')
   const _flCopyBtn    = document.getElementById('flp-copy')
+  const cancelButton = document.createElement('button')
+  cancelButton.id = 'flp-cancel'
+  cancelButton.type = 'button'
+  cancelButton.textContent = 'Cancel opening'
+  cancelButton.hidden = true
+  _flProgress?.appendChild(cancelButton)
+  let cancel = null
+  let cancelRequested = false
+  cancelButton.addEventListener('click', () => {
+    if (!cancel) return
+    cancelButton.disabled = true
+    cancelRequested = true
+    markDesktopLoad('cancel-requested')
+    cancel()
+  })
 
   let _flLogOpen = false
   let _flStartedAt = performance.now()
@@ -72,6 +88,8 @@ export function initFileLoadDialog() {
   })
 
   function _showFileLoad(header) {
+    cancelRequested = false
+    beginDesktopLoad(header)
     _flLogOpen = false
     if (_flLogEl)     _flLogEl.innerHTML             = ''
     if (_flLogWrapEl) _flLogWrapEl.style.display     = 'none'
@@ -89,11 +107,13 @@ export function initFileLoadDialog() {
   }
 
   function _hideFileLoad() {
+    if (cancelRequested) endDesktopLoad('Cancelled')
     _flStopClock()
     _flProgress?.classList.remove('visible')
   }
 
   function _flSetProgress(pct, msg) {
+    markDesktopLoad('progress', { percent: pct, message: msg })
     if (_flFillEl)   _flFillEl.style.width    = pct + '%'
     if (_flStatusEl) _flStatusEl.textContent  = msg ?? ''
   }
@@ -117,14 +137,17 @@ export function initFileLoadDialog() {
   }
 
   async function _flShowSuccess(msg) {
+    desktopLoadReady()
     if (_flFillEl)   { _flFillEl.style.width = '100%'; _flFillEl.style.background = '#3fb950' }
     if (_flStatusEl) { _flStatusEl.textContent = msg; _flStatusEl.style.color = '#3fb950' }
     _flStopClock()
-    await new Promise(r => setTimeout(r, 1500))
+    // The finished scene should be available immediately. Keep the report in
+    // memory for diagnostics instead of covering the viewport for another 1.5 s.
     _hideFileLoad()
   }
 
   function _flShowError(msg) {
+    endDesktopLoad('Failed')
     if (_flFillEl)   { _flFillEl.style.width = '100%'; _flFillEl.style.background = '#f85149' }
     if (_flStatusEl) { _flStatusEl.textContent = msg; _flStatusEl.style.color = '#f85149' }
     _flStopClock()
@@ -133,6 +156,7 @@ export function initFileLoadDialog() {
   }
 
   return {
+    setCancel(fn) { cancel = fn; cancelButton.hidden = !fn; cancelButton.disabled = false },
     show:          _showFileLoad,
     hide:          _hideFileLoad,
     setProgress:   _flSetProgress,

@@ -18,3 +18,22 @@ export function fitViewPose(box, cameraPosition, controlsTarget, fovDeg, aspect 
   else dir.normalize()
   return { target: center, position: center.clone().addScaledVector(dir, dist) }
 }
+
+/** Initial opening should not hide an elongated assembly behind its end face.
+ * Manual Fit continues to preserve the user's view direction. Only strongly
+ * elongated, nearly end-on initial views choose a diagonal observation angle.
+ */
+export function fitOpeningViewPose(box, cameraPosition, controlsTarget, fovDeg, aspect = 1) {
+  if (!box || box.isEmpty()) return null
+  const size = box.getSize(new THREE.Vector3())
+  const lengths = [size.x, size.y, size.z]
+  const longest = lengths.indexOf(Math.max(...lengths))
+  const other = lengths.filter((_, i) => i !== longest)
+  const direction = cameraPosition.clone().sub(controlsTarget).normalize()
+  const component = [direction.x, direction.y, direction.z][longest]
+  if (lengths[longest] > 4 * Math.max(...other, 1e-6) && Math.abs(component) > .95) {
+    const diagonal = new THREE.Vector3(1, .65, 1).normalize()
+    return fitViewPose(box, controlsTarget.clone().add(diagonal), controlsTarget, fovDeg, aspect)
+  }
+  return fitViewPose(box, cameraPosition, controlsTarget, fovDeg, aspect)
+}

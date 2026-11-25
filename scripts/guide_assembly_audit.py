@@ -1,7 +1,8 @@
 """Replay the guide's add-part/periodic-polymer commands without saved snapshots.
 
 Deliberately narrow: reject unsupported operations and every unexplained assembly
-field. Parts are audited independently; file references must be portable siblings.
+field. Parts are audited independently; file references must be portable siblings
+or contained paths within an explicitly supplied workspace root.
 Random clone/joint IDs are matched to the IDs recorded by the actual command.
 """
 from pathlib import Path
@@ -12,7 +13,7 @@ from scripts.agent_structure_guard import audit as audit_part
 from experiments.recorded_review_process import ProcessRequired
 
 
-def audit(assembly, directory):
+def audit(assembly, directory, *, workspace_root=None):
     from backend.core.assembly_polymer import build_periodic_chain
     from backend.core.periodic_polymer import derive_periodic_delta, principal_seam_connectors
     directory = Path(directory)
@@ -24,10 +25,14 @@ def audit(assembly, directory):
             key = design.id
         else:
             path = Path(source.path)
-            if path.is_absolute() or len(path.parts) != 1:
+            if path.is_absolute() or '..' in path.parts or (workspace_root is None and len(path.parts) != 1):
                 raise ProcessRequired('Guide assembly source must be a sibling part')
             key = str(path)
-            design = Design.model_validate_json((directory / path).read_text())
+            root = Path(workspace_root).resolve() if workspace_root is not None else directory.resolve()
+            resolved = (root / path).resolve()
+            if not resolved.is_relative_to(root):
+                raise ProcessRequired('Assembly source escapes its portable workspace')
+            design = Design.model_validate_json(resolved.read_text())
         if key not in sources:
             sources[key] = audit_part(design)
         return design
@@ -86,11 +91,11 @@ def audit(assembly, directory):
             'upstream_parts': sources, 'recovery_snapshots_used': False}
 
 
-def publish(assembly, path):
+def publish(assembly, path, *, workspace_root=None):
     path = Path(path)
-    proof = audit(assembly, path.parent)
+    proof = audit(assembly, path.parent, workspace_root=workspace_root)
     raw = assembly.to_json()
-    audit(Assembly.from_json(raw), path.parent)
+    audit(Assembly.from_json(raw), path.parent, workspace_root=workspace_root)
     with path.open('x') as stream:
         stream.write(raw)
     return {**proof, 'path': path.name, 'sha256': hashlib.sha256(raw.encode()).hexdigest()}

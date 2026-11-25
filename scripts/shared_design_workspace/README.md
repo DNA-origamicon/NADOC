@@ -57,3 +57,19 @@ Git checks out this folder beneath the NADOC checkout. If `NADOC_WORKSPACE` poin
 elsewhere, explicitly arrange for that workspace's `Shared Designs` to use this
 tracked folder (for example, a directory symlink where supported); changing the
 workspace setting does not move Git's checkout.
+
+### Archive-backed runtime workspace
+
+Keep `workspace/` a real directory so Git can track Shared Designs. An ignored
+`.nadoc-workspace` directory symlink at the NADOC checkout root can select an
+existing runtime workspace on another drive. `NADOC_WORKSPACE`, when set, takes
+precedence. An unavailable configured drive fails explicitly instead of creating
+an empty replacement workspace.
+
+Link that runtime workspace's `Shared Designs` to this checkout's
+`workspace/Shared Designs`. NADOC lists and opens this specific trusted link,
+while retaining workspace-relative document references. Arbitrary external links
+and links escaping the shared folder are not permitted. Existing local designs
+and jobs stay in the runtime workspace; only shared designs live in the checkout.
+Do not overwrite an existing folder when creating either link. Preserve old
+nested Git metadata outside the workspace before adopting this layout.

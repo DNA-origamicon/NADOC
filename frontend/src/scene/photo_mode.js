@@ -1,3 +1,4 @@
+import { makePhotoBackboneGeometry, photoBackboneRadius } from './photo_renderer/backbone_spheres.js'
 import { settleZoomVolumes, drawZoomVolumes } from './zoom_volume_export.js'
 import { prepareExportGrids } from './photo_renderer/export_grid.js'
 import { renderSilhouetteHighlights } from './silhouette_highlight.js'
@@ -234,7 +235,7 @@ export function swapToFlatMaterials(root, presets = null) {
     if (Array.isArray(src)) return
     if (src.isLineBasicMaterial || src.isLineDashedMaterial) return
     if (src.blending === THREE.AdditiveBlending) return
-    if (src.userData?.isImpostor || src.userData?.impostorRadius != null) return
+    if ((src.userData?.isImpostor || src.userData?.impostorRadius != null) && photoBackboneRadius(obj) == null) return
     // Assembly surfaces use ordinary instanceMatrix transforms and can safely
     // receive the selected surface material. Other shared-LOD meshes carry
     // custom texture-instancing shaders which a material replacement would drop.
@@ -294,7 +295,9 @@ export function swapToFlatMaterials(root, presets = null) {
     // real colour; otherwise carry the source colour through.
     if (!vc && !obj.instanceColor && src.color) mat.color.copy(src.color)
 
-    saved.set(obj, src)
+    const photoGeometry = makePhotoBackboneGeometry(obj)
+    saved.set(obj, { material: src, geometry: photoGeometry ? obj.geometry : null })
+    if (photoGeometry) { obj.geometry = photoGeometry; mat.side = THREE.FrontSide }
     obj.material = mat
     // The shared assembly renderer composes source-local geometry with each
     // assembly placement in an onBeforeCompile vertex patch. A fresh photo
@@ -306,10 +309,15 @@ export function swapToFlatMaterials(root, presets = null) {
   return {
     count: saved.size,
     restore() {
-      for (const [obj, mat] of saved) {
+      for (const [obj, original] of saved) {
         const swapped = obj.material
-        obj.material = mat
-        if (swapped !== mat) swapped?.dispose?.()
+        obj.material = original.material
+        if (original.geometry) {
+          const photoGeometry = obj.geometry
+          obj.geometry = original.geometry
+          if (photoGeometry !== original.geometry) photoGeometry.dispose()
+        }
+        if (swapped !== original.material) swapped?.dispose?.()
       }
       saved.clear()
     },

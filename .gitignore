@@ -114,6 +114,7 @@ gromacs_run/
 runs/
 /workspace/*
 !/workspace/Shared Designs/
+/.nadoc-workspace
 /timer.dat
 
 # ── Literature and large binary assets ───────────────────────────────────────

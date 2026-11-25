@@ -1,6 +1,25 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { fitViewPose } from './fit_view_math.js'
+import { fitViewPose, fitOpeningViewPose } from './fit_view_math.js'
+
+it('initial opening reveals a long end-on assembly without changing its bounds', () => {
+  const box = new THREE.Box3(new THREE.Vector3(-7, -7, 0), new THREE.Vector3(7, 7, 1500))
+  const before = box.clone(), target = new THREE.Vector3(0, 0, 750), position = new THREE.Vector3(0, 0, 3000)
+  const pose = fitOpeningViewPose(box, position, target, 55, .6)
+  const dir = pose.position.clone().sub(pose.target).normalize()
+  expect(Math.abs(dir.z)).toBeLessThan(.8)
+  expect(box.equals(before)).toBe(true)
+  expect(pose.target.equals(box.getCenter(new THREE.Vector3()))).toBe(true)
+  expect(fitViewPose(box, position, target, 55, .6).position.x).toBe(0)
+})
+
+it('initial opening preserves a useful existing view and compact shapes', () => {
+  for (const size of [new THREE.Vector3(10, 10, 10), new THREE.Vector3(10, 10, 1500)]) {
+    const box = new THREE.Box3(new THREE.Vector3(), size)
+    const position = new THREE.Vector3(100, 100, 100), target = new THREE.Vector3()
+    expect(fitOpeningViewPose(box, position, target, 55)).toEqual(fitViewPose(box, position, target, 55))
+  }
+})
 
 describe('fitViewPose', () => {
   it('recovers a finite pose when camera and orbit target are NaN', () => {

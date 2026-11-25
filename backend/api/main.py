@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse, ORJSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.api import library_events, session_cache
+from backend.api.routes_library_open import router as library_open_router
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.api.assembly import router as assembly_router
 from backend.api.crud import router as crud_router
@@ -564,12 +565,15 @@ app.include_router(image_evaluation_router, prefix="/api")
 from backend.api.routes_origami_relax import router as origami_relax_router
 app.include_router(origami_relax_router, prefix="/api")
 app.include_router(ws_router)  # WebSocket routes have no /api prefix
+app.include_router(library_open_router, prefix="/api")
 
 
 @app.get("/", include_in_schema=False)
 def root():
-    """In dev mode redirect to the Vite dev server; in production this is
-    shadowed by the StaticFiles mount below."""
+    """Serve the installed frontend; earlier routes precede the static mount."""
+    index = os.path.join(_frontend_dist, "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index)
     return RedirectResponse("http://localhost:5173")
 
 
@@ -600,6 +604,6 @@ if os.path.isdir(_origami_repo):
     app.mount("/api/all-origami-repo", StaticFiles(directory=_origami_repo, html=True), name="all-origami-repo")
 
 # Serve the built Vite frontend if present (production mode).
-_frontend_dist = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
+_frontend_dist = os.environ.get("NADOC_FRONTEND_DIST") or os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
 if os.path.isdir(_frontend_dist):
     app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")

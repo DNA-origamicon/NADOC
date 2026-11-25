@@ -9,6 +9,20 @@ metadata:
 
 # Sphere Impostors — vertex-load reduction for beads & atoms
 
+## Desktop CG rollout — November 24, 2026
+
+The desktop host now explicitly enables CG backbone impostors independently of
+the global/atomistic flag (`fast-backbone=1`). Browser default remains opt-in.
+`photo_renderer/backbone_spheres.js` and `photo_mode.js` convert recognized
+backbone quads to real spheres for photo mode, preserve shared-source placement
+and restore geometry/materials on exit. Part click picking, assembly editing,
+photo restoration and exact transform checks passed in installed windows.
+`docs/desktop_large_scene.md` records the matched-view ttest benchmark and limits.
+The historical photo TODO below is resolved for **CG backbone spheres only**;
+atomistic impostor conversion remains outside this rollout. No molecular placement
+or phase changes. Desktop `--standard-spheres` retains the previous path.
+
+
 **Why:** at `full` / atomistic representation the assembly view is *vertex/triangle-bound*, not
 fill-bound (see [[path-to-thousands]]). One 7000-bp origami ≈ 2 M tris at full CG, ≈ 40 M at
 atomistic; instancing cut draw-calls/CPU but not vertex throughput, so "1000 at full" stays

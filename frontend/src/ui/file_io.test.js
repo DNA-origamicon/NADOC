@@ -483,6 +483,7 @@ function makeOpenFactory(overrides = {}) {
     importDesign: vi.fn(async () => true),
     openLibraryPart: vi.fn(async () => ({ identityDisposition: 'confirmed' })),
     importAssembly: vi.fn(async () => true),
+    openLibraryAssembly: vi.fn(async () => true),
     ...overrides.api,
   }
   const deps = {
@@ -514,7 +515,7 @@ describe('initFileOpen — openPartFromServer', () => {
   it('opens server-side without moving the file content through the browser', async () => {
     const { fileOpen, deps } = makeOpenFactory()
     await fileOpen.openPartFromServer('p/x.nadoc', 'NiceName')
-    expect(deps.api.openLibraryPart).toHaveBeenCalledWith('p/x.nadoc', 'NiceName')
+    expect(deps.api.openLibraryPart).toHaveBeenCalledWith('p/x.nadoc', 'NiceName', expect.objectContaining({ isCancelled: expect.any(Function) }))
     expect(deps.api.getLibraryFileContent).not.toHaveBeenCalled()
     expect(deps.api.importDesign).not.toHaveBeenCalled()
   })
@@ -535,7 +536,7 @@ describe('initFileOpen — openPartFromServer', () => {
     const { fileOpen, deps } = makeOpenFactory()
     await fileOpen.openPartFromServer('p/x.nadoc')
     expect(deps.setFileName).toHaveBeenCalledWith('x')
-    expect(deps.api.openLibraryPart).toHaveBeenCalledWith('p/x.nadoc', 'x')
+    expect(deps.api.openLibraryPart).toHaveBeenCalledWith('p/x.nadoc', 'x', expect.objectContaining({ isCancelled: expect.any(Function) }))
   })
   it('on failure shows the error and returns to the welcome screen', async () => {
     const { fileOpen, deps } = makeOpenFactory({
@@ -557,15 +558,15 @@ describe('initFileOpen — openPartFromServer', () => {
 })
 
 describe('initFileOpen — openAssemblyFromServer', () => {
-  it('aborts with an error overlay when the server returns no content', async () => {
-    const { fileOpen, deps } = makeOpenFactory({ api: { getLibraryFileContent: vi.fn(async () => ({ content: null })) } })
+  it('aborts with an error overlay when the server cannot open the assembly', async () => {
+    const { fileOpen, deps } = makeOpenFactory({ api: { openLibraryAssembly: vi.fn(async () => false) } })
     await fileOpen.openAssemblyFromServer('p/a.nass')
-    expect(deps.flShowError).toHaveBeenCalledWith('Could not load assembly.')
+    expect(deps.flShowError).toHaveBeenCalledWith('Failed to import assembly.')
     expect(deps.enterAssemblyMode).not.toHaveBeenCalled()
   })
   it('clears the stash and shows the error when the import fails', async () => {
     const { fileOpen, deps } = makeOpenFactory({
-      api: { importAssembly: vi.fn(async () => false) },
+      api: { openLibraryAssembly: vi.fn(async () => false) },
       storeState: { lastError: { message: 'corrupt' } },
     })
     await fileOpen.openAssemblyFromServer('p/a.nass')
@@ -578,6 +579,9 @@ describe('initFileOpen — openAssemblyFromServer', () => {
     const { fileOpen, deps, state } = makeOpenFactory()
     await fileOpen.openAssemblyFromServer('p/a.nass')
     // stash was armed with a real progress callback before the import
+    expect(deps.api.openLibraryAssembly).toHaveBeenCalledWith('p/a.nass', expect.objectContaining({ isCancelled: expect.any(Function) }))
+    expect(deps.api.getLibraryFileContent).not.toHaveBeenCalled()
+    expect(deps.api.importAssembly).not.toHaveBeenCalled()
     expect(typeof state.onProgress).toBe('function')
     expect(state.assemblyName).toBe('p/a')          // .nass stripped
     expect(state.assemblyFileHandle).toBe(null)

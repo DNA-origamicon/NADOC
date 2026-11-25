@@ -14,6 +14,7 @@ import numpy as np
 
 from backend.core.design_geometry import native_full_arrays_for_helix
 from backend.core.models import Design, Direction
+from backend.core.domain_assignment import assign_domains, native_domains_available
 from backend.core.native_full_placement import SOURCE
 from backend.core.native_slab_placement import native_slab_poses_for_arrays
 
@@ -61,15 +62,31 @@ def native_compact_geometry(design: Design) -> dict | None:
         sid, stype, ohid = (np.full(count, None, dtype=object) for _ in range(3))
         did = np.zeros(count, dtype=np.int32)
         is5, is3 = (np.zeros(count, dtype=bool) for _ in range(2))
-        for strand, index, domain, lo, hi, five, three in domains[helix.id]:
-            direction = int(domain.direction == Direction.REVERSE)
-            mask = (directions == direction) & (bps >= lo) & (bps <= hi)
-            occupied[mask] = True
-            opposite_occupied |= (directions != direction) & (bps >= lo) & (bps <= hi)
-            sid[mask], stype[mask], ohid[mask] = strand.id, strand.strand_type.value, domain.overhang_id
-            did[mask] = index
-            is5[mask] = ((bps[mask] == five[1]) if (helix.id, domain.direction) == (five[0], five[2]) else False)
-            is3[mask] = ((bps[mask] == three[1]) if (helix.id, domain.direction) == (three[0], three[2]) else False)
+        if native_domains_available() and domains[helix.id]:
+            rows = domains[helix.id]
+            owner, opposite_occupied = assign_domains(bps, directions,
+                [(lo, hi, int(domain.direction == Direction.REVERSE))
+                 for _, _, domain, lo, hi, _, _ in rows])
+            occupied = owner >= 0
+            indices = owner[occupied]
+            sid[occupied] = np.asarray([r[0].id for r in rows], dtype=object)[indices]
+            stype[occupied] = np.asarray([r[0].strand_type.value for r in rows], dtype=object)[indices]
+            ohid[occupied] = np.asarray([r[2].overhang_id for r in rows], dtype=object)[indices]
+            did[occupied] = np.asarray([r[1] for r in rows], dtype=np.int32)[indices]
+            for target, endpoint in ((is5, 5), (is3, 6)):
+                endpoint_bp = np.asarray([r[endpoint][1] for r in rows], dtype=np.int64)
+                endpoint_here = np.asarray([(helix.id, r[2].direction) == (r[endpoint][0], r[endpoint][2]) for r in rows])
+                target[occupied] = (bps[occupied] == endpoint_bp[indices]) & endpoint_here[indices]
+        else:
+            for strand, index, domain, lo, hi, five, three in domains[helix.id]:
+                direction = int(domain.direction == Direction.REVERSE)
+                mask = (directions == direction) & (bps >= lo) & (bps <= hi)
+                occupied[mask] = True
+                opposite_occupied |= (directions != direction) & (bps >= lo) & (bps <= hi)
+                sid[mask], stype[mask], ohid[mask] = strand.id, strand.strand_type.value, domain.overhang_id
+                did[mask] = index
+                is5[mask] = ((bps[mask] == five[1]) if (helix.id, domain.direction) == (five[0], five[2]) else False)
+                is3[mask] = ((bps[mask] == three[1]) if (helix.id, domain.direction) == (three[0], three[2]) else False)
         if not np.any(occupied):
             continue
         # Keep original interleaved row order when evaluating the shared slab

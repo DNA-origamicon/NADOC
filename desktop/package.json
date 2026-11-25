@@ -1,0 +1,16 @@
+{
+  "name": "nadoc-desktop",
+  "productName": "NADOC",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local NADOC desktop host",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test *.test.cjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.5.0"
+  }
+}

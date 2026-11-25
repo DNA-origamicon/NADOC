@@ -22,6 +22,7 @@ import { nadocBroadcast } from '../shared/broadcast.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { createDocumentRequestScope } from '../api/document_request_scope.js'
 import { initRecipeFileRecovery } from './part_recipe_file_recovery.js'
+import { createFileOpenTasks } from './file_open_task.js'
 
 /**
  * @param {object} deps
@@ -343,13 +344,24 @@ export function initFileOpen({
   revealWorkspaceForEmptyPart, fitToView, enterAssemblyMode,
   setAssemblyWorkspacePath, setAssemblyName, setAssemblyFileHandle,
   setAssemblyLoadOnProgress, setAssemblyLoadSettle,
+  setFileLoadCancel, hideFileLoad = () => {}, exitAssemblyMode = () => {},
 }) {
+  const tasks = createFileOpenTasks({ setCancel: setFileLoadCancel,
+    progress: flSetProgress, log: flAppendLog, discard: () => api.discardOpenedDocument(),
+    reset: () => {
+      setAssemblyLoadOnProgress(null); setAssemblyLoadSettle(null)
+      exitAssemblyMode(); resetForNewDesign()
+      store.setState({ currentAssembly: null, activeInstanceId: null })
+      setWorkspacePath(null); setAssemblyWorkspacePath(null); setFileName(null)
+    }, hide: hideFileLoad, welcome: showWelcome })
   function _partNameFromPath(path, name) {
     const raw = name || String(path || '').split(/[\\/]/).pop() || 'Part'
     return raw.replace(/\.[^.]+$/, '') || raw
   }
 
   async function openPartFromServer(path, name) {
+    const task = tasks.begin()
+    if (!task) return false
     showFileLoad('Opening Part')
     flAppendLog(`Path: ${path}`)
     try {
@@ -357,7 +369,8 @@ export function initFileOpen({
       flAppendLog('Server is reading, migrating and validating the design…')
       resetForNewDesign()
       const partName = _partNameFromPath(path, name)
-      const opened = await api.openLibraryPart(path, partName)
+      const opened = await api.openLibraryPart(path, partName, { isCancelled: () => task.cancelled })
+      if (await tasks.cancelled(task)) return false
       if (opened) {
         const identityMessages = {
           claimed: 'Legacy file identity registered at this workspace path.',
@@ -373,7 +386,7 @@ export function initFileOpen({
         setWorkspacePath(path)
         hideWelcome()
         revealWorkspaceForEmptyPart()
-        fitToView()
+        fitToView({ opening: true })
         await flShowSuccess('Part loaded successfully')
         return true
       } else {
@@ -385,25 +398,19 @@ export function initFileOpen({
     } catch (e) {
       flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
       flShowError('Could not load part.')
-    }
+    } finally { tasks.finish(task) }
     return false
   }
 
   async function openAssemblyFromServer(path) {
+    const task = tasks.begin()
+    if (!task) return false
     showFileLoad('Opening Assembly')
     flAppendLog(`Path: ${path}`)
     let _hasInstanceErrors = false
     try {
-      flSetProgress(0, 'Fetching file…')
-      const result = await api.getLibraryFileContent(path)
-      if (!result?.content) {
-        flAppendLog('Server returned no content.', 'error')
-        flShowError('Could not load assembly.')
-        return
-      }
-      flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
-      flSetProgress(25, 'Importing assembly…')
-      flAppendLog('Parsing and validating assembly…')
+      flSetProgress(10, 'Opening assembly on the server…')
+      flAppendLog('Server is reading, parsing and validating the assembly…')
 
       // The geometry build is owned by the assembly subscriber (mode-enter for a
       // fresh open, the assemblyChanged branch for a reload while already in
@@ -433,7 +440,8 @@ export function initFileOpen({
       })
       setAssemblyLoadSettle({ resolve: _resolveBuilt, reject: _rejectBuilt })
 
-      const ok = await api.importAssembly(result.content)
+      const ok = await api.openLibraryAssembly(path, { isCancelled: () => task.cancelled })
+      if (await tasks.cancelled(task)) return false
       if (!ok) {
         setAssemblyLoadOnProgress(null)
         setAssemblyLoadSettle(null)
@@ -476,6 +484,8 @@ export function initFileOpen({
         flAppendLog(`Build failed: ${e?.message ?? String(e)}`, 'error')
       }
 
+      if (await tasks.cancelled(task)) return false
+
       if (_hasInstanceErrors) {
         flAppendLog('Assembly loaded with errors.', 'warn')
         flShowError('Some parts failed to load.')
@@ -489,7 +499,7 @@ export function initFileOpen({
       setAssemblyLoadSettle(null)
       flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
       flShowError('Could not load assembly.')
-    }
+    } finally { tasks.finish(task) }
     return false
   }
 

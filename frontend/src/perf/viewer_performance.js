@@ -5,6 +5,7 @@ import { formatViewerMetrics } from './viewer_metrics.js'
 import { connectViewerTestBridge } from './viewer_test_bridge.js'
 import { snapshotViewer } from './viewer_snapshot.js'
 import { openViewerFile } from './viewer_file_open.js'
+import { installDesktopDiagnostics } from './desktop_loading.js'
 
 let installed = null
 export function getViewerPerformance() { return installed }
@@ -37,6 +38,7 @@ export function initViewerPerformance({ renderer, camera, controls, store, addFr
   const axis = new THREE.Vector3()
   const listeners = new Set()
   let disconnectBridge = () => {}
+  let disconnectDesktop = () => {}
   const canvas = renderer.domElement
   const viewSize = () => [canvas.width, canvas.height, canvas.clientWidth, canvas.clientHeight, renderer.getPixelRatio()]
   const viewSettings = state => ({ assembly: !!state.assemblyActive, detail_level: getDetailLevel(),
@@ -172,6 +174,7 @@ export function initViewerPerformance({ renderer, camera, controls, store, addFr
     dispose() {
       disposed = true
       disconnectBridge()
+      disconnectDesktop()
       capture.stop('Viewer disposed')
       restore()
       document.removeEventListener('visibilitychange', visibility)
@@ -188,11 +191,15 @@ export function initViewerPerformance({ renderer, camera, controls, store, addFr
       default_variant: api.defaultVariant, visible: !document.hidden, busy: api.busy,
       url: location.href,
       design: { id: design?.id ?? null, name: design?.metadata?.name ?? null },
+      instances: state.assemblyActive ? state.currentAssembly?.instances?.map(i => ({ id: i.id, representation: i.representation, visible: i.visible })) : null,
       camera: captureCurrentCamera(), viewport: viewSize(), settings: viewSettings(state),
       controls_enabled: controls.enabled, process_log_open: !!document.querySelector('#process-log'),
       render_counts: { ...renderer.info.render }, resources: { ...renderer.info.memory },
       browser: navigator.userAgent }
   }
+  disconnectDesktop = installDesktopDiagnostics({ renderer, store, addFrameCallback, removeFrameCallback, inspect,
+    openFile: path => openViewerFile({ path, getFileOpen }),
+    snapshot: () => snapshotViewer({ canvas, addFrameCallback, removeFrameCallback, inspect }) })
   disconnectBridge = connectViewerTestBridge({ hot: import.meta.hot, api, inspect,
     openFile: path => openViewerFile({ path, getFileOpen }),
     snapshot: () => snapshotViewer({ canvas, addFrameCallback, removeFrameCallback, inspect }) })

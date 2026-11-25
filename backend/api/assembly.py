@@ -71,14 +71,13 @@ from backend.core.models import (
 )
 from backend.core import assembly_groups as _ag
 from backend.core import workspace as _ws
+from backend.core.workspace_location import default_workspace
 
 router = APIRouter()
 
 # ── Project root (two levels above this file: backend/api/ → backend/ → root) ──
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_WORKSPACE_DIR = Path(
-    os.environ.get("NADOC_WORKSPACE", str(_PROJECT_ROOT / "workspace"))
-)
+_WORKSPACE_DIR = default_workspace()
 
 
 # ── Geometry cache ─────────────────────────────────────────────────────────────
