@@ -3,11 +3,8 @@
 Display-only rigid templates; topology and surrounding atoms never change.
 """
 from contextvars import ContextVar
-from copy import deepcopy
 from collections import OrderedDict
 from threading import Lock
-import hashlib
-import json
 
 import numpy as np
 from scipy.spatial import cKDTree
@@ -15,51 +12,73 @@ from scipy.spatial.transform import Rotation
 
 from backend.core.strand_loop_bond_fit import ANGLES, ZERO
 from backend.core.ring_piercing import model_piercings
+from backend.core.strand_loop_fit_scope import RotorPiercingIndex
 
 TARGET = .1600
 _BUILDING_CONTEXT = ContextVar('loop_ring_fit_context', default=False)
 _POSE_CACHE = OrderedDict()
 _CACHE_LOCK = Lock()
+_FIT_LOCK = Lock()
 
 
 def refine_loop_geometry(design, records):
-    """One authority for Full and atomistic poses; cache by complete inputs."""
+    """One authority for Full and atomistic poses; cache by molecular inputs."""
     if _BUILDING_CONTEXT.get() or not any(r.get('placement_source') == 'strand-loop-ellipse-v4-ring-priority' for r in records):
         return
-    # Atomistic construction uses temporary model_copy views with transforms
-    # already applied. Preserve those objects; revalidating their JSON would
-    # incorrectly require removed placement clusters to still exist.
-    key = hashlib.sha256((design.model_dump_json() + json.dumps(records, sort_keys=True)).encode()).digest()
-    with _CACHE_LOCK:
-        poses = _POSE_CACHE.get(key)
-    if poses is None:
-        poses = _fit_poses(design, records)
+    from backend.core.strand_loop_fit_key import fit_key, record_key
+    key = fit_key(design, records)
+    # Single-flight: concurrent Full/atomistic requests share one fitted result.
+    with _FIT_LOCK:
+        with _CACHE_LOCK:
+            poses = _POSE_CACHE.get(key)
+        if poses is None:
+            poses = tuple((record_key(records[i]), q) for i, q in _fit_poses(design, records))
         with _CACHE_LOCK:
             _POSE_CACHE[key] = poses
             _POSE_CACHE.move_to_end(key)
             while len(_POSE_CACHE) > 8:
                 _POSE_CACHE.popitem(last=False)
-    for i, quaternion in poses:
-        records[i]['slab_quaternion'] = list(quaternion)
+    by_key = {record_key(r): r for r in records}
+    for identity, quaternion in poses:
+        by_key[identity]['slab_quaternion'] = list(quaternion)
 
 
 def _fit_poses(design, records):
     from backend.core.atomistic import build_atomistic_model, VDW_RADIUS
     from backend.core.strand_loops import strand_entries
-    records = deepcopy(records)
+    records = list(records)
+    from backend.core.strand_loop_fit_sites import fit_sites
+    sites = fit_sites(design, records)
     token = _BUILDING_CONTEXT.set(True)
     try:
-        model = build_atomistic_model(design, strand_loop_display=True, fast_bridges=True)
+        model = build_atomistic_model(design, strand_loop_display=True, fast_bridges=True,
+                                      _loop_fit_sites=sites,
+                                      _loop_fit_records=records if sites is not None else None)
     finally:
         _BUILDING_CONTEXT.reset(token)
     key = lambda r: (r['strand_id'], r['helix_id'], r['bp_index'], r['direction'], r.get('copy_k', 0))
     lookup = {key(r): i for i, r in enumerate(records)}
     ri = np.array([lookup.get((a.strand_id, a.helix_id, a.bp_index, a.direction, a.copy_k or 0), -1) for a in model.atoms])
     movable = np.array([i >= 0 and records[i].get('loop_order', 0) > 0 for i in ri])
+    required = set()
+    for strand in design.strands:
+        entries = list(strand_entries(design, strand))
+        for loop in strand.loops:
+            if not 6 <= loop.length < 40:
+                continue
+            identity = (loop.helix_id, loop.bp_index, loop.direction)
+            start = entries.index((*identity, 0))
+            for entry in entries[start:start + loop.length + 2]:
+                i = lookup.get((strand.id, *entry))
+                if i is not None:
+                    required.add(i)
+    from backend.core.strand_loop_fit_neighborhood import neighborhood
+    radii = np.array([VDW_RADIUS[a.element] for a in model.atoms])
+    model, ri, movable, radii = neighborhood(model, records, ri, required, movable, radii)
     bonded = [set() for _ in model.atoms]
     for a, b in model.bonds:
         bonded[a].add(b); bonded[b].add(a)
-    ac = dict(ri=ri, movable=movable, radii=np.array([VDW_RADIUS[a.element] for a in model.atoms]),
+    ac = dict(ri=ri, movable=movable, radii=radii,
               excluded=[neighbors | {k for j in neighbors for k in bonded[j]} for neighbors in bonded])
     xyz = np.array([[a.x, a.y, a.z] for a in model.atoms])
     poses = []
@@ -87,10 +106,16 @@ def _fit_poses(design, records):
 
 def contact_guard(ac, model, xyz, states, serials, host, current_state):
     """Check a local rotation against every other residue, including this loop."""
-    own=set(serials);fixed=np.array([i for i in range(len(xyz)) if i not in own])
-    tree=cKDTree(xyz[fixed]);flat=states.reshape(-1,3);m=len(serials)
-    neighbors=tree.query_ball_point(flat,float(2*ac['radii'].max()-.04))
-    counts=np.zeros((len(ANGLES),3),int);depth=np.zeros((len(ANGLES),3))
+    # Every trial atom's contact sphere is contained in this conservative box.
+    # Preserve original serial order so floating-point depth sums are identical.
+    flat=states.reshape(-1,3);m=len(serials)
+    radius=float(2*ac['radii'].max()-.04)
+    near=((xyz>=flat.min(axis=0)-radius-1e-12)&(xyz<=flat.max(axis=0)+radius+1e-12)).all(axis=1)
+    near[serials]=False
+    fixed=np.flatnonzero(near)
+    tree=cKDTree(xyz[fixed])
+    neighbors=tree.query_ball_point(flat,radius,return_sorted=True)
+    counts=np.zeros((len(states),3),int);depth=np.zeros((len(states),3))
     for row,near in enumerate(neighbors):
         i=int(serials[row%m]);k=row//m
         for local in near:
@@ -126,6 +151,7 @@ def optimize_rotations(model,ac,xyz,records,ctx,max_growth=0.):
         else:coords=xyz[ids][None]
         p.append(coords[:,names['P']]);o3.append(coords[:,names["O3'"]])
     chosen=[ZERO]*len(states);positions=xyz.copy();hits=piercing_keys(model,positions)
+    piercing_index=RotorPiercingIndex(model)
     accepted=0;checks=0;rejected=0;history=[]
     for sweep in range(4):
         changed=False
@@ -137,15 +163,31 @@ def optimize_rotations(model,ac,xyz,records,ctx,max_growth=0.):
             initial_right=np.linalg.norm(o3[k+1][ZERO]-p[k+2][0 if k==len(states)-1 else ZERO])
             keep=(dl<=initial_left+max_growth+1e-10)&(dr<=initial_right+max_growth+1e-10)
             keep&=(dl>=min(initial_left,TARGET)-1e-10)&(dr>=min(initial_right,TARGET)-1e-10)
-            keep&=contact_guard(ac,model,positions,states[k],serials[k],host,old)
             cost=(dl-TARGET)**2+(dr-TARGET)**2+1e-12*np.deg2rad(ANGLES)**2
             if max_growth==0:keep&=(dl<=dl[old]+1e-10)&(dr<=dr[old]+1e-10)
             own=set(serials[k]);unchanged={h for h in hits if not own.intersection((*h[0],*h[1]))}
+            # With no mutable piercing, a state with no lower bond error
+            # cannot improve the lexicographic objective. Skip its atom checks.
+            if len(unchanged)==len(hits):
+                keep &= cost < cost[old]
+            feasible=np.flatnonzero(keep)
+            if not len(feasible):
+                continue
+            candidates=np.unique(np.r_[feasible,old])
+            allowed=contact_guard(ac,model,positions,states[k][candidates],serials[k],
+                                  host,int(np.flatnonzero(candidates==old)[0]))
+            keep[candidates]&=allowed
+            local_hits=piercing_index.scope(positions,serials[k],states[k])
             best=(len(hits),float(cost[old]),old);best_hits=hits
             for trial_index in sorted(np.flatnonzero(keep),key=lambda i:(cost[i],abs(ANGLES[i]),ANGLES[i])):
                 if trial_index==old:continue
                 trial=positions.copy();trial[serials[k]]=states[k][trial_index]
-                trial_hits=piercing_keys(model,trial);checks+=1
+                trial_hits=unchanged|local_hits(trial)
+                # Preserve the legacy report-limit semantics for pathological
+                # models whose full report is truncated.
+                if len(hits)>=100000 or len(trial_hits)>=100000:
+                    trial_hits=piercing_keys(model,trial)
+                checks+=1
                 if trial_hits-hits:rejected+=1;continue
                 candidate=(len(trial_hits),float(cost[trial_index]),int(trial_index))
                 if candidate[:2]<best[:2]:best=candidate;best_hits=trial_hits
@@ -157,7 +199,9 @@ def optimize_rotations(model,ac,xyz,records,ctx,max_growth=0.):
                 history.append(dict(sweep=sweep+1,ordinal=k+1,from_deg=float(ANGLES[old]),to_deg=float(ANGLES[best[2]]),piercings_before=len(hits),piercings_after=len(best_hits)))
                 hits=best_hits;accepted+=1;changed=True
         if not changed:break
-    posed=deepcopy(records)
+    posed=list(records)
+    for index in ctx['loops']:
+        posed[index]=dict(records[index])
     for k,index in enumerate(ctx['loops']):
         matrix=matrices[k][chosen[k]]@ctx['mats'][index]
         posed[index]['slab_quaternion']=Rotation.from_matrix(matrix).as_quat().tolist()

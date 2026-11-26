@@ -36,6 +36,7 @@ EDIT_FIELDS = MappingProxyType({
     "crossover-delete-batch": frozenset({"crossover_ids"}),
     "crossover-extra-bases": frozenset({"crossover_id", "sequence"}),
     "crossover-extra-bases-batch": frozenset({"entries"}),
+    "strand-loop-set": _NICK | {"strand_id", "length", "aspect_ratio", "rotation_deg"},
     "loop-skip-insert": frozenset({"helix_id", "bp_index", "delta"}),
     "loop-skip-twist": _LOOP | {"target_twist_deg"},
     "loop-skip-bend": _LOOP | {"radius_nm", "direction_deg"},
@@ -227,7 +228,7 @@ def _validate(kind, values, *, allow_new=False):
         _invalid("Choose a supported native Fine Routing child.")
     _json(values)
     fields = _fields(kind, values) | _protected(kind)
-    _shape(values, fields, optional=_OPTIONAL)
+    _shape(values, fields, optional=_OPTIONAL | ({"aspect_ratio", "rotation_deg"} if kind == "strand-loop-set" else set()))
     if type(values["_proof_version"]) is not int or values["_proof_version"] not in (
             (1, V2) if kind in POSITIONAL_KINDS else (1,)):
         _invalid("Routing editing requires native proof version 1, or 2 for positional routing.",
@@ -296,6 +297,15 @@ def _validate(kind, values, *, allow_new=False):
                     _sequence(item["sequence"])
                 elif "move" in kind:
                     _integer(item["new_index"])
+    elif kind == "strand-loop-set":
+        _id(values["strand_id"])
+        _slot({key: values[key] for key in _SLOT})
+        _integer(values["length"])
+        _number(values.get("aspect_ratio", 3.0))
+        _number(values.get("rotation_deg", 0.0))
+        if not (0 <= values["length"] <= 512 and 1 <= values.get("aspect_ratio", 3.0) <= 10
+                and -180 <= values.get("rotation_deg", 0.0) <= 180):
+            _invalid("Loop length, aspect ratio or rotation is outside its allowed range.")
     elif kind == "loop-skip-insert":
         _id(values["helix_id"])
         _integer(values["bp_index"])
@@ -334,6 +344,9 @@ def _complete(kind, values):
     if "extra-bases" in kind:
         for item in result["entries"] if kind.endswith("-batch") else [result]:
             item["sequence"] = item["sequence"].upper()
+    if kind == "strand-loop-set":
+        result.setdefault("aspect_ratio", 3.0)
+        result.setdefault("rotation_deg", 0.0)
     if kind == "loop-skip-bend":
         result.setdefault("direction_deg", 0)
     _json(result)
@@ -413,6 +426,9 @@ def _references(kind, params):
 
     if kind in {"nick", "ligate", "loop-skip-insert"}:
         add("helix", params["helix_id"], ["helix_id"])
+    elif kind == "strand-loop-set":
+        add("helix", params["helix_id"], ["helix_id"])
+        add("strand", params["strand_id"], ["strand_id"])
     elif kind == "nick-batch":
         for index, item in enumerate(params["nicks"]):
             add("helix", item["helix_id"], ["nicks", index, "helix_id"])

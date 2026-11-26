@@ -1915,6 +1915,8 @@ def build_atomistic_model(
     _two_base_default: bool = True,
     _two_base_phosphate_clearance: bool = True,
     strand_loop_display: bool = False,
+    _loop_fit_sites: set[tuple[str, int, str]] | None = None,
+    _loop_fit_records: list[dict] | None = None,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -2001,7 +2003,7 @@ def build_atomistic_model(
                 model = append_biotin_linkers(model, design)
             if strand_loop_display:
                 from backend.core.strand_loop_atoms import append_loop_atoms
-                model = append_loop_atoms(model, design, exclude_helix_ids)
+                model = append_loop_atoms(model, design, exclude_helix_ids, records=_loop_fit_records)
             return model
 
     from backend.core.deformation import effective_helix_for_geometry
@@ -2111,6 +2113,11 @@ def build_atomistic_model(
         _interpolate_backbone_bridge if fast_bridges else _minimize_backbone_bridge
     )
 
+    fit_site_bps = {}
+    if _loop_fit_sites is not None:
+        for h_id, bp, direction in _loop_fit_sites:
+            fit_site_bps.setdefault((h_id, direction), set()).add(bp)
+
     for strand in design.strands:
         chain_id = strand_to_chain[strand.id]
         seq_num_in_chain = 0
@@ -2119,6 +2126,12 @@ def build_atomistic_model(
             h_id = domain.helix_id
             dir_str = domain.direction.value
             direction = domain.direction
+
+            if _loop_fit_sites is not None:
+                domain_bps = _atomistic_domain_bp_range(domain, strand)
+                if not fit_site_bps.get((h_id, dir_str), set()).intersection(domain_bps):
+                    seq_num_in_chain += len(domain_bps)
+                    continue
 
             if exclude_helix_ids and h_id in exclude_helix_ids:
                 continue
@@ -2217,6 +2230,10 @@ def build_atomistic_model(
                             )
 
                     seq_num_in_chain += 1
+                    # Internal native loop-fit scope. Sequence numbering and all
+                    # placement/bridge code remain the same as the full build.
+                    if _loop_fit_sites is not None and (h_id, bp, dir_str) not in _loop_fit_sites:
+                        continue
                     _seq_key: tuple = (
                         (h_id, bp, dir_str)
                         if copy_k == 0
@@ -2769,7 +2786,7 @@ def build_atomistic_model(
 
     if strand_loop_display:
         from backend.core.strand_loop_atoms import append_loop_atoms
-        model = append_loop_atoms(model, design, exclude_helix_ids)
+        model = append_loop_atoms(model, design, exclude_helix_ids, records=_loop_fit_records)
     return model
 
 

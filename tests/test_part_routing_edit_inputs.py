@@ -21,6 +21,8 @@ def placement(identity=X1):
 
 
 CASES = {
+    "strand-loop-set": {"strand_id": "s", "helix_id": "h", "bp_index": 4,
+        "direction": "FORWARD", "length": 12, "aspect_ratio": 3.0, "rotation_deg": 0.0},
     "strand-end-resize": {"entries": [{"strand_id": "s", "helix_id": "h", "end": "3p", "delta_bp": -2}]},
     "domain-shift": {"entries": [{"strand_id": "s", "domain_index": 0, "delta_bp": -2}]},
     "nick": {"helix_id": "h", "bp_index": 4, "direction": "FORWARD"},
@@ -55,7 +57,7 @@ def api():
     return part_routing_edit_inputs
 
 
-def test_catalog_is_all_twenty_two_native_roles():
+def test_catalog_covers_all_native_roles():
     assert api().KINDS == frozenset(CASES)
 
 

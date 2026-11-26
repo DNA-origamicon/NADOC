@@ -109,18 +109,19 @@ def crossover_connectors(design) -> list[Connector]:
 
 def reciprocal_pairs(connectors: Sequence[Connector]) -> list[tuple[int, int]]:
     """Return antiparallel connector pairs sharing an immobile junction."""
-    pairs: list[tuple[int, int]] = []
-    for index_a, connector_a in enumerate(connectors):
-        for index_b in range(index_a + 1, len(connectors)):
-            connector_b = connectors[index_b]
-            if (
-                connector_a.helices != connector_b.helices
-                or len(connector_a.helices) != 2
-            ):
-                continue
-            if connector_a.from_helix == connector_b.from_helix:
-                continue
-            if abs(connector_a.from_bp - connector_b.from_bp) > 1:
-                continue
-            pairs.append((index_a, index_b))
-    return pairs
+    # Only connectors sharing a helix pair can be reciprocal. Preserve the
+    # original lexicographic pair order without scanning unrelated junctions.
+    groups = {}
+    for index, connector in enumerate(connectors):
+        helices = connector.helices
+        if len(helices) == 2:
+            groups.setdefault(frozenset(helices), []).append(index)
+    pairs = []
+    for indices in groups.values():
+        for offset, index_a in enumerate(indices):
+            a = connectors[index_a]
+            for index_b in indices[offset + 1:]:
+                b = connectors[index_b]
+                if a.from_helix != b.from_helix and abs(a.from_bp - b.from_bp) <= 1:
+                    pairs.append((index_a, index_b))
+    return sorted(pairs)

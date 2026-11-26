@@ -31,13 +31,14 @@ def loop_template(residue, direction):
     return definitions, xyz[anchor].copy(), frame
 
 
-def append_loop_atoms(model, design, exclude_helix_ids=None):
+def append_loop_atoms(model, design, exclude_helix_ids=None, *, records=None):
     """Append loop residues after all parent atom placement; never move host atoms."""
     from backend.core.atomistic import Atom, BASE_TEMPLATES, _SUGAR_BONDS, _BASE_CHAR_TO_RESIDUE
     from backend.core.design_geometry import _geometry_for_design
     if not any(s.loops for s in design.strands):
         return model
-    records = _geometry_for_design(design, extension_slabs=False)
+    if records is None:
+        records = _geometry_for_design(design, extension_slabs=False)
     loops = [r for r in records if r.get('loop_order', 0) > 0
              and r['helix_id'] not in (exclude_helix_ids or set())]
     if not loops:

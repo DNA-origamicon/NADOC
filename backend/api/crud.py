@@ -1740,8 +1740,9 @@ def get_geometry(
             "nucleotides": nucleotides,
             "helix_axes": axes,
         }
-        # Auto-embed straight geometry whenever the design has deformations
-        # or cluster_transforms — mirrors _design_response_with_geometry's
+        # Auto-embed straight geometry when the design has an effective pose;
+        # an identity cluster needs no second computation. This mirrors
+        # _design_response_with_geometry's
         # auto-embed so frontend callers (getGeometry / refetch / preview
         # revert / debug refetch) update currentGeometry and straightGeometry
         # atomically in one setState batch. Without this, the deform_view
@@ -1751,7 +1752,7 @@ def get_geometry(
         # was meant to close. Skipped for partial responses (ids != None):
         # partial mutations leave axes unchanged, so cached straight maps
         # on the frontend stay valid.
-        if ids is None and (design.deformations or design.cluster_transforms):
+        if ids is None and _has_effective_display_pose(design):
             with trace.step("strip_for_embed_straight"):
                 straight_design = design.model_copy(
                     update={"deformations": [], "cluster_transforms": []}

@@ -44,6 +44,10 @@ const definitions = Object.freeze({
   'crossover-delete': ['Delete crossover', [crossover]], 'crossover-delete-batch': ['Delete crossovers', [ids('crossover_ids', 'Crossover', 'crossovers')]],
   'crossover-extra-bases': ['Crossover extra bases', [crossover, sequence]],
   'crossover-extra-bases-batch': ['Crossover extra bases batch', [list('entries', 'Entry', [crossover, sequence], () => ({ crossover_id: '', sequence: '' }))]],
+  'strand-loop-set': ['loop', [id('strand_id', 'Strand ID', 'strands'), ...site,
+    scalar('length', 'Loop bases', 'integer', { minimum: 0, maximum: 512 }),
+    scalar('aspect_ratio', 'Aspect ratio', 'number', { minimum: 1, maximum: 10, optional: true, fallback: 3 }),
+    scalar('rotation_deg', 'Rotation (degrees)', 'number', { minimum: -180, maximum: 180, optional: true, fallback: 0 })]],
   'loop-skip-insert': ['Insert loop or skip', [helix, integer('bp_index', 'Base index'), integer('delta', 'Loop/skip change')]],
   'loop-skip-twist': ['Loop/skip twist', [...planes, scalar('target_twist_deg', 'Target twist (degrees)', 'number')]],
   'loop-skip-bend': ['Loop/skip bend', [...planes, scalar('radius_nm', 'Radius (nm)', 'number', { positive: true }), scalar('direction_deg', 'Direction (degrees)', 'number', { optional: true, fallback: 0 })]],
@@ -132,7 +136,7 @@ function validate(value, fields, prefix = '') {
       item.forEach((row, i) => validate(field.fields[0].key === '$value' ? { $value: row } : row, field.fields, `${label} ${i + 1} `)); continue
     }
     if ((field.type === 'integer' && !Number.isSafeInteger(item)) || (field.type === 'number' && !Number.isFinite(item))) throw new Error(`${label} needs a finite ${field.type}.`)
-    if ((field.minimum != null && item < field.minimum) || (field.positive && item <= 0)) throw new Error(`${label} is outside its allowed range.`)
+    if ((field.minimum != null && item < field.minimum) || (field.maximum != null && item > field.maximum) || (field.positive && item <= 0)) throw new Error(`${label} is outside its allowed range.`)
     if (field.type === 'choice' && !field.choices.includes(item)) throw new Error(`Choose ${label}.`)
     if (field.type === 'boolean' && typeof item !== 'boolean') throw new Error(`${label} needs a checkbox value.`)
     if (field.type === 'id' && (typeof item !== 'string' || !item.trim())) throw new Error(`Specify ${label}.`)

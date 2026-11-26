@@ -154,7 +154,14 @@ long axis parallel to the helix, with both attachment nucleotides fixed.
 Scaffold assignment consumes loop bases in order. New staple loop bases are N;
 Edit sequence changes them, and later scaffold assignment preserves those manual
 loop bases. The native `strand-loop-set` operation records all inputs, supports
-undo, and independently replays after save/reopen. Nick/ligation preserve loop
+revert, delete, input editing, undo/redo and scrubbing, and independently replays
+after save/reopen. The Fine Routing history editor exposes the loop anchor,
+length, aspect ratio and rotation with the same bounds as creation; omitted
+older aspect/rotation values retain native defaults. Loop rows display “Loop”
+instead of the generic “Feature”. Verified with warm and evicted recovery,
+independent saved-file audit, preserved later loop steps and the real browser
+history controls (November 26, 2026; tests/test_strand_loop_history.py and
+frontend/e2e/strand_loop_history.spec.js). Nick/ligation preserve loop
 ownership and sequence; edits that would orphan/drop a surviving loop are refused.
 A 3′ terminus cannot anchor an internal loop because it has no next nucleotide.
 
@@ -429,3 +436,87 @@ alongside its existing row-selection IDs. Terminal overhang columns show a marke
 readout above the existing editable field. Unassigned selected sequence positions
 show `N`; clearing selection removes marks. Cross-window selection transport still
 uses the existing whole-strand protocol; section refs are local to each editor.
+
+## Loop load performance — November 26, 2026
+
+D009 (two 39-base loops): repeated whole-model piercing scans dominated load. The rotor now uses conservative trial-envelope bounds for contacts and piercing candidates; the unchanged detector checks the retained pairs, and immutable hits carry forward. Complete D009 nucleotide records match the previous output exactly (14,873 records); approved atom/pose fixtures also pass. Animation bookkeeping is excluded from the fit-cache key because geometry and atomistic-reference validity do not read it; sequence and other molecular edits still invalidate.
+
+Profiled geometry: 154.3 → 16.3 seconds. Isolated running-app D009 open: 26.2 seconds cold, 19.4 seconds repeat (repeat geometry request <1 second; remaining browser work persists). Source file hash unchanged. Tests: test_strand_loop_fit_scope.py, test_strand_loop_ring_fit.py, and opt-in frontend/e2e/strand_loop_load.spec.js. Evidence: .development-artifacts/loop-load-20261126/results.json and browser screenshot.
+
+
+Matched-size comparison (same-machine isolated browser run, November 26):
+D003 14,055 nt: 8.1s cold / 20.6s immediate reopen; D006 15,362 nt:
+8.3s / 22.9s; D005 15,983 nt: 6.9s / 18.4s; D009 14,873 nt:
+30.8s / 21.7s. Cold geometry response: controls 0.47–0.67s versus
+D009 23.00s (11.64s displayed plus 11.21s straight geometry computation).
+Repeat geometry: controls 0.52–0.60s, D009 1.01s. Thus loop cold fitting
+still costs ~22 extra seconds; slow immediate reopens also occur without
+loops and are a separate general frontend/history concern. One run, not
+statistical averages; all four files remained unchanged. Evidence:
+.development-artifacts/loop-load-comparison-20261126/results.json.
+Reusable read-only benchmark: frontend/e2e/design_load_comparison.spec.js.
+
+
+## Loop fitting scope — November 26, 2026
+
+User direction: converge on a loop model requiring no fitting, or only local
+fitting affecting a few bases with a narrow range of solutions. Do not treat
+caching an expensive whole-design optimization as the solution.
+
+The performance refactor retains the approved ellipse and orientations exactly.
+Plain rigid designs now stamp a conservative native atom neighborhood, retaining
+bridge/reciprocal/overhang dependencies; complex placements fall back to the full
+native builder. Atom contacts and ring checks use conservative rotation bounds.
+Bond feasibility and the existing objective discard trials that cannot improve
+before atom checks. The numerical angle grid and detector thresholds are unchanged;
+this is not yet a new analytic model or a hard cap on the number of movable bases.
+No disk pose cache is introduced. Memory fits are single-flight.
+
+D009 uncached geometry: 1.35s unprofiled (2.08s profiled), all 14,873 records
+exactly equal to the original approved output. Neither 39-base loop accepts an
+additional ring-priority rotation; only two trial ring checks remain in total.
+The deterministic initial ellipse/bond orientation model still runs.
+Evidence: .development-artifacts/loop-local-fit-20261126/solver.json.
+
+Final same-run app comparison: D009 cold 10.515s / immediate reopen 22.344s,
+D005 cold 6.966s / reopen 18.852s. Geometry responses D009 3.113s cold /
+1.136s warm versus D005 0.493s / 0.480s. These supersede the earlier timings
+above; performance is substantially closer, but not equal. Reopen delays remain
+shared frontend work. Both source hashes unchanged, 2 browser cases passed.
+All 26,949 retained D009 native atoms exactly match the full 304,931-atom
+build; 1,236 native sites selected. Ten focused backend tests passed across
+ring-fit fixtures, local scope/cache invalidation, and neighborhood/native-atom
+parity. No scratch designs persisted; isolated runtime workspaces removed.
+Evidence: .development-artifacts/loop-local-fit-20261126/results.json,
+browser.log, parity.py, and solver.json.
+
+
+## Subsecond loop geometry and unrelated edits — November 26, 2026
+
+User requires geometry responses below one second, including after unrelated
+geometry changes. D009 now measures 0.834s cold and 0.348s warm in the running
+app. Overall open remains 9.2s cold / 22.7s immediate reopen: these are distinct
+from the geometry endpoint timings and mostly frontend work.
+
+Fixed redundant straight geometry for identity cluster transforms in GET
+geometry, using the existing effective-pose predicate. Loop stamping reuses the
+already-computed loop records and skips unselected native domains. Reciprocal
+junction discovery groups by helix pair while retaining exactly the old ordering.
+
+Loop fit fingerprints exclude history/presentation and select native helices,
+strands and geometry records inside the conservative dependency scope. Spatial
+scope is recomputed on every request, so incoming neighbors invalidate correctly.
+Other molecular fields and complex-placement fallbacks remain conservative.
+Cached poses use nucleotide identities rather than array offsets.
+
+A recorded/replayed 14,880-base test fixture measured 0.422s without a loop,
+0.444s after adding a 39-base loop, then 0.425/0.422/0.439s after three remote
+helix moves, with zero refits for those moves. Nearby movement and sequence
+changes invalidate in regression tests. No claim that every conceivable edit or
+complex fallback is subsecond; these are measured representative workloads.
+
+28 focused backend tests and the D009 browser comparison passed. D009's complete
+14,873 geometry records still match the original approved output exactly. Source
+file hash unchanged, no saved test structures, isolated runtime workspace cleaned.
+Evidence: .development-artifacts/loop-subsecond-20261126/results.json,
+edits.py, edits.json, solver.json, browser.log.

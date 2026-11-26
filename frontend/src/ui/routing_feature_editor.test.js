@@ -5,6 +5,8 @@ const site = { helix_id: 'h1', bp_index: 5, direction: 'FORWARD' }
 const placement = id => ({ ...(id ? { crossover_id: id } : {}), half_a: { helix_id: 'h1', index: 5, strand: 'FORWARD' },
   half_b: { helix_id: 'h2', index: 5, strand: 'REVERSE' }, nick_bp_a: 4, nick_bp_b: 6, process_id: 'manual' })
 const cases = [
+  ['strand-loop-set', { ...site, strand_id: 's1', length: 30, aspect_ratio: 3, rotation_deg: 0 }, 'Loop bases', '12', ['length'], 12],
+  ['strand-loop-set', { ...site, strand_id: 's1', length: 30, aspect_ratio: 3, rotation_deg: 0 }, 'Rotation (degrees)', '90', ['rotation_deg'], 90],
   ['strand-end-resize', { entries: [{ strand_id: 's1', helix_id: 'h1', end: '3p', delta_bp: 2 }] }, 'Entry 1 Delta (bp)', '-3', ['entries', 0, 'delta_bp'], -3],
   ['domain-shift', { entries: [{ strand_id: 's1', domain_index: 0, delta_bp: 2 }] }, 'Entry 1 Domain index', '1', ['entries', 0, 'domain_index'], 1],
   ['nick', site, 'Base index', '7', ['bp_index'], 7],
@@ -103,6 +105,9 @@ it('exposes prefix choices including domain ordinals rather than consulting curr
 
 it.each([
   ['nick', site, 'Base index', '1.5'],
+  ['strand-loop-set', { ...site, strand_id: 's1', length: 30, aspect_ratio: 3, rotation_deg: 0 }, 'Loop bases', '513'],
+  ['strand-loop-set', { ...site, strand_id: 's1', length: 30, aspect_ratio: 3, rotation_deg: 0 }, 'Aspect ratio', '0'],
+  ['strand-loop-set', { ...site, strand_id: 's1', length: 30, aspect_ratio: 3, rotation_deg: 0 }, 'Rotation (degrees)', '181'],
   ['loop-skip-bend', { helix_ids: ['h1'], plane_a_bp: 0, plane_b_bp: 10, radius_nm: 10 }, 'Radius (nm)', '0'],
   ['crossover-extra-bases', { crossover_id: 'x1', sequence: 'AC' }, 'Sequence', 'AXB'],
 ])('keeps invalid %s drafts local', async (kind, params, label, value) => {
