@@ -90,7 +90,7 @@ def estimate_staple_temperatures(design):
         special = domain.overhang_id is not None or domain.binds_overhang_id is not None
         return [(domain.helix_id, bp, domain.direction, copy)
                 for bp in domain_bp_range(domain)
-                for copy in range(1 + (0 if special else ls_map.get((domain.helix_id, bp), 0)))]
+                for copy in range(1 + (0 if special else ls_map.get((domain.helix_id, bp, domain.direction), 0)))]
 
     def after(domains, i):
         d, nxt = domains[i], domains[(i+1) % len(domains)]
@@ -122,7 +122,11 @@ def estimate_staple_temperatures(design):
             if not tail:
                 for k, key in enumerate(domain_keys):
                     base = seq[offset+k:offset+k+1]
-                    pairing[key] = None if key in pairing else (strand.id, position, base)
+                    # Extra loop copies consume contour/sequence, but never pair.
+                    unpaired = getattr(ls_map, 'unpaired', {}).get(key[:3], 0)
+                    is_loop = unpaired and key[3] >= 1 + ls_map.get(key[:2], 0)
+                    if not is_loop:
+                        pairing[key] = None if key in pairing else (strand.id, position, base)
                     position += 1
                     if k+1 == len(domain_keys) or domain_keys[k+1][1] != key[1]:
                         junction = inserts.get(key[1])

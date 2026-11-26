@@ -499,6 +499,7 @@ export function orderStrandNucleotides(nucs) {
     }
     const bpDiff = a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
     if (bpDiff !== 0) return bpDiff
+    if (a.loop_order != null || b.loop_order != null) return (a.loop_order ?? 0) - (b.loop_order ?? 0)
     const ca = copyIdx.get(a) ?? 0
     const cb = copyIdx.get(b) ?? 0
     return a.direction === 'FORWARD' ? ca - cb : cb - ca

@@ -57,6 +57,7 @@ function _orderNucleotides5to3(nucs) {
       ? a.bp_index - b.bp_index
       : b.bp_index - a.bp_index
     if (bp !== 0) return bp
+    if (a.loop_order != null || b.loop_order != null) return (a.loop_order ?? 0) - (b.loop_order ?? 0)
     const copies = (copyIdx.get(a) ?? 0) - (copyIdx.get(b) ?? 0)
     return a.direction === 'FORWARD' ? copies : -copies
   })
@@ -102,6 +103,7 @@ export function buildNucLetterMap(design, nucs) {
       for (let i = 0; i < arr.length; i++) {
         const ch = seq[i]?.toUpperCase()
         if (ch && 'ATGC'.includes(ch)) nucLetter.set(arr[i], ch)
+        else if (arr[i].loop_order > 0) nucLetter.delete(arr[i])
       }
     }
   }
@@ -123,6 +125,7 @@ export function buildNucLetterMap(design, nucs) {
         if (nucLetter.has(arr[i])) continue
         const ch = seq[i]?.toUpperCase()
         if (ch && 'ATGC'.includes(ch)) nucLetter.set(arr[i], ch)
+        else if (arr[i].loop_order > 0) nucLetter.delete(arr[i])
       }
     }
   }

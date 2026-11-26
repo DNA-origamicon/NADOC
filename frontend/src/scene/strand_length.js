@@ -21,7 +21,7 @@ export function strandLengthNt(strand, helixById) {
       .filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
       .reduce((s, ls) => s + ls.delta, 0)
     return sum + (Math.abs(d.end_bp - d.start_bp) + 1) + skip
-  }, 0)
+  }, 0) + (strand.loops ?? []).reduce((sum, loop) => sum + loop.length, 0)
 }
 
 /** Loop/skip-aware length, building the helix lookup from a Design.

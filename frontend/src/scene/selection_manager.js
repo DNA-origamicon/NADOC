@@ -1,3 +1,4 @@
+import { openStrandLoopDialog, loopAt } from '../ui/strand_loop_dialog.js'
 import { coarseSelectionGeometry, coarseConnectionVisible } from './selection_representation.js'
 import { canonicalSelection } from './selection_model.js'
 import { assignClusterSelection } from '../ui/cluster_base_selection.js'
@@ -479,9 +480,18 @@ async function _deleteExtensions(ids, context) {
 let _onEditStrandSequence = null
 let _onHideSelection = null
 
+let _loopAnchor = null
+function _appendLoopAction(menu, nuc) {
+  const strand = store.getState().currentDesign?.strands?.find(s => s.id === nuc?.strand_id)
+  if (!strand || !nuc || nuc.extension_id) return
+  menu.appendChild(_menuItem(loopAt(strand, nuc) ? 'Edit loop…' : 'Add loop here', () =>
+    openStrandLoopDialog({ strand, anchor: nuc, save: api.setStrandLoop, getError: () => store.getState().lastError })))
+}
+
 function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null, ovhgMultiIds = null, onOpenOverhangsManager = null, domainRef = null) {
   _dismissMenu()
   const menu = _menuBase(x, y)
+  if (_loopAnchor?.strand_id === strandId) _appendLoopAction(menu, _loopAnchor)
   const singleEffectiveIds = linkerComponentIds(strandId)
   const linkerConn = linkerConnectionForStrandId(strandId)
 
@@ -1164,6 +1174,7 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
   _dismissMenu()
   const menu = _menuBase(x, y)
 
+  _appendLoopAction(menu, nuc)
   const { helix_id, bp_index } = nuc
 
   // Check if there's an existing loop/skip at this position
@@ -1200,6 +1211,7 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
 function _showFlexibleSegmentMenu(x, y, nuc, onFlexibleSegmentRightClick) {
   _dismissMenu()
   const menu = _menuBase(x, y)
+  _appendLoopAction(menu, nuc)
   const design = store.getState().currentDesign
   const marks = design?.flexible_segment_marks ?? []
   const marked = marks.some(m =>
@@ -1338,6 +1350,7 @@ function _showScaffoldMenu(x, y, ctx, cbs) {
     menu.appendChild(clear)
   }
 
+  _appendLoopAction(menu, nuc)
   // 6 — Loop / skip at this helix position (kept per user request).
   menu.appendChild(_menuSep())
   const helix = design?.helices?.find(h => h.id === nuc.helix_id)
@@ -4473,6 +4486,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       ? (backboneEntries.find(b => b.instMesh === beadHit.object && b.id === beadHit.instanceId) ?? null)
       : null
 
+    _loopAnchor = hitBead?.nuc ?? hitCone?.nuc ?? null
     // Extensions include ordinary tail beads plus optional fluorophore/modification tips.
     const extensionEntries = _extensionEntries()
     const extensionMeshes = [...new Set(extensionEntries.map(entry => entry.instMesh))].filter(mesh => mesh.visible)
@@ -4599,6 +4613,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         })
         return
       }
+    }
+
+    if (_beadFrontmost && hitBead.nuc?.strand_type === 'staple' && !hitBead.nuc.is_unpaired && !hitBead.nuc.overhang_id) {
+      _showColorMenu(e.clientX, e.clientY, hitBead.nuc.strand_id, designRenderer)
+      return
     }
 
     // Unpaired bead → flexible-segment menu (mark the contiguous ssDNA run as a

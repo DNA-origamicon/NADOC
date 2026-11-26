@@ -164,6 +164,7 @@ def _prefix_strand(strand: Strand, strand_prefix: str, helix_prefix: str) -> Str
         update={
             "id": f"{strand_prefix}{strand.id}",
             "domains": [_prefix_domain(d, helix_prefix) for d in strand.domains],
+            "loops": [loop.model_copy(update={"helix_id": f"{helix_prefix}{loop.helix_id}"}) for loop in strand.loops],
         }
     )
 
@@ -377,6 +378,7 @@ def _prefix_assembly_strand(strand: Strand, real_instance_ids: set[str]) -> Stra
             "domains": [
                 _remap_assembly_domain(d, real_instance_ids) for d in strand.domains
             ],
+            "loops": [_remap_assembly_domain(loop, real_instance_ids) for loop in strand.loops],
         }
     )
 

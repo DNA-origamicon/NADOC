@@ -4,6 +4,7 @@ from backend.core.models import LoopSkip
 
 LOOP_COMMANDS = frozenset(
     {
+        "strand-loop-set",
         "loop-skip-insert",
         "loop-skip-twist",
         "loop-skip-bend",
@@ -16,6 +17,9 @@ PATTERN_COMMANDS = frozenset({"circular-pattern", "linear-pattern"})
 
 
 def build_loop(kind, design, params):
+    if kind == "strand-loop-set":
+        from backend.core.strand_loops import set_loop
+        return set_loop(design, params)
     from backend.core.loop_skip_calculator import (
         apply_loop_skips,
         twist_loop_skips,

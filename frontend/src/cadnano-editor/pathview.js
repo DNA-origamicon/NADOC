@@ -1,3 +1,4 @@
+import { drawStrandLoops } from './strand_loop_glyph.js'
 import { createCanvasLayerCache } from './pathview/canvas_layer_cache.js'
 import { createTemperatureStyles } from './pathview/temperature_styles.js'
 import { sequenceSelectionRefs } from './sequence_selection.js'
@@ -894,7 +895,7 @@ export function initPathview(canvasEl, containerEl, {
         endWhich = (isFwd && bp === lo) || (!isFwd && bp === hi) ? '5p' : '3p'
       }
     }
-    return { strand, strandIdx: si, dom, domainIdx: di, elementType, endWhich }
+    return { strand, strandIdx: si, dom, domainIdx: di, elementType, endWhich, bp }
   }
 
   /**
@@ -4128,6 +4129,7 @@ export function initPathview(canvasEl, containerEl, {
     _drawQuadruplexHatching()
     _drawSequences()
     _drawLoopSkips()
+    if (_viewTools.loopSkips !== false) drawStrandLoops(ctx, _design, _rowMap, _bpCenterX, CELL_H, _zoom, _viewTools.referenceGeometry !== false)
     _drawOverhangNames()
     _drawQuadruplexMarkers()
   }
@@ -5167,7 +5169,7 @@ export function initPathview(canvasEl, containerEl, {
         clientY:    e.clientY,
       })
     } else if (domHit?.strand) {
-      onStrandContextMenu?.({ strand: domHit.strand, clientX: e.clientX, clientY: e.clientY })
+      onStrandContextMenu?.({ strand: domHit.strand, anchor: { helix_id: domHit.dom.helix_id, direction: domHit.dom.direction, bp_index: domHit.bp }, clientX: e.clientX, clientY: e.clientY })
     }
   })
 

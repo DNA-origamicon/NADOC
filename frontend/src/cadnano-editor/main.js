@@ -1,3 +1,5 @@
+import { openStrandLoopDialog, loopAt } from '../ui/strand_loop_dialog.js'
+import { setStrandLoop } from './api.js'
 import { mountScaffoldSequenceTarget, confirmedScaffoldOptions } from '../ui/scaffold_sequence_target.js'
 import { initEditorViewTools } from './view_tools.js'
 import { registerRecordingSource } from '../record/source.js'
@@ -1531,7 +1533,7 @@ function _hideStrandCtxMenu() {
  * ui/primitives/context_menu.js — so neither the labels nor the visibility rules
  * can drift between the two editors any more.
  */
-function _showStrandCtxMenu(strand, clientX, clientY) {
+function _showStrandCtxMenu(strand, clientX, clientY, anchor) {
   _hideStrandCtxMenu()
   const design = editorStore.getState().design
   // Apply to the whole selection if the right-clicked strand is part of it; else just this one.
@@ -1554,6 +1556,8 @@ function _showStrandCtxMenu(strand, clientX, clientY) {
       onEditExtensions: ids => _openStrandExtDialog(ids, clientX, clientY, extensionContext),
     },
   )
+  if (anchor) items.push({ label: loopAt(strand, anchor) ? 'Edit loop…' : 'Add loop here',
+    onClick: () => openStrandLoopDialog({ strand, anchor, save: setStrandLoop, getError: () => editorStore.getState().lastError }) })
   if (!items.length) return
   _strandCtxMenu = createContextMenu({
     x: clientX, y: clientY, items,
@@ -1832,8 +1836,8 @@ const pathview = initPathview(pathCanvas, pathContainer, {
     _ovhgMenu.show(overhangId, clientX, clientY)
   },
 
-  onStrandContextMenu: ({ strand, clientX, clientY }) => {
-    _showStrandCtxMenu(strand, clientX, clientY)
+  onStrandContextMenu: ({ strand, clientX, clientY, anchor }) => {
+    _showStrandCtxMenu(strand, clientX, clientY, anchor)
   },
 
   onDeleteElements: async (elementKeys) => {

@@ -949,6 +949,17 @@ class Domain(BaseModel):
     binds_overhang_id: Optional[str] = None
 
 
+class StrandLoop(BaseModel):
+    """Unpaired nucleotides after an occupied base in strand 5′→3′ order."""
+
+    helix_id: str
+    bp_index: int
+    direction: Direction
+    length: int = Field(ge=1, le=512, strict=True)
+    aspect_ratio: float = Field(default=3.0, ge=1.0, le=10.0, allow_inf_nan=False)
+    rotation_deg: float = Field(default=0.0, ge=-180.0, le=180.0, allow_inf_nan=False)
+
+
 class Strand(BaseModel):
     """
     A single DNA strand, ordered 5′ to 3′ through its domains.
@@ -969,6 +980,7 @@ class Strand(BaseModel):
     # sequence assigner truncates/pads it to the routed domains. Never infer this
     # from Strand.sequence: that may contain only a prefix of a supplied source.
     custom_scaffold_length: Optional[int] = Field(default=None, gt=0)
+    loops: List[StrandLoop] = Field(default_factory=list)
     color: Optional[str] = None  # "#RRGGBB" hex; None → use STAPLE_PALETTE
     name: Optional[str] = None  # user-defined oligo/order name; blank by default
     notes: Optional[str] = None  # user-defined notes (shown in spreadsheet panel)
@@ -2221,6 +2233,7 @@ MinorOpSubtype = Literal[
     "domain-add",
     "domain-delete",
     "domain-shift",
+    "strand-loop-set",
     "loop-skip-insert",
     "loop-skip-clear",
     "loop-skip-clear-all",

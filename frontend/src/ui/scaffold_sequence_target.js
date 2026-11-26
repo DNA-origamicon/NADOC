@@ -2,6 +2,7 @@
 import { showConfirm } from './primitives/confirm.js'
 import { canonicalSelection } from '../scene/selection_model.js'
 import { countScaffoldNt } from '../scene/scaffold_assign.js'
+import './scaffold_sequence_target.css'
 
 export function selectedSequenceTarget(state, explicitStrandId = null) {
   if (explicitStrandId != null) return `strand:${explicitStrandId}`
@@ -58,6 +59,7 @@ export function scaffoldScope(design, value) {
 export function mountScaffoldSequenceTarget({ body, design, state, explicitStrandId, onChange }) {
   body.querySelector('[data-scaffold-target]')?.remove()
   const wrapper = document.createElement('div')
+  wrapper.className = 'scaffold-sequence-target'
   wrapper.dataset.scaffoldTarget = ''
   const label = document.createElement('label')
   label.textContent = 'Assign to '

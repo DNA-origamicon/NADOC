@@ -13,6 +13,197 @@ to the strand right-click menu in BOTH editors; for a staple whose scaffold is
 sequenced, show the paired scaffold bases above the input and highlight incorrect
 base pairing — but still allow any bases.
 
+## Strand-specific insertion loops (2026-11-25)
+
+Current production (November 26, explicit user promotion): loops of **6–39 bases**
+use `strand-loop-ellipse-v4-ring-priority`: the previous bond optimum, additional
+rigid +1nm outward translation, then fixed-center ring-priority rotations with
+up to0.10nm linker growth versus the translated baseline. Atom-overlap counts
+and depth cannot increase per group; no new piercing identities are accepted.
+Shorter loops retain v2; loops>=40 retain v3. No hard editor limit is imposed.
+User accepted residual edge cases and deferred further refinement until demand.
+`strand_loop_ring_fit.py` shares the atom-aware placement with Full and all
+atomistic representations; context-local recursion control and an input-keyed
+bounded cache keep rebuilds consistent. Atom cache version advanced and v4 is
+registered in frontend placement validation. Six portable approved coordinate
+fixtures guard the selected result; complete84-case production comparison is
+under `.development-artifacts/loop-ring-production-20261126/`.
+
+
+Earlier production (November 26): user explicitly selected **Bond optimum only**
+on the demonstrated 0.50 nm outward ellipse. `strand-loop-ellipse-v3-bond-optimum`
+uses smooth fixed-root shoulders and contour refitting, then the global 5°-grid
+O3′–P length optimum about each fixed bead-to-slab-center axis. It never lengthens
+an individual modeled linker; it does not optimize clashes/piercings. Native
+attachment landmarks use the actual strand sequence and the measured template
+registration. Slab centers and beads stay fixed during fitting; path tangents
+remain geometric. Insertions below six bases retain v2 (the reviewed 0.50 nm
+offset exceeds a one-base contour budget). Atomistic cache version is advanced.
+
+Production reevaluation: 126 cases match the reviewed `bond_only` atoms within
+7.2e-15 nm, with exact independent replay. Relative to the unrotated 0.50 nm
+baseline, mean O3′–P is 0.576→0.306 nm; loop-self atom overlaps 1281→31647;
+parent overlaps 8295→8358; neighbor overlaps 14210→14131. Ring piercings 103→130,
+including 123 newly introduced identities. Full parent/self intersections stay
+zero; neighbor intersections 193→204. These are unassigned/T-placeholder display
+fixtures, not physically relaxed structures. Export/simulation remains guarded.
+Evidence: `.development-artifacts/loop-bond-production-20261126/`; executable audit:
+`experiments/loop_bond_production_review.py`. Focused regressions: 64 passed,
+including approved-pose, sequence-specific endpoint and no-linker-growth checks.
+Renderer/codec regressions: 32 passed; Full and all four atomistic modes verified
+in the isolated app, with its workspace removed afterward. The new source tag
+is explicitly registered in `native_placement.js`; the initial missing-tag
+incident was preserved and reviewed through the standard placement journal.
+The guarded alternatives below were **not** selected for production.
+
+Radial A/B diagnostic (November 26, production unchanged): user authorized bases
+outward from the ellipse center, farther offsets, then guarded rotation fitting.
+`experiments/loop_radial_comparison.py` compares 126 recorded 2HB fixtures;
+`.development-artifacts/loop-radial-20261126/` retains inputs, frozen source,
+ordered process, stage evidence and shared-frame review (localhost:8772).
+Offsets selected per case by self contacts, helix contacts, piercings, then offset:
+0.75 nm for 6 nt, 3 nm for 30 nt, 4 nm for 80 nt. Versus current production,
+final parent/neighbor/self atomic overlaps: 8358/14131/31647 → 3015/6346/2183;
+piercings 130→28, all 28 remaining identities newly introduced versus current.
+Mean O3′–P worsens 0.306→0.501 nm (maximum 0.775→0.876 nm). The rotation
+stage improves its radial starting pose (mean 0.633→0.501; piercings 47→28),
+with no individual linker growth, increased per-group overlap count/depth,
+or new piercing identity at that stage. Both centers and radial direction stay
+fixed during fitting. Full parent contacts increase 0→21. This candidate is
+not physically resolved and has not been selected for production.
+
+User retained the current bond optimum after radial comparison (November 26).
+Read-only piercing census: `.development-artifacts/loop-piercing-census-20261126/`.
+36/126 current fixtures have 130 events: 109 neighbor-helix, 21 parent, zero
+loop-self. Every 80 nt reverse fixture has parent helix P–OP2 at anchor bp+5
+piercing loop base 2 sugar; all 21 appear only after bond fitting. Neighbor events
+cluster at forward bp32–33/42–43 and reverse bp38/48–49 in this 2HB environment.
+Only lengths 6/30/80, ratio3, plane0°, offset0.50 nm were checked; exact length
+threshold and other settings remain unknown. Direction and scaffold/staple role
+are confounded in these fixtures. Current geometry remains selected.
+
+Rigid-translation A/B (November 26, production unchanged): user clarified that
+outward offset should translate the entire existing loop without taper/refitting,
+and explicitly authorized stretched attachment connections. Diagnostic script
+`experiments/loop_rigid_translation_comparison.py`; evidence/review:
+`.development-artifacts/loop-rigid-translation-20261126/`, localhost:8773.
+All 126 fixtures independently replay exactly. All loop positions translate
+uniformly; rotations, internal O3′–P lengths and 31647 self-overlaps stay fixed.
+Additional +0.25 nm removes all 21 parent ring piercings. +0.75 nm is the smallest
+tested shift clearing every parent atom overlap (8358→0); attachment lengths
+0.507–1.389 nm. Neighbor contacts can worsen: +0.75 nm has 16584 versus14131,
+with134 neighbor piercings versus109 current. +3 nm clears all helix atom overlaps,
+but leaves one stretched-attachment piercing in 6nt reverse bp38; attachment
+lengths2.694–3.559 nm. These offsets are additional to current0.50nm shaped geometry.
+User authorized diagnostic stretching only; no new production selection yet.
+
+Latest user selection (November 26): additional **+1.00 nm rigid translation**
+is the working candidate for further A/B investigation. Focus on loops **below
+40 bases**; longer motifs should use another solution per user. This is a scope
+restriction, not an implemented editor hard limit. Production remains unchanged
+pending explicit promotion. Selection recorded in rigid-translation evidence
+`working-candidate.json`. On existing6/30nt fixtures at+1nm, 13/84 cases contain
+58 neighbor-ring piercings. User subsequently granted the per-base rotation comparison at fixed bead/slab
+centers; completed results are recorded below.
+
+Neighbor-ring rotation A/B (November 26): user authorized per-base rotations
+on the +1nm working candidate, below40 bases. 84 fixtures (6/30nt, both directions,
+bp30..50) audited and independently replayed exactly. Strict no-linker-growth
+search accepts zero changes (58 piercings remain). Ring-priority local search
+allows up to0.10nm extra per linker versus baseline; keeps bead/slab centers and
+all helix atoms fixed, guards per-group atom-overlap count/depth and rejects new
+piercing identities. Piercings58→32, affected cases13→11; neighbor atom overlaps
+6673→6465, self10899→9787, parent stays0. 93 linkers lengthen, max0.090916nm;
+mean O3-P0.393709→0.393741nm, max1.619348→1.634093nm. Fully clears6nt forward
+bp33 and30nt reverse bp37. Local5degree/four-sweep search, not global optimum;
+other sub40 lengths untested. Full/atomistic review verified at localhost:8774.
+Evidence `.development-artifacts/loop-neighbor-rings-20261126/`; algorithm
+`experiments/loop_neighbor_ring_comparison.py`. The user subsequently authorized production promotion of this rotation candidate;
+see the current production state above.
+
+Previous loop orientation (November 25): `strand-loop-ellipse-v2` rotates
+all inserted bases 180° from the original v1 frame, except the two major-axis
+tip turning regions, which rotate +90° (net from v1, about local backbone
+tangents). A tip region includes bases within one ssDNA contour step (0.68 nm)
+axially from either extremum. Single extremal-base exceptions left short-loop
+neighbor collisions; the turning regions remove those in the checked fixtures.
+On a six-base loop the two regions cover all six bases. Backbones, roots and
+nonloop geometry are unchanged. Both editors consume the same geometry authority.
+
+`experiments/loop_orientation_v2_review.py` rebuilds and independently audits the
+126 recorded 2HB cases (6/30/80 nt, 21 phases, both directions). Zero loop-self
+display intersections remain; total base-display contacts fall 646→314, with
+parent/neighbor-helix and fixed-backbone contacts still present. These are default
+Full solid checks, not atomic clash/piercing validation. Evidence, frozen source,
+independent replay and viewer: `.development-artifacts/loop-orientation-v2-20261125/`.
+The earlier orientation search remains isolated in
+`.development-artifacts/loop-clearance-20261125/ab/`; it was not promoted.
+
+The shared Add/Edit Loop popup uses NADOC modal/input/button classes and theme
+tokens, aligned numeric fields, a primary save action and destructive remove action.
+
+Both editors offer **Add loop here** on scaffold/staple bases, then **Edit loop…**
+for count, aspect ratio, rotation around the helix, and removal. `Strand.loops`
+records unpaired nucleotides after the selected base in 5′→3′ traversal, before
+its existing next nucleotide. The complementary strand and duplex bp register
+stay unchanged. Existing helix-wide `LoopSkip` marks retain their old semantics.
+The D009 reference crop shows a compact counted loop (30 nt); cadnano uses one
+counted glyph on the owning track. Full/Beads use an arc-length-sampled ellipse,
+long axis parallel to the helix, with both attachment nucleotides fixed.
+
+Scaffold assignment consumes loop bases in order. New staple loop bases are N;
+Edit sequence changes them, and later scaffold assignment preserves those manual
+loop bases. The native `strand-loop-set` operation records all inputs, supports
+undo, and independently replays after save/reopen. Nick/ligation preserve loop
+ownership and sequence; edits that would orphan/drop a surviving loop are refused.
+A 3′ terminus cannot anchor an internal loop because it has no next nucleotide.
+
+Atomistic display now includes loops in Ball & Stick, VDW, Stick, and Detail
+Surface. Rigid measured nucleotide templates anchor O5′ to each loop backbone
+bead and follow the Full view's ring orientation (including the tip quarter
+turns). Sequence register, copy identities, and anchor→loop→next bonds are
+preserved; existing helix atoms stay fixed. Unassigned N uses the standard
+thymine display placeholder with a warning. Inter-residue linkers are unrelaxed:
+the explicit `strand_loop_display` build/cache path is display-only, and default
+atomistic export/simulation, oxDNA, and cadnano/scadnano interchange still refuse
+loops. Native NADOC persistence and sequence CSV remain available. Legacy
+multi-base duplex insertions are not automatically converted.
+
+Atomistic checks: `tests/test_strand_loop_atoms.py` (12 passing); focused related
+regressions (111 passed, 1 skipped before the final two guard tests); real-browser
+four-mode review `frontend/e2e/strand_loop_atoms.spec.js` (passed). Screenshots:
+`.development-artifacts/strand-loop-atomistic-20261125/`. Isolated review workspace
+is removed after evidence collection.
+
+Outward-offset investigation (2026-11-26): user explicitly authorized A/B testing
+for outward ellipse offsets. `experiments/loop_offset_comparison.py` is isolated
+from production; evidence/replay/viewer live in
+`.development-artifacts/loop-offset-20261126/`. Across 126 recorded 2HB cases,
+0.50 nm smooth outward body offsets with fixed roots and refitted contour remove
+all parent Full intersections (147→0), but leave atom overlaps (17976→8295) and
+increase neighbor overlaps (11752→14210). Some short-loop unrelaxed O3′–P linkers
+worsen. These are T-placeholder display models, not physically relaxed models.
+All evidence independently regenerated exactly; production geometry was unchanged
+at that investigation stage. The later explicit selection is documented above.
+
+Rotation-only follow-up (2026-11-26): user authorized A/B and selected the 0.50 nm
+outward candidate as the sole positional baseline. Isolated
+`experiments/loop_bond_rotation_comparison.py` rotates rigid loop residues about
+each fixed bead-to-slab-center axis. Evidence:
+`.development-artifacts/loop-bond-rotation-20261126/`. The final contact/ring-guarded
+search reduces mean O3′–P length 0.576→0.453 nm across 126 cases, with no individual
+linker lengthening, no increase in atom-contact counts/depth by group, and no new
+ring-piercing identities. Existing piercings remain (103→56); Full neighbor display
+intersections increase 193→202. Attachment bond lengths have analytic rigid-rotation
+minima 0.296–0.774 nm, above the 0.160 nm target. Both displayed centers and all
+nonloop atoms stay fixed. Physical ring centroid is not identical to slab center.
+These guarded alternatives were not selected for production; the later user
+selected the bond-only optimum described above. Internal-torsion fitting and
+simulation remain outside this work. See the evidence's replay and invariant reports.
+
+Tests: `tests/test_strand_loops.py`; shared dialog/glyph/sequence tests; real
+right-click flows in `frontend/e2e/strand_loops.spec.js` on an isolated server.
+
 ## Scoped scaffold assignment (2026-11-05)
 
 Assign Scaffold Sequence now offers Default, cluster, and scaffold-strand targets
@@ -55,6 +246,16 @@ scaffold for every active scaffold molecule (including secondary scaffolds).
 Each staple uses its own scaffold’s contour length; inter-scaffold staples remain
 unavailable rather than being treated as intramolecular loops. Both assume 10 mM free Mg²⁺ and excess 200 nM staples. Missing
 or unsupported cases are gray. See [model, sources and limits](../docs/staple_temperature.md).
+
+## Scaffold target layout and Pointer sequence (2026-11-23)
+
+The shared `scaffold_sequence_target` control constrains its select to the
+dialog width and stacks its label, so long imported scaffold identifiers do not
+force horizontal overflow in either editor. Scoped CSS lives beside the module.
+The Pointer's 7,249-nt M13mp18 assignment at offset 0 matches all 161 published
+staple cores in Praetorius 2017 Supplementary Table 2, including their 740
+unpaired T bases. The saved part records the scaffold assignment; staple
+sequences remain unassigned. See `docs/dietz_pointer_reconstruction.md`.
 
 ## Selection latency (2026-11-05)
 

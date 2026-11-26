@@ -182,7 +182,7 @@ def get_instance_atomistic_geometry(instance_id: str) -> dict:
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     design = _display_design(_design_with_instance_overrides(inst, _assembly_source_path(assembly)))
-    return atomistic_to_json(build_atomistic_model(design, include_proteins=True))
+    return atomistic_to_json(build_atomistic_model(design, include_proteins=True, strand_loop_display=True))
 
 
 @router.get("/assembly/instances/{instance_id}/protein-geometry", status_code=200)

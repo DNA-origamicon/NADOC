@@ -5825,3 +5825,7 @@ export const getMdTwoBaseMaps = (id, bases, { signal, designId, requestId } = {}
 
 export const getMdTwoBaseProgress = (id, requestId) =>
   _oxdnaJSON('GET', `/md/jobs/${encodeURIComponent(id)}/two-base-maps/progress?request_id=${encodeURIComponent(requestId)}`)
+
+export async function setStrandLoop(params) {
+  return _syncFromDesignResponse(await _request('POST', '/design/strand-loop', params))
+}

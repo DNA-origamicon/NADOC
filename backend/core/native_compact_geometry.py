@@ -26,7 +26,7 @@ def native_compact_geometry(design: Design) -> dict | None:
     copies and skips. Domain assignment follows the existing last-domain-wins
     rule; unoccupied complementary slots are never emitted.
     """
-    if (design.extensions or design.overhang_connections or design.overhangs
+    if (any(s.loops for s in design.strands) or design.extensions or design.overhang_connections or design.overhangs
             or design.flexible_segment_marks
             or design.nucleotide_transforms or design.photoproduct_junctions
             or any(h.native_residues for h in design.helices)):

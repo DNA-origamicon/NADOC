@@ -105,12 +105,27 @@ def is_watson_crick_complement(seq_a: str, seq_b: str, allow_n: bool = True) -> 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
+class _LoopMap(dict):
+    """Legacy duplex counts plus directional, unpaired insertion counts."""
+    def __init__(self):
+        super().__init__()
+        self.unpaired = {}
+
+    def get(self, key, default=None):
+        if len(key) == 3:
+            return super().get(key[:2], 0) + self.unpaired.get(key, 0)
+        return super().get(key, default)
+
+
 def _build_loop_skip_map(design: Design) -> dict[tuple[str, int], int]:
     """Return {(helix_id, global_bp_index): delta} for every loop/skip in design."""
-    ls_map: dict[tuple[str, int], int] = {}
+    ls_map = _LoopMap()
     for helix in design.helices:
         for ls in helix.loop_skips:
             ls_map[(helix.id, ls.bp_index)] = ls.delta
+    for strand in design.strands:
+        for loop in strand.loops:
+            ls_map.unpaired[(loop.helix_id, loop.bp_index, loop.direction)] = loop.length
     return ls_map
 
 
@@ -129,7 +144,7 @@ def _domain_nt_count(domain, ls_map: dict[tuple[str, int], int]) -> int:
     """
     total = 0
     for bp in domain_bp_range(domain):
-        delta = ls_map.get((domain.helix_id, bp), 0)
+        delta = ls_map.get((domain.helix_id, bp, domain.direction), ls_map.get((domain.helix_id, bp), 0))
         if delta <= -1:
             continue  # skip -- no nucleotide at this position
         total += delta + 1  # 1 for normal bp, 2 for a loop (+1), etc.
@@ -268,7 +283,7 @@ def _do_assign_sequence(
     seq_idx = 0
     for domain in scaffold_strand.domains:
         for bp in domain_bp_range(domain):
-            delta = ls_map.get((domain.helix_id, bp), 0)
+            delta = ls_map.get((domain.helix_id, bp, domain.direction), ls_map.get((domain.helix_id, bp), 0))
             if delta <= -1:
                 continue  # skip -- no nucleotide emitted
             n_copies = delta + 1  # 1 for normal, 2 for a loop (+1), etc.
@@ -396,7 +411,8 @@ def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], list[s
     inputs = tuple((s.sequence or "", tuple(
         (d.helix_id, d.direction.value, tuple(domain_bp_range(d))) for d in s.domains
     )) for s in scaffolds)
-    entries = scaffold_base_entries(inputs, tuple(_build_loop_skip_map(design).items()))
+    marks = _build_loop_skip_map(design)
+    entries = scaffold_base_entries(inputs, tuple(marks.items()), tuple(marks.unpaired.items()))
     # Callers may extend maps with native templates or mutate returned lists;
     # neither may alter the cached scaffold authority.
     return {key: list(bases) for key, bases in entries}
@@ -419,7 +435,7 @@ def build_scaffold_index_map(design: Design) -> list[tuple[str, int, str]]:
         h = domain.helix_id
         d_val = domain.direction.value
         for bp in domain_bp_range(domain):
-            delta = ls_map.get((h, bp), 0)
+            delta = ls_map.get((h, bp, domain.direction), ls_map.get((h, bp), 0))
             if delta <= -1:
                 continue
             n_copies = delta + 1
@@ -553,15 +569,15 @@ def strand_partner_bases(
             else Direction.FORWARD.value
         )
         for bp in domain_bp_range(domain):
-            delta = ls_map.get((h, bp), 0)
+            delta = ls_map.get((h, bp, domain.direction), ls_map.get((h, bp), 0))
             if delta <= -1:
                 continue  # skip -- no nucleotide in the staple at this position
             scaf_bases = scaf_map.get((h, bp, scaf_dir_val))
             n_copies = delta + 1  # 1 for normal, 2 for loop
-            if scaf_bases is not None:
-                partners.extend(scaf_bases)
-            else:
-                partners.extend([None] * n_copies)
+            unpaired = getattr(ls_map, "unpaired", {}).get((h, bp, domain.direction), 0)
+            paired_count = n_copies - unpaired
+            partners.extend((list(scaf_bases or []) + [None] * paired_count)[:paired_count])
+            partners.extend([None] * unpaired)
 
     return partners
 
@@ -617,7 +633,7 @@ def assign_staple_sequences(design: Design, *, strand_ids: set[str] | None = Non
                 if domain.helix_id in native_ids and domain.direction == Direction.FORWARD:
                     seq = iter((source.sequence or "")[offset:offset + span])
                     for bp in domain_bp_range(domain):
-                        count = 1 if domain.overhang_id else max(0, 1 + ls_map.get((domain.helix_id, bp), 0))
+                        count = 1 if domain.overhang_id else max(0, 1 + ls_map.get((domain.helix_id, bp, domain.direction), ls_map.get((domain.helix_id, bp), 0)))
                         scaf_map.setdefault((domain.helix_id, bp, Direction.FORWARD.value),
                                             [next(seq, "N") for _ in range(count)])
                 offset += span
@@ -671,6 +687,12 @@ def assign_staple_sequences(design: Design, *, strand_ids: set[str] | None = Non
                 bases.append(complement_base(p) if p is not None else "N")
             idx += span
 
+        # Manual loop sequence is independent of scaffold complement assignment.
+        if strand.loops:
+            from backend.core.strand_loops import strand_entries
+            for offset, entry in enumerate(strand_entries(design, strand)):
+                if entry[3] and strand.sequence and offset < len(strand.sequence):
+                    bases[offset] = strand.sequence[offset]
         new_strands.append(strand.model_copy(update={"sequence": "".join(bases)}))
 
     return design.model_copy(update={"strands": new_strands})
@@ -884,7 +906,7 @@ def assign_consensus_sequence(
             h = domain.helix_id
             d_val = domain.direction.value
             for bp in domain_bp_range(domain):
-                delta = ls_map.get((h, bp), 0)
+                delta = ls_map.get((h, bp, domain.direction), ls_map.get((h, bp), 0))
                 if delta <= -1:
                     continue
                 n_copies = delta + 1

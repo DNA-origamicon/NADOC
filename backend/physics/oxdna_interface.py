@@ -488,6 +488,10 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
                         if n_copies == 1
                         else (domain.helix_id, bp, domain.direction.value, k)
                     )
+                for loop in strand.loops:
+                    if (loop.helix_id, loop.bp_index, loop.direction) == (domain.helix_id, bp, domain.direction):
+                        keys.extend((domain.helix_id, bp, domain.direction.value, k)
+                                    for k in range(1, loop.length + 1))
             dom_keys.append(keys)
 
         strand_tails = tails.get(strand.id, {})
@@ -961,6 +965,8 @@ def write_topology(design: Design, path: str | Path, *, mobile_gold: bool = Fals
     Sequences are written as 'N' (unknown base) unless design strands carry a
     sequence string.
     """
+    from backend.core.strand_loops import require_loop_export_support
+    require_loop_export_support(design, "oxDNA export")
     from backend.core.streptavidin import require_coating_simulation_support
     require_coating_simulation_support(design, 'oxDNA mobile CUDA' if mobile_gold else 'oxDNA topology')
     rows, n_strands = topology_rows(design)
@@ -1061,6 +1067,8 @@ def write_configuration(
                physical convention. Tagged native Full O5′ records are always
                converted to particle frames; O5′ is never written as a CM.
     """
+    from backend.core.strand_loops import require_loop_export_support
+    require_loop_export_support(design, "oxDNA export")
     resolved_map = resolved_nuc_map(design, geometry)
     if oxdna_native_seed:
         resolved_map = oxdna_native_seed_map(design, resolved_map)

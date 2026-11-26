@@ -437,6 +437,8 @@ def _execute(kind, design, params, *, expensive):
 
     updated = _execute_candidate(kind, design, params, expensive=expensive)
     require_unique_occupancy(updated)
+    from backend.core.strand_loops import require_loop_transition
+    require_loop_transition(design, updated, kind)
     return updated
 
 
