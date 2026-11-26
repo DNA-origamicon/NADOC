@@ -311,7 +311,9 @@ describe('initPhotoPanel', () => {
   })
 
   it('restores the active profile through the current Photomode setters', () => {
+    mode.setTraceDenoise=vi.fn();mode.setTraceInteractive=vi.fn()
     localStorage.setItem('nadoc.photoProfiles.v1', JSON.stringify({ Saved: {
+      pathTraceDenoise:false,pathTraceInteractive:false,
       keyIntensity: 3.25, keyAzimuth: -45, full: 'metallic',
       outline: true, fov: 24, bgType: 'transparent', bgColor: '#123456',
     } }))
@@ -319,6 +321,8 @@ describe('initPhotoPanel', () => {
 
     panel.applyActiveProfile()
 
+    expect(mode.setTraceDenoise).toHaveBeenLastCalledWith(false)
+    expect(mode.setTraceInteractive).toHaveBeenLastCalledWith(false)
     expect(mode.setKeyIntensity).toHaveBeenLastCalledWith(3.25)
     expect(mode.setKeyAzimuth).toHaveBeenLastCalledWith(-45)
     expect(mode.setMaterialPresets).toHaveBeenLastCalledWith(expect.objectContaining({ full: 'metallic' }))
@@ -571,7 +575,7 @@ describe('initPhotoPanel', () => {
 
   it('the export button calls renderToBlob and re-enables itself', async () => {
     els['photo-export-btn'].dispatchEvent(new Event('click'))
-    await vi.waitFor(() => expect(mode.renderToBlob).toHaveBeenCalledWith(4200, 2970))
+    await vi.waitFor(() => expect(mode.renderToBlob).toHaveBeenCalledWith(4200, 2970, expect.objectContaining({onProgress:expect.any(Function), signal:expect.any(AbortSignal)})))
     await vi.waitFor(() => expect(els['photo-export-btn'].disabled).toBe(false))
   })
 

@@ -1,4 +1,6 @@
+import { traceVideoProgress } from './photo_renderer/path_trace_progress.js'
 import { settleZoomVolumes, drawZoomVolumes } from './zoom_volume_export.js'
+import { settleEMExport, hasVisibleEM } from './em_export.js'
 import { encodeWebM } from './encode_webm.js'
 import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
 import { withMediaExport } from '../shared/media_export_activity.js'
@@ -84,9 +86,8 @@ async function captureVideo({ animation, renderer, scene, camera, player, option
  * to produce tiled high-resolution frames (same path as the Export PNG
  * button), then encodes them with timestamped WebCodecs (WebM) or gifenc (GIF).
  *
- * Path-traced quality is intentionally NOT used per-frame — PT can take
- * minutes per still, which is impractical for a video. Rasterised photo
- * mode (SSAO + HDRI + lights + materials) is used.
+ * The active Appearance renderer is used, including offline per-frame GPU
+ * path tracing when enabled. Capture awaits the configured sample count.
  *
  * @param {object} opts
  * @param {object}   opts.animation     — DesignAnimation
@@ -124,7 +125,7 @@ async function capturePhotoVideo({ animation, player, photoRenderer, width, heig
   // map, and builds the RenderPass/FigurePass(silhouette)/SMAA/Output chain —
   // all synchronous, and on a large scene with shadows on it is seconds.
   onPhase?.('session')
-  const session = photoRenderer.beginFrameSession(width, height, { followMotion: true })
+  const session = photoRenderer.beginFrameSession(width, height, { followMotion: true, signal })
 
   try {
     // Photo mode owns the lens (and dollied the camera to preserve framing when
@@ -139,7 +140,7 @@ async function capturePhotoVideo({ animation, player, photoRenderer, width, heig
     }
   } finally {
     player.setLockFov?.(false)
-    session.dispose()
+    await session.dispose()
     player.stop()
   }
 }
@@ -156,7 +157,7 @@ async function capturePhotoVideo({ animation, player, photoRenderer, width, heig
 async function _frameToCanvas(session, w, h, scratch, ctx) {
   await session.settleOverlays?.()
   if (typeof session.renderFrameToCanvas === 'function') {
-    const src = session.renderFrameToCanvas()
+    const src = await session.renderFrameToCanvas()
     ctx.clearRect(0, 0, w, h)
     ctx.drawImage(src, 0, 0, w, h)
     return scratch
@@ -171,12 +172,15 @@ async function _frameToCanvas(session, w, h, scratch, ctx) {
 }
 
 /** Shared photo frame path for release videos and compiled presentation clips. */
-export function photoVideoFrame({ player, session, canvas, ctx, w, h }) {
+export function photoVideoFrame({ player, session, canvas, ctx, w, h, onPhase, frames }) {
+  let frame=0
   return async t => {
+    if(onPhase)session.setProgressCallback?.(info=>onPhase('capture',traceVideoProgress(info,frame,frames)))
     player.seekTo(t)
     if (await player.settleFrame?.() === false) throw new Error('Animation frame is not ready for export')
     await _frameToCanvas(session, w, h, canvas, ctx)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
+    frame++
   }
 }
 
@@ -184,7 +188,7 @@ async function _captureWebMPhoto({ animation, player, session, w, h, fps, totalD
   const scratch = Object.assign(document.createElement('canvas'), { width: w, height: h })
   const ctx = scratch.getContext('2d', { willReadFrequently: true })
   const blob = await encodeWebM({ canvas: scratch, fps, totalDur, onProgress, onPhase, signal,
-    renderFrame: photoVideoFrame({ player, session, canvas: scratch, ctx, w, h }),
+    renderFrame: photoVideoFrame({ player, session, canvas: scratch, ctx, w, h, onPhase, frames: Math.ceil(totalDur*fps) }),
   })
   onPhase?.('save')
   _download(blob, `${animation.name || 'animation'}-photo.webm`)
@@ -202,16 +206,17 @@ async function _captureGIFPhoto({ animation, player, session, w, h, fps, totalDu
   for (let i = 0; i <= frameCount; i++) {
     if (signal?.aborted) { const e = new Error('Aborted'); e.name = 'AbortError'; throw e }
     const t = Math.min((i / frameCount) * totalDur, totalDur)
+    session.setProgressCallback?.(info=>onPhase?.('capture',traceVideoProgress(info,i,frameCount+1)))
     player.seekTo(t)
     if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
     await _frameToCanvas(session, w, h, scratch, ctx)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     const { data } = ctx.getImageData(0, 0, w, h)
-    if (!palette || i % _PALETTE_EVERY === 0) palette = quantize(data, 256)
+    if (!palette || session.requiresFreshPalette?.() || i % _PALETTE_EVERY === 0) palette = quantize(data, 256)
     const index = applyPalette(data, palette)
     gif.writeFrame(index, w, h, { palette, delay })
     onProgress?.(i / frameCount, { frame: i, frames: frameCount })
-    onPhase?.('capture', { done: i, total: frameCount })
+    onPhase?.('capture', { done: i+1, total: frameCount+1 })
     await _yield()
   }
   // gif.finish() concatenates every encoded frame into one buffer — synchronous,
@@ -243,11 +248,13 @@ export function editorVideoFrame({ player, renderer, scene, camera, ctx, canvas,
   return async t => {
     player.seekTo(t)
     if (await player.settleFrame?.() === false) throw new Error('Animation frame is not ready for export')
+    await settleEMExport(scene)
     renderer.render(scene, camera)
     await settleZoomVolumes(scene)
     _copyEditorFrame(ctx, canvas, w, h)
     drawZoomVolumes(scene, ctx, w, h, camera)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
+    frame++
   }
 }
 
@@ -272,13 +279,14 @@ async function _captureGIF({ animation, canvas, renderer, scene, camera, player,
     const t = Math.min((i / frameCount) * totalDur, totalDur)
     player.seekTo(t)
     if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
+    await settleEMExport(scene)
     renderer.render(scene, camera)
     await settleZoomVolumes(scene)
     _copyEditorFrame(ctx, canvas, w, h)
     drawZoomVolumes(scene, ctx, w, h, camera)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     const { data } = ctx.getImageData(0, 0, w, h)
-    if (!palette || i % _PALETTE_EVERY === 0) palette = quantize(data, 256)
+    if (!palette || hasVisibleEM(scene) || i % _PALETTE_EVERY === 0) palette = quantize(data, 256)
     const index = applyPalette(data, palette)
     gif.writeFrame(index, w, h, { palette, delay })
     onProgress?.(i / frameCount, { frame: i, frames: frameCount })

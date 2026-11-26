@@ -15,9 +15,164 @@ permittivity corresponds to the solver's exp(-iωt) convention.
 
 The initial polarization is along the first pair's center-to-center axis; the
 perpendicular option rotates E by 90°. A deterministic orthogonal propagation
-axis is chosen. Pink/cyan arrows and numeric vectors report E/k in world space.
+axis is chosen. Numeric vectors in the result report E/k in world space;
+direction arrows are omitted from the scene and exports.
 For one sphere, the pair axis is world X. Slice XY spans the pair axis and its
 transverse direction; propagation is local Z.
+
+## Appearance image and video export
+
+**Appearance → Art & materials → GPU path tracing** enables progressive lighting
+and reflections. A spinner indicates ongoing work, and the progress bar below
+the toggle has one status line for percentage, current phase, completion or
+errors. It includes measured preparation and delivery work as well as samples;
+reused preparation is excluded on warm renders. This is weighted work, not a
+time estimate.
+
+**Advanced → Trace samples** sets 1–512 samples (default 64),
+for both the stationary preview and each offline exported frame. Type a value
+and press Enter or leave the box to apply it. Up/down buttons and arrow keys
+step the draft through powers of two (1, 2, 4, …, 512). Advanced control
+explanations are available as hover tooltips. Samples and export backend can be
+changed before enabling tracing. Settings are
+saved with the Appearance profile; changing Art Themes preserves the tracing
+choice. Moving the camera or playing a trajectory uses raster preview until the
+view settles. PNG, photo GIF/WebM and compiled presentations wait for the traced
+frame rather than capturing a partially accumulated preview.
+
+Completed viewport samples can be reused by WebGL export when the scene,
+camera, native pixel dimensions and sample requirement match exactly. Partial
+previews, different resolutions and different rendering backends start a new
+accumulation. The last completed export is also cached for an identical repeat
+or held video frame (one image only, cleared when tracing stops). Scene,
+material, field, lighting, camera, settings and resolution changes invalidate
+that match. Text/annotations and zoom insets are composited afresh. EM analysis
+results are read from the displayed field; image export does not rerun the EM
+solver. Changed frames retain the existing renderer/geometry reuse path.
+
+Image exports use the standard cancellable NADOC progress popup. Geometry
+building, actual completed samples across tiles, compositing and PNG encoding
+are reported separately. Steps without a measurable total are indeterminate;
+percentages describe completed work in the named stage, not elapsed-time
+predictions. Video export includes the current frame's tracing samples and
+stage in its existing phase-weighted bar. OptiX reports native preparation
+stages and Cycles sample counts through a frame-specific status endpoint; polling
+stops on completion/cancellation and ignores older frame IDs.
+
+Every visible EM sample becomes a small colored emissive sphere in a disposable
+rendering projection, including both clouds in a smooth crossfade. Centers,
+palette, opacity and apparent dot diameter follow the displayed field. These
+emitters participate in ray intersections, reflections and indirect lighting;
+the eight raster EM lights are excluded to avoid adding the same light twice.
+This is illustrative emission, not calibrated optical radiance or a second EM
+solver. Rendered brightness depends on the visible sample density and dot size.
+No molecular geometry, EM values or feature history is changed.
+
+The installed WebGL 2 path tracer requires floating-point render targets.
+Preview uses the actual drawing-buffer resolution, including device pixel ratio,
+with tiles no larger than approximately 256 pixels per edge. Increasing sample
+count reduces Monte Carlo noise; it does not increase spatial resolution. The
+former 1024-pixel cap blurred enlarged previews and has been removed. More pixels
+require proportionally more ray work; the preview retains raster output if the
+viewport exceeds the GPU target limit. Both preview and export
+submit bounded tile batches, wait for GPU completion, and adapt toward a 4 ms
+batch using GPU timer queries (two tiles when timers are unavailable). This
+bounds queued work; it cannot guarantee a GPU time share alongside oxDNA.
+A worker builds the ray-intersection tree. Stable connectivity reuses the tree;
+position changes refit it, with a rebuild after 32 refits or topology changes.
+The renderer, texture atlas and unchanged studio environment persist across
+exported frames. CPU snapshot preparation still occurs for changed frames. The former
+three-million-triangle cutoff has been removed. WebGL checks packed vertex/index
+textures against the active device’s maximum texture dimensions and checks the
+actual built acceleration structure before uploading it. The 32-bit index range
+remains an implementation limit. GPU/geometry
+errors retain raster preview with a visible explanation; requested traced
+exports fail explicitly. Scene guides and the raster shadow-catching floor are
+omitted. Unrecognized custom shaders and section clipping require raster mode.
+Low sample counts can be noisy, particularly in indirect light and reflections.
+
+**Advanced → Trace export** selects WebGL (default), experimental WebGPU, or
+experimental OptiX. Preview remains WebGL. The chosen backend is fixed for an
+export session; unsupported hardware or materials produce an explicit error.
+All three backends retain every visible EM sample within the snapshot budget.
+Export errors identify the backend and failing step (EM preparation, renderer
+loading, initialization or tile rendering). Native connection errors retain the
+HTTP status/server explanation when available. Oversized native uploads are
+checked against current server RAM/scratch availability before transmission;
+there is no silent fallback.
+Figure effects, tone mapping, grading and annotations use the existing export
+pipeline after the traced frame is ready. Experimental lighting can differ.
+
+WebGPU uses an isolated pinned Three.js 0.187 / tracer 0.0.28 dependency tree;
+`npm install` in `frontend` installs it through the postinstall hook. The editor
+keeps its current Three.js version. A WebGPU-capable browser/adapter is required.
+Renderer resources persist, but this first implementation rebuilds the scene
+BVHs per changed frame and reads linear float pixels back into the shared
+export compositor. This transfer cost means WebGPU is not automatically faster.
+BVH workers terminate on cancellation; sample readback bounds the compute queue.
+The device is requested with the adapter’s reported buffer/texture capacities,
+rather than WebGPU’s smaller default limits. Packed geometry buffers are checked
+against the resulting device limits; validation, memory and device-loss failures
+are reported explicitly.
+
+OptiX runs a persistent Blender/Cycles worker on an NVIDIA OptiX device, with
+mesh reuse for unchanged connectivity and two CPU support threads. Install the
+optional Linux x64 runtime with `uv run python scripts/setup_optix_renderer.py`,
+or configure an existing Blender with `--executable /path/to/blender` (the
+`NADOC_BLENDER` environment variable takes precedence). Runtime selection is
+local to the machine. On this WSL workstation, native Windows Blender 3.3 was
+verified on the RTX 2080 SUPER; the installed Linux 4.5.9 runtime could not use
+OptiX through the available WSL driver. No driver changes were made.
+
+The experimental native bridge supports solid standard materials and EM
+palettes; general textures and layered transmission/clearcoat/sheen/iridescence
+are rejected. The fixed 128 MiB upload ceiling and native triangle cutoff have
+been removed. Scene uploads stream into owned scratch instead of holding and
+re-encoding the geometry in the web-server process. Admission uses current OS
+RAM availability, applicable container/cgroup headroom, and scratch free space,
+and rechecks capacity while receiving data. Each render tile is at most 2048²
+pixels and 512 samples; large output images use the existing export tiles. One native export may run
+at a time. Cancel, error, server shutdown or 120-second idle expiry closes the
+owned worker and removes its scratch directory. Persistent data avoids repeated
+worker/kernel initialization within a movie; it does not reserve GPU capacity
+from other applications. Full-resolution Run1 throughput and cross-backend
+lighting/quality comparisons remain manual validation debt (MV-EM-TRACE).
+
+Passing capacity checks is not a guarantee that a scene fits VRAM: browser APIs
+report texture/buffer limits but do not expose reliable free GPU memory. Cycles
+and the browser can still reject allocations; concurrent oxDNA/display work,
+fragmentation and driver constraints affect that result. No guessed VRAM total
+or fixed percentage is used to reject a scene, and no atoms or EM emitters are
+thinned to fit. See the [WebGPU limits specification](https://www.w3.org/TR/webgpu/#limits).
+
+The active EM overlay is included in Appearance PNGs and animation GIF/WebM
+frames. Capture explicitly prepares the current field (or both smooth-playback
+endpoints) before drawing; it does not depend on the live animation loop running.
+An unfinished, missing or mismatched analysis stops export with an explanation
+instead of saving a stale or empty field. Complete analysis for the trajectory
+range used by the animation before export. Changing job, alignment or loaded
+range requires matching EM analysis. GIF refreshes its 256-color palette every
+EM frame to retain new hues; this adds encoding work compared with ordinary
+video palette reuse. GIF quantization can still lose faint, low-opacity blended
+colors against a similar background; PNG retains those rendered colors.
+Smooth intermediate fields remain visual
+crossfades, not additional Maxwell solutions.
+
+**EM lighting**, in the shared EM settings, offers plain samples, glowing samples
+(the default), or glow plus nearby surface illumination. Glowing samples use
+soft, self-lit point sprites, including on white figure backgrounds. Their size
+scales with export resolution across all tiles and restores afterward. The same
+settings apply to standalone maps and simulation overlays.
+
+Surface illumination is an illustrative, normalized lighting approximation: cell
+volume and log enhancement weight at most eight spatially aggregated point
+lights per field (sixteen during a crossfade). Adaptive subdivision does not
+increase the light budget or total brightness merely by adding samples. Lights
+cast no extra shadows and fade with their field. This is not optical radiance,
+fluorescence, emitted power, or an additional electromagnetic calculation. The
+field color scale and exported numeric results retain their original meaning.
+Plain/glow modes add no active surface lights. The bounded illumination option
+can still cost more on dense molecular scenes; glow is the fast default.
 
 ## What is displayed
 

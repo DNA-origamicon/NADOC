@@ -1,6 +1,7 @@
 // Read-only Plasmonic source, ephemeral __e2e__ document host and mocked simulation
 // transport. Real EM API results are deleted in finally; no native simulation job,
-// molecular edit, download, or capture outside Playwright's cleaned output dirs.
+// molecular edit or capture outside Playwright's cleaned output dirs. PNG downloads
+// remain in Playwright's disposable browser context; no download.saveAs is used.
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
@@ -152,6 +153,17 @@ test('loaded oxDNA trajectory confirms all frames and follows saved-frame EM map
     await expect(card.locator('[data-em-frame-status]')).toContainText('visual interpolation')
     await page.locator('#oxdna-jobs-traj-play').click()
     await expect(card.locator('[data-em-frame-status]')).toHaveText('')
+    // Exercise the Appearance PNG command with the analyzed simulation still active.
+    await page.locator('.left-tab-btn[data-tab="photo"]').click()
+    await page.locator('#photo-lighting-enabled').check()
+    await page.evaluate(()=>window.__photoMode.setExportSize(320,240))
+    const png=page.waitForEvent('download')
+    await page.locator('#photo-export-btn').evaluate(button=>button.click())
+    const download=await png
+    expect(download.suggestedFilename()).toContain('320x240.png')
+    expect(await download.failure()).toBeNull()
+    await page.waitForFunction(()=>window.__nadocTest.scene.children.some(o=>o.name==='experimental-em-field' && o.userData.sampleCount>0))
+    await page.locator('#photo-lighting-enabled').uncheck()
     await card.locator('[data-em-toggle]').uncheck()
     await expect(page.locator('#oxdna-jobs-traj-interpolate')).toBeEnabled()
     expect(previewDownloads).toBe(0) // both preview frames were already loaded in the nine-value page

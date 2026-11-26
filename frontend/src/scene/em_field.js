@@ -1,11 +1,15 @@
 /** Derived optical volume only; never changes molecular geometry or materials. */
 import * as THREE from 'three'
+import { emLightAccumulator, setEMGlow, updateEMLights } from './em_lighting.js'
 
 export function fieldSamples(result, { mode = 'volume', slice = 0.5, minimum = 1, maximum = 100 } = {}) {
   const adaptive = result.sampling?.layout === 'octree'
   const [, ny, nz] = result.shape
   const positions = [], colors = []
   const color = new THREE.Color()
+  const localCenter = result.upper_nm.map((v,i)=>(v+result.lower_nm[i])/2)
+  const center = result.origin_nm.map((v,a)=>v+localCenter.reduce((sum,x,b)=>sum+x*result.basis[b][a],0))
+  const lights = emLightAccumulator(center, Math.max(...result.upper_nm.map((v,i)=>v-result.lower_nm[i]))/2)
   const sliceAxis = { yz: 0, xz: 1, xy: 2 }[mode]
   const sliceIndex = sliceAxis === undefined ? null : Math.round(slice * (result.shape[sliceAxis] - 1))
   const plane = sliceAxis === undefined ? null : result.lower_nm[sliceAxis] + slice * (result.upper_nm[sliceAxis] - result.lower_nm[sliceAxis])
@@ -33,8 +37,12 @@ export function fieldSamples(result, { mode = 'volume', slice = 0.5, minimum = 1
     const fraction = Math.max(0, Math.min(1, (Math.log10(Math.max(value, 1e-10)) - lowLog) / (highLog - lowLog)))
     color.setHSL((1 - fraction) * 0.67, 1, 0.5)
     colors.push(color.r, color.g, color.b)
+    const cell = adaptive ? (ArrayBuffer.isView(result.cell_sizes_nm)
+      ? result.cell_sizes_nm.subarray(index*3,index*3+3) : result.cell_sizes_nm[index])
+      : result.upper_nm.map((v,i)=>(v-result.lower_nm[i])/Math.max(1,result.shape[i]-1))
+    lights.add(positions.slice(-3), [color.r,color.g,color.b], value, cell.reduce((v,n)=>v*n,1))
   }
-  return { positions: new Float32Array(positions), colors: new Float32Array(colors) }
+  return { positions: new Float32Array(positions), colors: new Float32Array(colors), emitters:lights.finish() }
 }
 
 const prepared = new WeakMap()
@@ -54,6 +62,7 @@ export function createEMFieldOverlay(scene) {
     for (const child of root.children) {
       if (child.name === 'experimental-em-field') continue
       child.traverse(object => {
+        if (object.userData.emLight) object.intensity = object.userData.emIntensity*value
         if (object.material) { object.material.transparent = true; object.material.opacity = value*(child.isPoints ? baseOpacity : 1) }
       })
     }
@@ -82,13 +91,14 @@ export function createEMFieldOverlay(scene) {
       transition = null; delete root.userData.interpolation
       secondary?.clear()
 
-      const { positions, colors } = prepareEMField(result, options)
+      const { positions, colors, emitters } = prepareEMField(result, options)
       let points = root.children.find(object => object.isPoints)
       if (!points) {
         points = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({
           sizeAttenuation:false, vertexColors:true, transparent:true, depthWrite:false, toneMapped:false,
         }))
         points.raycast = () => {}; root.add(points)
+        points.userData.emSamples = true
       }
       const geometry = points.geometry
       for (const [name, values] of [['position',positions], ['color',colors]]) {
@@ -102,20 +112,10 @@ export function createEMFieldOverlay(scene) {
       }
       geometry.boundingSphere = null
       points.material.size = options.dotSize ?? (options.mode === 'volume' ? 3 : 5)
+      setEMGlow(points.material, (options.lighting ?? 'glow') !== 'off')
       baseOpacity = options.mode === 'volume' ? .24 : .85
       points.material.opacity = baseOpacity
-      const origin = new THREE.Vector3(...result.origin_nm)
-      const length = Math.max(...result.upper_nm.map((v, i) => v - result.lower_nm[i])) * .35
-      const directions = [result.polarization_world, result.propagation_world]
-      directions.forEach((direction, i) => {
-        let arrow = root.children[i+1]
-        if (!arrow) {
-          arrow = new THREE.ArrowHelper(new THREE.Vector3(...direction), origin, length, [0xff75e6,0x66ffff][i])
-          arrow.traverse(o => { o.raycast = () => {} }); root.add(arrow)
-        }
-        arrow.position.copy(origin); arrow.setDirection(new THREE.Vector3(...direction))
-        arrow.setLength(length, length*.12, length*.06)
-      })
+      updateEMLights(root, emitters, options.lighting === 'illuminate')
       weight(1)
       root.userData.sampleCount = positions.length / 3
       root.visible = true

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest'
 import { initEMSimulation, trajectoryEMFrames, collectTrajectoryEMFrames } from './em_simulation.js'
+import { settleEMExport } from '../scene/em_export.js'
 import { loadEMSettings, saveEMSettings } from './em_settings.js'
 
 const particles = [{ id:'gold', diameter_nm:20, center_nm:[1,2,3] }]
@@ -20,10 +21,11 @@ function setup(trajectory = false, capture = () => particles) {
     if (path.includes('/trajectories/')) return {status:'complete', completed:2,total:2,frames:[10,12]}
     return {peak_intensity:2}
   }) }
-  feature = initEMSimulation({ scene:{}, api, store:{getState:()=>({currentDesign:{id:'d'}})}, displays:{oxdna:()=>display,md:()=>display},
+  const scene = {}
+  feature = initEMSimulation({ scene, api, store:{getState:()=>({currentDesign:{id:'d'}})}, displays:{oxdna:()=>display,md:()=>display},
     captureSimulation:capture, openSettings, overlayFactory:()=>overlay })
   const row = document.querySelector('#oxdna-jobs-viz-body')
-  return { row, api, overlay, openSettings, display }
+  return { row, api, overlay, openSettings, display, scene }
 }
 afterEach(() => { feature?.dispose(); document.body.innerHTML = ''; localStorage.clear(); vi.restoreAllMocks(); now=1000 })
 
@@ -194,4 +196,34 @@ it('uses the molecular interpolation fraction and restores exact fields on pause
   row.querySelector('[data-em-toggle]').click()
   expect(display.setEMPlaybackPreparation).toHaveBeenLastCalledWith(null)
  } finally {delete data.transition}
+})
+
+it('offline capture waits for the requested field without a render-loop tick',async()=>{
+ let current=particles
+ const {row,api,overlay,display,scene}=setup(true,()=>current)
+ row.querySelector('[data-em-trajectory]').click();document.querySelectorAll('.modal__actions button')[1].click()
+ await vi.waitFor(()=>expect(api._request.mock.calls.some(c=>c[0]==='POST')).toBe(true))
+ await settleEMExport(scene)
+ expect(overlay.show).toHaveBeenCalled()
+ let finish
+ api._request.mockImplementation(async(method,path)=>path.endsWith('/frames/1') ? new Promise(r=>{finish=r}) : {status:'complete',completed:2,total:2,frames:[10,12]})
+ const next={...data,currentIndex:12};display.emTrajectory=()=>next
+ current=[{...particles[0],center_nm:[4,5,6]}]
+ overlay.show.mockClear()
+ const exported=settleEMExport(scene)
+ await vi.waitFor(()=>expect(finish).toBeTypeOf('function'))
+ expect(overlay.show).not.toHaveBeenCalled()
+ finish({peak_intensity:12});await exported
+ expect(overlay.show.mock.lastCall[0].peak_intensity).toBe(12)
+ next.key='another trajectory'
+ await expect(settleEMExport(scene)).rejects.toThrow('differs')
+ row.querySelector('[data-em-toggle]').click()
+ await expect(settleEMExport(scene)).resolves.toBeUndefined()
+})
+it('refuses a missing analyzed frame instead of exporting an empty or stale field',async()=>{
+ const {row,api,scene}=setup(true)
+ row.querySelector('[data-em-trajectory]').click();document.querySelectorAll('.modal__actions button')[1].click()
+ await vi.waitFor(()=>expect(api._request.mock.calls.some(c=>c[0]==='POST')).toBe(true))
+ api._request.mockResolvedValue({status:'running',frames:[]})
+ await expect(settleEMExport(scene)).rejects.toThrow('not ready')
 })

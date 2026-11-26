@@ -2,6 +2,7 @@ import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { icon } from './primitives/icon.js'
 import { createEMPlaybackPreparation } from './em_playback_preparation.js'
+import { registerEMExport } from '../scene/em_export.js'
 import { createEMFrameCache } from './em_frame_cache.js'
 import { createEMFieldOverlay, prepareEMField } from '../scene/em_field.js'
 import { loadEMSettings, opticalSettings, displaySettings } from './em_settings.js'
@@ -54,6 +55,32 @@ export function initEMSimulation({ scene, api, store, displays, captureSimulatio
   let batch = null, result = null, shown = '', busy = false, lastTick = 0, disposed = false, dialog = null
   const status = text => { for (const c of controls) c.status.textContent = c === active ? text : '' }
   const redraw = () => { if (result && active?.toggle.checked) (overlay ??= overlayFactory(scene)).show(result, displaySettings(settings)) }
+  const unregisterExport = registerEMExport(scene, async () => {
+    if (!active?.toggle.checked) return
+    const token = generation, current = batch
+    const display = displays[active.engine](), data = display?.emTrajectory?.()
+    if (current) {
+      if (!display?.isActive?.() || current.context !== context(display) || current.key !== data?.key)
+        throw new Error('The exported trajectory differs from the EM analysis. Analyze this trajectory range before exporting.')
+      const indices = data.transition && data.transition.t > 0 && data.transition.t < 1
+        ? [data.transition.from,data.transition.to] : [data.currentIndex]
+      if (!indices.every(i=>current.ready.includes(i))) {
+        const progress = await request('GET', `/em-analysis/trajectories/${current.id}`)
+        if (token !== generation) throw new Error('EM changed during export.')
+        current.ready = progress.frames
+      }
+      if (!indices.every(i=>current.ready.includes(i)) || !await current.cache.ensure(current.ready,indices))
+        throw new Error('EM is not ready for this frame. Complete trajectory EM analysis before exporting.')
+      if (token !== generation || batch !== current) throw new Error('EM changed during export.')
+      showCachedFrame()
+      if (active.frameStatus.textContent && !active.frameStatus.textContent.startsWith('EM visual interpolation'))
+        throw new Error(active.frameStatus.textContent)
+    } else {
+      if (!result || busy || !sameParticles(captureSimulation(),resultParticles))
+        throw new Error('Calculate EM for the displayed state before exporting, or turn off EM visualization.')
+      redraw()
+    }
+  })
   async function request(method, path, payload, signal) {
     let error
     const data = await api._request(method, path, payload, { signal, suppressBusy:true, protectedRetry:false,
@@ -281,6 +308,6 @@ export function initEMSimulation({ scene, api, store, displays, captureSimulatio
     if (opticalChanged) { reset(); lastTick = 0; void tick() } else redraw()
   }
   window.addEventListener('nadoc:em-settings', changed); addFrameCallback?.(tick)
-  return { tick, dispose() { disposed = true; reset(); dialog?.close(); overlay?.dispose();
+  return { tick, dispose() { unregisterExport(); disposed = true; reset(); dialog?.close(); overlay?.dispose();
     removeFrameCallback?.(tick); window.removeEventListener('nadoc:em-settings', changed); controls.forEach(c => { c.row.remove(); c.progress.remove() }) } }
 }

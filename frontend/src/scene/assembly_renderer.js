@@ -1,3 +1,4 @@
+import { geometryLoads } from './geometry_loads.js'
 /**
  * Assembly renderer — adds PartInstance geometry to the Three.js scene.
  *
@@ -445,6 +446,7 @@ export function initAssemblyRenderer(scene, store, api) {
   }
 
   function _disposeGroup(entry) {
+    geometryLoads.cancel(entry)
     if (_boxHelperGroup === entry.group) {
       scene.remove(_boxHelper)
       _boxHelper.geometry?.dispose()
@@ -632,7 +634,9 @@ export function initAssemblyRenderer(scene, store, api) {
     return true
   }
 
-  async function _applyRepresentation(entry, instId, repr) {
+  function _applyRepresentation(entry, instId, repr) { return geometryLoads.track(entry, () => _applyRepresentationLoaded(entry, instId, repr)) }
+
+  async function _applyRepresentationLoaded(entry, instId, repr) {
     const ticket = entry.representationGeneration = (entry.representationGeneration ?? 0) + 1
     const lod = CG_LOD[repr]
 
@@ -1110,7 +1114,9 @@ export function initAssemblyRenderer(scene, store, api) {
 
   // ── Public: rebuild ───────────────────────────────────────────────────────
 
-  async function rebuild(assembly, { onProgress } = {}) {
+  function rebuild(assembly, { onProgress } = {}) { return geometryLoads.track(_cache, () => rebuildLoaded(assembly, { onProgress })) }
+
+  async function rebuildLoaded(assembly, { onProgress } = {}) {
     if (!assembly) { dispose(); return }
 
     const instances  = assembly.instances ?? []
@@ -1387,6 +1393,7 @@ export function initAssemblyRenderer(scene, store, api) {
   // ── Public: dispose ───────────────────────────────────────────────────────
 
   function dispose() {
+    geometryLoads.cancel(_cache)
     _clearPartJointIndicators()
     if (_boxHelper) {
       scene.remove(_boxHelper)

@@ -9,7 +9,10 @@ it('every theme resets the whole appearance, preserves output configuration, and
     expect(settings).not.toHaveProperty('exportHeight')
     for (const repr of REPRESENTATIONS) expect(PRESETS[repr][settings[repr]]).toBeDefined()
     expect(selectedTheme(settings, DEFAULT_PHOTO_SETTINGS)).toBe(name)
-    expect(Object.keys(settings).length).toBe(Object.keys(DEFAULT_PHOTO_SETTINGS).length - 2)
+    expect(settings.pathTracing).toBeUndefined()
+    expect(settings.pathTraceSamples).toBeUndefined()
+    expect(settings.pathTraceExportBackend).toBeUndefined()
+    expect(Object.keys(settings).length).toBe(Object.keys(DEFAULT_PHOTO_SETTINGS).length - 5)
   }
 })
 it('common materials cover mixed scenes; surface finishes cannot silently skip visible representations', () => {

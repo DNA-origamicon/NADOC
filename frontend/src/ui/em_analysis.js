@@ -2,6 +2,7 @@ import { EM_DEFAULTS, loadEMSettings, saveEMSettings } from './em_settings.js'
 import { initEMSimulation } from './em_simulation.js'
 import * as THREE from 'three'
 import { createEMFieldOverlay } from '../scene/em_field.js'
+import { registerEMExport } from '../scene/em_export.js'
 import { nanoparticlePoseMatrix } from '../scene/nanoparticle_display.js'
 import './em_analysis.css'
 
@@ -37,6 +38,12 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
   const fingerprint = () => JSON.stringify([store.getState().currentDesign?.id, store.getState().currentAssembly?.id,
     store.getState().assemblyActive, capture()])
   const status = text => { if (panel) panel.querySelector('[data-status]').textContent = text }
+  const unregisterExport = registerEMExport(scene, () => {
+    if (!panel || (!result && !controller)) return
+    if (controller) throw new Error('Wait for the EM calculation to finish before exporting.')
+    if (fingerprint() !== signature) { invalidate(); throw new Error('Particle positions changed. Recalculate EM before exporting.') }
+    redraw()
+  })
   function cancel(message = 'Cancelled.') {
     generation++; controller?.abort(); controller = null
     clearInterval(interval); interval = null
@@ -57,7 +64,7 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
     if (!result || !panel) return
     overlay.show(result, { mode: panel.querySelector('[data-mode]').value,
       slice: Number(panel.querySelector('[data-slice]').value), minimum: Number(panel.querySelector('[data-minimum]').value),
-      maximum: 100, dotSize: Number(panel.querySelector('[data-dot-size]').value) })
+      maximum: 100, dotSize: Number(panel.querySelector('[data-dot-size]').value), lighting:panel.querySelector('[data-lighting]').value })
   }
   async function run() {
     cancel('Preparing current particle snapshot…')
@@ -158,10 +165,12 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
       <p data-status role="status" aria-live="polite">Uses the current particle positions, including hidden gold. Calculate to begin.</p>
       <label>Display<select data-mode><option value="volume">3D field cloud</option><option value="xy">XY slice</option><option value="xz">XZ slice</option><option value="yz">YZ slice</option></select></label>
       <label>Sampling dot size: <output data-dot-size-value>3 px</output><input data-dot-size type="range" min="1" max="12" step="0.5" value="3"></label>
+      <label>EM lighting<select data-lighting><option value="off">Plain samples</option><option value="glow">Glowing samples · fast</option><option value="illuminate">Glow + nearby surface illumination</option></select></label>
+      <p>Visible EM is included in Appearance image and video exports. Glow and surface illumination are illustrative, not emitted optical power. Illumination combines samples into at most eight lights per calculated field; no additional shadows.</p>
       <label>Slice position<input data-slice type="range" min="0" max="1" step="0.02" value="0.5"></label>
       <label>Cloud minimum intensity enhancement<input data-minimum type="number" min="0" max="1000" step="0.5" value="1.5"></label>
       <div class="em-legend"></div><div class="em-scale"><span>0.1×</span><span>1×</span><span>10×</span><span>≥100×</span></div>
-      <p>Log color scale: |E<sub>total</sub>|² / |E<sub>incident</sub>|². Pink arrow: E polarization. Cyan: propagation. Slice axes follow the particle pair; XY contains the pair and E. Adaptive slices show center samples from cells intersecting the selected plane. Point density indicates sampling effort, not field strength; use color for intensity.</p>
+      <p>Log color scale: |E<sub>total</sub>|² / |E<sub>incident</sub>|². Slice axes follow the particle pair; XY contains the pair and E. Adaptive slices show center samples from cells intersecting the selected plane. Point density indicates sampling effort, not field strength; use color for intensity.</p>
       <details><summary>Model scope and numerical limits</summary><p>Bulk Johnson–Christy gold in water. Optional full-coverage dielectric DNA shells include fields within the shell; origami bodies and substrates are excluded. The length-based model uses the worm-like-chain RMS size with 0.59 nm/nt as an effective radial-size proxy, not a calibrated optical thickness. Persistence length depends on salt and sequence; 2.5 nm is a poly-T pure-water literature value. Shell n=1.7 is an adjustable literature starting point, not universal for hydrated DNA. Overlapping shells are rejected; compression and interpenetration require another dielectric geometry model. This is a static snapshot, not a trajectory average or fluorescence prediction. Diameters 5–100 nm; metal gaps ≥2 nm. Metal interiors are masked. A 1% multipole probe check does not certify grid convergence; compare resolutions before interpreting a peak.</p></details>
       <div class="em-actions"><button data-frame>Frame map</button><button data-download disabled>Download field + inputs</button><button data-copy>Copy details</button></div>`
     const saved = loadEMSettings()
@@ -181,7 +190,7 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
       shellControls()
       run()
     }
-    for (const selector of ['[data-mode]', '[data-slice]', '[data-minimum]']) panel.querySelector(selector).oninput = redraw
+    for (const selector of ['[data-mode]', '[data-slice]', '[data-minimum]', '[data-lighting]']) panel.querySelector(selector).oninput = redraw
     panel.querySelector('[data-dot-size]').oninput = () => {
       panel.querySelector('[data-dot-size-value]').textContent = `${panel.querySelector('[data-dot-size]').value} px`
       redraw()
@@ -220,5 +229,5 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
     displays:simulationDisplays, addFrameCallback, removeFrameCallback,
     captureSimulation:() => captureEMParticles({ state:{}, nanoparticleSubsystem }) }) : null
   button?.addEventListener('click', open)
-  return { open, close, dispose() { simulation?.dispose(); close(); button?.removeEventListener('click', open) } }
+  return { open, close, dispose() { unregisterExport(); simulation?.dispose(); close(); button?.removeEventListener('click', open) } }
 }

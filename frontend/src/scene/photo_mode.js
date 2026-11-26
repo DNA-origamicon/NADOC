@@ -1,5 +1,8 @@
+import { TRACE_DEFAULTS, createTracePreview } from './photo_renderer/path_trace_preview.js'
+import { createTraceFrameSession } from './photo_renderer/path_trace_session.js'
 import { makePhotoBackboneGeometry, photoBackboneRadius } from './photo_renderer/backbone_spheres.js'
 import { settleZoomVolumes, drawZoomVolumes } from './zoom_volume_export.js'
+import { settleEMExport, prepareEMExportSize, hasVisibleEM } from './em_export.js'
 import { prepareExportGrids } from './photo_renderer/export_grid.js'
 import { renderSilhouetteHighlights } from './silhouette_highlight.js'
 /**
@@ -26,7 +29,8 @@ import { renderSilhouetteHighlights } from './silhouette_highlight.js'
  *   • the ChimeraX depth-outline silhouette + a depth cue
  *   • flat-colour background, SMAA, and tiled PNG export
  *
- * No user-supplied HDRI, no bloom, no path tracer, no visible ground plane, no
+ * Optional GPU path tracing includes emissive EM samples and offline exports.
+ * No user-supplied HDRI, no bloom, no visible ground plane, no
  * mist — all deliberate.
  *
  * REMOVED 2026-07-28 — multishadow ambient occlusion. A faithful port of
@@ -108,6 +112,7 @@ const RIG_PRESET = 'full'
 /** Factory defaults — the single source of truth for "what the experiment looks
  *  like out of the box". */
 export const DEFAULT_PHOTO_SETTINGS = Object.freeze({
+  ...TRACE_DEFAULTS,
   ...GRADE_DEFAULTS,
   // Material preset per representation, keyed exactly like
   // material_presets.js PRESETS/PRESET_LABELS. Defaults are the FIGURE
@@ -361,6 +366,7 @@ export function createPhotoMode(sceneCtx) {
   const _settings = { ...DEFAULT_PHOTO_SETTINGS }
 
   let _active      = false
+  const _tracing = createTracePreview({ scene, camera, renderer, settings: _settings, isActive: () => _active, prepare: () => _syncForOfflineFrame(false) })
   let _composer    = null
   let _matSwap     = null
   let _lightGroup  = null
@@ -428,6 +434,7 @@ export function createPhotoMode(sceneCtx) {
     _savedLights = []
     scene.traverse(obj => {
       if (!obj.isLight) return
+      if (obj.userData.emLight) return
       if (_lightGroup && obj.parent === _lightGroup) return
       _savedLights.push({ light: obj, visible: obj.visible, castShadow: obj.castShadow })
       obj.visible = false
@@ -793,7 +800,7 @@ export function createPhotoMode(sceneCtx) {
     _composer?.dispose?.()
     const size = renderer.getDrawingBufferSize(new THREE.Vector2())
     const composer = new EffectComposer(renderer)
-    composer.addPass(new RenderPass(scene, camera))
+    composer.addPass(_tracing.pass(new RenderPass(scene, camera)))
     // Before SMAA so the contour gets antialiased with everything else.
     _figurePass = new FigurePass(scene, camera)
     composer.addPass(_figurePass)
@@ -831,6 +838,7 @@ export function createPhotoMode(sceneCtx) {
 
     _lightGroup = new THREE.Group()
     _lightGroup.name = 'expPhotoLights'
+    _lightGroup.userData.photoLightRig = true
     scene.add(_lightGroup)
     _hideEditorLights()
 
@@ -896,6 +904,7 @@ export function createPhotoMode(sceneCtx) {
   function deactivate() {
     if (!_active) return
     _active = false
+    _tracing.stop()
 
     resetRenderFn()
     clearResizeCallback?.()
@@ -1131,9 +1140,11 @@ export function createPhotoMode(sceneCtx) {
    *   frustum every frame, for callers stepping an animation. Stills leave it off.
    * @returns {{renderFrame: () => Promise<Blob>, dispose: () => void, tiles: number}}
    */
-  function beginFrameSession(width, height, { followMotion = false } = {}) {
+  function beginFrameSession(width, height, { followMotion = false, signal, onProgress } = {}) {
     assertPlacementExportSafe(scene)
     if (!_active) throw new Error('photo: beginFrameSession requires the mode to be active')
+    if (_settings.pathTracing) return createTraceFrameSession({ scene, camera, renderer, settings: _settings, width, height,
+      grading: _grading, preview: _tracing, syncFrame: () => _syncForOfflineFrame(followMotion), figureParams: _figureParams, cueRange: _pushCueRangeTo, signal, onProgress })
 
     const probeCanvas = document.createElement('canvas')
     const probeR = new THREE.WebGLRenderer({ canvas: probeCanvas, alpha: true })
@@ -1215,6 +1226,7 @@ export function createPhotoMode(sceneCtx) {
 
       const savedAspect = camera.aspect
       const restoreGrids = prepareExportGrids(scene, exportPixelScale)
+      const restoreEM = prepareEMExportSize(scene, exportPixelScale*(renderer.getPixelRatio?.() ?? 1))
       try {
         camera.aspect = width / height
         // The tiles are drawn with drawImage, which COMPOSITES. On a transparent
@@ -1248,6 +1260,7 @@ export function createPhotoMode(sceneCtx) {
         drawSceneAnnotations(scene, finalCtx, width, height, camera)
         drawZoomVolumes(scene, finalCtx, width, height, camera)
       } finally {
+        restoreEM()
         restoreGrids()
         camera.clearViewOffset()
         camera.aspect = savedAspect
@@ -1258,6 +1271,8 @@ export function createPhotoMode(sceneCtx) {
     }
 
     async function renderFrame() {
+      await settleEMExport(scene)
+      await settleZoomVolumes(scene)
       renderFrameToCanvas()
       return new Promise((resolve, reject) => finalCanvas.toBlob(blob => {
         try { assertPlacementExportSafe(scene); resolve(blob) } catch (error) { reject(error) }
@@ -1274,7 +1289,7 @@ export function createPhotoMode(sceneCtx) {
       offRenderer.dispose()
     }
 
-    return { renderFrame, renderFrameToCanvas, settleOverlays: () => settleZoomVolumes(scene), dispose, tiles: tilesX * tilesY }
+    return { renderFrame, renderFrameToCanvas, requiresFreshPalette: () => hasVisibleEM(scene), settleOverlays: async () => { await settleEMExport(scene); await settleZoomVolumes(scene) }, dispose, tiles: tilesX * tilesY }
   }
 
   /**
@@ -1282,18 +1297,18 @@ export function createPhotoMode(sceneCtx) {
    * A one-shot session — see `beginFrameSession` for the tiling and
    * separate-GL-context rules that govern both.
    */
-  function renderToBlob(width, height) {
-    return withMediaExport(() => captureToBlob(width, height))
+  function renderToBlob(width, height, options = {}) {
+    return withMediaExport(() => captureToBlob(width, height, options))
   }
 
-  async function captureToBlob(width, height) {
+  async function captureToBlob(width, height, options) {
     assertPlacementExportSafe(scene)
     if (!_active) throw new Error('photo: renderToBlob requires the mode to be active')
-    const session = beginFrameSession(width, height)
+    const session = beginFrameSession(width, height, options)
     try {
       return await session.renderFrame()
     } finally {
-      session.dispose()
+      await session.dispose()
     }
   }
 
@@ -1601,6 +1616,11 @@ export function createPhotoMode(sceneCtx) {
 
   return {
     activate, deactivate,
+    setTraceDenoise: _tracing.setDenoise,
+    setPathTracePreviewBackend: _tracing.setPreviewBackend,
+    setTraceInteractive: _tracing.setInteractive,
+    setTraceMetricsEnabled: _tracing.setMetricsEnabled,
+    setPathTracing: _tracing.setEnabled, setPathTraceSamples: _tracing.setSamples, setPathTraceExportBackend: _tracing.setExportBackend, getPathTracingStatus: _tracing.getStatus,
     getDiagnostics,
     isActive: () => _active,
     setBackground, setMaterialPreset, setMaterialPresets,

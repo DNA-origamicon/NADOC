@@ -16,6 +16,7 @@ it('cleans up scene resources after replacement and disposal',()=>{
  const scene=new THREE.Scene(), overlay=createEMFieldOverlay(scene)
  overlay.show(data,{mode:'volume',minimum:1,maximum:100})
  expect(scene.children[0].userData.sampleCount).toBe(7)
+ expect(scene.children[0].children.every(o=>o.isPoints || o.name==='em-illumination')).toBe(true)
  overlay.clear(); expect(scene.children[0].children).toHaveLength(0)
  overlay.dispose();expect(scene.children).toHaveLength(0)
 })
@@ -79,4 +80,15 @@ it('crossfades unequal adaptive clouds with opacity-only subframes and exact end
  expect(root.children[0].material.opacity).toBe(.24)
  expect(root.userData.interpolation).toBeUndefined()
  overlay.dispose();expect(scene.children).toHaveLength(0)
+})
+
+it('crossfades illumination with the field and removes all lights on clear',()=>{
+ const scene=new THREE.Scene(),overlay=createEMFieldOverlay(scene)
+ const b={...data,intensity:data.intensity.map(v=>v*2)}
+ overlay.showTransition(data,b,.25,{mode:'volume',minimum:1,lighting:'illuminate'})
+ let count=0
+ scene.traverse(o=>{if(o.userData.emLight){count++;const second=o.parent.parent.parent.name==='experimental-em-field';expect(o.intensity).toBeCloseTo(o.userData.emIntensity*(second ? .25 : .75))}})
+ expect(count).toBe(16)
+ overlay.clear();scene.traverse(o=>expect(o.isLight).not.toBe(true))
+ overlay.dispose()
 })
