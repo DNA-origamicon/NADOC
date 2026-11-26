@@ -5,12 +5,18 @@ import { junctionIndex, strandJunctions, domainJunctions } from '../design/stran
 export function domainKeys(domain, design) {
   const helix = design?.helices?.find(h => h.id === domain.helix_id)
   const deltas = new Map((helix?.loop_skips ?? []).map(ls => [ls.bp_index, ls.delta]))
+  const loops = new Map((design?.strands ?? []).flatMap(s => s.loops ?? [])
+    .filter(loop => loop.helix_id === domain.helix_id && loop.direction === domain.direction)
+    .map(loop => [loop.bp_index, loop.length]))
   const keys = []
   const step = domain.end_bp >= domain.start_bp ? 1 : -1
   for (let bp = domain.start_bp; ; bp += step) {
     const delta = domain.overhang_id != null || domain.binds_overhang_id != null ? 0 : (deltas.get(bp) ?? 0)
     for (let copy = 0; copy < 1 + delta; copy++) {
       keys.push(baseKey({ helix_id: domain.helix_id, bp_index: bp, direction: domain.direction }, copy))
+    }
+    for (let k = 1; k <= (loops.get(bp) ?? 0); k++) {
+      keys.push(baseKey({ helix_id: domain.helix_id, bp_index: bp, direction: domain.direction }, k))
     }
     if (bp === domain.end_bp) break
   }

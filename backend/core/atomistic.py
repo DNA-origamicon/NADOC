@@ -1614,6 +1614,7 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
             continue
         seq = strand.sequence
         idx = 0
+        loop_lengths = {(loop.helix_id, loop.bp_index, loop.direction.value): loop.length for loop in strand.loops}
         for domain in strand.domains:
             if idx >= len(seq):
                 break
@@ -1639,6 +1640,10 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
                         else (h_id, bp, dir_str, copy_k)
                     )
                     seq_map[key] = seq[idx]
+                    idx += 1
+                for ordinal in range(1, loop_lengths.get((h_id, bp, dir_str), 0) + 1):
+                    if idx < len(seq):
+                        seq_map[(h_id, bp, dir_str, ordinal)] = seq[idx]
                     idx += 1
     return seq_map
 
@@ -1909,12 +1914,17 @@ def build_atomistic_model(
     _extra_base_placement_sink: "list[dict] | None" = None,
     _two_base_default: bool = True,
     _two_base_phosphate_clearance: bool = True,
+    strand_loop_display: bool = False,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
 
     Returns an AtomisticModel with a flat atom list and a bond list (0-based
     serial pairs).  Serial numbers are 0-based to match the list index.
+
+    ``strand_loop_display=True`` adds rigid loop residues for rendering only.
+    Their inter-residue linkers are unrelaxed; default export/simulation builds
+    continue to reject strand-owned loops.
 
     All frame constants — including the −32° helical phase offset
     (_ATOMISTIC_PHASE_OFFSET_RAD) that aligns the all-atom model with the NADOC
@@ -1956,6 +1966,12 @@ def build_atomistic_model(
     authoritative result of a simulation or reconstruction.
 
     """
+    from backend.core.strand_loops import require_loop_export_support
+    if not strand_loop_display:
+        require_loop_export_support(design, "Atomistic export / simulation")
+    elif any(s.loops for s in design.strands) and (not apply_design_geometry or any(
+            value is not None for value in (nuc_pos_override, axis_override, frame_override, xb_pos_override, ext_pos_override))):
+        raise ValueError("Insertion-loop display does not support physical-frame overrides")
     from backend.core.native_full_placement import require_native_full_option
     require_native_full_option(measured_positioning)
 
@@ -1983,6 +1999,9 @@ def build_atomistic_model(
             if any(p.biotin_dna for p in design.nanoparticles):
                 from backend.core.biotin_atomistic import append_biotin_linkers
                 model = append_biotin_linkers(model, design)
+            if strand_loop_display:
+                from backend.core.strand_loop_atoms import append_loop_atoms
+                model = append_loop_atoms(model, design, exclude_helix_ids)
             return model
 
     from backend.core.deformation import effective_helix_for_geometry
@@ -2748,6 +2767,9 @@ def build_atomistic_model(
         from backend.core.biotin_atomistic import append_biotin_linkers
         model = append_biotin_linkers(model, design)
 
+    if strand_loop_display:
+        from backend.core.strand_loop_atoms import append_loop_atoms
+        model = append_loop_atoms(model, design, exclude_helix_ids)
     return model
 
 
@@ -2827,6 +2849,9 @@ def surface_atom_cloud(
     Returns ``(positions (N,3) float32, radii (N,) float32, strand_ids list[str])``.
     Honeycomb/square, routed/unrouted, deformed/clustered.  Not for MD seeds / PDB export
     (those need the exact bridge geometry + every atom) — display surface only."""
+    if any(s.loops for s in design.strands):
+        from backend.core.strand_loop_atoms import loop_surface_cloud
+        return loop_surface_cloud(design)
     from backend.core.deformation import effective_helix_for_geometry
     from backend.core.geometry import nucleotide_positions
 

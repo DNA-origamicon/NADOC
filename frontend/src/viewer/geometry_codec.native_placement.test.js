@@ -11,6 +11,18 @@ const compact = () => ({ h: { FORWARD: {
 } } })
 
 describe('[native-placement] compact geometry contract', () => {
+  it.each(['strand-loop-ellipse-v2', 'strand-loop-ellipse-v3-bond-optimum', 'strand-loop-ellipse-v4-ring-priority'])('preserves %s loop pose and traversal identity through both codecs', source => {
+    const payload = compact(), data = payload.h.FORWARD
+    data.pv = [source, source]
+    data.looporder = [1, 2]
+    const full = expandCompactNucleotides(payload), diff = positionUpdateLookup(payload)
+    for (let i = 0; i < 2; i++) {
+      expect(full[i]).toMatchObject({ placement_source: source, loop_order: i + 1 })
+      expect(full[i].slab_quaternion).toEqual(data.sq[i])
+      expect(diff.get(`h:2:FORWARD:${i}`).slab_quaternion).toEqual(data.sq[i])
+    }
+  })
+
   it('keeps slab authority and inserted site identity through both full and diff codecs', () => {
     const payload = compact(), full = expandCompactNucleotides(payload), diff = positionUpdateLookup(payload)
     for (let i = 0; i < 2; i++) {

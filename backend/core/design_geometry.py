@@ -749,6 +749,8 @@ def _geometry_for_helices(
     if extension_slabs:
         from backend.core.extension_slabs import attach_extension_slabs
         attach_extension_slabs(result, design)
+    from backend.core.strand_loop_geometry import append_loop_geometry
+    append_loop_geometry(design, result)
     return result
 
 
@@ -931,6 +933,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
         if b is None:
             b = {
                 "bp": [],
+                "looporder": [],
                 "bb": [],
                 "bs": [],
                 "bn": [],
@@ -954,6 +957,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
             }
             helix_bucket[direction] = b
         b["bp"].append(n.get("bp_index"))
+        b["looporder"].append(n.get("loop_order"))
         b["bb"].append(n.get("backbone_position"))
         b["bs"].append(n.get("base_position"))
         b["bn"].append(n.get("base_normal"))
@@ -1008,6 +1012,8 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
     # tight when none of those fields apply.
     for helix_bucket in out.values():
         for b in helix_bucket.values():
+            if not any(value is not None for value in b["looporder"]):
+                b.pop("looporder")
             for k in ("flex", "extid", "ismod", "mod", "base"):
                 if b.get(k) is None:
                     b.pop(k, None)

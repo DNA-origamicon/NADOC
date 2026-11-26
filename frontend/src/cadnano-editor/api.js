@@ -822,3 +822,7 @@ export function patchOverhang(id, patch = {}) {
 export function generateOverhangRandomSequence(id) {
   return runSequenceWork(`generate:${id}`, () => _generateOverhangRandomSequence(id))
 }
+
+export async function setStrandLoop(params) {
+  return mutate(req => req('POST', '/design/strand-loop', params))
+}

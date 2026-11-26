@@ -19,7 +19,7 @@ export function expandCompactNucleotides(compact) {
         const copy = copyCounts.get(b.bp[i]) ?? 0
         copyCounts.set(b.bp[i], copy + 1)
         flat.push({
-          copy_k: copy,
+          copy_k: copy, loop_order: b.looporder?.[i],
           helix_id:          helixId,
           bp_index:          b.bp[i],
           direction:         dir,
@@ -63,7 +63,7 @@ export function positionUpdateLookup(compact) {
         const bp = data.bp[i]
         const copy = seen.get(bp) ?? 0
         seen.set(bp, copy + 1)
-        const nuc = { helix_id: helixId, bp_index: bp, direction, copy_k: copy,
+        const nuc = { helix_id: helixId, bp_index: bp, direction, copy_k: copy, loop_order: data.looporder?.[i],
           backbone_position: data.bb?.[i], base_position: data.bs?.[i],
           base_normal: data.bn?.[i], axis_tangent: data.at?.[i],
           slab_position: data.sp?.[i], slab_quaternion: data.sq?.[i],

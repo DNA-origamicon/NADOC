@@ -33,6 +33,7 @@ export function computeUndefinedEntries(currentDesign, backboneEntries) {
   // where the assigned character is 'N' (skip/loop-aware).
   const nullStrandIds = new Set()
   const nPosKeys      = new Set()
+  const loopNKeys = new Set()
 
   for (const strand of currentDesign.strands ?? []) {
     if (!strand.sequence) {
@@ -58,6 +59,11 @@ export function computeUndefinedEntries(currentDesign, backboneEntries) {
             if (strand.sequence[seqIdx] === 'N') isN = true
             seqIdx++
           }
+          const loopLength = (strand.loops ?? []).filter(loop => loop.helix_id === domain.helix_id &&
+            loop.bp_index === bp && loop.direction === domain.direction).reduce((sum, loop) => sum + loop.length, 0)
+          for (let k = 1; k <= loopLength; k++) {
+            if (strand.sequence[seqIdx++] === 'N') loopNKeys.add(`${strand.id}:${domain.helix_id}:${bp}:${domain.direction}:${k}`)
+          }
           if (isN) nPosKeys.add(`${domain.helix_id}:${bp}`)
         }
       }
@@ -65,6 +71,10 @@ export function computeUndefinedEntries(currentDesign, backboneEntries) {
   }
 
   return backboneEntries.filter(entry => {
+    if (entry.nuc?.loop_order > 0) {
+      const n = entry.nuc
+      return nullStrandIds.has(n.strand_id) || loopNKeys.has(`${n.strand_id}:${n.helix_id}:${n.bp_index}:${n.direction}:${n.loop_order}`)
+    }
     if (nullStrandIds.has(entry.nuc?.strand_id)) return true
     if (nPosKeys.has(`${entry.nuc?.helix_id}:${entry.nuc?.bp_index}`)) return true
     return false

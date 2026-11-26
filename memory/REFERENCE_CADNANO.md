@@ -16,6 +16,18 @@ type: project
 
 ## Current importer v3 — authorized November 22/23 repair
 
+The recorded source envelope also admits the pinned mrDNA Pointer v1.12
+reference (82 helices, 606,540 bytes, 18,368 padded slots). Limits are 1 MB,
+96 helices, 24,576 slots and 2,048 domain-bound units; nucleotide/strand/width
+limits are unchanged. `scripts/reconstruct_dietz_pointer.py` compares every
+source pointer and loop/skip declaration before guarded publication. The exact
+reference has 161 staples, unlike the 2012 paper's 163; no sequence is supplied
+in the JSON. Follow-up comparison to Praetorius 2017 Supplementary Table 2
+matches all 161 uppercase staple cores using M13mp18 at offset 0 plus the
+published T passivation. The saved Pointer now has a recorded scaffold assignment.
+The normal bounded UI proof capture still refuses this large source; standalone
+saved-part publication/replay succeeds. See `docs/dietz_pointer_reconstruction.md`.
+
 New imports must also run the [mandatory bond review](../docs/design_bond_review.md):
 strictly more than 20% forced-ligation bonds or stretched backbone edges triggers
 review, checking both the whole-design and interhelix-junction populations.

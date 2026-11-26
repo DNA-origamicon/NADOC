@@ -137,7 +137,7 @@ def flexible_segment_atomistic_frame_overrides(
         (n["helix_id"], int(n["bp_index"]), n["direction"]): np.asarray(
             n["backbone_position"], dtype=float
         )
-        for n in geometry
+        for n in geometry if not n.get("loop_order", 0)
     }
     raw_by_key = {
         (n["helix_id"], int(n["bp_index"]), n["direction"]): n for n in geometry

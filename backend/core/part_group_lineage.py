@@ -30,7 +30,7 @@ KINDS = frozenset({
     "nick", "nick-batch", "ligate", "forced-ligation-create",
     "forced-ligation-delete", "forced-ligation-delete-batch",
     "crossover-delete", "crossover-delete-batch", "strand-delete",
-    "strand-delete-batch", "domain-delete", "sweep", "loop-skip-insert",
+    "strand-delete-batch", "domain-delete", "sweep", "loop-skip-insert", "strand-loop-set",
     "assign-staple-sequences",
     "extrude-segment", "extrude-continuation", "extrude-deformed-continuation",
     "circle-segment", "extrude-frame", "crossover-place", "crossover-place-batch",

@@ -224,3 +224,26 @@ def clear_loop_skip_range(
         params={"helix_ids": ids, "plane_a_bp": plane_a_bp, "plane_b_bp": plane_b_bp},
         fn=lambda d: clear_loop_skips(d, ids, plane_a_bp, plane_b_bp))
     return _design_response(updated, report)
+
+
+class StrandLoopRequest(BaseModel):
+    strand_id: str
+    helix_id: str
+    bp_index: int
+    direction: str
+    length: int = Field(strict=True, ge=0, le=512)
+    aspect_ratio: float = Field(default=3.0, ge=1.0, le=10.0, allow_inf_nan=False)
+    rotation_deg: float = Field(default=0.0, ge=-180.0, le=180.0, allow_inf_nan=False)
+
+
+@router.post("/design/strand-loop", status_code=200)
+def set_strand_loop(body: StrandLoopRequest) -> dict:
+    """Add/edit/remove a strand-specific loop with undo and native replay."""
+    from backend.core.strand_loops import set_loop
+    try:
+        updated, report, _ = design_state.mutate_with_minor_log(
+            op_subtype="strand-loop-set", label="Set strand loop",
+            params=body.model_dump(mode="json"), fn=lambda d: set_loop(d, body.model_dump()))
+    except ValueError as error:
+        raise HTTPException(422, detail=str(error)) from error
+    return _design_response(updated, report)

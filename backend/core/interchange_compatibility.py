@@ -30,6 +30,8 @@ def compatibility_report(design: Design, target: str) -> dict:
                 )
             )
 
+    add("strand_loops", "Strand-specific insertion loops", sum(len(s.loops) for s in design.strands),
+        "This format does not preserve strand-specific insertion loops; save the native NADOC document.", True)
     active = [s for s in design.strands if not s.is_reference]
     add(
         "reference_strands",

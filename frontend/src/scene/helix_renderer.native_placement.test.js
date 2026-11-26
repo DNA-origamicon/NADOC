@@ -197,3 +197,9 @@ it.each(['FORWARD', 'REVERSE'])('[native-placement] insertion history fades only
   const malformed = { ...before, displayDesign: after.displayDesign }
   expect(() => ctrl.applyPositionLerp(malformed, after, .5)).toThrow(/DNA positioning could not be verified/)
 })
+
+
+it('renders the approved loop bond-optimum authority without changing its supplied pose', () => {
+  const nuc = { ...start(), placement_source: 'strand-loop-ellipse-v4-ring-priority', loop_order: 1, copy_k: 1 }
+  expectSameRendered(build([nuc]), build([start()]))
+})

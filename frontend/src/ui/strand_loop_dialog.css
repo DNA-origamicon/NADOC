@@ -1,0 +1,24 @@
+/* Shared native dialog: retain browser focus trapping and NADOC components. */
+.strand-loop-dialog {
+  margin: auto;
+  padding: 0;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  color-scheme: dark;
+}
+.strand-loop-dialog::backdrop { background: var(--color-bg-overlay); }
+.strand-loop-dialog > form { display: flex; flex-direction: column; min-height: 0; }
+.strand-loop-dialog .modal__title { margin: 0; font: inherit; }
+.strand-loop-dialog__body { display: grid; gap: var(--space-4); }
+.strand-loop-dialog__body p { margin: 0; }
+.strand-loop-dialog__field { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: var(--space-3); align-items: center; }
+.strand-loop-dialog__field .input { width: 100%; min-width: 0; }
+.strand-loop-dialog__field small { display: block; color: var(--color-text-muted); font-size: var(--text-sm); }
+.strand-loop-dialog__hint { color: var(--color-text-muted); font-size: var(--text-sm); }
+.strand-loop-dialog__error { color: var(--color-danger); overflow-wrap: anywhere; }
+.strand-loop-dialog__error:empty { display: none; }
+.strand-loop-dialog [data-action="remove"] { margin-right: auto; }
+@media (max-width: 420px) {
+  .strand-loop-dialog__field { grid-template-columns: minmax(0, 1fr) 88px; }
+}
