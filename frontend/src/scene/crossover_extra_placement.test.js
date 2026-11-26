@@ -75,3 +75,20 @@ it('projects a deformed CPD with independent standard bead and slab sites, then 
   expect(p.baseCenter.distanceTo(new THREE.Vector3(...geometry.base_position).applyMatrix4(pose))).toBeLessThan(1e-12)
   expect(p.frameQuaternion.toArray()).toEqual(geometry.frame_rotation)
 })
+
+
+it('uses approved Corner atom landmarks in chemical order and applies the saved pose once', () => {
+  const pose = new THREE.Matrix4().makeRotationZ(.4).setPosition(3, -2, 1)
+  const geometry = { backbone_position: [4, 5, 6], base_position: [5, 6, 7], frame_rotation: [0, 0, 0, 1] }
+  const rows = buildCrossoverExtraPlacements({ xoId: 'corner', count: 2,
+    pointA: new THREE.Vector3(), control: new THREE.Vector3(1, 1, 0), pointB: new THREE.Vector3(2, 0, 0),
+    helixAxis: new THREE.Vector3(0, 0, 1), simReversed: true,
+    savedTransforms: new Map([[0, pose]]), cornerGeometry: new Map([[0, geometry]]) })
+  const p = rows[1]
+  expect(p.simK).toBe(0)
+  expect(p.sourceCenter.toArray()).toEqual(geometry.backbone_position)
+  expect(p.center.distanceTo(new THREE.Vector3(...geometry.backbone_position).applyMatrix4(pose))).toBeLessThan(1e-12)
+  expect(p.baseCenter.distanceTo(new THREE.Vector3(...geometry.base_position).applyMatrix4(pose))).toBeLessThan(1e-12)
+  expect(p.frameQuaternion.toArray()).toEqual(geometry.frame_rotation)
+  expect(rows[0].sourceCenter.toArray()).not.toEqual(geometry.backbone_position)
+})

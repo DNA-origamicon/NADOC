@@ -6,7 +6,7 @@ clone/pull of NADOC includes the committed designs and portable dependencies.
 
 | Design | Saved document / status |
 | --- | --- |
-| D003 — corner motif | [D003.nadoc](D003.nadoc); existing design retained unchanged; historical human review needs renewal under current geometry code |
+| D003 — corner motif | [D003.nadoc](D003.nadoc); current bond review and 1,692-command replay verified; long-junction limitations retained |
 | Dietz Pointer v1.12 — mrDNA reference | [Dietz_Pointer_v1_12_mrDNA.nadoc](Dietz_Pointer_v1_12_mrDNA.nadoc); reference import and scaffold assignment; not a publication-image reconstruction |
 | HC24 — periodic part | [HC24-polymerization.nadoc](HC24-polymerization.nadoc); upstream part for the 30-mer |
 | HC24 — 30-mer assembly | [HC24-30mer.nass](HC24-30mer.nass); 30 instances, 29 joins |
@@ -54,17 +54,19 @@ Before committing agent-authored parts, run the required independent audit:
 For D003's human-reviewed corner motif, repeat the audit from the NADOC root:
 
 ```bash
-.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/D003.nadoc" --bond-review "workspace/Shared Designs/.provenance/D003/receipt.json"
+.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/D003.nadoc" --bond-review "workspace/Shared Designs/.provenance/D003/receipt-20261125.json"
 ```
 
-D003 is retained as an existing shared artifact, not recertified by this cleanup.
-Its construction replay passed before upstream integration. With integrated
-geometry code, the saved receipt fails `DESIGN_BOND_REVIEW_REQUIRED` because the
-report changed: 266 previously unmeasured bonds are now measured, and long
-interhelix segments increase from 421/687 to 572/687. The design digest is
-unchanged. Keep the historical receipt/evidence intact; a new review is required
-before further publication or scientific acceptance. Do not rewrite the receipt
-to manufacture a pass.
+D003's read-only review was updated on 2026-11-25 and its saved process independently
+replayed (1,692 commands). Molecular content and feature history are unchanged; normal workspace identity
+path/timestamp updates are included in the current review binding. Current Full geometry
+measures all 14,070 backbone segments, including 266 previously unmeasured insert
+segments; 151 of those exceed the 1.2 nm screen, bringing the interhelix total to
+572/687. The current receipt acknowledges those limitations for sharing and
+inspection, not simulation readiness or a molecular repair. The original human
+approval and receipt remain intact; the new agent review does not claim renewed
+human approval. The complete seam census and current application views are in
+`.provenance/D003/`, with dated filenames.
 
 Its exact historical title exception is documented in
 `scripts/agent_metadata_exceptions.py`. A changed design requires a fresh audit

@@ -41,6 +41,14 @@ An unknown named landmark cannot silently be written into a CM column.
     native_extensions = set()
     for record in geometry:
         source = record.get("placement_source")
+        if source == 'corner-seam-o5-v1':
+            # The Corner fit moves only flexible backbone atoms at duplex tips.
+            # oxDNA has a rigid nucleotide particle: its calibrated frame comes
+            # from the unchanged duplex site, not from the displaced O5′ atom.
+            # Validate that original site through the same strict native path.
+            record = {**record, 'placement_source': SOURCE,
+                      'backbone_position': record.get('corner_native_backbone')}
+            source = SOURCE
         if source in (None, PHYSICAL_SOURCE):
             if "helical_site" in record or any(key.startswith("slab_") for key in record):
                 raise NativePlacementError("Physical input carries stale native placement metadata.")

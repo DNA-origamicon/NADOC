@@ -1,6 +1,6 @@
 ---
 name: photo-mode
-description: "Photo mode — flat figure materials, camera-pinned key shadow, ChimeraX depth-outline silhouette, tiled export. v1 (PBR/HDRI/bloom/PT/floor) was archived 2026-07-29."
+description: "Photo mode — unified materials, six Art Themes, studio lighting, scientific silhouettes, collapsed Advanced grading, and shared photo/compiled export. v1 remains archived."
 metadata: 
   node_type: memory
   type: project
@@ -8,6 +8,28 @@ metadata:
 ---
 
 # Photo mode
+
+## November 16, 2026 — unified art controls and export finishing
+
+The first appearance card now has one representation-aware Material selector and
+six complete Art Themes: Bright studio, Electric, Polished metal, Soft studio,
+Scientific light and Scientific dark. Common finishes map across all four material
+families; glass/wax/gummy/skin are enabled only for surface-only views. Dedicated
+materials/impostors retain their rendering contracts and the panel reports exclusions.
+Legacy per-representation profiles remain readable as Custom/mixed.
+
+Advanced is initially collapsed and contains exposure, contrast and saturation.
+The shared grade is used in preview and tiled still/video export; alpha and
+annotation colors are preserved. Themes reset appearance while preserving molecular
+colors and output dimensions. Manual edits show Custom; profiles persist the settings.
+Modules: `photo_renderer/art_themes.js`, `color_grade.js`, `material_availability.js`,
+`ui/photo_art_controls.js`. The studio environment and PBR material choices are live;
+the old statements below about their removal describe the July rebuild only.
+
+Compiled presentations now use the active photo frame session (including text and
+endpoints), with cleanup on success/failure. Shared WebM encoding scales bitrate
+with resolution and frame rate (8–120 Mbps), rather than using 8 Mbps at every size.
+No topology or molecular positions are changed by these controls.
 
 ## Topic navigation and current boundaries
 
@@ -49,8 +71,7 @@ on the merge — the archive removed more wiring than the rename added).
 
 v2 was written from the ground up, but one v1 fix was re-derived into it and must
 stay: [photo_mode.js:513](../frontend/src/scene/photo_mode.js#L513) sets
-`THREE.ACESFilmicToneMapping` in `activate()` (exposure hardcoded `1.0`, no
-slider), restores both at [:621](../frontend/src/scene/photo_mode.js#L621), and the
+`THREE.ACESFilmicToneMapping` in `activate()` (exposure defaults to `1.0`, adjustable in Advanced), restores both at [:621](../frontend/src/scene/photo_mode.js#L621), and the
 offscreen export renderer sets the same at
 [:772](../frontend/src/scene/photo_mode.js#L772). **Why it is not cosmetic:** with
 `NoToneMapping` (the Three.js default), HDR values hard-clip at 1.0 — that clipping
@@ -58,8 +79,8 @@ is what produced v1's screen-filling **yellow/purple wash** (2026-06-18 audit).
 Pinned by `photo_mode.test.js` (ACES on activate, `NoToneMapping` on deactivate).
 Export parity depends on the offscreen renderer matching the preview.
 
-The rest of v1's lighting stack is gone by design — no IBL (`scene.environment =
-null` unconditionally, "ambient occlusion IS the ambient light here"), no bloom, no
+Most of v1's lighting stack remains archived. Studio IBL has since returned via
+RoomEnvironment; the current renderer still has no bloom, no
 Sun/preset-rig duality, no fluorophore point-lights, and no *visible* ground plane
 (there is now a shadow CATCHER — see below — which is a different thing). So v1's other four
 remediations (Sun-sole, PMREM re-bake isolation, Reflector state isolation, the
@@ -106,8 +127,7 @@ without moving that explanation; don't trust its file pointer.
   resolution it is correct. The Thickness / Creases sliders are the mitigation. **The exp tab's
   ChimeraX mode is immune** — it reads no normals, so there is no crease term to fire; this was
   the specific reason for porting it.
-- Path-traced mode bypasses the EffectComposer, so **outline + depth cue do not apply in PT**
-  (same limitation as mist). The panel says so.
+- The path tracer remains archived; there is no live path-traced mode.
 - GTAO + the figure pre-pass add two full-scene renders per frame; on software GL (headless)
   frames get slow enough that Playwright's element-screenshot stability wait times out — use
   `page.screenshot` there, not `locator.screenshot`.

@@ -155,6 +155,8 @@ def _minimize_backbone_bridge(
     atoms: list["Atom"],
     src_s: dict[str, int],
     dst_s: dict[str, int],
+    *,
+    cost_fn=None,
 ) -> None:
     """
     Place O3′(src), P(dst), O5′(dst) so that the C3′(src)→C5′(dst) bridge has
@@ -208,6 +210,12 @@ def _minimize_backbone_bridge(
             + (_cos_angle(p, o5, c5) - cos_po5c5) ** 2
         )
         return float(bl + 0.1 * ba)
+
+    # Corner supplies an exact-arithmetic accelerated cost, retaining this
+    # initial guess, finite-difference solver and final atom scatter unchanged.
+    if cost_fn is not None:
+        def objective(x):
+            return cost_fn(c3, x[0:3], x[3:6], x[6:9], c5)
 
     x0 = _np.concatenate(
         [
