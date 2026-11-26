@@ -1232,6 +1232,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
     loadProgressEl: trajLoadProgress,
     prevBtn: trajPrev, nextBtn: trajNext,
+    frameDuration: () => oxdnaDisplay?.smoothFrameDuration?.(),
     interpolationToggle: document.getElementById('oxdna-jobs-traj-interpolate'),
     preparationKey: () => `${oxdnaDisplay?.trajectoryPreparationKey?.()}|${_lammpsMode}`,
     previewReady: () => !_lammpsMode && !!oxdnaDisplay?.hasInteractivePreview?.(),

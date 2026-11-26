@@ -174,6 +174,7 @@ export function createExportProgress({ phases, onUpdate = null, now = () => Date
   let _done     = null
   let _total    = null
   let _lastMs   = now()  // last time anything actually moved
+  let _detail = null
   let _finished = false
 
   const _indexOf = (key) => phases.findIndex(p => p.key === key)
@@ -188,8 +189,8 @@ export function createExportProgress({ phases, onUpdate = null, now = () => Date
     const text = _finished
       ? 'Done'
       : phaseStatusText({
-          label: ph.label, phaseIndex: _i, phaseCount: phases.length,
-          done: _done, total: _total, idleMs, stallMs, hint: ph.hint ?? null,
+          label: _detail ?? ph.label, phaseIndex: _i, phaseCount: phases.length,
+          done: _detail ? null : _done, total: _detail ? null : _total, idleMs, stallMs, hint: ph.hint ?? null,
         })
     onUpdate?.({
       key: ph.key, label: ph.label, text, fraction: _reported,
@@ -209,6 +210,7 @@ export function createExportProgress({ phases, onUpdate = null, now = () => Date
       _frac = 0
       _reported = Math.max(_reported, cum[idx])
     }
+    _detail = null
     _done = null; _total = null
     _lastMs = now()
     _emit()
@@ -216,13 +218,14 @@ export function createExportProgress({ phases, onUpdate = null, now = () => Date
   }
 
   /** Report countable progress inside `key` (entering it first if needed). */
-  function tick(key, done, total) {
+  function tick(key, done, total, detail = null) {
     const idx = _indexOf(key)
     if (idx < 0 || idx < _i) return false
     if (idx > _i) begin(key)
+    _detail = detail
     _done  = Number.isFinite(done)  ? done  : null
     _total = Number.isFinite(total) ? total : null
-    _frac  = _total > 0 ? Math.max(0, Math.min(1, _done / _total)) : _frac
+    _frac  = _total > 0 ? Math.max(_frac, Math.min(1, _done / _total)) : _frac
     _lastMs = now()
     _emit()
     return true

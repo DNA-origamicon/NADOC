@@ -1266,14 +1266,14 @@ export function initDesignRenderer(scene, storeRef, { addFrameCallback, removeFr
           _xoverBeadsMesh, _xoverSlabsMesh,
           ad.beadStartIdx, ad.beadCount,
           posA, _clusterXoverCtrl, posB, ad.avgAx,
-          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence, ad.productGeometry,
+          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence, ad.productGeometry, ad.cornerGeometry,
         )
         const placements = buildCrossoverExtraPlacements({
           xoId: ad.xoId, count: ad.beadCount, pointA: posA,
           control: _clusterXoverCtrl, pointB: posB, helixAxis: ad.avgAx,
           sequence: ad.sequence, simReversed: ad.simReversed,
           localFrameReversed: ad.localFrameReversed,
-          savedTransforms: ad.savedTransforms, productGeometry: ad.productGeometry,
+          savedTransforms: ad.savedTransforms, productGeometry: ad.productGeometry, cornerGeometry: ad.cornerGeometry,
         })
         for (const g of _xoverGlowLive) {
           if (g.arcData === ad) g.pos.copy(placements[g.localIdx].center)

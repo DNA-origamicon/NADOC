@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import * as THREE from 'three'
+import { geometryLoads } from './geometry_loads.js'
 
 // The 3 region-overlay renderers are constructed INSIDE the factory via these
 // imports — mock them so no real THREE scene is needed.
@@ -481,6 +482,25 @@ describe('initAtomSurfaceDisplay', () => {
     deps.atomisticRenderer._setMode('vdw')
     await api.applyAtomisticMode('vdw')
     expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds tracing until native atoms are installed and releases cancelled loads',async()=>{
+    mountIds(DOM)
+    const deps=makeDeps(),api=initAtomSurfaceDisplay(deps)
+    let respond
+    global.fetch.mockImplementation(()=>new Promise(resolve=>{respond=resolve}))
+    const pending=api.applyAtomisticMode('vdw')
+    expect(geometryLoads.getState().busy).toBe(true)
+    respond({ok:true,json:async()=>({atoms:[],bonds:[]})});await pending
+    expect(deps.atomisticRenderer.update).toHaveBeenLastCalledWith({atoms:[],bonds:[]})
+    expect(geometryLoads.getState().busy).toBe(false)
+    api.invalidateAtomCache()
+    const cancelled=api.applyAtomisticMode('ballstick')
+    expect(geometryLoads.getState().busy).toBe(true)
+    await api.applyAtomisticMode('off')
+    expect(geometryLoads.getState().busy).toBe(false)
+    respond({ok:true,json:async()=>({atoms:[],bonds:[]})});await cancelled
+    expect(geometryLoads.getState().busy).toBe(false)
   })
 
   it('applyAtomisticMode DEFERS to an active sim overlay: no native flash (keeps CG, skips design fetch)', async () => {

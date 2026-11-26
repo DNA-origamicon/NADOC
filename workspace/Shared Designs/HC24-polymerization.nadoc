@@ -5802,8 +5802,8 @@
       "24HB",
       "periodic"
     ],
-    "identity_last_known_path": "Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc",
-    "identity_confirmed_at": "2026-11-25T04:36:15.182228+00:00",
+    "identity_last_known_path": "Shared Designs/HC24-polymerization.nadoc",
+    "identity_confirmed_at": "2026-11-25T21:07:27.648792+00:00",
     "primitive_kind": null,
     "hardware_defaults": {},
     "peg_surface": null,

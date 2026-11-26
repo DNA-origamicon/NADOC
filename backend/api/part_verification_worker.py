@@ -28,8 +28,12 @@ class WorkerLimit(ValueError):
 
 
 class _BoundedInput(BytesIO):
+    def __init__(self, limit=None):
+        super().__init__()
+        self.limit = MAX_INPUT_BYTES if limit is None else limit
+
     def write(self, data):
-        if self.tell() + len(data) > MAX_INPUT_BYTES:
+        if self.tell() + len(data) > self.limit:
             raise WorkerLimit("Part verification worker input budget exceeded")
         return super().write(data)
 

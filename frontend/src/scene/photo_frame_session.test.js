@@ -1,3 +1,4 @@
+import { registerEMExport } from './em_export.js'
 import { registerZoomVolumes } from './zoom_volume_export.js'
 /**
  * beginFrameSession — the offscreen render session behind the tiled PNG export
@@ -239,6 +240,19 @@ describe('beginFrameSession', () => {
     const session = mode.beginFrameSession(4200, 2970)
     try { await session.settleOverlays(); session.renderFrameToCanvas(); expect(draw).toHaveBeenCalledOnce() }
     finally { session.dispose(); unregister() }
+  })
+
+  it('blocks PNG and video session capture until EM has settled and preserves EM lights', async () => {
+    const light = new THREE.PointLight(); light.userData.emLight = true; ctx.scene.add(light)
+    mode.activate(); expect(light.visible).toBe(true); expect(light.castShadow).toBe(false)
+    let release, done=false
+    const unregister=registerEMExport(ctx.scene,()=>new Promise(r=>{release=r}))
+    const capture=mode.renderToBlob(320,240).then(()=>{done=true})
+    await Promise.resolve(); expect(done).toBe(false)
+    release(); await capture; expect(done).toBe(true)
+    const session=mode.beginFrameSession(320,240)
+    const settled=session.settleOverlays(); release(); await settled
+    unregister(); session.dispose(); mode.deactivate(); expect(light.visible).toBe(true)
   })
 
   it('tiles anything above the GPU max texture size', () => {

@@ -236,3 +236,17 @@ def test_spawned_blocked_worker_is_terminated_without_cooperation():
         writer.close()
     assert process._closed
     assert not worker.is_alive()
+
+
+def test_private_input_budget_override_does_not_change_default(monkeypatch):
+    from backend.api import part_verification_worker as module
+    monkeypatch.setattr(module, 'MAX_INPUT_BYTES', 4)
+    ordinary = module._BoundedInput()
+    ordinary.write(b'abcd')
+    with pytest.raises(module.WorkerLimit):
+        ordinary.write(b'e')
+    custom = module._BoundedInput(8)
+    custom.write(b'abcdefgh')
+    with pytest.raises(module.WorkerLimit):
+        custom.write(b'i')
+    assert module.MAX_INPUT_BYTES == 4

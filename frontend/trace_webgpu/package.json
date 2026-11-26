@@ -1,0 +1,12 @@
+{
+  "name": "nadoc-trace-webgpu",
+  "private": true,
+  "type": "module",
+  "description": "Isolated experimental export renderer; does not upgrade the editor's Three.js",
+  "dependencies": {
+    "three": "0.187.0",
+    "three-gpu-pathtracer": "0.0.28",
+    "three-mesh-bvh": "0.9.17",
+    "xatlas-web": "0.1.0"
+  }
+}

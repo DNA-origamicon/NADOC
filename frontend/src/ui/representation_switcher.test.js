@@ -9,6 +9,7 @@ import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import { setNativePromptHandler } from './primitives/native_prompt.js'
 import { initRepresentationSwitcher } from './representation_switcher.js'
+import { geometryLoads } from '../scene/geometry_loads.js'
 import { getShortcuts, clearShortcuts, dispatchKeyEvent } from '../input/shortcuts.js'
 
 // Plain fake keydown for the registry matcher (a real off-document KeyboardEvent
@@ -672,7 +673,27 @@ it('does not finish a representation until job coordinates have landed', async (
     const pending = ui.setRepresentation('vdw').then(() => { finished = true })
     await vi.waitFor(() => expect(deps.setCurrentRepr).toHaveBeenCalledWith('vdw'))
     expect(finished).toBe(false)
+    expect(geometryLoads.getState().busy).toBe(true)
     release(); await pending
     expect(finished).toBe(true)
+    expect(geometryLoads.getState().busy).toBe(false)
   } finally { release(); window.removeEventListener('nadoc:representation-change', listener); ui.dispose() }
+})
+
+it('retires a superseded atomistic wait and releases the geometry gate on rejection',async()=>{
+  mountIds(DOM)
+  const deps=makeDeps({currentDesign:{}}),ui=initRepresentationSwitcher(deps)
+  let release
+  deps.applyAtomisticMode.mockImplementation(()=>new Promise(resolve=>{release=resolve}))
+  try{
+    const old=ui.setRepresentation('vdw')
+    await vi.waitFor(()=>expect(release).toBeTypeOf('function'))
+    expect(geometryLoads.getState().busy).toBe(true)
+    await ui.setRepresentation('full')
+    expect(geometryLoads.getState().busy).toBe(false)
+    release();await old
+    deps.applyAtomisticMode.mockRejectedValue(new Error('load failed'))
+    await expect(ui.setRepresentation('ballstick')).rejects.toThrow('load failed')
+    expect(geometryLoads.getState().busy).toBe(false)
+  }finally{release?.();ui.dispose()}
 })

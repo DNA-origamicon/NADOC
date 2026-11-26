@@ -177,10 +177,9 @@ const PANEL_IDS = {
   'photo-figure-heading':         'div',
   'photo-figure-body':            'div',
   'photo-figure-arrow':           'span',
-  'photo-mat-full':               'select',
-  'photo-mat-cylinders':          'select',
-  'photo-mat-surface':            'select',
-  'photo-mat-atomistic':          'select',
+  'photo-material': 'select',
+  'photo-art-theme': 'select',
+  'photo-material-note': 'div',
   'photo-materials-heading':      'div',
   'photo-materials-body':         'div',
   'photo-materials-arrow':        'span',
@@ -243,6 +242,7 @@ function makeMode(overrides = {}) {
     setKeyShadowMapSize: vi.fn(), setKeyShadowBias: vi.fn(), setShadowStrength: vi.fn(),
     setKeyIntensity: vi.fn(), setFillIntensity: vi.fn(), setAmbientIntensity: vi.fn(),
     setBackground: vi.fn(), setMaterialPreset: vi.fn(),
+    setMaterialPresets: vi.fn(), getMaterialAvailability: () => ({ representations: ['full'], unsupported: 0 }),
     setOutline: vi.fn(), setOutlineColor: vi.fn(), setOutlineStrength: vi.fn(),
     setOutlineThickness: vi.fn(), setOutlineSensitivity: vi.fn(), setOutlineDepthJump: vi.fn(),
     setDepthCue: vi.fn(), setDepthCueColor: vi.fn(), setDepthCueStrength: vi.fn(),
@@ -311,7 +311,9 @@ describe('initPhotoPanel', () => {
   })
 
   it('restores the active profile through the current Photomode setters', () => {
+    mode.setTraceDenoise=vi.fn();mode.setTraceInteractive=vi.fn()
     localStorage.setItem('nadoc.photoProfiles.v1', JSON.stringify({ Saved: {
+      pathTraceDenoise:false,pathTraceInteractive:false,
       keyIntensity: 3.25, keyAzimuth: -45, full: 'metallic',
       outline: true, fov: 24, bgType: 'transparent', bgColor: '#123456',
     } }))
@@ -319,9 +321,11 @@ describe('initPhotoPanel', () => {
 
     panel.applyActiveProfile()
 
+    expect(mode.setTraceDenoise).toHaveBeenLastCalledWith(false)
+    expect(mode.setTraceInteractive).toHaveBeenLastCalledWith(false)
     expect(mode.setKeyIntensity).toHaveBeenLastCalledWith(3.25)
     expect(mode.setKeyAzimuth).toHaveBeenLastCalledWith(-45)
-    expect(mode.setMaterialPreset).toHaveBeenLastCalledWith('full', 'metallic')
+    expect(mode.setMaterialPresets).toHaveBeenLastCalledWith(expect.objectContaining({ full: 'metallic' }))
     expect(mode.setOutline).toHaveBeenLastCalledWith(true)
     expect(mode.setFOV).toHaveBeenLastCalledWith(24)
     expect(mode.setBackground).toHaveBeenLastCalledWith('transparent', '#123456')
@@ -458,29 +462,26 @@ describe('initPhotoPanel', () => {
     expect(mode.setDepthCueColor).toHaveBeenCalledWith('#00ff00')
   })
 
-  it('builds the material dropdowns from PRESET_LABELS', () => {
-    // Driven off the shared preset table, so adding a preset in
-    // material_presets.js shows up here with no markup change.
-    const opts = id => [...els[id].querySelectorAll('option')].map(o => o.value)
-    expect(opts('photo-mat-full')).toEqual(['flat', 'matte', 'glossy', 'metallic'])
-    expect(opts('photo-mat-surface')).toContain('gummy')
-    expect(opts('photo-mat-atomistic')).toEqual(['cpk-flat', 'cpk-matte', 'cpk-glossy', 'cpk-metallic'])
+  it('offers one material selector and disables surface-only finishes for Full', () => {
+    const select = els['photo-material']
+    expect([...select.options].map(o => o.value)).toContain('metallic')
+    expect(select.querySelector('[value="glass"]').disabled).toBe(true)
+    expect(select.value).toBe('flat')
   })
 
-  it('wires each material dropdown to its own representation', () => {
-    els['photo-mat-cylinders'].value = 'metallic'
-    els['photo-mat-cylinders'].dispatchEvent(new Event('change'))
-    expect(mode.setMaterialPreset).toHaveBeenCalledWith('cylinders', 'metallic')
-
-    els['photo-mat-surface'].value = 'glass'
-    els['photo-mat-surface'].dispatchEvent(new Event('change'))
-    expect(mode.setMaterialPreset).toHaveBeenLastCalledWith('surface', 'glass')
+  it('does not overwrite a native select input before its change event applies the theme', () => {
+    const theme = els['photo-art-theme']
+    theme.value = 'electric'
+    theme.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(theme.value).toBe('electric')
+    theme.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(mode.setMaterialPresets).toHaveBeenLastCalledWith(expect.objectContaining({ full: 'glossy', surface: 'glossy' }))
   })
 
-  it('syncToState selects the active preset in each dropdown', () => {
-    panel.syncToState()
-    expect(els['photo-mat-full'].value).toBe('flat')
-    expect(els['photo-mat-atomistic'].value).toBe('cpk-flat')
+  it('applies a common finish to all representations in one operation', () => {
+    els['photo-material'].value = 'metallic'
+    els['photo-material'].dispatchEvent(new Event('change'))
+    expect(mode.setMaterialPresets).toHaveBeenCalledWith({ full: 'metallic', cylinders: 'metallic', surface: 'metallic', atomistic: 'cpk-metallic' })
   })
 
   it('syncToState and the Side dropdown drive the shadow catcher', () => {
@@ -574,7 +575,7 @@ describe('initPhotoPanel', () => {
 
   it('the export button calls renderToBlob and re-enables itself', async () => {
     els['photo-export-btn'].dispatchEvent(new Event('click'))
-    await vi.waitFor(() => expect(mode.renderToBlob).toHaveBeenCalledWith(4200, 2970))
+    await vi.waitFor(() => expect(mode.renderToBlob).toHaveBeenCalledWith(4200, 2970, expect.objectContaining({onProgress:expect.any(Function), signal:expect.any(AbortSignal)})))
     await vi.waitFor(() => expect(els['photo-export-btn'].disabled).toBe(false))
   })
 

@@ -8,7 +8,7 @@ geometry is constructed or repaired here.
 
 The 1.2 nm cutoff is a conservative native Full displayed-backbone endpoint
 envelope, not an O3'-P chemical bond-length criterion. Geometry that the Full
-projection does not supply (currently including junction-insert nucleotides)
+projection does not supply
 is reported as incomplete rather than interpolated into a passing result.
 """
 
@@ -106,8 +106,11 @@ def _realized_edges(design):
 
 
 def _position_lookup(design):
+    from backend.core.bond_review_insert_positions import insert_positions
+
     positions = {}
-    for nucleotide in _geometry_for_design(design):
+    nucleotides = _geometry_for_design(design)
+    for nucleotide in nucleotides:
         if nucleotide.get("is_modification"):
             continue
         raw = nucleotide.get("backbone_position")
@@ -125,6 +128,7 @@ def _position_lookup(design):
         positions[(*key, copy)] = pos
         if copy == 0:
             positions[key] = pos
+    positions.update(insert_positions(design, nucleotides))
     return positions
 
 

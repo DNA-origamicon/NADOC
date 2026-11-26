@@ -1,5 +1,5 @@
 import { encodeWebM } from './encode_webm.js'
-import { editorVideoFrame } from './export_video.js'
+import { editorVideoFrame, photoVideoFrame } from './export_video.js'
 import { presentationAnimation, presentationHTML } from './compiled_presentation.js'
 import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
 import { withMediaExport } from '../shared/media_export_activity.js'
@@ -11,7 +11,7 @@ export function compilePresentation(options) {
   return withMediaExport(() => compile(options))
 }
 
-async function compile({ animation, player, renderer, scene, camera, resolution = '1080p', playOptions = {}, inspection = {}, keyframeId = null, signal, onPrepared = () => {}, onProgress = () => {} }) {
+async function compile({ animation, player, renderer, scene, camera, resolution = '1080p', playOptions = {}, inspection = {}, keyframeId = null, photoRenderer = null, signal, onPrepared = () => {}, onProgress = () => {} }) {
   assertPlacementExportSafe(scene)
   const fps = Math.max(1, Math.min(60, Number(animation.fps) || 30))
   const selected = keyframeId == null ? -1 : animation.keyframes.findIndex(kf => kf.id === keyframeId)
@@ -24,6 +24,7 @@ async function compile({ animation, player, renderer, scene, camera, resolution 
   const cancel = () => player.cancelBake?.()
   signal?.addEventListener('abort', cancel)
   const clips = [], ranges = []; let bytes = 0
+  let photoSession = null
   try {
     signal?.throwIfAborted()
     player.setBounce(false); player.setDisablePoses(false)
@@ -33,25 +34,35 @@ async function compile({ animation, player, renderer, scene, camera, resolution 
     player.pause()
     player.assertExportSampling?.(fps)
     const [w, h] = resolution === '720p' ? [1280, 720] : [1920, 1080]
-    renderer.setPixelRatio(1); renderer.setSize(w, h, false)
-    camera.aspect = w / h; camera.updateProjectionMatrix()
+    const usePhoto = !!photoRenderer?.isActive()
+    if (!usePhoto) {
+      renderer.setPixelRatio(1); renderer.setSize(w, h, false)
+      camera.aspect = w / h; camera.updateProjectionMatrix()
+    }
     const canvas = Object.assign(document.createElement('canvas'), { width: w, height: h })
     const ctx = canvas.getContext('2d')
-    const render = editorVideoFrame({ player, renderer, scene, camera, ctx, canvas: renderer.domElement, w, h })
+    if (usePhoto) {
+      photoSession = photoRenderer.beginFrameSession(w, h, { followMotion: true, signal })
+      player.setLockFov?.(true)
+    }
+    const editorFrame = photoSession ? null : editorVideoFrame({ player, renderer, scene, camera, ctx, canvas: renderer.domElement, w, h })
     for (const [index, keyframe] of targets.entries()) {
       signal?.throwIfAborted()
       const range = player.getKeyframeRange(keyframe.id)
       if (!range || range.end <= range.start) throw new Error(`Keyframe ${index + 1} has no playable range`)
       const name = keyframe.name || keyframe.text || `Keyframe ${index + 1}`
       const report = detail => onProgress({ index, total: targets.length, name, ...detail })
-      report({ phase: 'capture', done: 0, frames: Math.ceil((range.end - range.start) * fps) })
+      const frames=Math.ceil((range.end-range.start)*fps)+1 // encoded frames plus exact endpoint
+      const render=photoSession ? photoVideoFrame({player,session:photoSession,ctx,canvas,w,h,frames,
+        onPhase:(_,info)=>report({phase:'capture',done:info.done,frames,detail:info.detail})}) : editorFrame
+      report({ phase: 'capture', done: 0, frames })
       let first
       const blob = await encodeWebM({ canvas, fps, totalDur: range.end - range.start, signal,
         renderFrame: async t => {
           await render(range.start + t)
           if (t === 0) first = canvas.toDataURL('image/jpeg', 0.9)
         },
-        onProgress: (_, { frame, frames }) => report({ phase: 'capture', done: frame, frames }),
+        onProgress: (_, { frame }) => report({ phase: 'capture', done: frame, frames }),
         onPhase: phase => { if (phase === 'encode') report({ phase: 'encode' }) },
       })
       bytes += blob.size
@@ -73,12 +84,14 @@ async function compile({ animation, player, renderer, scene, camera, resolution 
     assertPlacementExportSafe(scene)
     onProgress({ phase: 'package', total: clips.length })
     signal?.throwIfAborted()
-    const prepared = { ...inspection, initialJointValues: playOptions.liveJointValues ?? null, animation: source, ranges, clipKeyframeIds: targets.map(kf => kf.id) }
+    const prepared = { ...inspection, appearance: photoSession ? photoRenderer.getSettings() : null, initialJointValues: playOptions.liveJointValues ?? null, animation: source, ranges, clipKeyframeIds: targets.map(kf => kf.id) }
     const blob = new Blob([presentationHTML(animation.name || 'Presentation', clips, prepared)], { type: 'text/html' })
     onPrepared(prepared)
     return blob
   } finally {
     signal?.removeEventListener('abort', cancel)
+    await photoSession?.dispose()
+    if (photoSession) player.setLockFov?.(false)
     player.stop()
     player.setBounce(saved.bounce); player.setLoopMode(saved.loop); player.setDisablePoses(saved.poses)
     renderer.setPixelRatio(saved.ratio)

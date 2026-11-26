@@ -527,3 +527,13 @@ describe('full VoltronCoreScad trajectory → surface → GIF export', () => {
     expect(log.some(e => e.text?.includes('Downloading trajectory'))).toBe(true)
   })
 })
+it('shows measured tracing detail inside capture and does not rewind during compositing',()=>{
+  const updates=[],p=createExportProgress({phases:[{key:'capture',label:'Rendering frames',weight:.9},{key:'save',label:'Writing file',weight:.1}],onUpdate:u=>updates.push(u)})
+  p.tick('capture',.5,2,'Frame 1/2 · Path tracing · 32/64 samples')
+  expect(updates.at(-1).text).toContain('32/64 samples')
+  expect(updates.at(-1).fraction).toBeCloseTo(.225)
+  p.tick('capture',0,2,'Frame 1/2 · Compositing the image')
+  expect(updates.at(-1).fraction).toBeCloseTo(.225)
+  expect(updates.at(-1).text).toContain('Compositing')
+  p.finish();expect(updates.at(-1).fraction).toBe(1)
+})

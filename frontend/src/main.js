@@ -9,6 +9,7 @@ import { createVRFeatureLog } from './scene/vr_feature_log.js'
 import { initReferenceModels } from './scene/reference_models.js'
 import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
 import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
+import { initCornerTool } from './ui/corner_tool.js'
 import { createVRPrompts } from './scene/vr_prompts.js'
 import { setNativePromptHandler } from './ui/primitives/native_prompt.js'
 import { createVRFiles, saveBeforeVRFileSwitch } from './scene/vr_files.js'
@@ -168,6 +169,7 @@ import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
 import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
 import { initProteinSubsystem }    from './scene/protein_subsystem.js'
 import { initNanoparticleAttach } from './ui/nanoparticle_attach.js'
+import { initEMAnalysis } from './ui/em_analysis.js'
 import { initNanoparticleSubsystem } from './scene/nanoparticle_subsystem.js'
 import { promptGoldNanosphereDiameter } from './ui/nanoparticle_dialog.js'
 import { openGoldCreationDialog } from './ui/gold_creation_dialog.js'
@@ -3745,6 +3747,7 @@ async function main() {
   })
 
   const deformationToolLauncher = initDeformationToolLauncher({ store, selectionManager, showToast, deformView, watchDeformState: _watchDeformState, ownedEditor: featureEditor.creationEditor })
+  const cornerTool = initCornerTool({ store, selectionManager, scene, designRenderer, showToast })
 
   // Tools → Add Primitive: reveal the right-sidebar Primitives library.
   document.getElementById('menu-tools-add-primitive')?.addEventListener('click', () => {
@@ -5627,6 +5630,7 @@ async function main() {
       seekInstanceFeatures: _seekInstanceFeaturesFast,
     },
     onEditFeature: _onEditFeature,
+    onEditCorner: cornerTool.openEdit,
     onEditNanoparticle: async id => {
       const particle = store.getState().currentDesign?.nanoparticles?.find(item => item.id === id)
       if (!particle) return
@@ -5688,6 +5692,7 @@ async function main() {
   // (`animPanel` is forward-declared ~5200 lines up, next to the player it serves —
   //  four call sites read it from callbacks registered long before this line.)
   _partAnimPanel = animPanel = initAnimationPanel(store, {
+    getPhotoMode: () => _photoMode.mode,
     player: animPlayer, zoomVolume, viewVolumes, controls,
     captureCurrentCamera, captureThumbnail,
     api,
@@ -6132,6 +6137,9 @@ async function main() {
   document.getElementById('menu-view-extra-base-spacing')?.addEventListener('click', () => {
     expandedSpacing.toggleExtraBaseAdjust()   // pill syncs via the onModeChange dep
   })
+
+  initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRenderer, api, addFrameCallback, removeFrameCallback, camera, controls,
+    simulationDisplays: { oxdna: () => oxdnaDisplay, md: () => mdViz.isActive() ? mdViz : mdDisplayController } })
 
   // ── Help / Hotkeys modal ─────────────────────────────────────────────────────
   document.getElementById('menu-help-open-log')?.addEventListener('click', openProcessLog)

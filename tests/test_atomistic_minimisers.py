@@ -207,6 +207,20 @@ class TestInterpolateBackboneBridge:
 
 
 class TestMinimizeBackboneBridge:
+    @pytest.mark.parametrize('gap', [(0., 0., 0.), (.6, 0., 0.), (.3, -.2, .7), (3., 2., -1.)])
+    def test_corner_cost_preserves_native_solver_and_atom_scatter(self, gap):
+        from copy import deepcopy
+        from backend.core.corner_seam_bridge_math import minimize_bridge
+
+        atoms, src = _build_ribose(np.zeros(3))
+        destination, dst = _build_ribose(np.array(gap))
+        dst = {key: value + len(atoms) for key, value in dst.items()}
+        atoms.extend(destination)
+        expected = deepcopy(atoms)
+        _minimize_backbone_bridge(expected, src, dst)
+        minimize_bridge(atoms, src, dst)
+        assert atoms == expected
+
     def test_canonical_chain_length(self):
         # Place src and dst at the canonical chain length so the minimiser
         # should reach near-zero residual.

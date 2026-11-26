@@ -113,6 +113,8 @@ describe('swapToFlatMaterials', () => {
     swapToFlatMaterials(scene, { full: 'flat', cylinders: 'flat', surface: 'glass', atomistic: 'cpk-flat' })
     expect(surface.material.isMeshPhysicalMaterial).toBe(true)
     expect(surface.material.roughness).toBeCloseTo(0.05)
+    expect(surface.material.transmission).toBeCloseTo(0.95)
+    expect(surface.material.opacity).toBe(1)
   })
 
   it('defaults to the flat FIGURE materials when no presets are given', () => {

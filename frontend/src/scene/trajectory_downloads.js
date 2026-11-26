@@ -12,7 +12,7 @@ export function initTrajectoryDownloads(fetchTrajectory, { memory = trajectoryMe
 
   const drop = id => { memory.release(entries.get(id)); entries.delete(id) }
 
-  function get(jobId, spec = {}, { signal, onProgress } = {}) {
+  function get(jobId, spec = {}, { signal, onProgress, foreground = false } = {}) {
     if (signal?.aborted) return Promise.reject(new DOMException('cancelled', 'AbortError'))
     const id = key(jobId, spec)
     let entry = entries.get(id)
@@ -49,6 +49,7 @@ export function initTrajectoryDownloads(fetchTrajectory, { memory = trajectoryMe
       const complete = () => { if (jobTails.get(jobId) === entry.promise) jobTails.delete(jobId) }
       entry.promise.then(complete, complete)
     }
+    if (foreground) entry.foreground = (entry.foreground || 0) + 1
     if (onProgress) entry.listeners.add(onProgress)
     const cancel = () => {
       entry.abort.abort()
@@ -57,6 +58,7 @@ export function initTrajectoryDownloads(fetchTrajectory, { memory = trajectoryMe
     if (signal?.aborted) cancel()
     signal?.addEventListener('abort', cancel, { once: true })
     return entry.promise.finally(() => {
+      if (foreground) entry.foreground--
       entry.listeners.delete(onProgress)
       signal?.removeEventListener('abort', cancel)
     })
@@ -66,7 +68,7 @@ export function initTrajectoryDownloads(fetchTrajectory, { memory = trajectoryMe
     const wanted = new Set(requests.map(({ jobId, ...spec }) => key(jobId, spec)))
     retained = wanted
     for (const [id, entry] of entries) {
-      if (wanted.has(id)) continue
+      if (wanted.has(id) || entry.foreground > 0) continue
       entry.abort.abort()
       drop(id)
     }
@@ -93,5 +95,10 @@ export function initTrajectoryDownloads(fetchTrajectory, { memory = trajectoryMe
     const id = key(jobId, spec)
     if (!retained.has(id)) drop(id)
   }
-  return { get, retain, consumed, seed, cancelPending, clear: () => retain([]) }
+  // Animation cache pruning must not abort a visualization's active page read.
+  const foreground = () => ({
+    get: (jobId, spec, options) => get(jobId, spec, { ...options, foreground: true }),
+    consumed,
+  })
+  return { get, foreground, retain, consumed, seed, cancelPending, clear: () => retain([]) }
 }

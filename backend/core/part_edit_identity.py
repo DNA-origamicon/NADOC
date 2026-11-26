@@ -11,6 +11,7 @@ from backend.core.feature_identity import preserve_proof_identity as _preserve_b
 
 
 _PROTECTED = {
+    "corner": ("_proof_version", "operation_id"),
     "photoproduct-create": ("implementation",),
     "nanoparticle-attach-overhang": ("_proof_version", "np_fitting_version", "engine", "history_seed", "version_id", "duplex_id", "created_at"),
     "nanoparticle-bound-move": ("_proof_version", "np_fitting_version", "engine"),
