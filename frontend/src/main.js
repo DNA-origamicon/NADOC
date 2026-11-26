@@ -28,6 +28,7 @@ import { initShareLink } from './viewer/share_link.js'
 import { initPreparedExport } from './viewer/export_prepared.js'
 import { openProcessLog } from './ui/process_log.js'
 import { initViewerPerformance } from './perf/viewer_performance.js'
+import { recordDesktopAssemblyBuild } from './perf/desktop_loading.js'
 import { initMdIonPaths } from './scene/md_ion_paths.js'
 /**
  * NADOC frontend entry point.
@@ -103,7 +104,7 @@ import { initUndefinedHighlight } from './scene/undefined_highlight.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { nucleotideLocalBox, selectionBBox } from './scene/selection_bbox.js'
 import { navigationDesign, navigationGeometry } from './scene/reference_navigation.js'
-import { fitViewPose } from './scene/fit_view_math.js'
+import { fitViewPose, fitOpeningViewPose } from './scene/fit_view_math.js'
 import { screenPlaneCameraUp } from './scene/camera_basis.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
@@ -439,6 +440,7 @@ async function main() {
     scene, store, api,
     useShared,
   })
+  assemblyRenderer.onRebuildComplete?.(recordDesktopAssemblyBuild)
 
   const assemblyVolumes = initAssemblyViewVolumes({ scene, store, api, assemblyRenderer })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer, applyAssemblyLayers: assemblyVolumes.update })
@@ -3313,13 +3315,13 @@ async function main() {
     controls.update()
   }
 
-  function _fitToView() {
+  function _fitToView({ opening = false } = {}) {
     const state = store.getState()
     const { assemblyActive } = state
     const box = snupiDisplay?.getBoundingBox() ?? (assemblyActive
       ? assemblyVolumes.getBoundingBox() ?? assemblyRenderer.getBoundingBox()
       : nucleotideLocalBox(navigationGeometry(state, visibilityController?.getEffectiveHiddenBaseKeys())))
-    const pose = fitViewPose(box, camera.position, controls.target, camera.getEffectiveFOV(), camera.aspect)
+    const pose = (opening ? fitOpeningViewPose : fitViewPose)(box, camera.position, controls.target, camera.getEffectiveFOV(), camera.aspect)
     if (!pose) return
     controls.target.copy(pose.target)
     camera.position.copy(pose.position)
@@ -5255,6 +5257,7 @@ async function main() {
   // invoke post-init, so the forward-declared `let _fileOpen` resolves directly.
   _fileOpen = initFileOpen({
     store, api,
+    setFileLoadCancel: _fileLoad.setCancel, hideFileLoad: _hideFileLoad, exitAssemblyMode: _exitAssemblyMode,
     showFileLoad: _showFileLoad,
     flAppendLog: _flAppendLog,
     flSetProgress: _flSetProgress,
@@ -5300,7 +5303,7 @@ async function main() {
         }
         _syncAssemblyReprMenu(assembly)
         assemblyRenderer.applyGroupVisibilityOverlay?.(computeGroupHiddenInstanceIds(assembly))
-        if (fitOnDone) _fitToView()
+        if (fitOnDone) _fitToView({ opening: !!onProgress })
         settle?.resolve()
       })
       .catch(err => {
@@ -6776,8 +6779,8 @@ async function main() {
   })
 
   document.getElementById('menu-help-image-evaluation')?.addEventListener('click', async () => {
-    const { showImageEvaluation } = await import('./ui/image_evaluation.js')
-    showImageEvaluation()
+    const { showArticleReconstruction } = await import('./ui/article_reconstruction.js')
+    showArticleReconstruction()
   })
 
   document.getElementById('menu-help-generate-design')?.addEventListener('click', async () => {

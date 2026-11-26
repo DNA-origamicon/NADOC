@@ -10,7 +10,6 @@ import hashlib
 from collections import Counter, defaultdict
 from statistics import median
 
-MAX_BYTES = 25 * 1024 * 1024
 MAX_PAGES = 100
 MAX_FIGURES = 16
 
@@ -125,8 +124,6 @@ def diagram_evidence(paths):
 def evaluate_pdf(data):
     import pymupdf
 
-    if len(data) > MAX_BYTES:
-        raise ValueError('PDF exceeds the 25 MiB limit.')
     if not data.startswith(b'%PDF-'):
         raise ValueError('Select a valid PDF file.')
     try:

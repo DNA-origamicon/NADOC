@@ -80,14 +80,21 @@ def _display_atomistic_model(design):
 
     override = _flexible_display_override(design)
     pdb_model = design_state.get_pdb_atomistic()
+    if pdb_model is not None and any(s.loops for s in design.strands):
+        from copy import deepcopy
+        from backend.core.strand_loop_atoms import append_loop_atoms
+        # Imported atom data is shared session state; only the display copy changes.
+        pdb_helices = {a.helix_id for a in pdb_model.atoms}
+        pdb_model = append_loop_atoms(deepcopy(pdb_model), design,
+            exclude_helix_ids={h.id for h in design.helices} - pdb_helices)
     if pdb_model is not None:
         pdb_helices = {a.helix_id for a in pdb_model.atoms}
         if not ({h.id for h in design.helices} - pdb_helices):
             return pdb_model
-        template = build_atomistic_model(design, exclude_helix_ids=pdb_helices,
+        template = build_atomistic_model(design, strand_loop_display=True, exclude_helix_ids=pdb_helices,
             nuc_frame_override=override, fast_bridges=True, measured_positioning=True)
         return merge_models(pdb_model, template)
-    return build_atomistic_model(design, nuc_frame_override=override,
+    return build_atomistic_model(design, strand_loop_display=True, nuc_frame_override=override,
         fast_bridges=True, measured_positioning=True)
 
 
@@ -445,7 +452,7 @@ def _build_design_surface_mesh(
     # DISPLAY surface: cheap interpolated phosphate bridges (fast_bridges — 6× faster
     # build; the VdW envelope is unaffected) + adaptive grid coarsening.
     model = build_atomistic_model(
-        design,
+        design, strand_loop_display=True,
         nuc_frame_override=_flexible_display_override(design),
         fast_bridges=True,
         include_proteins=True,
@@ -484,7 +491,7 @@ def _build_chimerax_surface(
         from backend.core.atomistic import build_atomistic_model, VDW_RADIUS
 
         model = build_atomistic_model(
-            design,
+            design, strand_loop_display=True,
             nuc_frame_override=_flexible_display_override(design),
             fast_bridges=True,
             include_proteins=True,
@@ -518,6 +525,8 @@ def _can_use_surface_cloud(design) -> bool:
     ):
         return False
     if getattr(design, "flexible_connections", None):
+        return False
+    if any(s.loops for s in design.strands):
         return False
     if getattr(design, "extensions", None):
         return False
@@ -558,7 +567,7 @@ def build_region_surface(design, body: SurfaceRegionRequest) -> dict:
         }
 
     model = build_atomistic_model(
-        design,
+        design, strand_loop_display=True,
         nuc_frame_override=_flexible_display_override(design),
         include_proteins=any(key.startswith("__protein__") for key in (body.nucleotide_keys or [])),
     )

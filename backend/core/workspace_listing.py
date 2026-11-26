@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from backend.core.workspace import is_internal_workspace_path
+from backend.core.workspace_location import SHARED_FOLDER, linked_shared_root
 
 
 def list_workspace_entries(workspace: Path) -> list[dict]:
@@ -12,6 +13,7 @@ def list_workspace_entries(workspace: Path) -> list[dict]:
     validation_folders = {}
     needed_validation_folders = set()
     pending = [(os.fspath(workspace), "")]
+    shared = linked_shared_root(workspace)
 
     def append_entry(name, relative, kind, stat):
         entries.append({
@@ -43,7 +45,9 @@ def list_workspace_entries(workspace: Path) -> list[dict]:
             try:
                 if child.is_dir():
                     # Match os.walk's no-follow policy, including visible links.
-                    if not child.is_symlink():
+                    if not child.is_symlink() or (
+                        not parent and child.name == SHARED_FOLDER and shared is not None
+                    ):
                         pending.append((child.path, relative))
                     if validation:
                         validation_folders[relative] = child

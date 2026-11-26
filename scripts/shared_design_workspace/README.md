@@ -6,7 +6,7 @@ NADOC includes the folder and all committed designs; no separate remote or
 submodule initialization is needed.
 
 Open **Library → This computer → Shared Designs**. The default reconstruction
-layout is `Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc`. Keep required part and
+layout is `Shared Designs/DESIGN.nadoc`. Keep required part and
 assembly dependencies in this folder, with workspace-relative references starting
 `Shared Designs/`. Keep complete native feature histories and source hashes.
 
@@ -21,13 +21,13 @@ Do not automatically merge conflicting molecular JSON or discard local edits.
 Before committing agent-authored parts, run the required independent audit:
 
 ```bash
-.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/All Origami/Dnnn/RUN/Dnnn.nadoc"
+.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/DESIGN.nadoc"
 ```
 
 For D003's human-reviewed corner motif, repeat the audit from the NADOC root:
 
 ```bash
-.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/All Origami/D003/recovered-20261104/D003.nadoc" --bond-review "workspace/Shared Designs/All Origami/D003/recovered-20261104/review/receipt.json"
+.venv/bin/python -m scripts.agent_structure_guard "workspace/Shared Designs/D003.nadoc" --bond-review "workspace/Shared Designs/.provenance/D003/receipt.json"
 ```
 
 Its exact historical title exception is documented in
@@ -57,3 +57,19 @@ Git checks out this folder beneath the NADOC checkout. If `NADOC_WORKSPACE` poin
 elsewhere, explicitly arrange for that workspace's `Shared Designs` to use this
 tracked folder (for example, a directory symlink where supported); changing the
 workspace setting does not move Git's checkout.
+
+### Archive-backed runtime workspace
+
+Keep `workspace/` a real directory so Git can track Shared Designs. An ignored
+`.nadoc-workspace` directory symlink at the NADOC checkout root can select an
+existing runtime workspace on another drive. `NADOC_WORKSPACE`, when set, takes
+precedence. An unavailable configured drive fails explicitly instead of creating
+an empty replacement workspace.
+
+Link that runtime workspace's `Shared Designs` to this checkout's
+`workspace/Shared Designs`. NADOC lists and opens this specific trusted link,
+while retaining workspace-relative document references. Arbitrary external links
+and links escaping the shared folder are not permitted. Existing local designs
+and jobs stay in the runtime workspace; only shared designs live in the checkout.
+Do not overwrite an existing folder when creating either link. Preserve old
+nested Git metadata outside the workspace before adopting this layout.

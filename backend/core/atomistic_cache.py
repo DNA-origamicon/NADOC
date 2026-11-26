@@ -74,6 +74,7 @@ def build_atomistic_model_cached(
     fingerprint: str | None = None,
     fast_bridges: bool = False,
     measured_positioning: bool = True,
+    strand_loop_display: bool = False,
 ):
     """``build_atomistic_model(design)`` with a bounded cache + single-flight build.
 
@@ -84,13 +85,14 @@ def build_atomistic_model_cached(
     from backend.core.native_full_placement import SOURCE, require_native_full_option
     require_native_full_option(measured_positioning)
 
+    from backend.core.strand_loop_atoms import VERSION as LOOP_ATOMS_VERSION
     base_key = fingerprint if fingerprint is not None else atomistic_fingerprint(design)
     # Bridge construction changes coordinates, so keep exact and interpolated
     # models in distinct cache entries. The placement authority version prevents
     # reusing a cache entry produced before the single-source contract.
     key = (
         f"{base_key}:fast_bridges={int(fast_bridges)}"
-        f":placement={SOURCE}"
+        f":placement={SOURCE}:loop_display={int(strand_loop_display)}:{LOOP_ATOMS_VERSION}"
     )
 
     # Fast path: already built.
@@ -121,6 +123,7 @@ def build_atomistic_model_cached(
                 design,
                 fast_bridges=fast_bridges,
                 measured_positioning=measured_positioning,
+                **({"strand_loop_display": True} if strand_loop_display else {}),
             )
             charge = int(retained_bytes(model) * 1.25)
 

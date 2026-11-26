@@ -60,5 +60,5 @@ export function countScaffoldNt(currentDesign, strandId = null) {
       }
     }
   }
-  return totalNt
+  return totalNt + (scaffold?.loops ?? []).reduce((sum, loop) => sum + loop.length, 0)
 }

@@ -18,7 +18,7 @@ AXIS_FIELDS = frozenset({"helix_id", "start", "end", "samples", "segments", "ovh
 SEGMENT_FIELDS = frozenset({"strand_id", "domain_index", "ovhg_id", "bp_lo", "bp_hi", "domain_ids", "start", "end"})
 TOPOLOGY_FIELDS = {
     "helices": {"id", "length_bp", "bp_start", "axis_start", "axis_end", "loop_skips", "direction", "grid_pos", "lattice_frame_id"},
-    "strands": {"id", "domains", "strand_type", "sequence", "color", "is_reference"},
+    "strands": {"id", "domains", "loops", "strand_type", "sequence", "color", "is_reference"},
     "overhangs": {"id", "helix_id", "strand_id", "sequence", "sub_domains"},
     "cluster_transforms": {"id", "name", "is_default", "helix_ids", "domain_ids", "color", "auto_created"},
     "crossovers": {"id", "half_a", "half_b", "extra_bases"},

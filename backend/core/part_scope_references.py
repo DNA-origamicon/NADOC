@@ -45,8 +45,9 @@ _schema("Dimension", "dimension", plain="name a b visible")
 _schema("LatticeFrame", "lattice_frame", refs={"placement_cluster_id": "cluster"}, plain="plane")
 _schema("Helix", "helix", refs={"lattice_frame_id": "lattice_frame"},
         plain="axis_start axis_end native_residues native_source phase_offset twist_per_bp_rad length_bp bp_start loop_skips label grid_pos direction")
-_schema("Strand", "strand", children="domains routing_seed",
+_schema("Strand", "strand", children="domains routing_seed loops",
         plain="strand_type sequence custom_scaffold_length color name notes is_reference")
+_schema("StrandLoop", refs={"helix_id": "helix"}, plain="bp_index direction length aspect_ratio rotation_deg")
 _schema("Domain", refs={"helix_id": "helix", "overhang_id": "overhang", "binds_overhang_id": "overhang"},
         plain="start_bp end_bp direction")
 _schema("SubDomain", "sub_domain", plain="name color start_bp_offset length_bp sequence_override rotation_theta_deg rotation_phi_deg notes tm_celsius gc_percent hairpin_warning dimer_warning")

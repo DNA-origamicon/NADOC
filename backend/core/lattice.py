@@ -2047,6 +2047,13 @@ def make_nick(
         sequence=None,
     )
 
+    if strand.loops:
+        from backend.core.strand_loops import loops_in_domains
+        if any(loop.helix_id == helix_id and loop.bp_index == bp_index and loop.direction == direction
+               for loop in strand.loops):
+            raise ValueError("Cannot nick inside a loop attachment; remove the loop or choose another base")
+        new_strand_left.loops = loops_in_domains(strand.loops, left_domains)
+        new_strand_right.loops = loops_in_domains(strand.loops, right_domains)
     if strand.sequence is not None:
         from backend.core.sequences import strand_sequence_length
         split_at = strand_sequence_length(existing_design, new_strand_left)
@@ -2123,7 +2130,7 @@ def _find_strand_by_5prime(
 def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: ignore[name-defined]
     """Join s2's domains onto the 3' end of s1. Returns updated Design."""
     new_domains = _merge_adjacent_domains(list(s1.domains) + list(s2.domains))
-    updates = {"domains": new_domains}
+    updates = {"domains": new_domains, "loops": [*s1.loops, *s2.loops]}
     native_ids = {h.id for h in design.helices if h.native_residues}
     if s1.sequence is not None or s2.sequence is not None or any(
         d.helix_id in native_ids for d in (*s1.domains, *s2.domains)
@@ -4497,6 +4504,7 @@ def migrate_split_staple_domains(design: Design) -> Design:
                 and prev.direction == nxt.direction
                 and prev.overhang_id not in protected
                 and nxt.overhang_id not in protected
+                and not any(tag and tag.startswith("ovhg_gap_") for tag in (prev.overhang_id, nxt.overhang_id))
             ):
                 fwd = prev.direction == Direction.FORWARD
                 contig = (
@@ -4606,6 +4614,8 @@ def autodetect_all_overhangs(design: Design) -> Design:
 
     # Pass 2: domains that extend beyond scaffold boundary on scaffold-covered helices
     design = reconcile_all_inline_overhangs(design)
+    from backend.core.scaffold_gap_overhangs import reconcile_scaffold_gaps
+    design = reconcile_scaffold_gaps(design)
 
     # Assign default labels OH1, OH2, … to any overhang that has no label yet.
     # Sort by id for deterministic ordering across runs.

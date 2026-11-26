@@ -10,6 +10,8 @@ def build(design, strand_id, body):
         strand_sequence_segments,
     )
 
+    from backend.core.lattice import autodetect_all_overhangs
+    design = autodetect_all_overhangs(design)
     strand = design.find_strand(strand_id)
     if strand is None:
         raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")

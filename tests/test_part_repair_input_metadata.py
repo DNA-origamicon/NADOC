@@ -165,10 +165,10 @@ def test_child_cannot_promote_snapshot_source_contract_by_carrying_its_parameter
 def test_explicit_inspection_has_bounded_capture(document, scope):
     source = state.get_or_404()
     if scope == "rows":
-        source.feature_log *= 2001
+        source.feature_log *= 4001
     elif scope == "child_rows":
         source.feature_log.append(RoutingClusterLogEntry(id="group", label="Group", children=[]))
-        source.feature_log[-1].children = [source.feature_log[0]] * 2000
+        source.feature_log[-1].children = [source.feature_log[0]] * 4000
     elif scope == "bytes":
         source.feature_log[0].params["_generator"] = "x" * 256_000
     elif scope == "nodes":

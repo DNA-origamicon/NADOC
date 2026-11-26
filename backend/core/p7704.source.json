@@ -1,0 +1,9 @@
+{
+  "name": "p7704",
+  "length": 7704,
+  "sequence_sha256": "e2112106392df014a6bf7963166e4cdd479424ae6f6ec1ae408cdf95527c4a13",
+  "source_url": "https://raw.githubusercontent.com/cadnano/cadnano2/76644f36595b649583f31937150f78d33ac8b7ba/data/dnasequences.py",
+  "upstream_commit": "76644f36595b649583f31937150f78d33ac8b7ba",
+  "upstream_file_sha256": "72a1f47d83cc288d780a989539338bc17ffb4ffa7fa7c5b1cf95dc46785f2c41",
+  "extraction": "AST literal dictionary entry p7704; upstream code not executed"
+}

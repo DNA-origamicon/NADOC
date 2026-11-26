@@ -37,7 +37,7 @@ import { selfClosingPolymerSeam } from './polymer_seams.js'
 import { LazyMap } from './lazy_map.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
-  impostorsEnabled,
+  backboneImpostorsEnabled,
   IMPOSTOR_QUAD,
   makeImpostorPhongMaterial,
   installSphereImpostorRaycast,
@@ -499,6 +499,7 @@ export function orderStrandNucleotides(nucs) {
     }
     const bpDiff = a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
     if (bpDiff !== 0) return bpDiff
+    if (a.loop_order != null || b.loop_order != null) return (a.loop_order ?? 0) - (b.loop_order ?? 0)
     const ca = copyIdx.get(a) ?? 0
     const cb = copyIdx.get(b) ?? 0
     return a.direction === 'FORWARD' ? ca - cb : cb - ca
@@ -1025,7 +1026,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // center still rides the instance matrix, so setMatrixAt-based moves (mrDNA
   // relax / deform / unfold / fade) and setColorAt are unchanged. 5' cubes stay real
   // geometry (oriented markers, not spheres). See project_sphere_impostors.md.
-  const _useImpostors = impostorsEnabled()
+  const _useImpostors = backboneImpostorsEnabled()
   const iSpheres = new THREE.InstancedMesh(
     _useImpostors ? IMPOSTOR_QUAD : GEO_SPHERE,
     _useImpostors ? makeImpostorPhongMaterial({ radius: BEAD_RADIUS })

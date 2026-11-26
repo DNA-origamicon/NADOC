@@ -34,7 +34,7 @@ def recipe_inputs(design):
             'root': design.recipe_root.model_dump(mode='json') if design.recipe_root else None,
             'input_sources': {key: value.model_dump(mode='json') for key, value in design.input_sources.items()},
             'commands': [{'id': identity, 'kind': kind, 'params': deepcopy(params)}
-                         for identity, kind, params in command_rows(design, 2000)]}
+                         for identity, kind, params in command_rows(design, 4000)]}
 
 
 def record(before, after, kind, params):

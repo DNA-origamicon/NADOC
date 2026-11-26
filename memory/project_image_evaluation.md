@@ -1,5 +1,108 @@
 # Image evaluation — 2026-10-27
 
+## Exact controlled Pointer image routing — 2026-11-25
+
+`diagram_route_extraction.py` now recovers an undirected graph from visible
+ruler/row labels and vector primitives, joins fragmented strokes, reads deletion
+crosses and the numbered square-lattice inset, then resolves each staple's
+orientation independently using sequence agreement. No reference input is
+accepted by the extractor. Detect designs calls this graph detector independently
+of the old whole-path detector, which missed fragmented strokes.
+
+Controlled reference-image extraction matches all 15,240 source sites and every
+predecessor/successor pointer, all 161 staples, the deletion, and 82 normalized
+lattice positions. The oracle is separate from extraction. Tests vary scale,
+row spacing, stroke order/orientation and fragmentation. Incorrect sequences,
+missing rulers and missing deletion marks do not produce a directed solution.
+This is **not** a successful extraction of the original published Pointer image.
+The available Gerling S7 is a modified variant with 159 continuous gray paths;
+its outlined labels are not supported. Raster/OCR and full molecular construction
+remain future work. Unknown partner bases (740) are explicitly retained as unknown.
+
+See `docs/pointer_image_extraction.md` for the contract and reproduction command.
+The benchmark writes only diagram/review evidence, not authored molecular files.
+`tools/design_archive/pointer_image_benchmark.py` isolates the extractor worker
+from the reference-bearing renderer/validator. Eight extraction/integration tests,
+seven existing detection tests, fourteen frontend tests and three browser flows
+passed, including blind Pointer extraction through the actual API. Temporary
+preview images and browser artifacts were cleaned. Main.js task LOC delta: zero.
+
+## Agent-less figure/list hypotheses — 2026-11-25
+
+**Detect designs** now analyzes uploaded PDFs alongside XLS/XLSX/CSV/JSON/text
+staple lists; workbook sheets stay separate and raw sequence case is retained.
+PDF page sequence tables are also extracted. Vector candidates and captioned
+raster pages appear as independently selectable design candidates. Nearby
+caption/list labels nominate pairings; sequence support outranks context-only
+associations, and unrelated lists remain unassigned. Users select design(s) and
+inspect likely lists and competing direction/register/calibration hypotheses.
+
+`article_design_detection.py` retains source hashes, PDF path IDs, drawing
+coordinates and calibration assumptions. It rejects fragmented/cropped paths
+for complete-route inference. Whole-scaffold-length and 7/8-base-interval scales
+are tested against the chosen scaffold (default M13mp18, explicitly a hypothesis).
+`article_sequence_inference.py` tests both scaffold and staple senses, nominates
+registers using up to 12 paths, then checks all paths/list rows. Uppercase cores
+and raw oligos are explicit alternative interpretations. Ties remain unresolved;
+unknown scaffold partners are not invented. Evidence scores measure agreement,
+not calibrated molecular reconstruction probability. These are transient drawing
+and sequence hypotheses, not authored NADOC structures; Reconstruct stays disabled.
+
+Pointer reference validation recovers all 161 2017 published staple cores at
+M13mp18 offset 0, including 7,249 verified paired bases and 740 unknown-partner
+bases. Reversing the observed staple order recovers the opposite direction.
+The original XLS was read directly: 161 oligos on `pointer staples`, with two
+other sequence-containing sheets kept separate. Added `xlrd` for legacy XLS.
+No published Pointer diagram PDF was available locally: this is a reference-route
+sequence oracle, not evidence of reconstruction from the original Pointer image.
+Independent synthetic vector PDF tests recover 12/12 staples and retain six
+symmetric alternatives. Multi-design PDFs test separate caption/list pairings.
+
+Earlier heuristic method limits: vector-only route inference, continuous paths, uniform scale,
+known scaffold sequence, no recovered lattice positions or insertion/deletion
+annotations. Raster candidates are detected but not traced. Fragmented/wrapped
+sequence rows and multi-page list merging need additional extraction. Partial
+path evidence remains visible when complete calibration cannot be recovered.
+
+Validation: seven new backend tests, thirteen frontend tests and four serial
+browser flows passed; the two detection flows use the real analysis API. Browser
+artifacts and test-server credentials were cleaned. Task main.js LOC delta: zero.
+
+## Reconstruct from Article screening — 2026-11-25
+
+The Help → Experimental entry now opens **Reconstruct from Article** with DOI,
+paper PDF and up to two supplement PDF inputs and an explicit Check action.
+`article_reconstruction.js` consumes incremental NDJSON checks from
+`POST /api/article-reconstruction/check`. Input edits/cancel/close invalidate
+pending results. The original diagram/calibration/sequence evidence viewer
+remains accessible through **Inspect diagram evidence**.
+
+Current scope is basic, agent-less screening. DOI lookup checks Crossref and
+Europe PMC metadata plus available open-access full text/captions, with upload fallback. A supplemental caDNAno diagram/schematic label
+or description suffices to proceed to image analysis; neither caDNAno files nor
+verified staple sequences are prerequisites. Staple-list mentions are reported
+separately. Missing accessible evidence is not proof the paper lacks it.
+
+Image detail analysis is deferred to **Detect designs**; complete reconstruction
+feasibility/confidence remains a later stage, not a failed basic check. No reconstruction confidence is fabricated (the
+screening result reports null). Reconstruct is disabled for this session's
+scope. Future reconstruction is intended to derive all required information
+from article evidence without agents or caDNAno files. The agent-orchestrated
+construction policy must not be presented as a product screening blocker.
+Separate publisher supplement downloads, raster analysis and spreadsheet
+extraction remain future work. Users can supply supplement PDFs now.
+
+PDF uploads have no application byte-size limit, individually or combined, in
+both article screening and the diagram evidence viewer. The 100-page limit
+and two-supplement count limit remain. Remote article text likewise has no
+byte-size cap. Large files are still buffered in memory during processing.
+
+Validation: ten backend screening/API tests and ten frontend dialog/evidence
+tests passed. External Europe PMC request timed out in this environment;
+service contracts/fallbacks are covered with controlled responses. Two browser
+flows passed, including DOI readiness with controlled screening responses;
+cleanup verified. Task-specific main.js LOC delta: zero.
+
 ## Gerling flanking-frame and sequence audit — 2026-11-06
 
 Audited all 453 TT joins (276 standard, 177 forced) in the existing failed-job
@@ -723,3 +826,268 @@ click selects matchingstaple inbothmaps. App_verification.json recordsdetails.
 InitialreviewHTMLnewlineescapingandSVGzero-heightlocatorissuesfixedandrerun;
 no productionbehaviorchanges. Disposablebrowserprofile/cache/testworkspace and
 capturesremoved afterallprocessesfinished;cleanup.json recordscounts/bytes.
+
+## Original-publication extension (2026-11-25)
+
+`publication_diagram_labels.py` decodes corrupted PDF numeral maps by rendered
+shape matching. `publication_routing.py` handles quarter-turn figures, legacy
+base-cell paths, endpoint-table pairing/register shifts, antiparallel scaffold
+orientation, honeycomb insets and constrained insertion lengths. Wired into
+`article_design_detection.py` and the design selection UI; returns evidence only.
+
+Five real designs audited using `tools/design_archive/publication_routing_benchmark.py`.
+Right-twisted 10×6 bundle: all 15,119 occupied pointer entries, 60 lattice cells,
+and 361 insertion sites/lengths match the separate native oracle. Straight 3×6:
+all 15,362 routing entries match, but the inset omits auxiliary helix locations.
+Monolith/square nut/railed bridge have exact recovered routing but missing native
+staple sites. Do not describe those as complete recovery. Details and reproducible
+commands: `docs/publication_routing_extraction.md`. Native authoring, general
+deletion handling and full sequence reconciliation remain unfinished; Reconstruct
+is disabled. No molecular artifacts were created.
+
+D005 sequence reconciliation implemented in `publication_sequence_search.py`:
+exhaustive 2×8064 register/direction candidates, insertion-expanded partners,
+all 217 staples exact (7,919 paired bases), unique offset 0 in recovered direction;
+runner-up 5,551 mismatches. Wired into publication analysis and evidence UI.
+Explicit user sequence overrides the scaffold named in the publication. Missing
+library sequences, unresolved insertion lengths, ties and unknown partners remain
+explicit. Search never moves a physical nick or edits topology. User generally
+authorizes bounded scaffold-shift/nick-position searches; see
+`feedback_bounded_sequence_search.md`. Native construction remains unfinished.
+
+Cross-design alignment extension: D006 now uses a pinned upstream p7704 sequence
+(`backend/core/p7704.txt`, provenance JSON alongside). D006 matches 209 staples /
+7,658 paired bases; D007 144 / 5,880; D008 148 / 4,977. All unique zero-mismatch,
+offset 0. D007/D008 use explicit length-matched library hypotheses since their
+tables do not name a scaffold. D009 refuses alignment while two insertion lengths
+remain unresolved. `publication_sequence_benchmark.py` audits all five from PDFs
+alone. Added rejection/coverage checks and tests for duplicate evidence, mutations,
+ambiguous library matches, batch boundaries and virtual-nick changes. Sequence
+alignment is not whole-design reconstruction; native construction stays pending.
+
+D009 update: user-authorized +/-1 length candidates and deliberate scaffold-loop
+search implemented in `publication_loop_search.py`. From PDF/table evidence alone,
+39/39 inserted bases plus a one-base gap at the observed nick boundary give zero
+mismatches at 6,686 comparable bases. Equal-length 40/39 has 408 mismatches.
+Confidence is a transparent heuristic: 80.96/100 after a 10-point discrepancy
+penalty plus missing-row/unknown-partner penalties. Gap location/cause remain
+unverified; no topology is edited. Sequence-supported loops are returned in
+reconstruction evidence alongside the original unresolved annotations. D009 full
+validation remains false (10 table rows unmatched, 276 unknown partner bases).
+This supersedes the previous blanket D009 alignment blocker. Native construction
+and geometry remain unfinished.
+
+Native publication follow-up (2026-11-25): D005 is now built from the PDF through
+2,681 ordinary recorded actions, published by the guard and independently replayed
+from the saved file. A separate post-publication native reference comparison is
+exact for all scaffold/staple pointers, relative lattice cells and insertion
+counts. The original supplement and pinned extraction implementations travel in
+Shared Designs/.provenance/D005. D006–D009 remain unsupported for complete native
+publication; the compiler rejects missing lattice, unresolved routing/sequence
+and unexplained unpaired scaffold runs. Do not imply README analysis rows appear
+in the welcome library. Native loop-count/history editing now admits 1–512 bases;
+process/document/history traversal remains bounded at 4,000 rows. The interactive
+Reconstruct button remains disabled; publication currently uses the CLI workflow.
+
+D006 loop follow-up (2026-11-25): user identifies sideways diagram and path-only
+bundle 19, authorizing inference of deliberate unpaired scaffold loops from
+negative staple complement evidence. Partial lattice recovery retains all 18
+inset cells and explicitly lists missing track 19. `publication_unpaired_scaffold`
+reports 26/3/3/14 unpaired runs and two anchored excursions containing 49 paired
+bases each. Short repeats in fully assigned staples are reported separately from
+unassigned-staple matches; minimum contiguous match is explicit (default 7, whole
+run when shorter). All four quarter-turn orientations are tested. Evidence is
+wired into publication analysis; no 3D position inferred, no D006 native output.
+Native publication reports AGENT_PROCESS_REQUIRED for missing auxiliary placement
+or native loop representation, rather than treating negative sequence evidence
+as a recovered physical pose. The user has been asked how to represent the
+path-only auxiliary track; do not invent a slice cell to unblock publication.
+
+Auxiliary placement clarification (2026-11-25): user authorizes inferring a vacant
+cell from odd/even polarity and nearest scaffold attachments; no published pose
+is required merely to run that search. `publication_auxiliary_placement.py`
+checks label parity against directed routing, enumerates an analytically bounded
+HC search, excludes occupied cells and preserves numerical ties. D006 has two
+exactly equivalent closest reverse-direction cells (2.25 nm to bundle 0 and
+sqrt(15.1875) nm to bundle 1). Neither is promoted. Public publication evidence
+returns both candidates; compiler reports ambiguous lattice placement. This
+supersedes the previous question about requiring a published pose. No new native
+structure or physical pose has been authored. Local reproducible evidence and
+lattice schematic: `.development-artifacts/d006-auxiliary-placement/`.
+
+D006 two-loop/ligation correction (2026-11-25): user confirms separate excursions
+from helices 0 and 1 and requests minimizing forced-ligation lengths. The two
+source-track-19 segments have independent 49-base staples, no cross-segment
+staple, and 29/17 unpaired bases. `publication_ligation_placement.py` uses the
+canonical native Full O5 projection and fixed source register; minimizes SUM of
+3D join spans per independent segment with an exhaustive analytic search bound.
+Both minima unique; combined span61.119926nm vs best shared-cell61.197591nm.
+The second optimum was outside the old center-distance two-cell shortlist.
+Segment identity/source ranges preserved; connected staples and endpoint indels
+block unsafe inference. Old center-distance tie retained as diagnostic only.
+Long25–28nm spans remain: no axial fit, phase change, flexible-loop geometry or
+native D006 publication. Do not label this a geometry pass. Evidence/schematic in
+`.development-artifacts/d006-ligation-placement/`. Native authoring guard now
+names independent segment/loop representation and geometry review as the blocker.
+
+D006 native follow-up (2026-11-25): user approved generalization/publication.
+`publication_native_tracks.py` maps independent auxiliary source-row intervals
+bijectively to ordinary recorded helix/domain commands; rejects collisions,
+overlaps, missing sites and unresolved placements. D006 published through guard:
+2116 replayed commands,20 tracks,210 strands,15362nt. All209 staples and p7704
+scaffold exact; independent post-construction reference comparison zero missing,
+extra or wrong pointers. Source row19 splits into visible native18(loop from0)
+and19(loop from1);46 unpaired bases retained as scaffold domains, no extensions.
+Full topology recovery is confirmed, not simulation-ready geometry: all15152
+bonds measured;22 long joins (18 source end-to-end staple wraps ~140nm,4 loop
+joins). Do not silently infer periodic seams or assembled instances from these.
+Portable source/code/audits in Shared Designs/.provenance/D006. Remaining D007–009
+have no native documents. D007's1680 reference-only positions are70 WHOLE end
+staples (20x12,20x24,30x32),28basesperhelix/840perend. All144 published paths
+exactly match other reference strands. Figure shows bare scaffold at those ends:
+source-variant difference, not missing interior tracing; reason still unverified.
+
+D006 precursor/polymerization correction (2026-11-25): user explicitly confirms
+the 18 end-to-end staple joins as polymerization. Fresh PDF reconstruction uses
+1434 native commands: 18 body staple pens + two auxiliary-track pens, terminal
+nicks, native crossover placement; all segments of 18 polymerization staples
+are reserved and drawn separately. Periodic seams use existing is_periodic_seam
+semantics; no assemblies/extensions or simulation policy changes. Four nonlocal
+scaffold-loop joins remain. Exact source topology/sequences and saved independent
+replay pass. Generic opt-in compiler/CLI flags continuous_staples and
+periodic_staple_seams; the latter requires explicit caller confirmation and only
+classifies jumps between same-helix scaffold extrema, never interior jumps.
+Native source snapshots updated with this rebuild; previous file/provenance
+retained in .development-artifacts/d006-precursor-polymerization.
+Welcome-screen reopen and ordinary browser autosave also pass independent replay
+(1434 commands), retain all18 periodic seams, and preserve exact sequences/routes.
+Isolated browser workspace/config/spec removed; published-file hash unchanged.
+
+General precursor defaults and D007 completion (2026-11-25): user requests the
+D006 method in the general algorithm and confirms D007 terminal labels are bare
+scaffold ends. compile_publication/CLI now default to continuous staple pens and
+the user-authorized same-helix scaffold-extrema polymerization rule. Other
+nonlocal staples remain separately authored without periodic reclassification;
+interior jumps are not inferred to be seams. Original D005/D006 saved histories
+and their pinned code remain unchanged. D007 publishes 1298 commands, 60 helices,
+144 staples/5880 staple bases,7560 scaffold bases;1680 terminal scaffold bases
+stay unpaired (28 per helix). No extra70 reference-only staples authored. Exact
+published routes/sequences and independent saved replay pass; all13295 bonds
+measured,zero forced/long/missing bonds. No relaxation prediction of bare ends.
+Terminal admission requires supported sequence/routing, positioned source tracks,
+and sites outside that helix's published staple band; interior gaps stay guarded.
+Portable PDF/code/reference/replay audits in Shared Designs/.provenance/D007.
+D007 welcome-screen open/save verified in an isolated byte-identical workspace:
+60 helices,145 strands,13440nt,zero browser/API errors; autosaved copy independently
+replays1298 commands. Cleanup verified; published original unchanged. Focused
+authoring18,precursor4,unpaired12 tests pass.
+
+D008/D009 follow-up (2026-11-25): default updated algorithm plus two general
+recovery modules. publication_missing_staples admits an existing unlisted drawn
+route only with complete exact scaffold alignment, full partner coverage,
+unanimous antiparallel polarity and no occupied staple overlap; sequence is
+explicitly derived, excluded from independent table validation. D008 publishes
+1186 commands,60 helices,149 staples (148 table +1 drawn38nt at27[60]→17[55]),
+7560scaf+5015stap=12575nt;2545 bare terminal scaffold bases retained. All source
+pointers match separately consulted reference; no120 extra reference terminal
+staples added. All12425 bonds measured,zero forced/long/missing. PDF/code/replay
+and reference audits in Shared Designs/.provenance/D008.
+publication_lattice_insets independently fits repeated inset copies and requires
+full translated-cell consensus. D009's5 copies/46 helices now resolve. Still
+10 absent drawn table routes,276 unknown scaffold partners (233terminal,
+43internal),two39base loops and1base p7704 discrepancy. Score80.96 unchanged;
+no D009 native model or silent extension substitution. Development evidence in
+.development-artifacts/d008-d009-recovery. No source reference used to author.
+D008 welcome-screen open/save verified:60 helices,150 strands,12575nt;zero
+browser/API errors. Browser autosave independently replays1186commands; temporary
+workspace/config/spec removed and original saved hash unchanged. Focused tests:
+recovery9,authoring18,publication routing7 pass.
+
+User-authorized on-helix staple overhang rule (2026-11-25): classify routed
+staple sites lacking scaffold partners as on-helix overhangs, including internal
+segments. publication_staple_overhangs selects exact table offsets (with indels),
+compares independently decoded image letters, explicitly falls back if absent or
+unreadable; readable conflicts never silently fall back. publication_base_labels
+uses color-isolated glyph templates despite broken Unicode; optional installed
+monospaced templates improve coverage, uncertainty remains unreadable. D009 has
+276bases:266 image/table matches,8 absent-image table fallbacks,2 imageA/tableT
+conflicts at8[117] and9[118].272bases accepted; two2base segments unresolved.
+Confidence84.87 policy on-helix-overhang-v1; original6686paired comparisons and
+129exact fully paired staples retained (no self-validation from table fallback).
+Ten unmatched routes and1base scaffold discrepancy still block native D009;
+recorded native on-helix authoring including internal segments remains required.
+No extensions or molecular files written. Analysis UI shows separate counts.
+Evidence .development-artifacts/d009-overhangs; real dialog browser test passed,
+isolated workspace/config/spec cleaned.
+Focused verification:34 backend tests (9overhang,18authoring,7routing),9UI tests,
+and actual-dialog browser rendering with computed D009 evidence pass. Image/table
+conflict addresses are displayed explicitly; no native files were modified.
+
+User base-conflict policy (2026-11-25): simply note image/table disagreements;
+do not block sequence assignment for them. Prefer strongest evidence; equal
+evidence defaults T > A > C > G, regardless of source. Reusable resolver in
+publication_base_conflicts retains original observations, selected_base, reason,
+support and notice severity; duplicates from one source do not add votes.
+Readable image/table each have equal default weight; OCR confidence is admission
+quality, not biological support. Overhang sequences use the selected bases;
+original table_sequence remains separate. D009 selectsT at8[117] and9[118],
+accepts276overhangbases,score84.92; retains2notices plus10missing routes and
+1base discrepancy. No native files modified. Evidence d009-base-conflicts.
+
+D009 end-to-end audit (2026-11-25): fresh compiler still blocks at missing routes
+(187/197; ten table-only paths total327nt). No native output. Fixed analysis→native
+39/39 loop handoff using shared apply_supported_insertions; originals immutable.
+Remaining native gaps: approved1base discrepancy still rejected by exact-length
+gates; on-helix overhang authoring/comparison still blocked; native min/max
+scaffold coverage masks138 of276 unpaired bases inside same-helix scaffold gaps
+(other138 outside bounds), including43 internal staple bases. UI Reconstruct
+is explicitly disabled and only check/analyze endpoints exist. Native generation
+requires route completion, explicit candidate sequence bookkeeping, interval-aware
+overhang recording/replay and endpoint/UI wiring, then saved replay/bond audit.
+Details and ten endpoint pairs: docs/d009_reconstruction_readiness.md. This is an
+implementation/readiness report, not a finding that new source data is certainly
+necessary. No reference design was used for this audit.
+
+## Partial native reconstruction — 2026-11-25
+
+D009 is published as a partial source-only native design: 1591 operations, 46
+helices, 194 staples, 7703 scaffold bases, two 39-base insertions, 285 native
+overhang bases. Seven of ten table-only routes are unique under bounded native
+crossover/sequence search; two are ambiguous, one has no match. No archived
+reference was used. Source comparison, guard publication and saved replay pass.
+Native review measures 14678 bonds, six >1.2 nm (two nonlocal joins/four loop
+boundaries); unrelaxed geometry. See docs/d009_partial_reconstruction.md.
+
+Arbitrary scaffold gaps are split/tagged as native overhang domains. Initial
+staple fine routing spans interior gaps, then records nicks/deletions to remove
+unsupported intervals. Partial output omits unresolved routes, preserving full
+process for all included strands. The CLI defaults to --allow-partial. A new
+reconstruct endpoint and selected-figure/table dialog download ZIP packages with
+reports, source PDFs and recipes; failures retain reports without fake models.
+Custom scaffold native generation remains unsupported and is explicitly rejected.
+
+Gap overhang reconciliation also transfers OverhangSpec identity with joined
+strand ownership; otherwise the first sequence normalization can discard prior
+labels/subdomain identities and later document-source replay diverges. The
+ownership regression test covers this; final native rebuild uses the fix.
+
+Final validation: 67 focused backend checks, 13 UI tests, two real-app flows;
+browser autosave independent replay and downloaded native package both verified.
+Temporary test workspaces/configs cleaned. D009 partial visible on welcome.
+Main.js task LOC delta: 0. Broad regression suites were not run.
+
+## Source figure colors and helix order — 2026-11-25
+
+publication_appearance.py preserves PDF stroke colors; table-only routes use a
+unanimous observed palette mapping or explicit nominal-table fallback. The
+compiler applies color with final sequence metadata and uses recorded
+helix-reorder after routing to preserve figure row order without renumbering.
+D009 is rebuilt with 1592 operations and appearance verification. Its figure
+order is 45–34, 16–21, 0–15, 33–22 (first/last descending). The source visibly
+labels both 30[119] and 42[119] as 39-base insertions; saved deltas are +39, not
+skips. See docs/publication_appearance.md.
+
+Appearance validation: 23 focused backend tests and the live welcome/caDNAno
+editor flow passed, including all colors, row order/labels and insertion deltas.
+Browser autosave replay/source comparison passed; temporary artifacts cleaned.
+Main.js task LOC delta: 0.

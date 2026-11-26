@@ -189,6 +189,57 @@
   crossover identities/stations are preserved. Both nicked and routed 6HB app
   flows pass preview, Apply, undo/redo and history edit; screenshots inspected.
 
+## ISSUE-264 — Large-scene backbone rendering and native metadata assignment (2026-11-24)
+
+[x] Desktop enables fast CG backbone spheres independently of atomistic flags;
+photo mode substitutes ordinary spheres and restores original interactive meshes.
+A bundled C++ integer domain-assignment kernel retains the existing NumPy fallback
+and all molecular placement authorities. Matched-camera ttest medians: Full wide
+30.2→59.9 fps, close 29.9→59.9; 68.4% fewer triangles. One candidate trial remained
+near 31 fps and is retained. Warm compact preparation 27.35→21.10ms with identical
+packet bytes. Opening stayed ~0.55s; no opening or selection speedup claimed.
+Part click selection, assembly editing/save/reopen, photo/cancel and installed
+normal lifecycle passed. 35 backend, 141 frontend, four host tests. Source files
+unchanged, simulations not run. Details: `docs/desktop_large_scene.md`.
+`main.js` task delta: 0 lines.
+
+## ISSUE-263 — Applications-menu launch aborted by Ubuntu sandbox policy (2026-11-24)
+
+[x] Initial installed tests inherited VS Code's AppArmor profile. GNOME's
+unconfined launch denied Chromium user-namespace capabilities, then aborted at
+the unconfigured SUID helper before NADOC logs existed. Installer now prepares
+an exact-executable userns profile and authenticated setup script. Applied the
+workstation profile through pkexec; kept the Chromium sandbox and global
+namespace restriction enabled. Verified `gtk-launch nadoc` from the unconfined
+user service manager, new backend ready and visible welcome window captured.
+Five focused desktop tests and task lint pass. `main.js` delta: 0.
+
+## ISSUE-262 — Desktop installation and delayed/end-on first display (2026-11-24)
+
+[x] Added an Electron host with bundled Python, production static entry point,
+workspace selection, capability-protected loopback server and owned shutdown.
+Assembly opening delegates its workspace path directly to the existing import
+command; the fixed 1.5s success delay is removed. Elongated end-on initial views
+choose a diagonal fit, while manual Fit retains orientation. Cooperative Cancel
+waits for active work and discards the document. HC24/30-mer native histories
+were published and independently replayed. Installed opening median: 1.791s →
+0.624s in three samples per frontend version on the same installed executable.
+Focused tests and real installed editing/cancellation/shutdown passed. See
+`docs/desktop_install.md` for evidence and scope. `main.js` task delta: +3 lines
+(import, observer wiring, cancellation dependency wiring); behavior lives in modules.
+
+## ISSUE-261 — Shared Git library with an external runtime workspace (2026-11-23)
+
+[x] Git cannot track Shared Designs beneath a symlinked checkout workspace.
+Runtime storage now supports the ignored `.nadoc-workspace` directory link,
+with `NADOC_WORKSPACE` precedence. The checkout keeps a real tracked workspace;
+the external runtime links only Shared Designs back to it. Library listing,
+path containment, identity scanning and assembly reference remapping recognize
+that exact trusted link while rejecting arbitrary external links and escapes.
+Existing Archive documents and jobs stay in place. Thirty-nine focused tests
+pass; the live Library browser shows the Pointer through the new layout.
+`main.js` task delta: 0 lines.
+
 ## ISSUE-259 — NAMD runner scheduling fixture intermittently sees a busy lease (2026-11-22)
 
 [ ] Occupancy archive FAST validation failed in

@@ -56,8 +56,8 @@ def record_loop_skip(kind, params):
             helix = source.find_helix(hid)
             if helix is None:
                 raise HTTPException(404, detail=f"Helix '{hid}' not found")
-            if delta not in (-1, 0, 1):
-                raise HTTPException(400, detail=f"delta must be -1, 0, or +1, got {delta}")
+            if type(delta) is not int or not -1 <= delta <= 512:
+                raise HTTPException(400, detail=f"delta must be -1, 0, or an insertion count from 1 to 512, got {delta}")
             # Removal must continue to clear stale out-of-range marks.
             if delta != 0 and not helix.bp_start <= bp < helix.bp_start + helix.length_bp:
                 raise HTTPException(400, detail=(f"bp_index {bp} out of range "

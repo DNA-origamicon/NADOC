@@ -183,3 +183,4 @@ Finishing a feature → update its topic file *head*, not this index. Repeated m
 Head past ~200 lines → move history to matching `*_archive.md`. Run `just lint-memory` after structure changes; see [hygiene rubric](../docs/agent_memory_hygiene.md) for periodic audits.
 
 **Public guest sharing:** [public_sharing](project_public_sharing.md) — host setup, public DNS/HTTPS/password verification, and new-computer checklist.
+- [Linux desktop installation](project_desktop_install.md) — Electron/Python host, HC24 benchmark, opening/cancellation and installed-app verification.

@@ -437,3 +437,13 @@ describe('buildClusterColorLookup — manual beats auto', () => {
     }
   })
 })
+
+it('keeps unpaired reverse loop bases after the anchor in sequence order', () => {
+  const site = { strand_id: 'loop', domain_index: 0, helix_id: 'h', bp_index: 4, direction: 'REVERSE' }
+  const anchor = { ...site, loop_order: 0 }
+  const first = { ...site, loop_order: 1 }
+  const second = { ...site, loop_order: 2 }
+  const next = { ...site, bp_index: 3 }
+  const letters = buildNucLetterMap({ strands: [{ id: 'loop', sequence: 'ACGT' }] }, [anchor, next, first, second])
+  expect([anchor, first, second, next].map(n => letters.get(n))).toEqual(['A', 'C', 'G', 'T'])
+})

@@ -187,7 +187,8 @@ def _nuc_key(a: Atom) -> str:
     if not a.helix_id:
         return ""
     d = a.direction.value if hasattr(a.direction, "value") else a.direction
-    return f"{a.helix_id}:{a.bp_index}:{d}"
+    key = f"{a.helix_id}:{a.bp_index}:{d}"
+    return f"{key}:{a.copy_k}" if getattr(a, "copy_k", None) else key
 
 
 def _assign_vertex_owners(

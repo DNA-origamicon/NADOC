@@ -58,10 +58,11 @@ def _load_design(source) -> Design:
         # Match the assembly API's source semantics: ordinary .nass files store
         # workspace-relative part paths (for example ``BigO.nadoc``).  The old
         # flatten path omitted workspace and silently produced an empty Design.
+        from backend.core.shared_design_paths import resolve_shared_source
         raw = Path(source.path)
         candidates = [
             raw,
-            _WORKSPACE_DIR / raw,
+            resolve_shared_source(_WORKSPACE_DIR, raw),
             _PROJECT_ROOT / raw,
             _LIBRARY_DIR / raw,
         ]
@@ -163,6 +164,7 @@ def _prefix_strand(strand: Strand, strand_prefix: str, helix_prefix: str) -> Str
         update={
             "id": f"{strand_prefix}{strand.id}",
             "domains": [_prefix_domain(d, helix_prefix) for d in strand.domains],
+            "loops": [loop.model_copy(update={"helix_id": f"{helix_prefix}{loop.helix_id}"}) for loop in strand.loops],
         }
     )
 
@@ -376,6 +378,7 @@ def _prefix_assembly_strand(strand: Strand, real_instance_ids: set[str]) -> Stra
             "domains": [
                 _remap_assembly_domain(d, real_instance_ids) for d in strand.domains
             ],
+            "loops": [_remap_assembly_domain(loop, real_instance_ids) for loop in strand.loops],
         }
     )
 

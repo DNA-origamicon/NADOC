@@ -367,7 +367,7 @@ def atomistic_batch(body: GeometryBatchBody) -> dict:
     groups = batch_target_groups(design, body.positions, optimized=optimization_enabled())
     for position, aliases in groups.items():
         d = _seek_feature_log(design, position)
-        model = build_atomistic_model(d)
+        model = build_atomistic_model(d, strand_loop_display=True)
         entry = atomistic_positions_flat(model)
         if body.include_topology:
             entry = {**atomistic_to_json(model), "positions": entry}
@@ -410,7 +410,7 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
     groups = batch_target_groups(design, body.positions, optimized=optimization_enabled())
     for position, aliases in groups.items():
         d = _seek_feature_log(design, position)
-        model = build_atomistic_model(d)
+        model = build_atomistic_model(d, strand_loop_display=True)
         if not model.atoms:
             for alias in aliases:
                 result[str(alias)] = {"vertices": [], "faces": [], "vertex_nuc_ids": []}

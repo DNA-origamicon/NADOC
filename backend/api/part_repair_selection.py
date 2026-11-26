@@ -284,7 +284,7 @@ def prepare_selection(source, request, *, source_revision, executor, dependency_
             raise CommandContractError("Selection requires the complete recipe", code="historical_cursor")
         if set(type(source).model_fields) - FIELD_ROLES.keys():
             raise CommandContractError("Design fields lack proof ownership", code="unclassified_fields")
-        rows = list(command_rows(source, 2000))
+        rows = list(command_rows(source, 4000))
         target, log = resolve_prefix(source, request.feature_id, request.child_id)
         kind, params = command_input(target)
         slot = reference_slot(kind, params, request.parameter_path)
@@ -293,7 +293,7 @@ def prepare_selection(source, request, *, source_revision, executor, dependency_
             raise CommandContractError("Target has no supported native command schema", code="missing_proof_contract")
         if _old_value(params, request.parameter_path) != request.expected_old:
             raise SelectionInputError("Selected reference changed after this request was prepared", code="selection_conflict")
-        prefix_rows = list(command_rows(source.copy_with(feature_log=log), 2000))
+        prefix_rows = list(command_rows(source.copy_with(feature_log=log), 4000))
         if any(row_kind == "empty-routing-cluster" for _, row_kind, _ in prefix_rows):
             raise CommandContractError("Prefix contains an empty routing group", code="empty_routing_cluster")
 

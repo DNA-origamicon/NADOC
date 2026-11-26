@@ -40,6 +40,16 @@ export function impostorsEnabled(fallback = false) {
   return fallback
 }
 
+/** Desktop enables backbone acceleration separately from atomistic rendering. */
+export function backboneImpostorsEnabled() {
+  try {
+    const value = new URLSearchParams(location.search).get('fast-backbone')
+    if (value === '0') return false
+    if (value === '1') return true
+  } catch { /* Non-browser tests. */ }
+  return impostorsEnabled()
+}
+
 // Shared unit quad spanning [-1,1] in XY (2 triangles). position.xy is the
 // corner offset used both to billboard (vertex) and as the disc coordinate
 // (fragment). Tagged `userData.shared` so helix_renderer's dispose-traversal

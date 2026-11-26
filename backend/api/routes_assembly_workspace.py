@@ -112,6 +112,10 @@ def _audit_candidate_files(workspace_dir: Path) -> list[Path]:
             if not d.startswith((".", "__")) and not (at_top and d.endswith("_jobs"))
         )
         found.extend(Path(root) / f for f in sorted(files) if f.endswith(".nadoc"))
+    from backend.core.workspace_location import SHARED_FOLDER, linked_shared_root
+
+    if linked_shared_root(workspace_dir) is not None:
+        found.extend(_audit_candidate_files(workspace_dir / SHARED_FOLDER))
     return sorted(found)
 
 

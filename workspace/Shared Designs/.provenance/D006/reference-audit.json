@@ -1,0 +1,37 @@
+{
+  "native_sha256": "258caa3115b1a202b9e373e8fe8ceaedfbb63d9705271632d1ad62c6e6fc84ca",
+  "reference_sha256": "829b0cd2d6f2820733b80c09c96e49e9b2debdc32caae8d5dc736a46fa7a0c14",
+  "comparison": {
+    "routes": 210,
+    "insertions": 0,
+    "published_staples": 209,
+    "scaffold_sequence_matches": true,
+    "source_scaffold_bases": 7704,
+    "native_helices": 20,
+    "native_reference_consulted": false
+  },
+  "reference_routing": {
+    "scaf": {
+      "reference_sites": 7704,
+      "recovered_sites": 7704,
+      "missing_sites": 0,
+      "extra_sites": 0,
+      "wrong_pointers": 0
+    },
+    "stap": {
+      "reference_sites": 7658,
+      "recovered_sites": 7658,
+      "missing_sites": 0,
+      "extra_sites": 0,
+      "wrong_pointers": 0
+    }
+  },
+  "source_topology_complete": true,
+  "periodic_seams": 18,
+  "geometry_certified": false,
+  "geometry_limitations": "18 user-confirmed polymerization seams span the monomer ends; 4 auxiliary loop joins remain nonlocal in the unrelaxed native geometry.",
+  "source_track_19_native_labels": {
+    "18": "loop from helix 0",
+    "19": "loop from helix 1"
+  }
+}

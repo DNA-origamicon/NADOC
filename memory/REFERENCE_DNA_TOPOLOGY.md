@@ -38,3 +38,10 @@ is circular**, including secondary scaffolds. Calculate loop closure independent
 within the owning scaffold; never concatenate separate scaffold contours. This
 is a thermodynamic modeling assumption, not a change to authored strand ends or
 geometry. See [temperature model](../docs/staple_temperature.md).
+
+## Bounded sequence searches (2026-11-25)
+
+The user generally authorizes bounded searches for scaffold shift and nick
+position. Enumeration and evidence-based ranking may proceed despite an initially
+unknown register. A sequence origin is not proof of a physical nick. See
+[authorization and scope](feedback_bounded_sequence_search.md).

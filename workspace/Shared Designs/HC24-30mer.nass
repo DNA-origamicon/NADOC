@@ -1,0 +1,3663 @@
+{
+  "dimensions": [],
+  "id": "1be83090-01b1-47a5-b1fa-71ef889e5dca",
+  "metadata": {
+    "name": "HC24-30mer",
+    "description": "",
+    "author": "",
+    "created_at": "",
+    "modified_at": "",
+    "tags": [],
+    "identity_last_known_path": null,
+    "identity_confirmed_at": "",
+    "primitive_kind": null,
+    "hardware_defaults": {},
+    "peg_surface": null,
+    "namd_peg_review": null,
+    "namd_box_solvent": null,
+    "namd_peg_coating": null,
+    "namd_peg_visible": true
+  },
+  "joints": [
+    {
+      "id": "d382c096-6b89-4c99-ba82-e058c85ca2c6",
+      "name": "Seam +1",
+      "joint_type": "rigid",
+      "instance_a_id": "5211826e-75df-496b-b3b3-29d4191e5041",
+      "cluster_id_a": null,
+      "instance_b_id": "e15c1d13-4615-4a0a-85f0-61df4e2490c7",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.84567147554496,
+        7.875,
+        46.092000000000006
+      ],
+      "axis_direction": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "4ed1d567-88cd-43e2-b168-6a7300999a8f",
+      "name": "Seam +2",
+      "joint_type": "rigid",
+      "instance_a_id": "e15c1d13-4615-4a0a-85f0-61df4e2490c7",
+      "cluster_id_a": null,
+      "instance_b_id": "a68a8c1b-d98a-4de0-8726-769883a0da80",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475544969,
+        7.8749999999999964,
+        95.19000000000003
+      ],
+      "axis_direction": [
+        2.0071027333541446e-16,
+        -1.2674155627084104e-16,
+        1.0000000000000004
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "a6bb7087-f85c-4676-987f-76531603d9fd",
+      "name": "Seam +3",
+      "joint_type": "rigid",
+      "instance_a_id": "a68a8c1b-d98a-4de0-8726-769883a0da80",
+      "cluster_id_a": null,
+      "instance_b_id": "f0825f3b-eed1-4ce1-a28c-16ee522a9d18",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.8456714755449894,
+        7.8749999999999885,
+        144.28800000000007
+      ],
+      "axis_direction": [
+        4.0142054667082906e-16,
+        -2.534831125416823e-16,
+        1.0000000000000009
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "f739f997-75a0-4556-b6f9-ec3135bb8fc7",
+      "name": "Seam +4",
+      "joint_type": "rigid",
+      "instance_a_id": "f0825f3b-eed1-4ce1-a28c-16ee522a9d18",
+      "cluster_id_a": null,
+      "instance_b_id": "3ec67cc2-32e5-4e84-a796-9244f0aeef13",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475545018,
+        7.8749999999999725,
+        193.38600000000014
+      ],
+      "axis_direction": [
+        6.021308200062438e-16,
+        -3.802246688125237e-16,
+        1.0000000000000013
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "906caa02-5afc-4100-af5d-f2095166c655",
+      "name": "Seam +5",
+      "joint_type": "rigid",
+      "instance_a_id": "3ec67cc2-32e5-4e84-a796-9244f0aeef13",
+      "cluster_id_a": null,
+      "instance_b_id": "519da237-3433-4339-96f0-6b697a62c694",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475545059,
+        7.874999999999951,
+        242.48400000000018
+      ],
+      "axis_direction": [
+        8.028410933416586e-16,
+        -5.069662250833653e-16,
+        1.0000000000000018
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "44801b70-9002-4038-84c0-fecb1c462bcd",
+      "name": "Seam +6",
+      "joint_type": "rigid",
+      "instance_a_id": "519da237-3433-4339-96f0-6b697a62c694",
+      "cluster_id_a": null,
+      "instance_b_id": "dc63bc48-8445-4acc-ad27-c600cd364080",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475545108,
+        7.874999999999924,
+        291.5820000000003
+      ],
+      "axis_direction": [
+        1.0035513666770736e-15,
+        -6.33707781354207e-16,
+        1.0000000000000022
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "076e4f7a-9d31-481a-b7ad-702aa6a3bd83",
+      "name": "Seam +7",
+      "joint_type": "rigid",
+      "instance_a_id": "dc63bc48-8445-4acc-ad27-c600cd364080",
+      "cluster_id_a": null,
+      "instance_b_id": "396ca935-3506-47fa-a737-771bdfc648ca",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475545166,
+        7.87499999999989,
+        340.6800000000004
+      ],
+      "axis_direction": [
+        1.2042616400124887e-15,
+        -7.604493376250489e-16,
+        1.0000000000000027
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "c9b5ae90-48e8-47af-b0b3-a713df98a4ef",
+      "name": "Seam +8",
+      "joint_type": "rigid",
+      "instance_a_id": "396ca935-3506-47fa-a737-771bdfc648ca",
+      "cluster_id_a": null,
+      "instance_b_id": "ec144880-5500-4515-8df8-eb0ca97d1a79",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.8456714755452355,
+        7.874999999999849,
+        389.77800000000053
+      ],
+      "axis_direction": [
+        1.4049719133479039e-15,
+        -8.871908938958911e-16,
+        1.000000000000003
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "7c299fa2-e590-401a-b868-580d1bcf64a1",
+      "name": "Seam +9",
+      "joint_type": "rigid",
+      "instance_a_id": "ec144880-5500-4515-8df8-eb0ca97d1a79",
+      "cluster_id_a": null,
+      "instance_b_id": "ae9031b4-4b4e-48ef-a5b2-e9a386b613d0",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.8456714755453145,
+        7.874999999999803,
+        438.8760000000008
+      ],
+      "axis_direction": [
+        1.6056821866833194e-15,
+        -1.0139324501667335e-15,
+        1.0000000000000036
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "c1a8f2cc-0ea7-4979-924a-e4edaf9cd409",
+      "name": "Seam +10",
+      "joint_type": "rigid",
+      "instance_a_id": "ae9031b4-4b4e-48ef-a5b2-e9a386b613d0",
+      "cluster_id_a": null,
+      "instance_b_id": "0f88e55c-58c6-4e50-9d5a-12e7ea86dcd3",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.8456714755454025,
+        7.87499999999975,
+        487.97400000000096
+      ],
+      "axis_direction": [
+        1.806392460018735e-15,
+        -1.140674006437576e-15,
+        1.000000000000004
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "77010f80-1d27-41cd-a11d-ccf58e495f2d",
+      "name": "Seam +11",
+      "joint_type": "rigid",
+      "instance_a_id": "0f88e55c-58c6-4e50-9d5a-12e7ea86dcd3",
+      "cluster_id_a": null,
+      "instance_b_id": "9e5e08c9-077b-4dc1-9540-a5a01cacca21",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475545501,
+        7.874999999999691,
+        537.0720000000011
+      ],
+      "axis_direction": [
+        2.0071027333541507e-15,
+        -1.2674155627084188e-15,
+        1.0000000000000044
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "1067f112-fdeb-4fd8-9b28-e23b462b03ab",
+      "name": "Seam +12",
+      "joint_type": "rigid",
+      "instance_a_id": "9e5e08c9-077b-4dc1-9540-a5a01cacca21",
+      "cluster_id_a": null,
+      "instance_b_id": "7e0d9b16-a0a4-4409-a34a-272a5ce16e3a",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475545609,
+        7.874999999999627,
+        586.1700000000014
+      ],
+      "axis_direction": [
+        2.2078130066895666e-15,
+        -1.3941571189792616e-15,
+        1.0000000000000049
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "3902a3c9-9bc0-440c-8408-2471a4b43608",
+      "name": "Seam +13",
+      "joint_type": "rigid",
+      "instance_a_id": "7e0d9b16-a0a4-4409-a34a-272a5ce16e3a",
+      "cluster_id_a": null,
+      "instance_b_id": "1cc068e6-d10a-44e9-8e5e-f7a4242bd2e7",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.8456714755457275,
+        7.874999999999555,
+        635.2680000000016
+      ],
+      "axis_direction": [
+        2.4085232800249826e-15,
+        -1.5208986752501046e-15,
+        1.0000000000000053
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "322041f7-9410-4aed-b254-d06074b92c1f",
+      "name": "Seam +14",
+      "joint_type": "rigid",
+      "instance_a_id": "1cc068e6-d10a-44e9-8e5e-f7a4242bd2e7",
+      "cluster_id_a": null,
+      "instance_b_id": "d819a441-f78a-4ee5-bdac-7da517df04a7",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475545855,
+        7.874999999999477,
+        684.3660000000018
+      ],
+      "axis_direction": [
+        2.6092335533603985e-15,
+        -1.647640231520948e-15,
+        1.0000000000000058
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "d23ccca6-5af3-4214-a145-053aef5bb6a4",
+      "name": "Seam +15",
+      "joint_type": "rigid",
+      "instance_a_id": "d819a441-f78a-4ee5-bdac-7da517df04a7",
+      "cluster_id_a": null,
+      "instance_b_id": "12623295-77b2-45b5-b6de-56807a56cc5f",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475545994,
+        7.874999999999393,
+        733.464000000002
+      ],
+      "axis_direction": [
+        2.8099438266958144e-15,
+        -1.7743817877917913e-15,
+        1.0000000000000062
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "a8a6d635-bd92-401c-8dfe-6e8021484457",
+      "name": "Seam +16",
+      "joint_type": "rigid",
+      "instance_a_id": "12623295-77b2-45b5-b6de-56807a56cc5f",
+      "cluster_id_a": null,
+      "instance_b_id": "cd5a922b-a2cf-42a1-a211-8537d2456470",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475546141,
+        7.874999999999303,
+        782.5620000000023
+      ],
+      "axis_direction": [
+        3.0106541000312308e-15,
+        -1.901123344062635e-15,
+        1.0000000000000067
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "74a599e7-cf95-406a-9432-35cb5c12e071",
+      "name": "Seam +17",
+      "joint_type": "rigid",
+      "instance_a_id": "cd5a922b-a2cf-42a1-a211-8537d2456470",
+      "cluster_id_a": null,
+      "instance_b_id": "fdd11cd5-4dd6-4f45-8131-6154df3dbca2",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475546299,
+        7.874999999999207,
+        831.6600000000026
+      ],
+      "axis_direction": [
+        3.2113643733666475e-15,
+        -2.027864900333479e-15,
+        1.000000000000007
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "f2aa20d5-e310-4a98-8740-cb70eeeaab25",
+      "name": "Seam +18",
+      "joint_type": "rigid",
+      "instance_a_id": "fdd11cd5-4dd6-4f45-8131-6154df3dbca2",
+      "cluster_id_a": null,
+      "instance_b_id": "f465bb73-dbd1-479c-8362-8e2c80efe044",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.8456714755464665,
+        7.874999999999105,
+        880.758000000003
+      ],
+      "axis_direction": [
+        3.4120746467020642e-15,
+        -2.1546064566043226e-15,
+        1.0000000000000075
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "5290c304-d404-4e85-b6e6-84defe90bf8b",
+      "name": "Seam +19",
+      "joint_type": "rigid",
+      "instance_a_id": "f465bb73-dbd1-479c-8362-8e2c80efe044",
+      "cluster_id_a": null,
+      "instance_b_id": "99070513-2183-4353-b334-e1e5bbf051e7",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475546643,
+        7.874999999998996,
+        929.8560000000033
+      ],
+      "axis_direction": [
+        3.612784920037481e-15,
+        -2.2813480128751667e-15,
+        1.000000000000008
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "f7c54624-68eb-437e-a2a5-7436a47dabbe",
+      "name": "Seam +20",
+      "joint_type": "rigid",
+      "instance_a_id": "99070513-2183-4353-b334-e1e5bbf051e7",
+      "cluster_id_a": null,
+      "instance_b_id": "4cdbae74-7144-4c19-88ff-2517608e60b9",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475546831,
+        7.874999999998881,
+        978.9540000000036
+      ],
+      "axis_direction": [
+        3.813495193372898e-15,
+        -2.4080895691460113e-15,
+        1.0000000000000084
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "8a9d90b6-4a6b-4e50-b4ac-94c204288c79",
+      "name": "Seam +21",
+      "joint_type": "rigid",
+      "instance_a_id": "4cdbae74-7144-4c19-88ff-2517608e60b9",
+      "cluster_id_a": null,
+      "instance_b_id": "09419fc7-0b51-4e88-9196-13f42fc4502c",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475547027,
+        7.87499999999876,
+        1028.052000000004
+      ],
+      "axis_direction": [
+        4.014205466708315e-15,
+        -2.534831125416856e-15,
+        1.0000000000000089
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "4ea8cdc5-6878-440f-b98a-84540bde4127",
+      "name": "Seam +22",
+      "joint_type": "rigid",
+      "instance_a_id": "09419fc7-0b51-4e88-9196-13f42fc4502c",
+      "cluster_id_a": null,
+      "instance_b_id": "f5ac4d40-d218-48f6-b992-16b1004209f6",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475547235,
+        7.874999999998633,
+        1077.1500000000044
+      ],
+      "axis_direction": [
+        4.2149157400437315e-15,
+        -2.6615726816877003e-15,
+        1.0000000000000093
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "a4f3a85c-9869-42a1-b087-163d8b550162",
+      "name": "Seam +23",
+      "joint_type": "rigid",
+      "instance_a_id": "f5ac4d40-d218-48f6-b992-16b1004209f6",
+      "cluster_id_a": null,
+      "instance_b_id": "63e060ad-83cb-40b8-a2bb-a5ab328fbb78",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.8456714755474515,
+        7.874999999998499,
+        1126.2480000000048
+      ],
+      "axis_direction": [
+        4.415626013379148e-15,
+        -2.7883142379585453e-15,
+        1.0000000000000098
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "80a7073d-98bd-4eec-8808-378444a93400",
+      "name": "Seam +24",
+      "joint_type": "rigid",
+      "instance_a_id": "63e060ad-83cb-40b8-a2bb-a5ab328fbb78",
+      "cluster_id_a": null,
+      "instance_b_id": "fec736d1-a12f-4cee-ac84-4eaa9eed7b77",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475547679,
+        7.8749999999983595,
+        1175.3460000000052
+      ],
+      "axis_direction": [
+        4.616336286714566e-15,
+        -2.9150557942293902e-15,
+        1.0000000000000102
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "cbd5876b-a588-43d7-989d-dd430cf2e6e7",
+      "name": "Seam +25",
+      "joint_type": "rigid",
+      "instance_a_id": "fec736d1-a12f-4cee-ac84-4eaa9eed7b77",
+      "cluster_id_a": null,
+      "instance_b_id": "293f89ad-ea34-4a55-a19b-5ac2194f2872",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475547914,
+        7.874999999998213,
+        1224.4440000000056
+      ],
+      "axis_direction": [
+        4.817046560049983e-15,
+        -3.041797350500235e-15,
+        1.0000000000000107
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "08cddded-768b-41a7-b40e-cb69eb3ccf17",
+      "name": "Seam +26",
+      "joint_type": "rigid",
+      "instance_a_id": "293f89ad-ea34-4a55-a19b-5ac2194f2872",
+      "cluster_id_a": null,
+      "instance_b_id": "06f1481e-4b4f-4501-9d6e-66e47323f77c",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475548161,
+        7.874999999998061,
+        1273.542000000006
+      ],
+      "axis_direction": [
+        5.017756833385401e-15,
+        -3.168538906771081e-15,
+        1.000000000000011
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "9a3c08e2-1d38-490c-9808-a947e3a9a8c4",
+      "name": "Seam +27",
+      "joint_type": "rigid",
+      "instance_a_id": "06f1481e-4b4f-4501-9d6e-66e47323f77c",
+      "cluster_id_a": null,
+      "instance_b_id": "cd9f46e0-0e49-44fe-b5d0-178fc457ed4e",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475548417,
+        7.874999999997903,
+        1322.6400000000065
+      ],
+      "axis_direction": [
+        5.218467106720818e-15,
+        -3.2952804630419266e-15,
+        1.0000000000000115
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "61db54cd-2ec1-4b7b-b566-bce8e099cdfa",
+      "name": "Seam +28",
+      "joint_type": "rigid",
+      "instance_a_id": "cd9f46e0-0e49-44fe-b5d0-178fc457ed4e",
+      "cluster_id_a": null,
+      "instance_b_id": "da82f6cb-fd66-476e-871d-b10f339c498f",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475548682,
+        7.874999999997738,
+        1371.738000000007
+      ],
+      "axis_direction": [
+        5.419177380056236e-15,
+        -3.4220220193127724e-15,
+        1.000000000000012
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    },
+    {
+      "id": "179e2a36-1898-4ee2-9756-9b6f7d7324c9",
+      "name": "Seam +29",
+      "joint_type": "rigid",
+      "instance_a_id": "da82f6cb-fd66-476e-871d-b10f339c498f",
+      "cluster_id_a": null,
+      "instance_b_id": "9942f393-af12-4c2f-b122-54d7fe10613d",
+      "cluster_id_b": null,
+      "axis_origin": [
+        5.845671475548959,
+        7.874999999997567,
+        1420.8360000000077
+      ],
+      "axis_direction": [
+        5.619887653391654e-15,
+        -3.5487635755836185e-15,
+        1.0000000000000124
+      ],
+      "current_value": 0.0,
+      "min_limit": null,
+      "max_limit": null,
+      "connector_a_label": "seam0:3p",
+      "connector_b_label": "seam0:5p",
+      "mate_relative_transform": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        -2.0071027333541446e-16,
+        8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        1.2674155627084104e-16,
+        -2.6645352591003757e-15,
+        2.384262292251952e-16,
+        3.904195246193157e-16,
+        1.0000000000000004,
+        -1.4210854715202004e-14,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "angular_velocity_rpm": 0.0,
+      "spin_paused": false
+    }
+  ],
+  "gear_relations": [],
+  "belt_paths": [],
+  "belt_riders": [],
+  "groups": [],
+  "assembly_helices": [],
+  "assembly_strands": [],
+  "view_volumes": [],
+  "zoom_volumes": [],
+  "annotations": [],
+  "annotations_enabled": true,
+  "camera_poses": [],
+  "animations": [],
+  "configurations": [],
+  "configuration_cursor": null,
+  "feature_log": [
+    {
+      "suppressed": false,
+      "autogenerated_group_id": null,
+      "feature_type": "snapshot",
+      "id": "71029901-8f38-4aae-91b2-f37ca91cd430",
+      "op_kind": "assembly-add-instance",
+      "label": "Add part: HC24-polymerization",
+      "timestamp": "2026-11-25T04:33:18.862376+00:00",
+      "params": {
+        "instance_id": "5211826e-75df-496b-b3b3-29d4191e5041",
+        "name": "HC24-polymerization",
+        "source": {
+          "type": "file",
+          "path": "Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc"
+        },
+        "transform": {
+          "values": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "source_label": "Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc"
+      },
+      "design_snapshot_gz_b64": "H4sIAA5lBmsA/31Ty27bQAz8lUDnCrCcBEl67aX/UBQLSktJbPYhcLmyUyP/Xq4TW1IS9KadITkkhzpVljyGRDGk6vvNr9/fbiqy+lU1LT7e7p529a5pm/ruAe7rtumhfmiwf3x8wnvbQaXRHgUsCGjOqQrgsST//LG/q293HrmEWEwd0yQqUsgCQZYx8uXVMYKgNSAXxEdLPW0ggWHVIgYheTEOkpjnEA/BTCCj8iE7t47oYuiJ/abUxORJaEbzTMEuSSOwPQCjsdhDdlL0Tq8lAQeTMvfQ4RKtw1pTGMaZ8PCBaOPRpOhmbeOLlC6CUBi+YGZK1LoiI5yxiP+JFOQ6+oDAquhA1p616OS8gS3CugZeUjnm6fqClNC37sWM6KjDz3gShmCveJnRzNFlv8T+jdF/xCCEKNvuVpDBADqefZ+vmK83w2CmmNY1yG9LnG0cMv8HNV3mdD6q9532elVZ3XRxuCSsoCW8bpSJM/IIYTCtnoRac9W4EioWsNvo2zw5PC59TxwFKZiyQ/mMikA36u+2UHicIqtPODEmJeDyk/Q6QjnVPrJuwmgP6Y3ZK5hi5jfHztdJIQkEBcy8Pxd+/Qf00RMT1wMAAA==",
+      "snapshot_size_bytes": 983,
+      "post_state_gz_b64": "H4sIAA5lBmsA/61UyXLbMAz9FY/OUSLKS+wc2x5677GT4UAiJLGmSA0JKXE8/veC8iI7ybSXXLS8B+ARG/eJ0i3aoJ0NydPs9/PdLNGKvxJR4HqebbI0E4VIF4+wTAtRQfoosFqvN7hUJSRs3SKBAgL22ScWWozOP7/ni3SeteijicJQet0Ri0QyQtBT4/z5r/QIhEoCnZHWKV3pG4igvjoiWtK0kwYCya11L1Z2QA3ztjfm2qJ0ttK+vQnVed1q0gPKrbZqcmrAqxfwKBVW0BuKevtDdMBaht5XUOJkzckqGRmPg8aXd0ThXmVwZuBjfOJSOiBt60+YQQddmChDvsco/sdpS5fUawTPigboumcFGhorcIt4LoOfXL3ru8sfhIBtYXayQaNL/IgH8mDVBY85ysGZvp1s35xr32NgraPb011BEi1weuqUX2w+z4wH2blwHUO3tyHGNta9/wcqy96HcahONa14qnrupnH12eEKmsxTwYwb0Ddga1nwSHBrLhoXgsUsljf6qu8Mvk7n7rwj1FbGGtJHlAjKhtdtovC1c577hJ3HwAScl6TiFOKoVs5zJSSfIRyZnMHgen/s2D6pnn7x2KKa/cCgaxse+L0l182+oWUx8NvwMK1jmmf5Soh8ccQ6Z3aM6rdR996CcuXTGJZ23bjJleZZjDkctyv5YrEYOjSQL1enth3ixGsbCCxnKIc8Vmp/upOWuRDrfIXp41JV6WKzKtJiXszTfKMWYiNwmS3EeFWI0U3cZ3ez7JPHf4nYmuBLucXdWISvr/Fx5afL8tYqOTwf/gIRTz8hmwUAAA==",
+      "post_state_size_bytes": 1435,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": false
+    },
+    {
+      "suppressed": false,
+      "autogenerated_group_id": null,
+      "feature_type": "snapshot",
+      "id": "2b886767-2f69-4b82-a724-8b126653d3f9",
+      "op_kind": "assembly-polymerize-periodic",
+      "label": "Polymerize (periodic) HC24-polymerization: chain length 30 (forward)",
+      "timestamp": "2026-11-25T04:33:18.877711+00:00",
+      "params": {
+        "instance_id": "5211826e-75df-496b-b3b3-29d4191e5041",
+        "count": 30,
+        "direction": "forward",
+        "new_instance_ids": [
+          "e15c1d13-4615-4a0a-85f0-61df4e2490c7",
+          "a68a8c1b-d98a-4de0-8726-769883a0da80",
+          "f0825f3b-eed1-4ce1-a28c-16ee522a9d18",
+          "3ec67cc2-32e5-4e84-a796-9244f0aeef13",
+          "519da237-3433-4339-96f0-6b697a62c694",
+          "dc63bc48-8445-4acc-ad27-c600cd364080",
+          "396ca935-3506-47fa-a737-771bdfc648ca",
+          "ec144880-5500-4515-8df8-eb0ca97d1a79",
+          "ae9031b4-4b4e-48ef-a5b2-e9a386b613d0",
+          "0f88e55c-58c6-4e50-9d5a-12e7ea86dcd3",
+          "9e5e08c9-077b-4dc1-9540-a5a01cacca21",
+          "7e0d9b16-a0a4-4409-a34a-272a5ce16e3a",
+          "1cc068e6-d10a-44e9-8e5e-f7a4242bd2e7",
+          "d819a441-f78a-4ee5-bdac-7da517df04a7",
+          "12623295-77b2-45b5-b6de-56807a56cc5f",
+          "cd5a922b-a2cf-42a1-a211-8537d2456470",
+          "fdd11cd5-4dd6-4f45-8131-6154df3dbca2",
+          "f465bb73-dbd1-479c-8362-8e2c80efe044",
+          "99070513-2183-4353-b334-e1e5bbf051e7",
+          "4cdbae74-7144-4c19-88ff-2517608e60b9",
+          "09419fc7-0b51-4e88-9196-13f42fc4502c",
+          "f5ac4d40-d218-48f6-b992-16b1004209f6",
+          "63e060ad-83cb-40b8-a2bb-a5ab328fbb78",
+          "fec736d1-a12f-4cee-ac84-4eaa9eed7b77",
+          "293f89ad-ea34-4a55-a19b-5ac2194f2872",
+          "06f1481e-4b4f-4501-9d6e-66e47323f77c",
+          "cd9f46e0-0e49-44fe-b5d0-178fc457ed4e",
+          "da82f6cb-fd66-476e-871d-b10f339c498f",
+          "9942f393-af12-4c2f-b122-54d7fe10613d"
+        ],
+        "new_joint_ids": [
+          "d382c096-6b89-4c99-ba82-e058c85ca2c6",
+          "4ed1d567-88cd-43e2-b168-6a7300999a8f",
+          "a6bb7087-f85c-4676-987f-76531603d9fd",
+          "f739f997-75a0-4556-b6f9-ec3135bb8fc7",
+          "906caa02-5afc-4100-af5d-f2095166c655",
+          "44801b70-9002-4038-84c0-fecb1c462bcd",
+          "076e4f7a-9d31-481a-b7ad-702aa6a3bd83",
+          "c9b5ae90-48e8-47af-b0b3-a713df98a4ef",
+          "7c299fa2-e590-401a-b868-580d1bcf64a1",
+          "c1a8f2cc-0ea7-4979-924a-e4edaf9cd409",
+          "77010f80-1d27-41cd-a11d-ccf58e495f2d",
+          "1067f112-fdeb-4fd8-9b28-e23b462b03ab",
+          "3902a3c9-9bc0-440c-8408-2471a4b43608",
+          "322041f7-9410-4aed-b254-d06074b92c1f",
+          "d23ccca6-5af3-4214-a145-053aef5bb6a4",
+          "a8a6d635-bd92-401c-8dfe-6e8021484457",
+          "74a599e7-cf95-406a-9432-35cb5c12e071",
+          "f2aa20d5-e310-4a98-8740-cb70eeeaab25",
+          "5290c304-d404-4e85-b6e6-84defe90bf8b",
+          "f7c54624-68eb-437e-a2a5-7436a47dabbe",
+          "8a9d90b6-4a6b-4e50-b4ac-94c204288c79",
+          "4ea8cdc5-6878-440f-b98a-84540bde4127",
+          "a4f3a85c-9869-42a1-b087-163d8b550162",
+          "80a7073d-98bd-4eec-8808-378444a93400",
+          "cbd5876b-a588-43d7-989d-dd430cf2e6e7",
+          "08cddded-768b-41a7-b40e-cb69eb3ccf17",
+          "9a3c08e2-1d38-490c-9808-a947e3a9a8c4",
+          "61db54cd-2ec1-4b7b-b566-bce8e099cdfa",
+          "179e2a36-1898-4ee2-9756-9b6f7d7324c9"
+        ]
+      },
+      "design_snapshot_gz_b64": "",
+      "snapshot_size_bytes": 0,
+      "post_state_gz_b64": "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",
+      "post_state_size_bytes": 64600,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": true
+    }
+  ],
+  "feature_log_cursor": -1,
+  "overhang_bindings": [],
+  "overhang_connections": [],
+  "duplexes": [],
+  "protein_assets": [],
+  "protein_attachments": [],
+  "export_representation": "full",
+  "format_version": 2,
+  "sources": {
+    "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:": {
+      "type": "file",
+      "path": "Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc",
+      "sha256": null
+    }
+  },
+  "instances_v2": [
+    {
+      "id": "5211826e-75df-496b-b3b3-29d4191e5041",
+      "t12": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "e15c1d13-4615-4a0a-85f0-61df4e2490c7",
+      "t12": [
+        1.0000000000000002,
+        1.323419393588521e-17,
+        2.0071027333541446e-16,
+        -8.881784197001252e-16,
+        7.514676906309647e-17,
+        1.000000000000001,
+        -1.2674155627084104e-16,
+        -6.217248937900877e-15,
+        -2.384262292251952e-16,
+        -3.904195246193157e-16,
+        1.0000000000000004,
+        49.098
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +1",
+      "base_transform": {
+        "values": [
+          1.0000000000000002,
+          1.323419393588521e-17,
+          2.0071027333541446e-16,
+          -8.881784197001252e-16,
+          7.514676906309647e-17,
+          1.000000000000001,
+          -1.2674155627084104e-16,
+          -6.217248937900877e-15,
+          -2.384262292251952e-16,
+          -3.904195246193157e-16,
+          1.0000000000000004,
+          49.098,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "a68a8c1b-d98a-4de0-8726-769883a0da80",
+      "t12": [
+        1.0000000000000004,
+        2.646838787177036e-17,
+        4.0142054667082906e-16,
+        8.078116160821929e-15,
+        1.5029353812619306e-16,
+        1.0000000000000022,
+        -2.534831125416823e-16,
+        -1.8657254805587516e-14,
+        -4.768524584503906e-16,
+        -7.80839049238632e-16,
+        1.0000000000000009,
+        98.19600000000003
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +2",
+      "base_transform": {
+        "values": [
+          1.0000000000000004,
+          2.646838787177036e-17,
+          4.0142054667082906e-16,
+          8.078116160821929e-15,
+          1.5029353812619306e-16,
+          1.0000000000000022,
+          -2.534831125416823e-16,
+          -1.8657254805587516e-14,
+          -4.768524584503906e-16,
+          -7.80839049238632e-16,
+          1.0000000000000009,
+          98.19600000000003,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "f0825f3b-eed1-4ce1-a28c-16ee522a9d18",
+      "t12": [
+        1.0000000000000007,
+        3.970258180765545e-17,
+        6.021308200062438e-16,
+        2.689888374156617e-14,
+        2.254403071892898e-16,
+        1.0000000000000033,
+        -3.802246688125237e-16,
+        -3.7320017603059924e-14,
+        -7.152786876755862e-16,
+        -1.171258573857949e-15,
+        1.0000000000000013,
+        147.29400000000007
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +3",
+      "base_transform": {
+        "values": [
+          1.0000000000000007,
+          3.970258180765545e-17,
+          6.021308200062438e-16,
+          2.689888374156617e-14,
+          2.254403071892898e-16,
+          1.0000000000000033,
+          -3.802246688125237e-16,
+          -3.7320017603059924e-14,
+          -7.152786876755862e-16,
+          -1.171258573857949e-15,
+          1.0000000000000013,
+          147.29400000000007,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "3ec67cc2-32e5-4e84-a796-9244f0aeef13",
+      "t12": [
+        1.0000000000000009,
+        5.2936775743540475e-17,
+        8.028410933416586e-16,
+        5.55741243225326e-14,
+        3.0058707625238665e-16,
+        1.0000000000000044,
+        -5.069662250833653e-16,
+        -6.220553733031811e-14,
+        -9.53704916900782e-16,
+        -1.5616780984772666e-15,
+        1.0000000000000018,
+        196.3920000000001
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +4",
+      "base_transform": {
+        "values": [
+          1.0000000000000009,
+          5.2936775743540475e-17,
+          8.028410933416586e-16,
+          5.55741243225326e-14,
+          3.0058707625238665e-16,
+          1.0000000000000044,
+          -5.069662250833653e-16,
+          -6.220553733031811e-14,
+          -9.53704916900782e-16,
+          -1.5616780984772666e-15,
+          1.0000000000000018,
+          196.3920000000001,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "519da237-3433-4339-96f0-6b697a62c694",
+      "t12": [
+        1.000000000000001,
+        6.617096967942545e-17,
+        1.0035513666770736e-15,
+        9.410383790372123e-14,
+        3.757338453154836e-16,
+        1.0000000000000056,
+        -6.33707781354207e-16,
+        -9.331381398736207e-14,
+        -1.192131146125978e-15,
+        -1.9520976230965847e-15,
+        1.0000000000000022,
+        245.49000000000018
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +5",
+      "base_transform": {
+        "values": [
+          1.000000000000001,
+          6.617096967942545e-17,
+          1.0035513666770736e-15,
+          9.410383790372123e-14,
+          3.757338453154836e-16,
+          1.0000000000000056,
+          -6.33707781354207e-16,
+          -9.331381398736207e-14,
+          -1.192131146125978e-15,
+          -1.9520976230965847e-15,
+          1.0000000000000022,
+          245.49000000000018,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "dc63bc48-8445-4acc-ad27-c600cd364080",
+      "t12": [
+        1.0000000000000013,
+        7.940516361531035e-17,
+        1.2042616400124887e-15,
+        1.4248802448513207e-13,
+        4.508806143785808e-16,
+        1.0000000000000067,
+        -7.604493376250489e-16,
+        -1.3064484757419184e-13,
+        -1.430557375351174e-15,
+        -2.3425171477159035e-15,
+        1.0000000000000027,
+        294.5880000000003
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +6",
+      "base_transform": {
+        "values": [
+          1.0000000000000013,
+          7.940516361531035e-17,
+          1.2042616400124887e-15,
+          1.4248802448513207e-13,
+          4.508806143785808e-16,
+          1.0000000000000067,
+          -7.604493376250489e-16,
+          -1.3064484757419184e-13,
+          -1.430557375351174e-15,
+          -2.3425171477159035e-15,
+          1.0000000000000027,
+          294.5880000000003,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "396ca935-3506-47fa-a737-771bdfc648ca",
+      "t12": [
+        1.0000000000000016,
+        9.263935755119519e-17,
+        1.4049719133479039e-15,
+        2.007266840667651e-13,
+        5.26027383441678e-16,
+        1.0000000000000078,
+        -8.871908938958911e-16,
+        -1.741986380908074e-13,
+        -1.6689836045763704e-15,
+        -2.7329366723352227e-15,
+        1.000000000000003,
+        343.68600000000043
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +7",
+      "base_transform": {
+        "values": [
+          1.0000000000000016,
+          9.263935755119519e-17,
+          1.4049719133479039e-15,
+          2.007266840667651e-13,
+          5.26027383441678e-16,
+          1.0000000000000078,
+          -8.871908938958911e-16,
+          -1.741986380908074e-13,
+          -1.6689836045763704e-15,
+          -2.7329366723352227e-15,
+          1.000000000000003,
+          343.68600000000043,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "ec144880-5500-4515-8df8-eb0ca97d1a79",
+      "t12": [
+        1.0000000000000018,
+        1.0587355148707998e-16,
+        1.6056821866833194e-15,
+        2.6881981664862036e-13,
+        6.011741525047754e-16,
+        1.0000000000000089,
+        -1.0139324501667335e-15,
+        -2.2397518553720877e-13,
+        -1.907409833801567e-15,
+        -3.1233561969545427e-15,
+        1.0000000000000036,
+        392.7840000000006
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +8",
+      "base_transform": {
+        "values": [
+          1.0000000000000018,
+          1.0587355148707998e-16,
+          1.6056821866833194e-15,
+          2.6881981664862036e-13,
+          6.011741525047754e-16,
+          1.0000000000000089,
+          -1.0139324501667335e-15,
+          -2.2397518553720877e-13,
+          -1.907409833801567e-15,
+          -3.1233561969545427e-15,
+          1.0000000000000036,
+          392.7840000000006,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "ae9031b4-4b4e-48ef-a5b2-e9a386b613d0",
+      "t12": [
+        1.000000000000002,
+        1.1910774542296472e-16,
+        1.806392460018735e-15,
+        3.4676742223069783e-13,
+        6.763209215678728e-16,
+        1.00000000000001,
+        -1.140674006437576e-15,
+        -2.79974489913396e-13,
+        -2.1458360630267635e-15,
+        -3.5137757215738635e-15,
+        1.000000000000004,
+        441.8820000000008
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +9",
+      "base_transform": {
+        "values": [
+          1.000000000000002,
+          1.1910774542296472e-16,
+          1.806392460018735e-15,
+          3.4676742223069783e-13,
+          6.763209215678728e-16,
+          1.00000000000001,
+          -1.140674006437576e-15,
+          -2.79974489913396e-13,
+          -2.1458360630267635e-15,
+          -3.5137757215738635e-15,
+          1.000000000000004,
+          441.8820000000008,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "0f88e55c-58c6-4e50-9d5a-12e7ea86dcd3",
+      "t12": [
+        1.0000000000000022,
+        1.3234193935884937e-16,
+        2.0071027333541507e-15,
+        4.3456950081299757e-13,
+        7.514676906309705e-16,
+        1.000000000000011,
+        -1.2674155627084188e-15,
+        -3.4219655121936906e-13,
+        -2.3842622922519606e-15,
+        -3.904195246193185e-15,
+        1.0000000000000044,
+        490.980000000001
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +10",
+      "base_transform": {
+        "values": [
+          1.0000000000000022,
+          1.3234193935884937e-16,
+          2.0071027333541507e-15,
+          4.3456950081299757e-13,
+          7.514676906309705e-16,
+          1.000000000000011,
+          -1.2674155627084188e-15,
+          -3.4219655121936906e-13,
+          -2.3842622922519606e-15,
+          -3.904195246193185e-15,
+          1.0000000000000044,
+          490.980000000001,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "9e5e08c9-077b-4dc1-9540-a5a01cacca21",
+      "t12": [
+        1.0000000000000024,
+        1.4557613329473397e-16,
+        2.2078130066895666e-15,
+        5.322260523955196e-13,
+        8.266144596940682e-16,
+        1.0000000000000122,
+        -1.3941571189792616e-15,
+        -4.1064136945512794e-13,
+        -2.6226885214771577e-15,
+        -4.294614770812507e-15,
+        1.0000000000000049,
+        540.0780000000012
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +11",
+      "base_transform": {
+        "values": [
+          1.0000000000000024,
+          1.4557613329473397e-16,
+          2.2078130066895666e-15,
+          5.322260523955196e-13,
+          8.266144596940682e-16,
+          1.0000000000000122,
+          -1.3941571189792616e-15,
+          -4.1064136945512794e-13,
+          -2.6226885214771577e-15,
+          -4.294614770812507e-15,
+          1.0000000000000049,
+          540.0780000000012,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "7e0d9b16-a0a4-4409-a34a-272a5ce16e3a",
+      "t12": [
+        1.0000000000000027,
+        1.588103272306185e-16,
+        2.4085232800249826e-15,
+        6.397370769782638e-13,
+        9.017612287571663e-16,
+        1.0000000000000133,
+        -1.5208986752501046e-15,
+        -4.853089446206727e-13,
+        -2.8611147507023552e-15,
+        -4.685034295431829e-15,
+        1.0000000000000053,
+        589.1760000000014
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +12",
+      "base_transform": {
+        "values": [
+          1.0000000000000027,
+          1.588103272306185e-16,
+          2.4085232800249826e-15,
+          6.397370769782638e-13,
+          9.017612287571663e-16,
+          1.0000000000000133,
+          -1.5208986752501046e-15,
+          -4.853089446206727e-13,
+          -2.8611147507023552e-15,
+          -4.685034295431829e-15,
+          1.0000000000000053,
+          589.1760000000014,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "1cc068e6-d10a-44e9-8e5e-f7a4242bd2e7",
+      "t12": [
+        1.0000000000000029,
+        1.7204452116650297e-16,
+        2.6092335533603985e-15,
+        7.571025745612302e-13,
+        9.769079978202644e-16,
+        1.0000000000000144,
+        -1.647640231520948e-15,
+        -5.661992767160033e-13,
+        -3.0995409799275527e-15,
+        -5.075453820051152e-15,
+        1.0000000000000058,
+        638.2740000000016
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +13",
+      "base_transform": {
+        "values": [
+          1.0000000000000029,
+          1.7204452116650297e-16,
+          2.6092335533603985e-15,
+          7.571025745612302e-13,
+          9.769079978202644e-16,
+          1.0000000000000144,
+          -1.647640231520948e-15,
+          -5.661992767160033e-13,
+          -3.0995409799275527e-15,
+          -5.075453820051152e-15,
+          1.0000000000000058,
+          638.2740000000016,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "d819a441-f78a-4ee5-bdac-7da517df04a7",
+      "t12": [
+        1.000000000000003,
+        1.852787151023874e-16,
+        2.8099438266958144e-15,
+        8.84322545144419e-13,
+        1.0520547668833626e-15,
+        1.0000000000000155,
+        -1.7743817877917913e-15,
+        -6.533123657411197e-13,
+        -3.33796720915275e-15,
+        -5.465873344670476e-15,
+        1.0000000000000062,
+        687.3720000000018
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +14",
+      "base_transform": {
+        "values": [
+          1.000000000000003,
+          1.852787151023874e-16,
+          2.8099438266958144e-15,
+          8.84322545144419e-13,
+          1.0520547668833626e-15,
+          1.0000000000000155,
+          -1.7743817877917913e-15,
+          -6.533123657411197e-13,
+          -3.33796720915275e-15,
+          -5.465873344670476e-15,
+          1.0000000000000062,
+          687.3720000000018,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "12623295-77b2-45b5-b6de-56807a56cc5f",
+      "t12": [
+        1.0000000000000033,
+        1.9851290903827175e-16,
+        3.0106541000312308e-15,
+        1.02139698872783e-12,
+        1.1272015359464609e-15,
+        1.0000000000000167,
+        -1.901123344062635e-15,
+        -7.466482116960221e-13,
+        -3.576393438377948e-15,
+        -5.8562928692898e-15,
+        1.0000000000000067,
+        736.4700000000021
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +15",
+      "base_transform": {
+        "values": [
+          1.0000000000000033,
+          1.9851290903827175e-16,
+          3.0106541000312308e-15,
+          1.02139698872783e-12,
+          1.1272015359464609e-15,
+          1.0000000000000167,
+          -1.901123344062635e-15,
+          -7.466482116960221e-13,
+          -3.576393438377948e-15,
+          -5.8562928692898e-15,
+          1.0000000000000067,
+          736.4700000000021,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "cd5a922b-a2cf-42a1-a211-8537d2456470",
+      "t12": [
+        1.0000000000000036,
+        2.1174710297415606e-16,
+        3.2113643733666475e-15,
+        1.1683259053114632e-12,
+        1.2023483050095592e-15,
+        1.0000000000000178,
+        -2.027864900333479e-15,
+        -8.462068145807102e-13,
+        -3.814819667603146e-15,
+        -6.246712393909125e-15,
+        1.000000000000007,
+        785.5680000000024
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +16",
+      "base_transform": {
+        "values": [
+          1.0000000000000036,
+          2.1174710297415606e-16,
+          3.2113643733666475e-15,
+          1.1683259053114632e-12,
+          1.2023483050095592e-15,
+          1.0000000000000178,
+          -2.027864900333479e-15,
+          -8.462068145807102e-13,
+          -3.814819667603146e-15,
+          -6.246712393909125e-15,
+          1.000000000000007,
+          785.5680000000024,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "fdd11cd5-4dd6-4f45-8131-6154df3dbca2",
+      "t12": [
+        1.0000000000000038,
+        2.2498129691004034e-16,
+        3.4120746467020642e-15,
+        1.3251092948953186e-12,
+        1.2774950740726578e-15,
+        1.0000000000000189,
+        -2.1546064566043226e-15,
+        -9.519881743951842e-13,
+        -4.0532458968283446e-15,
+        -6.6371319185284505e-15,
+        1.0000000000000075,
+        834.6660000000027
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +17",
+      "base_transform": {
+        "values": [
+          1.0000000000000038,
+          2.2498129691004034e-16,
+          3.4120746467020642e-15,
+          1.3251092948953186e-12,
+          1.2774950740726578e-15,
+          1.0000000000000189,
+          -2.1546064566043226e-15,
+          -9.519881743951842e-13,
+          -4.0532458968283446e-15,
+          -6.6371319185284505e-15,
+          1.0000000000000075,
+          834.6660000000027,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "f465bb73-dbd1-479c-8362-8e2c80efe044",
+      "t12": [
+        1.000000000000004,
+        2.382154908459245e-16,
+        3.612784920037481e-15,
+        1.4917471574793963e-12,
+        1.3526418431357565e-15,
+        1.00000000000002,
+        -2.2813480128751667e-15,
+        -1.0639922911394441e-12,
+        -4.291672126053543e-15,
+        -7.027551443147777e-15,
+        1.000000000000008,
+        883.764000000003
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +18",
+      "base_transform": {
+        "values": [
+          1.000000000000004,
+          2.382154908459245e-16,
+          3.612784920037481e-15,
+          1.4917471574793963e-12,
+          1.3526418431357565e-15,
+          1.00000000000002,
+          -2.2813480128751667e-15,
+          -1.0639922911394441e-12,
+          -4.291672126053543e-15,
+          -7.027551443147777e-15,
+          1.000000000000008,
+          883.764000000003,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "99070513-2183-4353-b334-e1e5bbf051e7",
+      "t12": [
+        1.0000000000000042,
+        2.514496847818086e-16,
+        3.813495193372898e-15,
+        1.6682394930636964e-12,
+        1.4277886121988554e-15,
+        1.000000000000021,
+        -2.4080895691460113e-15,
+        -1.18221916481349e-12,
+        -4.530098355278741e-15,
+        -7.417970967767103e-15,
+        1.0000000000000084,
+        932.8620000000033
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +19",
+      "base_transform": {
+        "values": [
+          1.0000000000000042,
+          2.514496847818086e-16,
+          3.813495193372898e-15,
+          1.6682394930636964e-12,
+          1.4277886121988554e-15,
+          1.000000000000021,
+          -2.4080895691460113e-15,
+          -1.18221916481349e-12,
+          -4.530098355278741e-15,
+          -7.417970967767103e-15,
+          1.0000000000000084,
+          932.8620000000033,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "4cdbae74-7144-4c19-88ff-2517608e60b9",
+      "t12": [
+        1.0000000000000044,
+        2.646838787176927e-16,
+        4.014205466708315e-15,
+        1.8545863016482187e-12,
+        1.5029353812619544e-15,
+        1.0000000000000222,
+        -2.534831125416856e-15,
+        -1.306668795417322e-12,
+        -4.76852458450394e-15,
+        -7.80839049238643e-15,
+        1.0000000000000089,
+        981.9600000000037
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +20",
+      "base_transform": {
+        "values": [
+          1.0000000000000044,
+          2.646838787176927e-16,
+          4.014205466708315e-15,
+          1.8545863016482187e-12,
+          1.5029353812619544e-15,
+          1.0000000000000222,
+          -2.534831125416856e-15,
+          -1.306668795417322e-12,
+          -4.76852458450394e-15,
+          -7.80839049238643e-15,
+          1.0000000000000089,
+          981.9600000000037,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "09419fc7-0b51-4e88-9196-13f42fc4502c",
+      "t12": [
+        1.0000000000000047,
+        2.7791807265357666e-16,
+        4.2149157400437315e-15,
+        2.050787583232963e-12,
+        1.5780821503250535e-15,
+        1.0000000000000233,
+        -2.6615726816877003e-15,
+        -1.4373411829509395e-12,
+        -5.006950813729139e-15,
+        -8.198810017005759e-15,
+        1.0000000000000093,
+        1031.058000000004
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +21",
+      "base_transform": {
+        "values": [
+          1.0000000000000047,
+          2.7791807265357666e-16,
+          4.2149157400437315e-15,
+          2.050787583232963e-12,
+          1.5780821503250535e-15,
+          1.0000000000000233,
+          -2.6615726816877003e-15,
+          -1.4373411829509395e-12,
+          -5.006950813729139e-15,
+          -8.198810017005759e-15,
+          1.0000000000000093,
+          1031.058000000004,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "f5ac4d40-d218-48f6-b992-16b1004209f6",
+      "t12": [
+        1.0000000000000049,
+        2.911522665894606e-16,
+        4.415626013379148e-15,
+        2.25684333781793e-12,
+        1.6532289193881526e-15,
+        1.0000000000000244,
+        -2.7883142379585453e-15,
+        -1.5742363274143432e-12,
+        -5.245377042954338e-15,
+        -8.589229541625088e-15,
+        1.0000000000000098,
+        1080.1560000000045
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +22",
+      "base_transform": {
+        "values": [
+          1.0000000000000049,
+          2.911522665894606e-16,
+          4.415626013379148e-15,
+          2.25684333781793e-12,
+          1.6532289193881526e-15,
+          1.0000000000000244,
+          -2.7883142379585453e-15,
+          -1.5742363274143432e-12,
+          -5.245377042954338e-15,
+          -8.589229541625088e-15,
+          1.0000000000000098,
+          1080.1560000000045,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "63e060ad-83cb-40b8-a2bb-a5ab328fbb78",
+      "t12": [
+        1.000000000000005,
+        3.0438646052534443e-16,
+        4.616336286714566e-15,
+        2.472753565403119e-12,
+        1.728375688451252e-15,
+        1.0000000000000255,
+        -2.9150557942293902e-15,
+        -1.7173542288075327e-12,
+        -5.483803272179537e-15,
+        -8.979649066244416e-15,
+        1.0000000000000102,
+        1129.254000000005
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +23",
+      "base_transform": {
+        "values": [
+          1.000000000000005,
+          3.0438646052534443e-16,
+          4.616336286714566e-15,
+          2.472753565403119e-12,
+          1.728375688451252e-15,
+          1.0000000000000255,
+          -2.9150557942293902e-15,
+          -1.7173542288075327e-12,
+          -5.483803272179537e-15,
+          -8.979649066244416e-15,
+          1.0000000000000102,
+          1129.254000000005,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "fec736d1-a12f-4cee-ac84-4eaa9eed7b77",
+      "t12": [
+        1.0000000000000053,
+        3.176206544612282e-16,
+        4.817046560049983e-15,
+        2.6985182659885307e-12,
+        1.8035224575143515e-15,
+        1.0000000000000266,
+        -3.041797350500235e-15,
+        -1.8666948871305083e-12,
+        -5.722229501404737e-15,
+        -9.370068590863747e-15,
+        1.0000000000000107,
+        1178.3520000000053
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +24",
+      "base_transform": {
+        "values": [
+          1.0000000000000053,
+          3.176206544612282e-16,
+          4.817046560049983e-15,
+          2.6985182659885307e-12,
+          1.8035224575143515e-15,
+          1.0000000000000266,
+          -3.041797350500235e-15,
+          -1.8666948871305083e-12,
+          -5.722229501404737e-15,
+          -9.370068590863747e-15,
+          1.0000000000000107,
+          1178.3520000000053,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "293f89ad-ea34-4a55-a19b-5ac2194f2872",
+      "t12": [
+        1.0000000000000056,
+        3.3085484839711196e-16,
+        5.017756833385401e-15,
+        2.9341374395741643e-12,
+        1.878669226577451e-15,
+        1.0000000000000278,
+        -3.168538906771081e-15,
+        -2.02225830238327e-12,
+        -5.960655730629937e-15,
+        -9.760488115483077e-15,
+        1.000000000000011,
+        1227.4500000000057
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +25",
+      "base_transform": {
+        "values": [
+          1.0000000000000056,
+          3.3085484839711196e-16,
+          5.017756833385401e-15,
+          2.9341374395741643e-12,
+          1.878669226577451e-15,
+          1.0000000000000278,
+          -3.168538906771081e-15,
+          -2.02225830238327e-12,
+          -5.960655730629937e-15,
+          -9.760488115483077e-15,
+          1.000000000000011,
+          1227.4500000000057,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "06f1481e-4b4f-4501-9d6e-66e47323f77c",
+      "t12": [
+        1.0000000000000058,
+        3.440890423329956e-16,
+        5.218467106720818e-15,
+        3.1796110861600206e-12,
+        1.953815995640551e-15,
+        1.0000000000000289,
+        -3.2952804630419266e-15,
+        -2.1840444745658172e-12,
+        -6.199081959855137e-15,
+        -1.0150907640102407e-14,
+        1.0000000000000115,
+        1276.5480000000061
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +26",
+      "base_transform": {
+        "values": [
+          1.0000000000000058,
+          3.440890423329956e-16,
+          5.218467106720818e-15,
+          3.1796110861600206e-12,
+          1.953815995640551e-15,
+          1.0000000000000289,
+          -3.2952804630419266e-15,
+          -2.1840444745658172e-12,
+          -6.199081959855137e-15,
+          -1.0150907640102407e-14,
+          1.0000000000000115,
+          1276.5480000000061,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "cd9f46e0-0e49-44fe-b5d0-178fc457ed4e",
+      "t12": [
+        1.000000000000006,
+        3.573232362688793e-16,
+        5.419177380056236e-15,
+        3.4349392057460992e-12,
+        2.0289627647036506e-15,
+        1.00000000000003,
+        -3.4220220193127724e-15,
+        -2.3520534036781505e-12,
+        -6.437508189080337e-15,
+        -1.0541327164721739e-14,
+        1.000000000000012,
+        1325.6460000000066
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +27",
+      "base_transform": {
+        "values": [
+          1.000000000000006,
+          3.573232362688793e-16,
+          5.419177380056236e-15,
+          3.4349392057460992e-12,
+          2.0289627647036506e-15,
+          1.00000000000003,
+          -3.4220220193127724e-15,
+          -2.3520534036781505e-12,
+          -6.437508189080337e-15,
+          -1.0541327164721739e-14,
+          1.000000000000012,
+          1325.6460000000066,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "da82f6cb-fd66-476e-871d-b10f339c498f",
+      "t12": [
+        1.0000000000000062,
+        3.7055743020476287e-16,
+        5.619887653391654e-15,
+        3.7001217983324e-12,
+        2.1041095337667507e-15,
+        1.000000000000031,
+        -3.5487635755836185e-15,
+        -2.52628508972027e-12,
+        -6.6759344183055374e-15,
+        -1.0931746689341071e-14,
+        1.0000000000000124,
+        1374.7440000000072
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +28",
+      "base_transform": {
+        "values": [
+          1.0000000000000062,
+          3.7055743020476287e-16,
+          5.619887653391654e-15,
+          3.7001217983324e-12,
+          2.1041095337667507e-15,
+          1.000000000000031,
+          -3.5487635755836185e-15,
+          -2.52628508972027e-12,
+          -6.6759344183055374e-15,
+          -1.0931746689341071e-14,
+          1.0000000000000124,
+          1374.7440000000072,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    },
+    {
+      "id": "9942f393-af12-4c2f-b122-54d7fe10613d",
+      "t12": [
+        1.0000000000000064,
+        3.8379162414064636e-16,
+        5.8205979267270724e-15,
+        3.975158863918923e-12,
+        2.179256302829851e-15,
+        1.0000000000000322,
+        -3.675505131854465e-15,
+        -2.7067395326921754e-12,
+        -6.914360647530738e-15,
+        -1.1322166213960404e-14,
+        1.0000000000000129,
+        1423.8420000000078
+      ],
+      "src_key": "f:Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc:",
+      "name": "HC24-polymerization +29",
+      "base_transform": {
+        "values": [
+          1.0000000000000064,
+          3.8379162414064636e-16,
+          5.8205979267270724e-15,
+          3.975158863918923e-12,
+          2.179256302829851e-15,
+          1.0000000000000322,
+          -3.675505131854465e-15,
+          -2.7067395326921754e-12,
+          -6.914360647530738e-15,
+          -1.1322166213960404e-14,
+          1.0000000000000129,
+          1423.8420000000078,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "representation": "cylinders",
+      "interface_points": [
+        {
+          "label": "seam0:5p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": -3.0060000000000002
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        },
+        {
+          "label": "seam0:3p",
+          "position": {
+            "x": 5.84567147554496,
+            "y": 7.875,
+            "z": 46.092000000000006
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "connection_type": "COVALENT",
+          "clearance_nm": 0.0,
+          "cluster_id": null
+        }
+      ]
+    }
+  ]
+}

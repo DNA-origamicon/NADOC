@@ -9,7 +9,7 @@ passes.
 
 Routes
 ------
-  POST   /design/loop-skip/insert   — insert/remove a single loop or skip
+  POST   /design/loop-skip/insert   — set/remove a loop insertion count or skip
   POST   /design/loop-skip/twist    — apply twist via loop/skip strain
   POST   /design/loop-skip/bend     — apply bend via loop/skip strain
   GET    /design/loop-skip/limits   — query physical min/max
@@ -25,7 +25,7 @@ in crud.py for now (out of scope for 10-F; deferred to a follow-up).
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 
@@ -40,14 +40,14 @@ router = APIRouter()
 class LoopSkipInsertRequest(BaseModel):
     helix_id: str
     bp_index: int
-    delta: int  # +1 = loop (insertion), -1 = skip (deletion), 0 = remove existing
+    delta: int = Field(strict=True, ge=-1, le=512)  # 1..512 = inserted bases, -1 = single deletion, 0 = remove existing
 
 
 @router.post("/design/loop-skip/insert", status_code=200)
 def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
     """Insert or remove a single loop/skip modification at a bp position.
 
-    delta=+1 inserts a loop (extra bp), delta=-1 inserts a skip (deleted bp),
+    delta=1..512 sets a loop insertion count, delta=-1 inserts a skip (deleted bp),
     delta=0 removes any existing modification at that position.
     """
     from backend.api.part_routing_recording import record_loop_skip
@@ -223,4 +223,27 @@ def clear_loop_skip_range(
         op_subtype="loop-skip-clear", label="Clear loop/skip range",
         params={"helix_ids": ids, "plane_a_bp": plane_a_bp, "plane_b_bp": plane_b_bp},
         fn=lambda d: clear_loop_skips(d, ids, plane_a_bp, plane_b_bp))
+    return _design_response(updated, report)
+
+
+class StrandLoopRequest(BaseModel):
+    strand_id: str
+    helix_id: str
+    bp_index: int
+    direction: str
+    length: int = Field(strict=True, ge=0, le=512)
+    aspect_ratio: float = Field(default=3.0, ge=1.0, le=10.0, allow_inf_nan=False)
+    rotation_deg: float = Field(default=0.0, ge=-180.0, le=180.0, allow_inf_nan=False)
+
+
+@router.post("/design/strand-loop", status_code=200)
+def set_strand_loop(body: StrandLoopRequest) -> dict:
+    """Add/edit/remove a strand-specific loop with undo and native replay."""
+    from backend.core.strand_loops import set_loop
+    try:
+        updated, report, _ = design_state.mutate_with_minor_log(
+            op_subtype="strand-loop-set", label="Set strand loop",
+            params=body.model_dump(mode="json"), fn=lambda d: set_loop(d, body.model_dump()))
+    except ValueError as error:
+        raise HTTPException(422, detail=str(error)) from error
     return _design_response(updated, report)

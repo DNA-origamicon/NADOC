@@ -4490,6 +4490,21 @@ export async function importAssembly(content, { docId } = {}) {
   return _syncFromAssemblyResponse(json)
 }
 
+/** Read the workspace file on the server and reuse the ordinary import contract. */
+export async function openLibraryAssembly(path, { isCancelled = () => false } = {}) {
+  const json = await _request('POST', '/library/open-assembly', { path })
+  if (isCancelled()) return false
+  return _syncFromAssemblyResponse(json)
+}
+
+/** Discard an opening document only after its import/render command has settled. */
+export async function discardOpenedDocument() {
+  window.dispatchEvent(new Event('nadoc:document-reset'))
+  const response = await fetch(`${BASE}/documents/${encodeURIComponent(getDocId() ?? '__default__')}`, { method: 'DELETE' })
+  if (!response.ok) throw new Error('Could not discard the cancelled document')
+  clearPersistedDesign()
+}
+
 /**
  * Trigger a browser download of the active assembly as a .nass file.
  */
@@ -5400,8 +5415,9 @@ export async function listSimJobs(designSourcePath = null, showAll = false, { wa
  *  Replaces getLibraryFileContent → importDesign for opening: an 80 MB design used to
  *  cross the wire twice and be re-encoded in the browser. Resolves to
  *  `{ identityDisposition }` on success, `null` on failure (see store.lastError). */
-export async function openLibraryPart(path, name) {
+export async function openLibraryPart(path, name, { isCancelled = () => false } = {}) {
   const json = await _request('POST', '/library/open-part', { path, name })
+  if (isCancelled()) return null
   const ok = await _syncFromDesignResponse(json)
   return ok ? { identityDisposition: json?.identity_disposition ?? null } : null
 }
@@ -5809,3 +5825,7 @@ export const getMdTwoBaseMaps = (id, bases, { signal, designId, requestId } = {}
 
 export const getMdTwoBaseProgress = (id, requestId) =>
   _oxdnaJSON('GET', `/md/jobs/${encodeURIComponent(id)}/two-base-maps/progress?request_id=${encodeURIComponent(requestId)}`)
+
+export async function setStrandLoop(params) {
+  return _syncFromDesignResponse(await _request('POST', '/design/strand-loop', params))
+}

@@ -1,0 +1,867 @@
+{
+  "publication": {
+    "status": "verified",
+    "commands": 1434,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "bond_review": {
+      "schema": "nadoc-design-bond-report-v1",
+      "design_sha256": "e952a6f4c267f188f41ca26833f19e92e28e0763f2ce4e8a5636bb621cf65004",
+      "report_sha256": "6ff366b55acc6735a3b86cb61b05b153d16650d63955aa8b35e4e5b93c58d657",
+      "report": {
+        "schema_version": 1,
+        "review_required": false,
+        "reason_codes": [],
+        "threshold_fraction": 0.2,
+        "counts": {
+          "backbone_bonds": 15152,
+          "interhelix_bonds": 820,
+          "matched_forced_bonds": 22,
+          "matched_forced_interhelix_bonds": 4,
+          "unmatched_forced_records": 0,
+          "matched_forced_records": 22,
+          "nucleotides": 15362
+        },
+        "ratios": {
+          "forced_all": 0.0014519535374868005,
+          "forced_interhelix": 0.004878048780487805
+        },
+        "geometry": {
+          "requested": true,
+          "complete": true,
+          "status": "complete",
+          "threshold_nm": 1.2,
+          "long_all": 22,
+          "long_interhelix": 4,
+          "fraction_all": 0.0014519535374868005,
+          "fraction_interhelix": 0.004878048780487805,
+          "measured_bonds": 15152,
+          "missing_bonds": 0,
+          "worst_edges": [
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 1,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 1,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 3,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 3,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 5,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 5,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 7,
+                "bp": 431,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 7,
+                "bp": 12,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 9,
+                "bp": 431,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 9,
+                "bp": 12,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 13,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 13,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 11,
+                "bp": 431,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 11,
+                "bp": 12,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 15,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 15,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 17,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 17,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 0,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 0,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 2,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 2,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 12,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 12,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 4,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 4,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 6,
+                "bp": 12,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 6,
+                "bp": 431,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 8,
+                "bp": 12,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 8,
+                "bp": 431,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 10,
+                "bp": 12,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 10,
+                "bp": 431,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 14,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 14,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 16,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 16,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 0,
+                "bp": 172,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 18,
+                "bp": 256,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": true,
+              "forced_ligation": true,
+              "distance_nm": 28.321904353851856
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 19,
+                "bp": 98,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 1,
+                "bp": 172,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": true,
+              "forced_ligation": true,
+              "distance_nm": 25.04355457188713
+            }
+          ],
+          "missing_edge_examples": []
+        }
+      },
+      "review_status": "not_required"
+    },
+    "path": "workspace/Shared Designs/D006.nadoc",
+    "sha256": "258caa3115b1a202b9e373e8fe8ceaedfbb63d9705271632d1ad62c6e6fc84ca"
+  },
+  "reopened": {
+    "status": "verified",
+    "commands": 1434,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false,
+    "bond_review": {
+      "schema": "nadoc-design-bond-report-v1",
+      "design_sha256": "e952a6f4c267f188f41ca26833f19e92e28e0763f2ce4e8a5636bb621cf65004",
+      "report_sha256": "6ff366b55acc6735a3b86cb61b05b153d16650d63955aa8b35e4e5b93c58d657",
+      "report": {
+        "schema_version": 1,
+        "review_required": false,
+        "reason_codes": [],
+        "threshold_fraction": 0.2,
+        "counts": {
+          "backbone_bonds": 15152,
+          "interhelix_bonds": 820,
+          "matched_forced_bonds": 22,
+          "matched_forced_interhelix_bonds": 4,
+          "unmatched_forced_records": 0,
+          "matched_forced_records": 22,
+          "nucleotides": 15362
+        },
+        "ratios": {
+          "forced_all": 0.0014519535374868005,
+          "forced_interhelix": 0.004878048780487805
+        },
+        "geometry": {
+          "requested": true,
+          "complete": true,
+          "status": "complete",
+          "threshold_nm": 1.2,
+          "long_all": 22,
+          "long_interhelix": 4,
+          "fraction_all": 0.0014519535374868005,
+          "fraction_interhelix": 0.004878048780487805,
+          "measured_bonds": 15152,
+          "missing_bonds": 0,
+          "worst_edges": [
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 1,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 1,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 3,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 3,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 5,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 5,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 7,
+                "bp": 431,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 7,
+                "bp": 12,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 9,
+                "bp": 431,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 9,
+                "bp": 12,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 13,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 13,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 11,
+                "bp": 431,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 11,
+                "bp": 12,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 15,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 15,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 17,
+                "bp": 435,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 17,
+                "bp": 16,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689517650352
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 0,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 0,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 2,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 2,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 12,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 12,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 4,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 4,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 6,
+                "bp": 12,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 6,
+                "bp": 431,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 8,
+                "bp": 12,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 8,
+                "bp": 431,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 10,
+                "bp": 12,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 10,
+                "bp": 431,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 14,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 14,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 16,
+                "bp": 16,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 16,
+                "bp": 435,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": true,
+              "distance_nm": 139.94689306922166
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 0,
+                "bp": 172,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 18,
+                "bp": 256,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": true,
+              "forced_ligation": true,
+              "distance_nm": 28.321904353851856
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": 19,
+                "bp": 98,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": 1,
+                "bp": 172,
+                "direction": "REVERSE",
+                "copy_index": 0
+              },
+              "interhelix": true,
+              "forced_ligation": true,
+              "distance_nm": 25.04355457188713
+            }
+          ],
+          "missing_edge_examples": []
+        }
+      },
+      "review_status": "not_required"
+    }
+  },
+  "comparison": {
+    "routes": 210,
+    "insertions": 0,
+    "published_staples": 209,
+    "scaffold_sequence_matches": true,
+    "source_scaffold_bases": 7704,
+    "native_helices": 20,
+    "native_reference_consulted": false
+  },
+  "source_sha256": "9efdb9f71af9bc6169a420cf391b42eef17b97f23ac34ed7128c0dbc8c0c0232",
+  "design_sha256": "258caa3115b1a202b9e373e8fe8ceaedfbb63d9705271632d1ad62c6e6fc84ca"
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "files": {
+    "Shared Designs/All Origami/D003/recovered-20261104/D003.nadoc": {
+      "path": "Shared Designs/D003.nadoc",
+      "sha256": "03d1bff9570cbebbe7cc96693567a116198424bd8a6c9f9b8ffe0f315e3b35bd",
+      "content_sha256": "9e08d61ea8ed9f1f30739f4f3ce0ebabab1e603348baa6fce6c202441007397e"
+    },
+    "Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-polymerization.nadoc": {
+      "path": "Shared Designs/HC24-polymerization.nadoc",
+      "sha256": "51cf267c4cd97b74b3f5e9a946bd2d5ea4e4e6c1dc6883f8306a2b2bb55b73c0",
+      "content_sha256": "18a1ebab9119d0f960eb82eaaa4819501781a83469c8a3efd4aacbc8c1a9848b"
+    },
+    "Shared Designs/Desktop Benchmarks/HC24-30mer-20261124/HC24-30mer.nass": {
+      "path": "Shared Designs/HC24-30mer.nass",
+      "sha256": "6f123c4045d1aeedf286d6ecd7c228c8daca91e345949a13d12d19b849a28517",
+      "content_sha256": "aa883799d2cf33b58d7a079ca0de215f513cfa9b88d0495bce921289274857df"
+    },
+    "Shared Designs/parts/Dietz_Pointer_v1_12_mrDNA.nadoc": {
+      "path": "Shared Designs/Dietz_Pointer_v1_12_mrDNA.nadoc",
+      "sha256": "b38c51c5a26c5d36aeffada35c03b23cfdf220e0fabbe71bb442e28ec60c1cb0",
+      "content_sha256": "507306b8b980cee5f3ba5d5b95e06d0b9302ff6437a2ca335f66f8a467846150"
+    }
+  }
+}

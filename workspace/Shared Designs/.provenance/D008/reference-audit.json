@@ -1,0 +1,35 @@
+{
+  "native_sha256": "bd8371c721172211fbf5b01a5f005f70f2aa75ef98cb96ff862f9c62ead1144a",
+  "reference_sha256": "68b14bc7502d2fdcd5c2371a474a3040fd468517b2ae65ed8ad32a8400fc109b",
+  "comparison": {
+    "routes": 150,
+    "insertions": 0,
+    "published_staples": 148,
+    "derived_staples": 1,
+    "scaffold_sequence_matches": true,
+    "source_scaffold_bases": 7560,
+    "native_helices": 60,
+    "native_reference_consulted": false
+  },
+  "reference_routing": {
+    "scaf": {
+      "reference_sites": 7560,
+      "recovered_sites": 7560,
+      "missing_sites": 0,
+      "extra_sites": 0,
+      "wrong_pointers": 0
+    },
+    "stap": {
+      "reference_sites": 7560,
+      "recovered_sites": 5015,
+      "missing_sites": 2545,
+      "extra_sites": 0,
+      "wrong_pointers": 0
+    }
+  },
+  "published_source_topology_complete": true,
+  "unpaired_scaffold_bases": 2545,
+  "native_reference_used_only_after_construction": true,
+  "reference_difference": "120 reference-only terminal staples intentionally absent; one 38-base diagram strand omitted from the table is retained with a scaffold-derived sequence.",
+  "physical_relaxation_certified": false
+}

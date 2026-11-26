@@ -79,7 +79,7 @@ describe('initFileLoadDialog', () => {
     expect(els['flp-actions'].style.display).toBe('flex')
   })
 
-  it('showSuccess() fills green then hides after the delay', async () => {
+  it('showSuccess() immediately uncovers the prepared scene', async () => {
     vi.useFakeTimers()
     const els = mount()
     const dlg = initFileLoadDialog()
@@ -87,8 +87,7 @@ describe('initFileLoadDialog', () => {
     const p = dlg.showSuccess('"Part" loaded')
     expect(els['flp-status'].textContent).toBe('"Part" loaded')
     expect(els['flp-fill'].style.width).toBe('100%')
-    expect(els['file-load-progress'].classList.contains('visible')).toBe(true)
-    await vi.advanceTimersByTimeAsync(1500)
+    expect(els['file-load-progress'].classList.contains('visible')).toBe(false)
     await p
     expect(els['file-load-progress'].classList.contains('visible')).toBe(false)
     vi.useRealTimers()

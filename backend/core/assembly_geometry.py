@@ -55,7 +55,8 @@ def geo_cache_key(inst: "PartInstance", workspace_dir: Path | None) -> str | Non
         p = Path(src.path)
         if not p.is_absolute():
             for base in filter(None, [workspace_dir]):
-                candidate = (base / p).resolve()
+                from backend.core.shared_design_paths import resolve_shared_source
+                candidate = resolve_shared_source(base, p).resolve()
                 if candidate.is_file():
                     p = candidate
                     break

@@ -13,7 +13,10 @@ If no valid authoring path exists, stop with `AGENT_PROCESS_REQUIRED`.
 
 Shared reconstructions must be saved under `workspace/Shared Designs/`, which is
 tracked by the main NADOC repository. Stage specific audited files from the NADOC
-root; do not initialize a nested repository.
+root; do not initialize a nested repository. Store native documents directly in
+this folder, with one catalog in README.md. Keep required review evidence in
+`.provenance/`, not nested design/run directories. Preserve historical source
+references through the hash-bound read-only relocation manifest when moving files.
 
 Keep all dependencies inside this shared folder. Use workspace-relative assembly
 references beginning `Shared Designs/`, never another machine's absolute paths.

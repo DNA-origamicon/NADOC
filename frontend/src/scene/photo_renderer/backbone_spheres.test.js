@@ -1,6 +1,6 @@
 import { it, expect, vi } from 'vitest'
 import * as THREE from 'three'
-import { makeImpostorPhongMaterial, IMPOSTOR_QUAD } from '../impostor_material.js'
+import { makeImpostorPhongMaterial, IMPOSTOR_QUAD, backboneImpostorsEnabled, impostorsEnabled } from '../impostor_material.js'
 import { swapToFlatMaterials } from '../photo_mode.js'
 import { photoBackboneRadius, makePhotoBackboneGeometry } from './backbone_spheres.js'
 import { materialAvailability } from './material_availability.js'
@@ -48,4 +48,16 @@ it('refuses unknown/atomistic shader contracts and invalid radii', () => {
   mesh.material.userData.impostorRadius = NaN
   expect(photoBackboneRadius(mesh)).toBeNull()
   mesh.material.dispose()
+})
+
+
+it('desktop backbone switch is explicit and does not enable atomistic impostors', () => {
+  const original = location.href
+  try {
+    history.replaceState({}, '', '?fast-backbone=1')
+    expect(backboneImpostorsEnabled()).toBe(true)
+    expect(impostorsEnabled()).toBe(false)
+    history.replaceState({}, '', '?fast-backbone=0&impostors=1')
+    expect(backboneImpostorsEnabled()).toBe(false)
+  } finally { history.replaceState({}, '', original) }
 })

@@ -36,3 +36,18 @@ def test_exception_does_not_hide_other_replay_differences(monkeypatch):
     assert exceptions.reviewed_replay_value(design, replayed) != raw
     raw['molecular'][0] = 99
     assert exceptions.reviewed_replay_value(design, replayed) == replayed
+
+
+def test_workspace_move_preserves_only_the_existing_title_exception(monkeypatch):
+    raw={'metadata':{'name':'D003',**exceptions._D003_REVIEWED_IDENTITY},
+         'id':'same-document','commands':['original'],'molecular':[1,2]}
+    monkeypatch.setattr(exceptions,'_D003_DIGESTS',{content_digest(raw)})
+    raw['metadata'].update(identity_last_known_path='Shared Designs/D003.nadoc',identity_confirmed_at='after-move')
+    design=SimpleNamespace(model_dump=lambda **kw:deepcopy(raw))
+    replayed={'metadata':{'name':exceptions._OLD_NAME},'molecular':[1,2]}
+    assert exceptions.reviewed_replay_value(design,replayed)['metadata']['name']=='D003'
+    raw['molecular'][0]=3
+    assert exceptions.reviewed_replay_value(design,replayed)==replayed
+    raw['molecular'][0]=1
+    raw['id']='different-document'
+    assert exceptions.reviewed_replay_value(design,replayed)==replayed

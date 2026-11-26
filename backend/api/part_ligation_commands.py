@@ -161,7 +161,7 @@ def ligate(design, body):
                 patched = s.model_copy(
                     update={
                         "domains": new_domains,
-                        "sequence": None,
+                        "sequence": s.sequence if s.loops else None,
                     }
                 )
 
@@ -235,7 +235,12 @@ def ligate(design, body):
         strand_type=strand_a.strand_type,
         color=strand_a.color,
         sequence=None,  # topology changed — clear sequence
+        loops=[*strand_a.loops, *strand_b.loops],
     )
+    if merged_strand.loops:
+        from backend.core.sequences import strand_sequence_length
+        merged_strand.sequence = ''.join((s.sequence or '').ljust(strand_sequence_length(design, s), 'N')
+                                         for s in (strand_a, strand_b))
 
     return design.copy_with(
         strands=[

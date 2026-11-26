@@ -60,7 +60,7 @@ def create_empty_part(name, lattice_type):
     )
 
 
-def assess_part_history(design, *, max_entries=2000, execute=None, dependencies=None, checkpoint=None):
+def assess_part_history(design, *, max_entries=4000, execute=None, dependencies=None, checkpoint=None):
     """Read-only coverage/proof result for an already isolated Design.
 
 Never invokes the recovery evaluator, decompresses a snapshot, changes IDs,

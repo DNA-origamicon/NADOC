@@ -71,14 +71,13 @@ from backend.core.models import (
 )
 from backend.core import assembly_groups as _ag
 from backend.core import workspace as _ws
+from backend.core.workspace_location import default_workspace
 
 router = APIRouter()
 
 # ── Project root (two levels above this file: backend/api/ → backend/ → root) ──
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_WORKSPACE_DIR = Path(
-    os.environ.get("NADOC_WORKSPACE", str(_PROJECT_ROOT / "workspace"))
-)
+_WORKSPACE_DIR = default_workspace()
 
 
 # ── Geometry cache ─────────────────────────────────────────────────────────────
@@ -172,7 +171,8 @@ def _load_design_from_source(source, assembly_path: str | None = None):
             _PROJECT_ROOT,
         ]
         for base in filter(None, bases):
-            candidate = (base / p).resolve()
+            from backend.core.shared_design_paths import resolve_shared_source
+            candidate = resolve_shared_source(base, p).resolve()
             if candidate.is_file():
                 p = candidate
                 break
@@ -1404,6 +1404,9 @@ def _replace_instance_design(
     if inst.source.type == "file":
         # Write back to the existing workspace file
         dest = _safe_workspace_path(inst.source.path)
+        from backend.core.shared_design_paths import resolve_shared_source
+        if resolve_shared_source(_WORKSPACE_DIR, inst.source.path).resolve() != dest.resolve():
+            raise HTTPException(409, detail="This assembly uses a read-only relocated input. Select the canonical part as a new source before editing it.")
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(design.to_json(), encoding="utf-8")
         new_source = inst.source  # path unchanged; watchdog fires SSE

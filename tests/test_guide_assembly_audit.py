@@ -57,3 +57,26 @@ def test_unrecorded_upstream_change_refused(polymer, tmp_path):
     changed.instances[0].source.design.helices[0].length_bp += 1
     with pytest.raises(ProcessRequired):
         audit(changed, tmp_path)
+
+
+def test_workspace_relative_dependency_is_audited_and_replayed(polymer, tmp_path, monkeypatch):
+    from backend.api import assembly as api
+    from scripts.agent_structure_guard import publish as publish_part
+    folder = tmp_path / 'Shared Designs' / 'benchmark'
+    folder.mkdir(parents=True)
+    source = folder / '__e2e__part.nadoc'
+    destination = folder / '__e2e__assembly.nass'
+    monkeypatch.setattr(api, '_WORKSPACE_DIR', tmp_path)
+    try:
+        publish_part(polymer.instances[0].source.design, source)
+        with assemblies.assembly_scratch_session():
+            built = assemblies.add_file_instance(source.relative_to(tmp_path).as_posix())
+            result = publish(built, destination, workspace_root=tmp_path)
+        assert result['instances'] == 1
+        assert list(result['upstream_parts']) == ['Shared Designs/benchmark/__e2e__part.nadoc']
+        assert audit(Assembly.from_json(destination.read_text()), folder, workspace_root=tmp_path)['status'] == 'verified'
+        with pytest.raises(ProcessRequired, match='sibling'):
+            audit(built, folder)
+    finally:
+        destination.unlink(missing_ok=True)
+        source.unlink(missing_ok=True)

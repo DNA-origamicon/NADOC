@@ -1,0 +1,9 @@
+{
+  "source_url": "https://gitlab.engr.illinois.edu/tbgl/tools/mrdna/-/blob/6b9dfdcb73959029a9538564581c5a9e37edaea9/mrdna/resources/json/pointer_v1_12_from_dietz.json",
+  "local_source": "/home/jojo/Work/mrdna-tool/mrdna/resources/json/pointer_v1_12_from_dietz.json",
+  "repository_commit": "6b9dfdcb73959029a9538564581c5a9e37edaea9",
+  "sha256": "b2be312ef90f945cd0f6b5f134946019e7b1b52a763175820af72029342139f0",
+  "bytes": 606540,
+  "publication": "https://doi.org/10.1073/pnas.1215713109",
+  "note": "Unmodified local mrDNA distribution reference, named from_dietz. Remote endpoint unavailable during reconstruction. This file has 162 routed strands, whereas the paper describes 164; exact matching claims apply to this pinned file."
+}

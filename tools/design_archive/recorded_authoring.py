@@ -12,7 +12,7 @@ from scripts.agent_structure_guard import audit
 
 def audit_image_history(design):
     from backend.core.part_history_proof import command_rows
-    for _, kind, _ in command_rows(design, 2000):
+    for _, kind, _ in command_rows(design, 4000):
         if 'import' in kind:
             raise ProcessRequired('Image-only authoring cannot substitute an import command for construction')
     return audit(design)
@@ -32,6 +32,33 @@ def sequence(kind, design, params):
     return build(design, params['strand_id'], StrandPatchRequest.model_validate(params))[0]
 
 
+def delete_strands(kind, design, params):
+    from backend.api.crud import StrandBatchDeleteRequest, _build_delete_strands_batch
+    return _build_delete_strands_batch(design, StrandBatchDeleteRequest.model_validate(params))
+
+
+def nick(kind, design, params):
+    from backend.api.crud import NickRequest, _build_nick
+    return _build_nick(design, NickRequest.model_validate(params))
+
+
+def select_route(design, route):
+    """Resolve an exact directed staple selection before recording an editor command."""
+    matches = []
+    for strand in design.strands:
+        if strand.is_scaffold:
+            continue
+        sites = []
+        for domain in strand.domains:
+            step = 1 if domain.direction.value == 'FORWARD' else -1
+            sites.extend([domain.helix_id, bp] for bp in range(domain.start_bp, domain.end_bp+step, step))
+        if sites == route:
+            matches.append(strand.id)
+    if len(matches) != 1:
+        raise ProcessRequired('Published directed staple route does not select exactly one native strand')
+    return matches[0]
+
+
 # Deliberately bounded to reviewed editor operations, not every replay executor.
 # Imports, frozen topology, diagnostic operations and assembly commands are absent.
 BUILDERS = {
@@ -40,6 +67,8 @@ BUILDERS = {
     'loop-skip-insert': build_loop,
     'crossover-place': crossover,
     'strand-sequence': sequence,
+    'nick': nick,
+    'strand-delete-batch': delete_strands,
     **dict.fromkeys(('assign-scaffold-sequence', 'assign-staple-sequences'), build_sequence),
     **dict.fromkeys(('ligate', 'forced-ligation-create', 'crossover-extra-bases',
                      'forced-ligation-extra-bases'), ligation),
@@ -51,7 +80,7 @@ def construct(recipe, *, progress=None):
     from backend.api.part_proof_commands import PROOF_MINOR_KINDS
 
     if (recipe.get('version') != 1 or type(recipe.get('operations')) is not list
-            or not 1 <= len(recipe['operations']) <= 1900):
+            or not 1 <= len(recipe['operations']) <= 3800):
         raise ProcessRequired('A version-1, nonempty editor-operation recipe is required')
     if type(recipe.get('unresolved')) is not list:
         raise ProcessRequired('Recipe must explicitly list unresolved selections (empty only when reviewed)')
@@ -67,6 +96,12 @@ def construct(recipe, *, progress=None):
         state.load_design(create_empty_part(recipe['name'], recipe['lattice']))
         for number, operation in enumerate(recipe['operations'], 1):
             kind, params = operation['kind'], dict(operation['params'])
+            if 'select_route' in operation:
+                if kind not in ('strand-sequence', 'strand-delete-batch'):
+                    raise ProcessRequired('Directed route selection is only admitted for sequence assignment')
+                selected_id = select_route(state.get_or_404(), operation['select_route'])
+                if kind == 'strand-delete-batch': params['strand_ids'] = [selected_id]
+                else: params['strand_id'] = selected_id
             params['_generator'] = {'tool': 'All Origami recorded authoring',
                 'design_id': recipe.get('design_id'), 'sources': recipe.get('sources', []),
                 'evidence': operation.get('evidence', []), 'selection': operation['label'],

@@ -23,6 +23,7 @@ const cases = [
   ['crossover-extra-bases', { crossover_id: 'x1', sequence: 'AC' }, 'Sequence', 'NN', ['sequence'], 'NN'],
   ['crossover-extra-bases-batch', { entries: [{ crossover_id: 'x1', sequence: 'AC' }] }, 'Entry 1 Sequence', '', ['entries', 0, 'sequence'], ''],
   ['loop-skip-insert', { helix_id: 'h1', bp_index: 5, delta: 1 }, 'Loop/skip change', '0', ['delta'], 0],
+  ['loop-skip-insert', { helix_id: 'h1', bp_index: 5, delta: 144 }, 'Loop/skip change', '39', ['delta'], 39],
   ['loop-skip-twist', { helix_ids: ['h1'], plane_a_bp: 1, plane_b_bp: 10, target_twist_deg: 30 }, 'Target twist (degrees)', '-15', ['target_twist_deg'], -15],
   ['loop-skip-bend', { helix_ids: ['h1'], plane_a_bp: 1, plane_b_bp: 10, radius_nm: 20, direction_deg: 0 }, 'Direction (degrees)', '45', ['direction_deg'], 45],
   ['loop-skip-clear', { helix_ids: ['h1'], plane_a_bp: 1, plane_b_bp: 10 }, 'End plane (bp)', '12', ['plane_b_bp'], 12],

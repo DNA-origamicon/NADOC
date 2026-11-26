@@ -54,7 +54,7 @@ a separate requirement and cannot be bypassed by adding a feature log.
 ## Shared reconstruction destination
 
 Save shared reconstructions and their required portable dependencies under
-`workspace/Shared Designs/` (catalog runs use `All Origami/Dnnn/RUN/`). This folder
+`workspace/Shared Designs/`, directly in its top level with one README catalog. This folder
 is tracked by the main NADOC repository and travels with ordinary clone/pull.
 Do not create a nested Git repository. Keep simulation jobs and development
 evidence local. Publication and independent replay requirements above still apply.

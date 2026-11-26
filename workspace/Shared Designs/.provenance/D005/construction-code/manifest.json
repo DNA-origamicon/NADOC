@@ -1,0 +1,6 @@
+{
+  "backend/core/publication_authoring.py": "3c0d0d45f13c5d778fdd85636120eded43a6a213269cb8f9b838f541a5dae352",
+  "backend/core/publication_routing.py": "dfe0982f94741720e20ac91e0601b055839a229b16b0675d3adc105b4a448b3e",
+  "backend/core/publication_sequence_search.py": "5ebad19065b1f6b05c3f63587802e27c4044941080aa1f0ae427bc8a59ebb3f4",
+  "tools/design_archive/recorded_authoring.py": "28f563236f6eda58a8f98655e70fc3e3fd54493503b8e33660538df53a378256"
+}
