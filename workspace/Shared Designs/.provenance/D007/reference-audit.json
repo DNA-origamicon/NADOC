@@ -1,0 +1,35 @@
+{
+  "native_sha256": "a269b86a9a52649b1b5edfa754d58a1cdee3edce779dfc2c041c2a9a0ffaedda",
+  "reference_sha256": "3bf4d914c55566c0f22a8c8ad73410fb6a1a78f67be08cc970532fcf98bb7b98",
+  "comparison": {
+    "routes": 145,
+    "insertions": 0,
+    "published_staples": 144,
+    "scaffold_sequence_matches": true,
+    "source_scaffold_bases": 7560,
+    "native_helices": 60,
+    "native_reference_consulted": false
+  },
+  "reference_routing": {
+    "scaf": {
+      "reference_sites": 7560,
+      "recovered_sites": 7560,
+      "missing_sites": 0,
+      "extra_sites": 0,
+      "wrong_pointers": 0
+    },
+    "stap": {
+      "reference_sites": 7560,
+      "recovered_sites": 5880,
+      "missing_sites": 1680,
+      "extra_sites": 0,
+      "wrong_pointers": 0
+    }
+  },
+  "published_source_topology_complete": true,
+  "unpaired_scaffold_bases": 1680,
+  "unpaired_bases_per_helix": 28,
+  "native_reference_used_only_after_construction": true,
+  "reference_difference": "70 reference-only staples intentionally absent: user confirms these positions are bare scaffold ends in the target publication design.",
+  "physical_relaxation_certified": false
+}

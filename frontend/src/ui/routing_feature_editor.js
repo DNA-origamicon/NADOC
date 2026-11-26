@@ -44,7 +44,7 @@ const definitions = Object.freeze({
   'crossover-delete': ['Delete crossover', [crossover]], 'crossover-delete-batch': ['Delete crossovers', [ids('crossover_ids', 'Crossover', 'crossovers')]],
   'crossover-extra-bases': ['Crossover extra bases', [crossover, sequence]],
   'crossover-extra-bases-batch': ['Crossover extra bases batch', [list('entries', 'Entry', [crossover, sequence], () => ({ crossover_id: '', sequence: '' }))]],
-  'loop-skip-insert': ['Insert loop or skip', [helix, integer('bp_index', 'Base index'), scalar('delta', 'Loop/skip change', 'choice', { choices: [-1, 0, 1] })]],
+  'loop-skip-insert': ['Insert loop or skip', [helix, integer('bp_index', 'Base index'), integer('delta', 'Loop/skip change')]],
   'loop-skip-twist': ['Loop/skip twist', [...planes, scalar('target_twist_deg', 'Target twist (degrees)', 'number')]],
   'loop-skip-bend': ['Loop/skip bend', [...planes, scalar('radius_nm', 'Radius (nm)', 'number', { positive: true }), scalar('direction_deg', 'Direction (degrees)', 'number', { optional: true, fallback: 0 })]],
   'loop-skip-clear': ['Clear loops and skips in range', planes], 'loop-skip-clear-all': ['Clear all loops and skips', []],

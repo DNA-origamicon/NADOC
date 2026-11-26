@@ -4,6 +4,16 @@ import hashlib
 import json
 
 
+def shared_source_digest(raw: bytes) -> str:
+    """Bind all saved content except the two ordinary workspace identity stamps."""
+    value = json.loads(raw)
+    metadata = value.get('metadata', {})
+    for key in ('identity_last_known_path', 'identity_confirmed_at'):
+        metadata.pop(key, None)
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
+                                    allow_nan=False).encode()).hexdigest()
+
+
 def resolve_shared_source(workspace: Path, source: str | Path) -> Path:
     """Resolve a missing historical source through the shared relocation manifest.
 
@@ -34,6 +44,8 @@ def resolve_shared_source(workspace: Path, source: str | Path) -> Path:
     resolved = (workspace / target).resolve()
     if not resolved.is_relative_to(shared):
         raise ValueError('Shared design relocation escapes Shared Designs')
-    if hashlib.sha256(resolved.read_bytes()).hexdigest() != entry['sha256']:
-        raise ValueError(f'Shared design relocation source changed: {source}')
+    raw = resolved.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != entry['sha256']:
+        if not entry.get('content_sha256') or shared_source_digest(raw) != entry['content_sha256']:
+            raise ValueError(f'Shared design relocation source changed: {source}')
     return resolved

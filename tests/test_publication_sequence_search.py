@@ -176,3 +176,20 @@ def test_bad_declared_staple_length_prevents_validation():
     c,i=fixture();c['stap'][0]['table_row']['length']=17
     with pytest.raises(ValueError,match='No comparable'):
         search_scaffold_register(c,i,'ACGTTAGCATGCCGAT')
+
+
+def test_supported_loop_handoff_preserves_sources_and_refuses_unsupported_hypotheses():
+    from copy import deepcopy
+    from backend.core.publication_sequence_search import apply_supported_insertions
+    raw={'counts':[],'unresolved':[(30,119),(42,119)]}
+    search={'sequence_supported':True,'represented_length':7703,'length_discrepancy':1,
+            'insertion_hypothesis':{'sequence_supported':True,'counts':[[30,119,39],[42,119,39]],'unresolved':[]}}
+    before=deepcopy((raw,search))
+    result=apply_supported_insertions(raw,search)
+    assert result['counts']==[[30,119,39],[42,119,39]] and not result['unresolved']
+    result['counts'][0][2]=99
+    assert (raw,search)==before
+    search['sequence_supported']=False
+    assert apply_supported_insertions(raw,search)==raw
+    search['sequence_supported']=True;search['insertion_hypothesis']['sequence_supported']=False
+    assert apply_supported_insertions(raw,search)==raw

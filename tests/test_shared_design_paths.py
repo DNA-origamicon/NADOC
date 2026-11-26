@@ -73,3 +73,21 @@ def test_assembly_edit_cannot_recreate_historical_directory(tmp_path, monkeypatc
         assembly._replace_instance_design(None, instance, None)
     assert error.value.status_code == 409
     assert not (tmp_path / old).parent.exists()
+
+
+def test_identity_stamps_do_not_invalidate_relocation_but_other_metadata_does(tmp_path):
+    from backend.core.shared_design_paths import shared_source_digest
+    target, old, entry, manifest = fixture(tmp_path)
+    data = {'metadata': {'name':'part','identity_last_known_path':old,'identity_confirmed_at':'before'},
+            'feature_log':[{'input':'retained'}], 'helices':[{'length':10}]}
+    raw=json.dumps(data).encode()
+    target.write_bytes(raw)
+    entry.update(sha256=hashlib.sha256(raw).hexdigest(),content_sha256=shared_source_digest(raw))
+    manifest.write_text(json.dumps({'version':1,'files':{old:entry}}))
+    data['metadata'].update(identity_last_known_path=entry['path'],identity_confirmed_at='after')
+    target.write_text(json.dumps(data))
+    assert resolve_shared_source(tmp_path,old)==target
+    data['metadata']['name']='unrecorded name change'
+    target.write_text(json.dumps(data))
+    with pytest.raises(ValueError,match='source changed'):
+        resolve_shared_source(tmp_path,old)

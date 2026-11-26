@@ -876,3 +876,218 @@ reconstruction evidence alongside the original unresolved annotations. D009 full
 validation remains false (10 table rows unmatched, 276 unknown partner bases).
 This supersedes the previous blanket D009 alignment blocker. Native construction
 and geometry remain unfinished.
+
+Native publication follow-up (2026-11-25): D005 is now built from the PDF through
+2,681 ordinary recorded actions, published by the guard and independently replayed
+from the saved file. A separate post-publication native reference comparison is
+exact for all scaffold/staple pointers, relative lattice cells and insertion
+counts. The original supplement and pinned extraction implementations travel in
+Shared Designs/.provenance/D005. D006–D009 remain unsupported for complete native
+publication; the compiler rejects missing lattice, unresolved routing/sequence
+and unexplained unpaired scaffold runs. Do not imply README analysis rows appear
+in the welcome library. Native loop-count/history editing now admits 1–512 bases;
+process/document/history traversal remains bounded at 4,000 rows. The interactive
+Reconstruct button remains disabled; publication currently uses the CLI workflow.
+
+D006 loop follow-up (2026-11-25): user identifies sideways diagram and path-only
+bundle 19, authorizing inference of deliberate unpaired scaffold loops from
+negative staple complement evidence. Partial lattice recovery retains all 18
+inset cells and explicitly lists missing track 19. `publication_unpaired_scaffold`
+reports 26/3/3/14 unpaired runs and two anchored excursions containing 49 paired
+bases each. Short repeats in fully assigned staples are reported separately from
+unassigned-staple matches; minimum contiguous match is explicit (default 7, whole
+run when shorter). All four quarter-turn orientations are tested. Evidence is
+wired into publication analysis; no 3D position inferred, no D006 native output.
+Native publication reports AGENT_PROCESS_REQUIRED for missing auxiliary placement
+or native loop representation, rather than treating negative sequence evidence
+as a recovered physical pose. The user has been asked how to represent the
+path-only auxiliary track; do not invent a slice cell to unblock publication.
+
+Auxiliary placement clarification (2026-11-25): user authorizes inferring a vacant
+cell from odd/even polarity and nearest scaffold attachments; no published pose
+is required merely to run that search. `publication_auxiliary_placement.py`
+checks label parity against directed routing, enumerates an analytically bounded
+HC search, excludes occupied cells and preserves numerical ties. D006 has two
+exactly equivalent closest reverse-direction cells (2.25 nm to bundle 0 and
+sqrt(15.1875) nm to bundle 1). Neither is promoted. Public publication evidence
+returns both candidates; compiler reports ambiguous lattice placement. This
+supersedes the previous question about requiring a published pose. No new native
+structure or physical pose has been authored. Local reproducible evidence and
+lattice schematic: `.development-artifacts/d006-auxiliary-placement/`.
+
+D006 two-loop/ligation correction (2026-11-25): user confirms separate excursions
+from helices 0 and 1 and requests minimizing forced-ligation lengths. The two
+source-track-19 segments have independent 49-base staples, no cross-segment
+staple, and 29/17 unpaired bases. `publication_ligation_placement.py` uses the
+canonical native Full O5 projection and fixed source register; minimizes SUM of
+3D join spans per independent segment with an exhaustive analytic search bound.
+Both minima unique; combined span61.119926nm vs best shared-cell61.197591nm.
+The second optimum was outside the old center-distance two-cell shortlist.
+Segment identity/source ranges preserved; connected staples and endpoint indels
+block unsafe inference. Old center-distance tie retained as diagnostic only.
+Long25–28nm spans remain: no axial fit, phase change, flexible-loop geometry or
+native D006 publication. Do not label this a geometry pass. Evidence/schematic in
+`.development-artifacts/d006-ligation-placement/`. Native authoring guard now
+names independent segment/loop representation and geometry review as the blocker.
+
+D006 native follow-up (2026-11-25): user approved generalization/publication.
+`publication_native_tracks.py` maps independent auxiliary source-row intervals
+bijectively to ordinary recorded helix/domain commands; rejects collisions,
+overlaps, missing sites and unresolved placements. D006 published through guard:
+2116 replayed commands,20 tracks,210 strands,15362nt. All209 staples and p7704
+scaffold exact; independent post-construction reference comparison zero missing,
+extra or wrong pointers. Source row19 splits into visible native18(loop from0)
+and19(loop from1);46 unpaired bases retained as scaffold domains, no extensions.
+Full topology recovery is confirmed, not simulation-ready geometry: all15152
+bonds measured;22 long joins (18 source end-to-end staple wraps ~140nm,4 loop
+joins). Do not silently infer periodic seams or assembled instances from these.
+Portable source/code/audits in Shared Designs/.provenance/D006. Remaining D007–009
+have no native documents. D007's1680 reference-only positions are70 WHOLE end
+staples (20x12,20x24,30x32),28basesperhelix/840perend. All144 published paths
+exactly match other reference strands. Figure shows bare scaffold at those ends:
+source-variant difference, not missing interior tracing; reason still unverified.
+
+D006 precursor/polymerization correction (2026-11-25): user explicitly confirms
+the 18 end-to-end staple joins as polymerization. Fresh PDF reconstruction uses
+1434 native commands: 18 body staple pens + two auxiliary-track pens, terminal
+nicks, native crossover placement; all segments of 18 polymerization staples
+are reserved and drawn separately. Periodic seams use existing is_periodic_seam
+semantics; no assemblies/extensions or simulation policy changes. Four nonlocal
+scaffold-loop joins remain. Exact source topology/sequences and saved independent
+replay pass. Generic opt-in compiler/CLI flags continuous_staples and
+periodic_staple_seams; the latter requires explicit caller confirmation and only
+classifies jumps between same-helix scaffold extrema, never interior jumps.
+Native source snapshots updated with this rebuild; previous file/provenance
+retained in .development-artifacts/d006-precursor-polymerization.
+Welcome-screen reopen and ordinary browser autosave also pass independent replay
+(1434 commands), retain all18 periodic seams, and preserve exact sequences/routes.
+Isolated browser workspace/config/spec removed; published-file hash unchanged.
+
+General precursor defaults and D007 completion (2026-11-25): user requests the
+D006 method in the general algorithm and confirms D007 terminal labels are bare
+scaffold ends. compile_publication/CLI now default to continuous staple pens and
+the user-authorized same-helix scaffold-extrema polymerization rule. Other
+nonlocal staples remain separately authored without periodic reclassification;
+interior jumps are not inferred to be seams. Original D005/D006 saved histories
+and their pinned code remain unchanged. D007 publishes 1298 commands, 60 helices,
+144 staples/5880 staple bases,7560 scaffold bases;1680 terminal scaffold bases
+stay unpaired (28 per helix). No extra70 reference-only staples authored. Exact
+published routes/sequences and independent saved replay pass; all13295 bonds
+measured,zero forced/long/missing bonds. No relaxation prediction of bare ends.
+Terminal admission requires supported sequence/routing, positioned source tracks,
+and sites outside that helix's published staple band; interior gaps stay guarded.
+Portable PDF/code/reference/replay audits in Shared Designs/.provenance/D007.
+D007 welcome-screen open/save verified in an isolated byte-identical workspace:
+60 helices,145 strands,13440nt,zero browser/API errors; autosaved copy independently
+replays1298 commands. Cleanup verified; published original unchanged. Focused
+authoring18,precursor4,unpaired12 tests pass.
+
+D008/D009 follow-up (2026-11-25): default updated algorithm plus two general
+recovery modules. publication_missing_staples admits an existing unlisted drawn
+route only with complete exact scaffold alignment, full partner coverage,
+unanimous antiparallel polarity and no occupied staple overlap; sequence is
+explicitly derived, excluded from independent table validation. D008 publishes
+1186 commands,60 helices,149 staples (148 table +1 drawn38nt at27[60]→17[55]),
+7560scaf+5015stap=12575nt;2545 bare terminal scaffold bases retained. All source
+pointers match separately consulted reference; no120 extra reference terminal
+staples added. All12425 bonds measured,zero forced/long/missing. PDF/code/replay
+and reference audits in Shared Designs/.provenance/D008.
+publication_lattice_insets independently fits repeated inset copies and requires
+full translated-cell consensus. D009's5 copies/46 helices now resolve. Still
+10 absent drawn table routes,276 unknown scaffold partners (233terminal,
+43internal),two39base loops and1base p7704 discrepancy. Score80.96 unchanged;
+no D009 native model or silent extension substitution. Development evidence in
+.development-artifacts/d008-d009-recovery. No source reference used to author.
+D008 welcome-screen open/save verified:60 helices,150 strands,12575nt;zero
+browser/API errors. Browser autosave independently replays1186commands; temporary
+workspace/config/spec removed and original saved hash unchanged. Focused tests:
+recovery9,authoring18,publication routing7 pass.
+
+User-authorized on-helix staple overhang rule (2026-11-25): classify routed
+staple sites lacking scaffold partners as on-helix overhangs, including internal
+segments. publication_staple_overhangs selects exact table offsets (with indels),
+compares independently decoded image letters, explicitly falls back if absent or
+unreadable; readable conflicts never silently fall back. publication_base_labels
+uses color-isolated glyph templates despite broken Unicode; optional installed
+monospaced templates improve coverage, uncertainty remains unreadable. D009 has
+276bases:266 image/table matches,8 absent-image table fallbacks,2 imageA/tableT
+conflicts at8[117] and9[118].272bases accepted; two2base segments unresolved.
+Confidence84.87 policy on-helix-overhang-v1; original6686paired comparisons and
+129exact fully paired staples retained (no self-validation from table fallback).
+Ten unmatched routes and1base scaffold discrepancy still block native D009;
+recorded native on-helix authoring including internal segments remains required.
+No extensions or molecular files written. Analysis UI shows separate counts.
+Evidence .development-artifacts/d009-overhangs; real dialog browser test passed,
+isolated workspace/config/spec cleaned.
+Focused verification:34 backend tests (9overhang,18authoring,7routing),9UI tests,
+and actual-dialog browser rendering with computed D009 evidence pass. Image/table
+conflict addresses are displayed explicitly; no native files were modified.
+
+User base-conflict policy (2026-11-25): simply note image/table disagreements;
+do not block sequence assignment for them. Prefer strongest evidence; equal
+evidence defaults T > A > C > G, regardless of source. Reusable resolver in
+publication_base_conflicts retains original observations, selected_base, reason,
+support and notice severity; duplicates from one source do not add votes.
+Readable image/table each have equal default weight; OCR confidence is admission
+quality, not biological support. Overhang sequences use the selected bases;
+original table_sequence remains separate. D009 selectsT at8[117] and9[118],
+accepts276overhangbases,score84.92; retains2notices plus10missing routes and
+1base discrepancy. No native files modified. Evidence d009-base-conflicts.
+
+D009 end-to-end audit (2026-11-25): fresh compiler still blocks at missing routes
+(187/197; ten table-only paths total327nt). No native output. Fixed analysis→native
+39/39 loop handoff using shared apply_supported_insertions; originals immutable.
+Remaining native gaps: approved1base discrepancy still rejected by exact-length
+gates; on-helix overhang authoring/comparison still blocked; native min/max
+scaffold coverage masks138 of276 unpaired bases inside same-helix scaffold gaps
+(other138 outside bounds), including43 internal staple bases. UI Reconstruct
+is explicitly disabled and only check/analyze endpoints exist. Native generation
+requires route completion, explicit candidate sequence bookkeeping, interval-aware
+overhang recording/replay and endpoint/UI wiring, then saved replay/bond audit.
+Details and ten endpoint pairs: docs/d009_reconstruction_readiness.md. This is an
+implementation/readiness report, not a finding that new source data is certainly
+necessary. No reference design was used for this audit.
+
+## Partial native reconstruction — 2026-11-25
+
+D009 is published as a partial source-only native design: 1591 operations, 46
+helices, 194 staples, 7703 scaffold bases, two 39-base insertions, 285 native
+overhang bases. Seven of ten table-only routes are unique under bounded native
+crossover/sequence search; two are ambiguous, one has no match. No archived
+reference was used. Source comparison, guard publication and saved replay pass.
+Native review measures 14678 bonds, six >1.2 nm (two nonlocal joins/four loop
+boundaries); unrelaxed geometry. See docs/d009_partial_reconstruction.md.
+
+Arbitrary scaffold gaps are split/tagged as native overhang domains. Initial
+staple fine routing spans interior gaps, then records nicks/deletions to remove
+unsupported intervals. Partial output omits unresolved routes, preserving full
+process for all included strands. The CLI defaults to --allow-partial. A new
+reconstruct endpoint and selected-figure/table dialog download ZIP packages with
+reports, source PDFs and recipes; failures retain reports without fake models.
+Custom scaffold native generation remains unsupported and is explicitly rejected.
+
+Gap overhang reconciliation also transfers OverhangSpec identity with joined
+strand ownership; otherwise the first sequence normalization can discard prior
+labels/subdomain identities and later document-source replay diverges. The
+ownership regression test covers this; final native rebuild uses the fix.
+
+Final validation: 67 focused backend checks, 13 UI tests, two real-app flows;
+browser autosave independent replay and downloaded native package both verified.
+Temporary test workspaces/configs cleaned. D009 partial visible on welcome.
+Main.js task LOC delta: 0. Broad regression suites were not run.
+
+## Source figure colors and helix order — 2026-11-25
+
+publication_appearance.py preserves PDF stroke colors; table-only routes use a
+unanimous observed palette mapping or explicit nominal-table fallback. The
+compiler applies color with final sequence metadata and uses recorded
+helix-reorder after routing to preserve figure row order without renumbering.
+D009 is rebuilt with 1592 operations and appearance verification. Its figure
+order is 45–34, 16–21, 0–15, 33–22 (first/last descending). The source visibly
+labels both 30[119] and 42[119] as 39-base insertions; saved deltas are +39, not
+skips. See docs/publication_appearance.md.
+
+Appearance validation: 23 focused backend tests and the live welcome/caDNAno
+editor flow passed, including all colors, row order/labels and insertion deltas.
+Browser autosave replay/source comparison passed; temporary artifacts cleaned.
+Main.js task LOC delta: 0.

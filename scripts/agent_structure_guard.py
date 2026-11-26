@@ -13,7 +13,7 @@ from experiments.recorded_review_process import ProcessRequired, verify
 
 def _audit_with_process(design, *, document=True):
     """Require part authoring operations as well as complete process replay."""
-    for feature_id, kind, params in command_rows(design, 2000):
+    for feature_id, kind, params in command_rows(design, 4000):
         if kind == 'diagnostic-process' or kind.startswith('assembly-'):
             action = params.get('action', kind)
             raise ProcessRequired(

@@ -130,3 +130,18 @@ it('shows supported loops and penalizes the off-by-one candidate without calling
   expect(q('[data-length-discrepancy]').textContent).toContain('7703 bases; sequence: 7704 bases')
   expect(q('[data-pairing-evidence]').textContent).not.toContain('matches every supplied staple exactly')
 })
+
+it('distinguishes image-verified overhangs, table fallbacks and conflicts', async () => {
+  const design = candidate('overhangs')
+  design.pairings[0].publication_evidence = { staple_overhangs: { bases: 276, image_verified_bases: 266, table_fallback_bases: 8, conflicting_bases: 2, runs: [{ bases: [{ status: 'conflict', site: [8, 117], image_base: 'A', table_base: 'T', selected_base: 'T', selection_reason: 'preference_tie_break' }] }] } }
+  mount(vi.fn().mockResolvedValue({ ok: true, json: async () => ({ designs: [design], staple_lists: [{}], notes: [] }) }))
+  q('[data-analyze]').click()
+  await vi.waitFor(() => expect(q('select')).not.toBeNull())
+  q('select').value = 'list1'; q('select').dispatchEvent(new Event('change'))
+  expect(q('[data-staple-overhangs]').textContent).toContain('266 image/table matches')
+  expect(q('[data-staple-overhangs]').textContent).toContain('8 assigned from the table')
+  expect(q('[data-staple-overhangs]').textContent).toContain('2 image/table conflicts')
+  expect(q('[data-staple-overhangs]').textContent).toContain('not independent sequence validation')
+  expect(q('[data-staple-overhangs]').textContent).toContain('selected T (equal evidence; T > A > C > G)')
+  expect(q('[data-staple-overhangs]').textContent).toContain('Potential conflicts (notices)')
+})

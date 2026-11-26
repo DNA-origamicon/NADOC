@@ -300,8 +300,8 @@ def _validate(kind, values, *, allow_new=False):
         _id(values["helix_id"])
         _integer(values["bp_index"])
         _integer(values["delta"])
-        if values["delta"] not in {-1, 0, 1}:
-            _invalid("Loop/skip delta must be -1, 0 or 1.")
+        if not -1 <= values["delta"] <= 512:
+            _invalid("Loop/skip delta must be -1, 0, or an insertion count from 1 to 512.")
     elif kind != "loop-skip-clear-all":
         for identity in _list(values["helix_ids"]):
             _id(identity)

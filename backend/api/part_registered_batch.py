@@ -152,7 +152,7 @@ def _compile(source, request, history_seed, timestamp, dependency_resolver):
         steps.append(_Step(index, kind, feature_id, child_id, entry, outputs))
     # Count routing group headers as well as their children, before any replay.
     needed = len(log) + sum(len(entry.children) for entry in log if entry.feature_type == "routing-cluster")
-    list(command_rows(source, 2000 - needed))
+    list(command_rows(source, 4000 - needed))
     return log, steps
 
 

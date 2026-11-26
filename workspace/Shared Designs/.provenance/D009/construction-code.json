@@ -1,0 +1,21 @@
+{
+  "backend/core/publication_authoring.py": "71dcb0b4b3701ebcdad65debcc71aad9aff6528bb27a03840532080514f3714a",
+  "backend/core/publication_routing.py": "a3b3ac37cbeed9e2b7af14dc24e709ae1bc3d201c3e61b3f413f260bca0ed5df",
+  "backend/core/publication_sequence_search.py": "f8fedadbd1c3c7ad15e5b54bd91241c80a4800125a8fed10f407b1d6418980e6",
+  "backend/core/publication_unpaired_scaffold.py": "366ba484f6c2bb9aa2b6100787d9d318b194457e1cc1034fa9e3553864f460d5",
+  "backend/core/publication_auxiliary_placement.py": "bd742882603ab6fad75253b702394e20b6f12cc7fde70d89a9a7c5fb2cf3b806",
+  "backend/core/publication_ligation_placement.py": "faaeba4d7bacd4891db1805ab73208e56e4921a80b615ddc2e9cddc0aafdc515",
+  "backend/core/publication_native_tracks.py": "5678928a5ab1deb3a3bcb4191c35a258fed84bd87ca2a2a434adcc52ebaa025f",
+  "tools/design_archive/recorded_authoring.py": "b88ca7a9e0727bb44dfb12c0cf1f1e1b729c3d3c2994df3173ba8c9fbb8af22a",
+  "backend/core/publication_precursors.py": "3de8599372025fb98b5e84f3c15a15eb337e3e61b60a0fd733ba3ab7febd2a1c",
+  "backend/core/publication_missing_staples.py": "a850d7c52751c7f29108e4f4af2978556caf6a23036f8d08ef63f4ace10103c7",
+  "backend/core/publication_lattice_insets.py": "2f091affe7f4322e760b3d2a337765d0c8491565ab6693e363c2295ec556dfcb",
+  "backend/core/publication_base_labels.py": "8473e758f343e7cf47e1126c193bb2dc05b5406e51faad53718f52e369f473e6",
+  "backend/core/publication_staple_overhangs.py": "4a63588908fcf4af52eb86b58e41bcb52951cd45eb2a8aa1f9e6e57925d84d44",
+  "backend/core/publication_base_conflicts.py": "cde4085375a1c13d602c8a735cf8b8ff152281b6eff3af4e1220c16cbbe764d8",
+  "backend/core/publication_route_search.py": "6e46993009462ad32145f274458421e185fb93df14d64da54500a9143b50edc3",
+  "backend/core/publication_appearance.py": "df75398a4a5bab7a946dcfbfe3c9afd4cb3df43be0f9653c3db8e6a578e871e5",
+  "backend/core/scaffold_gap_overhangs.py": "b96e33ebd2b5e72f0c1aa83f38c73b3c3a720a432075c03ae8e680c62d7b9cd5",
+  "backend/api/part_strand_patch.py": "1642abbdfe94af97107c68592051b9b68ba0f88d1722d321742771c8a604f2e9",
+  "backend/core/lattice.py": "5f436c64d2528bed14f27dff818c95706f940c220092e26bf478211b67ea46e1"
+}

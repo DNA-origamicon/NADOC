@@ -51,7 +51,7 @@ def replay_prefix(source, log):
     try:
         # Admit only the requested prefix: a broken later feature must not prevent
         # navigating to, or reverting to, the last good stage.
-        for identity, kind, params in command_rows(source.copy_with(feature_log=log), 2000):
+        for identity, kind, params in command_rows(source.copy_with(feature_log=log), 4000):
             if not dependencies(kind, params).known:
                 raise HTTPException(409, detail={"code": "missing_proof_contract",
                     "feature_id": identity, "detail": f"Cannot rebuild history command {kind}."})

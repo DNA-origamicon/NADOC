@@ -45,3 +45,25 @@ it('cancels and ignores a late response', async () => {
   await Promise.resolve(); await Promise.resolve()
   expect(q('[data-status]').textContent).toBe('Check canceled.')
 })
+it('enables native reconstruction only for a selected figure/table and downloads its report package', async () => {
+  const report = { designs: [{ id: 'd', label: 'D009', source_sha256: 'abc', page: 6, image: '', context: '', rows: 46, branches: 0, observed_paths: [], route_hypotheses_tested: 1, limitations: [], pairings: [{ list_id: 't', label: 'table', list_rows: 197, basis: 'endpoints', alternatives: [], publication_evidence: { table_page: 14 } }] }], staple_lists: [], notes: [] }
+  const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => report }).mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['zip']) })
+  const create = vi.fn(() => 'blob:test'), revoke = vi.fn()
+  vi.stubGlobal('URL', { createObjectURL: create, revokeObjectURL: revoke })
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  try {
+    modal = showArticleReconstruction({ fetchImpl })
+    q('[data-analyze]').click()
+    await vi.waitFor(() => expect(q('.article-design-card select')).not.toBeNull())
+    q('[data-design-id]').click()
+    expect(q('[data-reconstruct]').disabled).toBe(true)
+    q('.article-design-card select').value = 't'; q('.article-design-card select').dispatchEvent(new Event('change'))
+    expect(q('[data-reconstruct]').disabled).toBe(false)
+    q('[data-reconstruct]').click()
+    await vi.waitFor(() => expect(click).toHaveBeenCalledOnce())
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body).selections).toEqual([{ source_sha256: 'abc', diagram_page: 6, table_page: 14 }])
+    expect(q('[data-status]').textContent).toContain('missing or ambiguous routes')
+    await new Promise(resolve => setTimeout(resolve, 1050))
+    expect(revoke).toHaveBeenCalledWith('blob:test')
+  } finally { click.mockRestore(); vi.unstubAllGlobals() }
+})

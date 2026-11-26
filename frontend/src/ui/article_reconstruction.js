@@ -32,10 +32,10 @@ export function showArticleReconstruction({ fetchImpl = globalThis.fetch } = {})
     <label>Scaffold sequence (optional; default M13mp18 hypothesis)<textarea data-scaffold rows="2" placeholder="ACGT…"></textarea></label>
     <p>Up to 100 pages per PDF. DOI lookup checks available metadata and open-access text. Upload PDFs when the paper or supplement cannot be accessed. caDNAno files are not required.</p>
     <div class="ie-toolbar"><button data-check>Check</button><button data-cancel disabled>Cancel</button></div>
-    <p>Basic screening accepts diagram captions or labels. Use Detect designs for image/list pairing and direction hypotheses. Molecular reconstruction is a later stage.</p>
+    <p>Basic screening accepts diagram captions or labels. Use Detect designs for image/list pairing and direction hypotheses. Select a detected design and its endpoint table to reconstruct. Partial results include a report of missing or ambiguous routes.</p>
     <ol data-checks aria-live="polite"></ol>
     <p data-status role="status">Ready to check.</p>
-    <div class="ie-toolbar"><button data-reconstruct title="Available in a later stage" disabled>Reconstruct</button><button data-evidence>Inspect diagram evidence…</button></div>`
+    <div class="ie-toolbar"><button data-reconstruct title="Select a detected figure and endpoint table" disabled>Reconstruct</button><button data-evidence>Inspect diagram evidence…</button></div>`
   const q = selector => body.querySelector(selector)
   let controller = null, revision = 0
   const readPayload = async () => {
@@ -45,7 +45,8 @@ export function showArticleReconstruction({ fetchImpl = globalThis.fetch } = {})
       staple_lists: await Promise.all(Array.from(q('[data-staple-lists]').files || []).map(encode)),
       scaffold_sequence: q('[data-scaffold]').value.trim() }
   }
-  const analysis = createArticleDesignSelection({ body, fetchImpl, readPayload })
+  const analysis = createArticleDesignSelection({ body, fetchImpl, readPayload,
+    onSelectionChange: selections => { q('[data-reconstruct]').disabled = !selections.length } })
   const rows = new Map()
   for (const [id, label] of checks) {
     const row = document.createElement('li')
@@ -57,7 +58,7 @@ export function showArticleReconstruction({ fetchImpl = globalThis.fetch } = {})
     revision++; controller?.abort(); controller = null; analysis.reset()
     for (const [id, { row, title, detail, label }] of rows) {
       const deferred = ['detail', 'reconstruction'].includes(id)
-      row.dataset.state = deferred ? 'deferred' : 'pending'; title.textContent = `○ ${label}`; detail.textContent = id === 'detail' ? 'Run Detect designs' : deferred ? 'Later stage' : 'Not checked'
+      row.dataset.state = deferred ? 'deferred' : 'pending'; title.textContent = `○ ${label}`; detail.textContent = id === 'detail' ? 'Run Detect designs' : deferred ? 'Run Detect designs' : 'Not checked'
     }
     q('[data-check]').disabled = false; q('[data-cancel]').disabled = true
     q('[data-reconstruct]').disabled = true
@@ -69,6 +70,29 @@ export function showArticleReconstruction({ fetchImpl = globalThis.fetch } = {})
     q(selector).addEventListener('input', () => { reset(); q('[data-status]').textContent = 'Inputs changed. Click Check to recheck.' })
   }
   q('[data-cancel]').addEventListener('click', () => { reset(); q('[data-status]').textContent = 'Check canceled.' })
+  q('[data-reconstruct]').addEventListener('click', async () => {
+    const current = revision
+    const selections = analysis.selectedReconstructions()
+    if (!selections.length) return
+    q('[data-reconstruct]').disabled = true
+    q('[data-status]').textContent = 'Reconstructing native designs and verifying recorded history… This may take several minutes.'
+    try {
+      const payload = { ...await readPayload(), selections }
+      if (current !== revision) return
+      const response = await fetchImpl('/api/article-reconstruction/reconstruct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (!response.ok) { const error = await response.json(); throw new Error(error.detail || 'Reconstruction failed.') }
+      const blob = await response.blob()
+      if (current !== revision) return
+      const url = URL.createObjectURL(blob), link = document.createElement('a')
+      link.href = url; link.download = 'reconstructed-designs.zip'; link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      q('[data-status]').textContent = 'Downloaded reconstruction package. Read each report for missing or ambiguous routes, then open its .nadoc file. If construction could not pass validation, the package contains its report without a design.'
+    } catch (error) {
+      if (current === revision) q('[data-status]').textContent = error.message
+    } finally {
+      if (current === revision) q('[data-reconstruct]').disabled = !analysis.selectedReconstructions().length
+    }
+  })
   q('[data-evidence]').addEventListener('click', () => showImageEvaluation({ fetchImpl }))
   q('[data-check]').addEventListener('click', async () => {
     reset()
@@ -103,7 +127,7 @@ export function showArticleReconstruction({ fetchImpl = globalThis.fetch } = {})
             completed = true
             q('[data-status]').textContent = item.ready_for_analysis
               ? 'Checks complete. Basic evidence is sufficient to proceed to image analysis.'
-              : 'Checks complete. See missing or inaccessible evidence above. Image analysis and confidence scoring are later stages.'
+              : 'Checks complete. See missing or inaccessible evidence above. Use Detect designs to inspect available image and sequence evidence.'
           } else if (rows.has(item.id)) {
             const { row, title, detail, label } = rows.get(item.id)
             row.dataset.state = item.status

@@ -1,5 +1,5 @@
 /** Candidate selection and evidence review; never commits an inferred molecule. */
-export function createArticleDesignSelection({ body, fetchImpl, readPayload }) {
+export function createArticleDesignSelection({ body, fetchImpl, readPayload, onSelectionChange = () => {} }) {
   const host = document.createElement('section')
   host.className = 'article-designs'
   host.innerHTML = `<h3>Detect designs and staple lists</h3>
@@ -10,9 +10,10 @@ export function createArticleDesignSelection({ body, fetchImpl, readPayload }) {
   const q = s => host.querySelector(s)
   let revision = 0, controller = null
   const selected = new Set()
-  function selectionStatus() { q('[data-selection-status]').textContent = `${selected.size} detected design(s) selected for review.` }
+  const selections = new Map()
+  function selectionStatus() { q('[data-selection-status]').textContent = `${selected.size} detected design(s) selected for review.`; onSelectionChange([...selected].map(id => selections.get(id)).filter(Boolean)) }
   function reset() {
-    revision++; controller?.abort(); controller = null; selected.clear()
+    revision++; controller?.abort(); controller = null; selected.clear(); selections.clear(); onSelectionChange([])
     q('[data-designs]').replaceChildren(); q('[data-analysis-status]').textContent = ''
     q('[data-selection-status]').textContent = ''; q('[data-analyze]').disabled = false
     q('[data-analysis-cancel]').disabled = true
@@ -40,6 +41,9 @@ export function createArticleDesignSelection({ body, fetchImpl, readPayload }) {
       function showPairing() {
         evidence.replaceChildren()
         const pairing = design.pairings.find(p => p.list_id === choices.value)
+        selections.delete(design.id)
+        if (pairing?.publication_evidence) selections.set(design.id, { source_sha256: design.source_sha256, diagram_page: design.page, table_page: pairing.publication_evidence.table_page })
+        selectionStatus()
         if (!pairing) {
           evidence.textContent = design.pairings.length ? 'Select a likely staple list to compare hypotheses.' : 'No sufficiently supported staple-list pairing. Upload a labelled list or improve the diagram evidence.'
           return
@@ -53,10 +57,18 @@ export function createArticleDesignSelection({ body, fetchImpl, readPayload }) {
           const recovered = document.createElement('p'); recovered.dataset.publicationRouting = ''
           recovered.textContent = `${item.matched_staples}/${item.table_rows} published staple endpoint pairs recovered from the figure; ${item.lengths_agree} path lengths agree. Base-index correction: ${item.base_index_offset}. ${item.scaffold_paths} scaffold path(s) oriented by antiparallel agreement; ${item.unclassified_paths} path(s) remain unclassified. ${item.unit_insertions_resolved ?? 0} unit insertions resolved; ${item.unresolved_insertions ?? 0} insertion lengths unresolved. ${item.limitation}`
           evidence.append(recovered)
+          if (item.staple_overhangs?.bases) {
+            const overhang = document.createElement('p'); overhang.dataset.stapleOverhangs = ''
+            const o = item.staple_overhangs
+            overhang.textContent = `On-helix staple overhangs: ${o.bases} bases; ${o.image_verified_bases} image/table matches, ${o.table_fallback_bases} assigned from the table where image letters are unavailable, ${o.conflicting_bases} image/table conflicts. Table fallback is an explicit assumption, not independent sequence validation.`
+            const conflicts = (o.runs ?? []).flatMap(run => run.bases ?? []).filter(base => base.status === 'conflict')
+            if (conflicts.length) overhang.textContent += ` Potential conflicts (notices): ${conflicts.map(base => `helix ${base.site[0]}[${base.site[1]}]: image ${base.image_base ?? 'ambiguous'}, table ${base.table_base}; selected ${base.selected_base ?? 'unresolved'}${base.selection_reason === 'preference_tie_break' ? ' (equal evidence; T > A > C > G)' : ''}`).join('; ')}.`
+            evidence.append(overhang)
+          }
           if (sequenceSearch) {
             const search = document.createElement('p'); search.dataset.sequenceSearch = ''
             search.textContent = sequenceSearch.best
-              ? `${sequenceSearch.scaffold_name}: ${sequenceSearch.candidates_tested} direction/shift candidates tested. Best: ${sequenceSearch.best.mismatches} mismatches across ${sequenceSearch.best.compared_bases} paired bases; ${sequenceSearch.best.exact_staples} exact staples; ${sequenceSearch.best_ties} best candidate(s). Offset ${sequenceSearch.best.offset}, direction ${sequenceSearch.best.reverse ? 'reversed' : 'recovered'}. Next-best: ${sequenceSearch.runner_up_mismatches} mismatches. ${sequenceSearch.nick_note} ${sequenceSearch.selection_basis ?? ''}. Unmatched table rows: ${sequenceSearch.unmatched_table_rows ?? 0}; invalid sequence rows: ${sequenceSearch.invalid_staple_rows?.length ?? 0}; unknown paired bases: ${sequenceSearch.best.unknown_bases ?? 0}.`
+              ? `${sequenceSearch.scaffold_name}: ${sequenceSearch.candidates_tested} direction/shift candidates tested. Best: ${sequenceSearch.best.mismatches} mismatches across ${sequenceSearch.best.compared_bases} paired bases; ${sequenceSearch.best.exact_staples} exact staples; ${sequenceSearch.best_ties} best candidate(s). Offset ${sequenceSearch.best.offset}, direction ${sequenceSearch.best.reverse ? 'reversed' : 'recovered'}. Next-best: ${sequenceSearch.runner_up_mismatches} mismatches. ${sequenceSearch.nick_note} ${sequenceSearch.selection_basis ?? ''}. Unmatched table rows: ${sequenceSearch.unmatched_table_rows ?? 0}; invalid sequence rows: ${sequenceSearch.invalid_staple_rows?.length ?? 0}; bases without scaffold partners: ${sequenceSearch.best.unknown_bases ?? 0}.`
               : sequenceSearch.reason
             evidence.append(search)
             if (sequenceSearch.confidence) {
@@ -117,5 +129,5 @@ export function createArticleDesignSelection({ body, fetchImpl, readPayload }) {
     }
   })
   q('[data-analysis-cancel]').addEventListener('click', () => { reset(); q('[data-analysis-status]').textContent = 'Analysis canceled.' })
-  return { reset, dispose: reset, selectedDesigns: () => [...selected] }
+  return { reset, dispose: reset, selectedDesigns: () => [...selected], selectedReconstructions: () => [...selected].map(id => selections.get(id)).filter(Boolean) }
 }

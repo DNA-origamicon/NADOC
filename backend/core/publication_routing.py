@@ -43,7 +43,9 @@ def extract_publication_paths(page):
             result=_extract_publication_paths(target)
             result['normalization_rotation']=rotation
             return result
-    return _extract_publication_paths(page)
+    result = _extract_publication_paths(page)
+    result['normalization_rotation'] = 0
+    return result
 
 
 def _extract_publication_paths(page):
@@ -125,7 +127,10 @@ def _extract_publication_paths(page):
         except ValueError:
             continue
         insertions.append(address)
-    return {'paths':paths,'insertion_annotations':sorted(set(insertions)),'calibration' :{'origin_x':origin,'points_per_base':scale,'row_centers':centers},
+    calibration={'origin_x':origin,'points_per_base':scale,'row_centers':centers}
+    from backend.core.publication_base_labels import extract_base_labels
+    return {'paths':paths,'insertion_annotations':sorted(set(insertions)),
+            'calibration':calibration, 'base_labels':extract_base_labels(page,calibration),
             'lattice':recover_lattice(page,all_labels,centers),
             'status':'unclassified image-derived paths'}
 
@@ -194,6 +199,8 @@ def classify_scaffold(pairing):
 
 def publication_evidence(graph, tables, custom_sequence=None):
     from backend.core.publication_sequence_search import search_declared_scaffold
+    from backend.core.publication_unpaired_scaffold import aligned_unpaired_scaffold
+    from backend.core.publication_auxiliary_placement import infer_auxiliary_placement
     candidates=[]
     for table in tables:
         pairing=pair_endpoint_table(graph,table)
@@ -202,13 +209,23 @@ def publication_evidence(graph, tables, custom_sequence=None):
         classified=classify_scaffold(pairing)
         insertion_solution=resolve_insertions(pairing,classified,table)
         sequence_search=search_declared_scaffold(classified,insertion_solution,table,custom_sequence)
+        from backend.core.publication_missing_staples import recover_unlisted_staples
+        classified, derived_staples = recover_unlisted_staples(classified, insertion_solution, sequence_search)
         source_insertions=insertion_solution
-        hypothesis=sequence_search.get('insertion_hypothesis')
-        if hypothesis and hypothesis['sequence_supported'] and sequence_search.get('sequence_supported'):
-            insertion_solution={**insertion_solution,**hypothesis,
-                                'represented_scaffold_length':sequence_search['represented_length'],
-                                'sequence_length_discrepancy':sequence_search['length_discrepancy']}
+        from backend.core.publication_sequence_search import apply_supported_insertions
+        insertion_solution=apply_supported_insertions(insertion_solution,sequence_search)
+        from backend.core.publication_staple_overhangs import classify_staple_overhangs, apply_overhang_evidence
+        overhangs=classify_staple_overhangs(classified,insertion_solution,graph.get('base_labels',[]),
+                                          base_index_offset=pairing['base_index_offset'])
+        sequence_search=apply_overhang_evidence(sequence_search,overhangs)
+        unpaired = aligned_unpaired_scaffold(classified, insertion_solution, table,
+                                             sequence_search, graph['lattice'], custom_sequence)
         candidates.append({'sequence_search':sequence_search,
+                           'staple_overhangs':overhangs,
+                           'derived_staples': derived_staples,
+                           'unpaired_scaffold': unpaired,
+                           'auxiliary_placement': infer_auxiliary_placement(graph['lattice'], classified, unpaired),
+                           'normalization_rotation': graph.get('normalization_rotation', 0),
                            'source_insertion_solution':source_insertions,
                            'sequence_resolved_loops':len(source_insertions['unresolved'])-len(insertion_solution['unresolved']),
                            'table_page':table['page'], 'table_rows':len(table['rows']),
@@ -235,7 +252,7 @@ def publication_evidence(graph, tables, custom_sequence=None):
 
 def recover_lattice(page, labels, row_ids):
     """Read labelled circles and fit a honeycomb inset, allowing export rounding."""
-    circles={}
+    observations=[]
     for drawing in page.get_drawings():
         items=drawing['items'];rect=drawing['rect']
         if not drawing.get('color') or len(items)!=4 or not all(i[0]=='c' for i in items):
@@ -245,11 +262,16 @@ def recover_lattice(page, labels, row_ids):
         inside=[n for n in labels if rect.contains(pymupdf.Point(n['x'],n['y']))]
         if len(inside)==1 and inside[0]['value'] in row_ids:
             key=inside[0]['value']
-            if key in circles:
-                return {'resolved':False,'reason':'Repeated lattice labels.'}
-            circles[key]=((rect.x0+rect.x1)/2,(rect.y0+rect.y1)/2,rect.width/2)
-    if set(circles)!=set(row_ids):
-        return {'resolved':False,'reason':'Incomplete numbered lattice inset.'}
+            observations.append((key, ((rect.x0+rect.x1)/2,(rect.y0+rect.y1)/2,rect.width/2)))
+    from backend.core.publication_lattice_insets import consensus_insets
+    return consensus_insets(observations, row_ids, _fit_lattice_circles)
+
+
+def _fit_lattice_circles(circles, row_ids):
+    missing = sorted(set(row_ids) - set(circles))
+    if len(circles) < 3:
+        return {'resolved': False, 'inset_resolved': False,
+                'missing_helices': missing, 'reason': 'Incomplete numbered lattice inset.'}
     radius=median(v[2] for v in circles.values())
     minx=min(v[0] for v in circles.values());miny=min(v[1] for v in circles.values())
     fits=[]
@@ -264,7 +286,13 @@ def recover_lattice(page, labels, row_ids):
             cells[helix]=[row,col]
         if residual<radius*.15 and len({tuple(v) for v in cells.values()})==len(cells):
             fits.append({'resolved':True,'kind':'honeycomb','cells':cells,'max_residual_in_radii':residual/radius})
-    return fits[0] if len(fits)==1 else {'resolved':False,'reason':'Lattice does not have a unique honeycomb fit.'}
+    if len(fits) != 1:
+        return {'resolved': False, 'inset_resolved': False, 'missing_helices': missing,
+                'reason': 'Lattice does not have a unique honeycomb fit.'}
+    fit = {**fits[0], 'inset_resolved': True, 'missing_helices': missing}
+    if missing:
+        fit.update(resolved=False, reason='Path-view helices absent from numbered lattice inset.')
+    return fit
 
 
 def resolve_insertions(pairing, classified, table):

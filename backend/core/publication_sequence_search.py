@@ -5,6 +5,18 @@ import re
 import numpy as np
 
 
+def apply_supported_insertions(insertions, search):
+    """Carry accepted loop-count evidence into native planning without editing it."""
+    from copy import deepcopy
+    solution = deepcopy(insertions)
+    hypothesis = search.get('insertion_hypothesis')
+    if hypothesis and hypothesis.get('sequence_supported') and search.get('sequence_supported'):
+        solution.update(deepcopy(hypothesis))
+        solution['represented_scaffold_length'] = search['represented_length']
+        solution['sequence_length_discrepancy'] = search['length_discrepancy']
+    return solution
+
+
 def search_scaffold_register(classified, insertions, sequence, *, scaffold_name='custom', allow_length_discrepancy=False):
     """Score every cyclic shift in both directions against every supplied staple.
 
@@ -197,8 +209,11 @@ def _confidence(result):
         penalties.append({'reason':'one-base scaffold length discrepancy','points':LENGTH_PENALTY})
     if result.get('unmatched_table_rows'):
         penalties.append({'reason':'unmatched staple table rows','points':100*result['unmatched_table_rows']/max(1,result['table_rows'])})
-    if best['unknown_bases']:
-        penalties.append({'reason':'staple bases with unknown scaffold partners','points':100*best['unknown_bases']/max(1,best['compared_bases']+best['unknown_bases'])})
+    unresolved=result.get('unresolved_partner_bases',best['unknown_bases'])
+    if unresolved:
+        penalties.append({'reason':('unresolved on-helix overhang sequences' if 'assigned_overhang_bases' in result
+                                    else 'staple bases with unknown scaffold partners'),
+                          'points':100*unresolved/max(1,best['compared_bases']+best['unknown_bases'])})
     if result['invalid_staple_rows']:
         penalties.append({'reason':'invalid staple sequences','points':100*len(result['invalid_staple_rows'])/max(1,result['matched_rows'])})
     if result.get('unsearched_candidates'):
@@ -209,4 +224,4 @@ def _confidence(result):
     return {'score':round(max(0,agreement-sum(p['points'] for p in penalties)),2),
             'sequence_agreement':round(agreement,2),'penalties':penalties,
             'kind':'heuristic sequence-evidence score, not a calibrated probability or whole-design confidence',
-            'policy':'one-base-discrepancy-v1'}
+            'policy':'on-helix-overhang-v2' if 'assigned_overhang_bases' in result else 'one-base-discrepancy-v1'}

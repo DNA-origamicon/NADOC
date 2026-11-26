@@ -206,10 +206,10 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
             raise CommandContractError("Repair requires the complete recipe", code="historical_cursor")
         if set(type(source).model_fields) - FIELD_ROLES.keys():
             raise CommandContractError("Design fields lack proof ownership", code="unclassified_fields")
-        rows = list(command_rows(source, 2000))
+        rows = list(command_rows(source, 4000))
         log, upgrades, definition_upgrades = _definitions(
             source, request, dependency_resolver, numerical_provider or _current_numerical_pins)
-        rows = list(command_rows(source.copy_with(feature_log=log), 2000))
+        rows = list(command_rows(source.copy_with(feature_log=log), 4000))
 
         changed = {action.feature_id for action in request.actions
                    if isinstance(action, SetInput) and action.child_id is None}

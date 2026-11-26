@@ -380,7 +380,7 @@ def test_cumulative_recovery_budget_and_recipe_row_reservation_are_shared(monkey
     assert result["status"] == "unverified" and result["issues"][0]["code"] == "command_limit"
     assert "candidate" not in result
     design = source().copy_with(feature_log=[SnapshotLogEntry(id=f"old-{index}", op_kind="nanoparticle-create",
-        label="legacy") for index in range(1999)])
+        label="legacy") for index in range(3999)])
     result = prepare(design, request(helix()), executor=lambda *_a: pytest.fail("Entry limit replayed"))
     assert result["issues"][0]["code"] == "entry_limit"  # One child PLUS its routing header.
 

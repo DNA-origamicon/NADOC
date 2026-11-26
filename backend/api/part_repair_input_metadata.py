@@ -34,13 +34,13 @@ def _error(code, detail, status=422):
 def _capture(source, selection):
     """Bound identity scanning before cloning only the selected input JSON."""
     deadline = monotonic() + 0.025
-    if len(source.feature_log) > 2000:
+    if len(source.feature_log) > 4000:
         raise CaptureLimit("Repair input inspection exceeds the history row allowance")
     seen, count, selected = set(), 0, None
     for entry in source.feature_log:
         children = entry.children if entry.feature_type == "routing-cluster" else ()
         count += 1 + len(children)
-        if count > 2000:
+        if count > 4000:
             raise CaptureLimit("Repair input inspection exceeds the history row allowance")
         for item in (entry, *children):
             if monotonic() > deadline:

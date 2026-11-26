@@ -88,7 +88,7 @@ class _Copier:
 
 
 def capture_draft_inputs(design, *, source_revision, draft=None, proposed_actions=(),
-                         include_definitions=True, max_entries=2000,
+                         include_definitions=True, max_entries=4000,
                          max_nodes=30_000, max_bytes=2_000_000, seconds=0.025):
     """Caller owns the state lock; mutable definitions are cloned before return.
 

@@ -85,6 +85,14 @@ def test_original_publication_detection_uses_pdf_only(monkeypatch):
     report=detect_designs({'paper':{'name':'publication.pdf','data':base64.b64encode(data).decode()}})
     observed=[p['publication_evidence']['matched_staples'] for d in report['designs'] for p in d['pairings'] if 'publication_evidence' in p]
     assert 217 in observed and 209 in observed
+    candidates=[p['publication_evidence'] for d in report['designs'] for p in d['pairings']
+                if 'publication_evidence' in p]
+    d006=next(c for c in candidates if c['matched_staples']==209)
+    assert d006['normalization_rotation']==270
+    assert d006['unpaired_scaffold']['unpaired_bases']==46
+    assert d006['unpaired_scaffold']['resolved']
+    assert d006['auxiliary_placement']['resolved']
+    assert len(d006['auxiliary_placement']['segment_placements'])==2
     assert not report['can_reconstruct']
 
 

@@ -10,22 +10,31 @@ clone/pull of NADOC includes the committed designs and portable dependencies.
 | Dietz Pointer v1.12 — mrDNA reference | [Dietz_Pointer_v1_12_mrDNA.nadoc](Dietz_Pointer_v1_12_mrDNA.nadoc); reference import and scaffold assignment; not a publication-image reconstruction |
 | HC24 — periodic part | [HC24-polymerization.nadoc](HC24-polymerization.nadoc); upstream part for the 30-mer |
 | HC24 — 30-mer assembly | [HC24-30mer.nass](HC24-30mer.nass); 30 instances, 29 joins |
-| D005 — twisted bundle | Analysis only; 217/217 staples match; no saved native model |
-| D006 — twisted bundle | Analysis only; 209/209 staples match; lattice positions remain incomplete |
-| D007 — monolith | Analysis only; 144/144 staples match; native routing completion remains |
-| D008 — square nut | Analysis only; 148/148 staples match; native routing completion remains |
-| D009 — railed bridge | Analysis only; loop-supported candidate with a one-base scaffold discrepancy and penalized confidence; unresolved, no saved native model |
+| D005 — twisted bundle | [D005.nadoc](D005.nadoc); PDF-derived native construction, 2,681 replayed commands, 217/217 staples match |
+| D006 — straight 3×6 bundle | [D006.nadoc](D006.nadoc); complete source topology, 209/209 staples, two independently placed loop tracks, 1,434 replayed commands; 18 polymerization seams and four nonlocal loop joins |
+| D007 — monolith | [D007.nadoc](D007.nadoc); 60 helices, 144/144 published staples, 1,680 bare terminal scaffold bases preserved; 1,298 replayed commands |
+| D008 — square nut | [D008.nadoc](D008.nadoc); 148 table staples plus one drawn 38-base staple with derived sequence; 1,186 replayed commands |
+| D009 — railed bridge (partial) | [D009.nadoc](D009.nadoc); 194/197 table staples; 1,592 replayed commands; [completion report](D009.reconstruction.json) |
+
+D005 was authored from the published figure/table using native editor operations,
+without a caDNAno reference as a construction input. Its original supplement,
+construction implementation hashes and publication/reopen audits are retained in
+`.provenance/D005/`. This is the native idealized lattice model; experimental
+twist/relaxation and simulation readiness are not certified.
 
 Publication-analysis details and limitations: [routing extraction](../../../docs/publication_routing_extraction.md).
-The reconstruction UI retains analysis results in its session; these rows do not
-represent published molecular documents. Development reports remain local.
+D009 is a partial native document visible on the welcome screen. Its report lists
+the three omitted staples and remaining interpretation/geometry limitations. Development artifacts remain local.
 
 Store future native designs directly here with unique, descriptive filenames.
 Required review evidence lives in `.provenance/`; historical read-only source
-paths resolve through `.relocations.json`, which binds their original SHA-256.
-The consolidation did not rewrite any native document, identity or feature log.
-Relocation aliases are for loading dependencies, not save destinations. Editing
-a relocated source changes its digest and invalidates the historical alias;
+paths resolve through `.relocations.json`, which binds their original SHA-256 and complete saved content except the two
+ordinary workspace identity path/timestamp fields.
+The consolidation preserved native histories and molecular content. NADOC’s
+ordinary welcome-screen identity migration subsequently updated relocation paths
+and timestamps; those two bookkeeping fields are explicitly allowed by the lookup.
+Relocation aliases are for loading dependencies, not save destinations. Editing molecular content, construction history or other metadata
+invalidates the historical alias;
 record a new source selection rather than silently repointing old history.
 
 ## Save and synchronize
@@ -100,3 +109,30 @@ and links escaping the shared folder are not permitted. Existing local designs
 and jobs stay in the runtime workspace; only shared designs live in the checkout.
 Do not overwrite an existing folder when creating either link. Preserve old
 nested Git metadata outside the workspace before adopting this layout.
+
+D006 preserves all 7,704 scaffold sites and 7,658 staple sites, with zero missing,
+extra or incorrect reference pointers after mapping the two native loop tracks
+back to source row 19. Native visible helix 18 is the loop from helix 0; native
+helix 19 is the loop from helix 1. All 46 unpaired bases remain native scaffold
+domains; no terminal extensions, inferred oligos or imported root were substituted.
+
+This certifies source topology and recorded construction, not simulation geometry.
+The source includes 18 same-helix end-to-end staple connections (~140 nm in the
+straight monomer frame) and four auxiliary loop joins. The 18 end-to-end joins are now
+explicitly marked as periodic polymerization seams, as confirmed by the user.
+The four loop joins remain nonlocal. No axial fitting or relaxation was performed.
+Staple construction uses 18 continuous body pens and two auxiliary-track pens,
+then native endpoint nicks and crossovers; polymerization staples are drawn separately.
+Portable source, code snapshots, replay and reference audits: `.provenance/D006/`.
+
+D007 preserves the full 7,560-base scaffold and only the 144 published staples
+(5,880 staple bases). The 1,680 terminal scaffold bases remain unpaired, 28 per
+helix; no additional staples from the archived end-stapled variant are added.
+All 13,295 backbone edges were measured with zero forced ligations and zero
+Full-view O5 spans above 1.2 nm. This is an idealized native lattice model, not
+a relaxed prediction of the bare ends. Source and replay audits: `.provenance/D007/`.
+
+D009 is now available as **D009.nadoc (partial)** with 194/197 table staples. Read
+[D009.reconstruction.json](D009.reconstruction.json) and
+[its provenance](.provenance/D009/README.md) for the three omitted routes,
+scaffold-length hypothesis, sequence conflicts and unrelaxed geometry limits.

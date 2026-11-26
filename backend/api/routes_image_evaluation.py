@@ -90,3 +90,18 @@ async def analyze_article(request: Request):
             return await run_in_threadpool(detect_designs, payload)
     except (ValueError, TypeError, KeyError, RuntimeError) as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.post('/article-reconstruction/reconstruct')
+async def reconstruct_article(request: Request):
+    from starlette.responses import Response
+    from backend.core.article_native_reconstruction import reconstruct_package
+    try:
+        payload=await request.json()
+        if not isinstance(payload,dict):raise ValueError('Expected article inputs.')
+        async with _gate:
+            data=await run_in_threadpool(reconstruct_package,payload)
+        return Response(data,media_type='application/zip',headers={
+            'Content-Disposition':'attachment; filename="reconstructed-designs.zip"'})
+    except (ValueError,TypeError,KeyError) as exc:
+        raise HTTPException(422,str(exc)) from exc

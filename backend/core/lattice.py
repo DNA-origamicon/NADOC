@@ -4497,6 +4497,7 @@ def migrate_split_staple_domains(design: Design) -> Design:
                 and prev.direction == nxt.direction
                 and prev.overhang_id not in protected
                 and nxt.overhang_id not in protected
+                and not any(tag and tag.startswith("ovhg_gap_") for tag in (prev.overhang_id, nxt.overhang_id))
             ):
                 fwd = prev.direction == Direction.FORWARD
                 contig = (
@@ -4606,6 +4607,8 @@ def autodetect_all_overhangs(design: Design) -> Design:
 
     # Pass 2: domains that extend beyond scaffold boundary on scaffold-covered helices
     design = reconcile_all_inline_overhangs(design)
+    from backend.core.scaffold_gap_overhangs import reconcile_scaffold_gaps
+    design = reconcile_scaffold_gaps(design)
 
     # Assign default labels OH1, OH2, … to any overhang that has no label yet.
     # Sort by id for deterministic ordering across runs.

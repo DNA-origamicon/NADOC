@@ -80,7 +80,7 @@ def test_all_native_roles_keep_complete_detached_inputs(kind):
     ("crossover-place", {"half_a": {"helix_id": "h", "index": 3, "strand": "FORWARD", "future": 1}}),
     ("crossover-place", {"process_id": 7}),
     ("crossover-move", {"new_index": 1.0}),
-    ("loop-skip-insert", {"delta": 2}),
+    ("loop-skip-insert", {"delta": 513}),
     ("loop-skip-bend", {"radius_nm": 0}),
     ("loop-skip-twist", {"target_twist_deg": float("inf")}),
     ("loop-skip-clear", {"helix_ids": [""]}),

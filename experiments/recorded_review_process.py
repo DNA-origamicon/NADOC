@@ -222,7 +222,7 @@ def verify(design):
     process.design = root_design(design.recipe_root, input_sources=design.input_sources)
     process.design.id = design.id
     count = 0
-    for feature_id, kind, params in command_rows(design, 2000):
+    for feature_id, kind, params in command_rows(design, 4000):
         process.apply(kind, params)
         # Preserve prior input rows for nested Add Part provenance, never read
         # snapshots or saved outputs. Rows are copied only after their execution.

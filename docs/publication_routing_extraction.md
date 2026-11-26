@@ -192,3 +192,38 @@ Regression tests: `tests/test_publication_loop_search.py`, including unchanged
 inputs, both directions, nonzero shifts, exact-length loops, +/-1 cases, bounds,
 ambiguous partitions and paired-base mutations. PDF-only sequence-audit reports
 now hash the loop-search implementation as well.
+
+## Saved native construction (2026-11-25)
+
+D005 is now published through ordinary recorded editor operations and independently
+replayed. See [native publication workflow](publication_native_authoring.md).
+D006, D007 and D008 are also published through recorded native construction. D007
+retains its bare terminal scaffold domains and only the 144 published staples.
+D009 remains blocked; the interactive Reconstruct button is still disabled.
+Native publication currently uses the documented command-line workflow.
+
+
+D008/D009 recovery follow-up: D008's unmatched 38-base figure route is now
+classified using the fully aligned scaffold and assigned its derived complement,
+explicitly distinguished from 148 independently supplied table sequences. It is
+published as 149 staples with no extra terminal staples. D009's five repeated
+cross-section insets agree after independent fitting (46 helices); that blocker
+is resolved. Ten table routes, 276 unpaired staple bases (233 terminal/43 internal)
+and the penalized one-base scaffold discrepancy still prevent complete native
+publication. Diagnostic evidence: `.development-artifacts/d008-d009-recovery/`.
+
+
+On-helix overhang follow-up: unpaired staple positions now receive explicit
+on-helix overhang classifications and table-indexed sequences. Independent visible
+glyph decoding verifies image letters despite damaged PDF Unicode maps. D009:
+266 image matches,8 table-only fallbacks,2 A/T conflicts (8[117],9[118]);272 bases
+accepted across complete segments. Confidence84.87 retains other penalties. No
+D009 native design is published. See the native authoring workflow for limits.
+
+
+Conflict policy update: source disagreements are non-blocking notices. Equal
+evidence selects T > A > C > G; stronger evidence overrides that preference.
+D009 retains two imageA/tableT notices, selects T at both sites, accepts all276
+overhang bases, and scores84.92. Original observations and independent alignment
+counts are preserved. Ten missing table routes and the one-base discrepancy
+remain unresolved.

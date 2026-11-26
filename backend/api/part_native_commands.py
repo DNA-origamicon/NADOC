@@ -40,7 +40,7 @@ def build_loop(kind, design, params):
         if helix is None:
             raise ValueError("Loop/skip helix is missing")
         bp, delta = params["bp_index"], params["delta"]
-        if delta not in {-1, 0, 1}:
+        if type(delta) is not int or not -1 <= delta <= 512:
             raise ValueError("Invalid loop/skip delta")
         if delta == 0:
             updated = helix.model_copy(

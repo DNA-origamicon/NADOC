@@ -424,8 +424,8 @@ def _before_command(kind, params, design):
         # its input interval walk before it allocates modification/cell lists.
         if len(params["helix_ids"]) * abs(b - a) > MAX_SLOTS:
             _reject("Loop/skip planning exceeds the private preview work allowance", "preview_limit")
-    elif kind == "loop-skip-insert" and params.get("delta") == 1:
-        _growth(design, 2)
+    elif kind == "loop-skip-insert" and params.get("delta", 0) > 0:
+        _growth(design, 2 * params["delta"])
 
 
 def _run(kind, design, params, check, executor=None):

@@ -1,0 +1,13 @@
+{
+  "backend/core/publication_authoring.py": "8fd8ab35a3d9b2650ecd006161c6cb115720dd3fe7b6f32c79ea250b1e8bb7b8",
+  "backend/core/publication_routing.py": "6d8c9d3012496195d96047dadfd40c94576730c68d86425ad39f9f9da59d3da5",
+  "backend/core/publication_sequence_search.py": "5ebad19065b1f6b05c3f63587802e27c4044941080aa1f0ae427bc8a59ebb3f4",
+  "backend/core/publication_unpaired_scaffold.py": "366ba484f6c2bb9aa2b6100787d9d318b194457e1cc1034fa9e3553864f460d5",
+  "backend/core/publication_auxiliary_placement.py": "bd742882603ab6fad75253b702394e20b6f12cc7fde70d89a9a7c5fb2cf3b806",
+  "backend/core/publication_ligation_placement.py": "faaeba4d7bacd4891db1805ab73208e56e4921a80b615ddc2e9cddc0aafdc515",
+  "backend/core/publication_native_tracks.py": "5678928a5ab1deb3a3bcb4191c35a258fed84bd87ca2a2a434adcc52ebaa025f",
+  "tools/design_archive/recorded_authoring.py": "f0227246d952be22c2b65a54d8d0ae8c9b161e77310dabae673507c2c02d4f69",
+  "backend/core/publication_precursors.py": "a2f775bf5738a1ab2f6d9302ba34dcb4e5bdc35816021a58e5d762bbec9c42c0",
+  "backend/core/publication_missing_staples.py": "a850d7c52751c7f29108e4f4af2978556caf6a23036f8d08ef63f4ace10103c7",
+  "backend/core/publication_lattice_insets.py": "2f091affe7f4322e760b3d2a337765d0c8491565ab6693e363c2295ec556dfcb"
+}

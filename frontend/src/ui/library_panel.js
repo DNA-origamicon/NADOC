@@ -146,7 +146,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   let _inlineEdit = null
   let _allEntries = []
-  const _expanded = new Set()
+  let _expanded = new Set()
+  let _expandedBeforeSearch = null
   let _sortKey = 'modified'
   let _sortDir = 'desc'
   let _query   = ''
@@ -260,6 +261,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
         _query = ''
         searchEl.value = ''
         _expanded.clear()
+        _expandedBeforeSearch = null
         _renderServerTabs()
         _updateActionVisibility()
         await refresh()
@@ -311,7 +313,14 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   ].join(';')
   mount.appendChild(searchEl)
   searchEl.addEventListener('input', () => {
-    _query = searchEl.value.trim().toLowerCase()
+    const query = searchEl.value.trim().toLowerCase()
+    // Search expansion is temporary; preserve browsing state across query edits.
+    if (!_query && query) _expandedBeforeSearch = new Set(_expanded)
+    if (_query && !query) {
+      _expanded = _expandedBeforeSearch
+      _expandedBeforeSearch = null
+    }
+    _query = query
     _render()
   })
 
@@ -968,7 +977,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
               ? renamedPath + path.slice(entry.path.length) : path
           _allEntries = _allEntries.map(item => ({ ...item, path: remap(item.path),
             name: item.path === entry.path ? libraryRenameStem(entry, newName) : item.name }))
-          for (const paths of [_expanded, _selectedPaths]) {
+          for (const paths of [_expanded, _selectedPaths, _expandedBeforeSearch].filter(Boolean)) {
             const mapped = [...paths].map(remap)
             paths.clear()
             for (const path of mapped) paths.add(path)
