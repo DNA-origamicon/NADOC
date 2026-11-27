@@ -126,6 +126,7 @@ from backend.api.vr_prompts import router as vr_prompts_router
 from backend.api.vr_routing import router as vr_routing_router
 from backend.api.routes_sweep import router as sweep_router
 from backend.api.routes_corner import router as corner_router
+from backend.api.routes_bevel import router as bevel_router
 from backend.api.routes_part_sweep_preview import router as sweep_preview_router
 from backend.api.routes_part_transform_preview import router as transform_preview_router
 from backend.api.routes_frame_extrusion import router as frame_extrusion_router
@@ -490,6 +491,7 @@ app.include_router(vr_prompts_router, prefix="/api")
 app.include_router(frame_extrusion_router, prefix="/api")
 app.include_router(sweep_router, prefix="/api")
 app.include_router(corner_router, prefix="/api")
+app.include_router(bevel_router, prefix="/api")
 app.include_router(sweep_preview_router, prefix="/api")
 app.include_router(transform_preview_router, prefix="/api")
 app.include_router(display_metadata_router, prefix="/api")

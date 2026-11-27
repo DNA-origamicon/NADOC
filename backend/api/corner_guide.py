@@ -34,7 +34,7 @@ def _material_frame(design, helix, station):
     return tangent, right, np.cross(tangent, right)
 
 
-def corner_guide(design, cluster_id, parameters):
+def bundle_axis_paths(design, cluster_id, position_bp, *, all_members=False):
     clusters = [c for c in design.cluster_transforms if c.id == cluster_id]
     if len(clusters) != 1:
         raise ValueError("Select an existing cluster for Corner.")
@@ -53,7 +53,7 @@ def corner_guide(design, cluster_id, parameters):
     # the cross-section that actually crosses the requested plane.
     spans = occupied_duplex_spans(design.strands)
     helices = [h for h in helices if h.id in spans
-               and spans[h.id][0] < parameters.position_bp <= spans[h.id][1]]
+               and (all_members or spans[h.id][0] < position_bp <= spans[h.id][1])]
     if not helices:
         raise ValueError("The corner plane does not cross occupied duplex material.")
     axes = {a['helix_id']: a for a in deformed_helix_axes(design)}
@@ -76,6 +76,13 @@ def corner_guide(design, cluster_id, parameters):
             stations = [helix.bp_start, helix.bp_start + helix.length_bp - int(curved)]
         path = AxisPath(helix.id, tuple(stations), tuple(map(tuple, samples)))
         paths.append(path.clipped(*spans[helix.id]))
-    tangent, right, up = _material_frame(design, helices[0], parameters.position_bp)
+    if not all(h.bp_start <= position_bp < h.bp_start + h.length_bp for h in helices):
+        raise ValueError("Plane position must lie within the selected bundle axes.")
+    frame = _material_frame(design, helices[0], position_bp)
+    return paths, frame
+
+
+def corner_guide(design, cluster_id, parameters):
+    paths, (tangent, right, up) = bundle_axis_paths(design, cluster_id, parameters.position_bp)
     guide = plan_corner_guide(paths, parameters, axis_dir=tangent, frame_right=right, frame_up=up)
     return asdict(guide)

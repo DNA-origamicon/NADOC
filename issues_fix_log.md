@@ -1,4 +1,12 @@
 # Issues fix log
+
+## ISSUE-271 — [ ] Corner near-plane duplicate intersection
+
+Discovered during Bevel integration. Bevel now counts an on-plane station once,
+with four focused regression cases and passing curved/perpendicular app preview.
+The original Corner helper is unchanged; Corner qualification remains follow-up.
+
+
 ## EM-PANEL-ACTIONS-20261127 — [x] Remove redundant user actions
 
 Removed Frame map and Copy details, including their handlers. Download field +

@@ -1,4 +1,22 @@
 # Issues & bugs ledger — "fix next issue" loop
+
+## ISSUE-271 — Corner plane intersections double-count nearly on-plane samples (2026-11-27)
+
+- **Status:** open for Corner; Bevel uses a separate corrected intersection routine.
+- **Evidence:** while reusing Corner's `_intersection` for Bevel, a perpendicular
+  cut on a recorded bent 2HB returned “Each helix must cross … exactly once.”
+  A sample with a tiny positive signed distance is counted both as the endpoint
+  of a sign-changing edge and as an on-plane sample in the next interval.
+- **Minimal case:** stations `[0, 1, 2]`, signed distances `[-1, 1e-14, 1]`.
+- **Scope:** `backend/core/corner_plan.py::_intersection` remains unchanged;
+  the existing Corner molecular provider and approved geometry are preserved.
+  Bevel's `intersect_bevel_plane` treats near-zero samples once and still rejects
+  genuinely multiple crossings. `tests/test_bevel_plan.py` covers both residual
+  signs, exact zero, interpolation and true multiple crossings.
+- **Follow-up:** qualify the equivalent correction against Corner's guide and
+  frozen molecular geometry before integrating it into Corner.
+
+
 ## EM-CONTROLS-20261127 — [x] Contextual analysis controls and rendering warning
 
 The calculation action was buried, wavelength was fixed at 520 nm, and unused DNA

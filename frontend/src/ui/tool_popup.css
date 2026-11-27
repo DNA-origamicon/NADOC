@@ -85,14 +85,14 @@
 .tool-popup .cp-actions, .tool-popup .def-btn-row { padding-top: var(--space-3); border-top: 1px solid var(--color-border-default); }
 
 /* Bend/Twist: scroll the fields only; the actions always stay in view. */
-.tool-popup:is([data-tool-panel="deform-panel"], [data-tool-panel="corner-panel"]) .tool-popup__content { display: flex; overflow: hidden; }
-.tool-popup__content > :is(#deform-panel, #corner-panel) { flex: 1; flex-direction: column; min-height: 0; min-width: 0; padding: 0; }
-:is(#deform-panel, #corner-panel) .def-fields { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 10px 12px 0; }
-:is(#deform-panel, #corner-panel) > .def-btn-row { flex-shrink: 0; padding: 10px 12px; }
-:is(#deform-panel, #corner-panel) .tool-section { margin-bottom: 8px; padding: 8px; }
-:is(#deform-panel, #corner-panel) .def-row { gap: 6px; margin-bottom: 6px; }
-#corner-panel input[type=number] { width: 104px; }
-#corner-panel progress { width: 100%; accent-color: var(--color-accent-strong); }
+.tool-popup:is([data-tool-panel="deform-panel"], [data-tool-panel="corner-panel"], [data-tool-panel="bevel-panel"]) .tool-popup__content { display: flex; overflow: hidden; }
+.tool-popup__content > :is(#deform-panel, #corner-panel, #bevel-panel) { flex: 1; flex-direction: column; min-height: 0; min-width: 0; padding: 0; }
+:is(#deform-panel, #corner-panel, #bevel-panel) .def-fields { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 10px 12px 0; }
+:is(#deform-panel, #corner-panel, #bevel-panel) > .def-btn-row { flex-shrink: 0; padding: 10px 12px; }
+:is(#deform-panel, #corner-panel, #bevel-panel) .tool-section { margin-bottom: 8px; padding: 8px; }
+:is(#deform-panel, #corner-panel, #bevel-panel) .def-row { gap: 6px; margin-bottom: 6px; }
+:is(#corner-panel, #bevel-panel) input[type=number] { width: 104px; }
+:is(#corner-panel, #bevel-panel) progress { width: 100%; accent-color: var(--color-accent-strong); }
 #deform-panel .def-preview-row { margin: 4px 0; }
 #deform-panel #def-compass-container { align-items: center; margin-bottom: 6px; }
 #deform-panel #def-compass { width: 44px; height: 44px; }

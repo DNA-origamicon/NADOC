@@ -9,6 +9,7 @@ import { createVRFeatureLog } from './scene/vr_feature_log.js'
 import { initReferenceModels } from './scene/reference_models.js'
 import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
 import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
+import { initBevelTool } from './ui/bevel_tool.js'
 import { initCornerTool } from './ui/corner_tool.js'
 import { createVRPrompts } from './scene/vr_prompts.js'
 import { setNativePromptHandler } from './ui/primitives/native_prompt.js'
@@ -3745,6 +3746,7 @@ async function main() {
   })
 
   const deformationToolLauncher = initDeformationToolLauncher({ store, selectionManager, showToast, deformView, watchDeformState: _watchDeformState, ownedEditor: featureEditor.creationEditor })
+  const bevelTool = initBevelTool({ store, selectionManager, scene, designRenderer, showToast })
   const cornerTool = initCornerTool({ store, selectionManager, scene, designRenderer, showToast })
 
   // Tools → Add Primitive: reveal the right-sidebar Primitives library.
@@ -5628,6 +5630,7 @@ async function main() {
     },
     onEditFeature: _onEditFeature,
     onEditCorner: cornerTool.openEdit,
+    onEditBevel: bevelTool.openEdit,
     onEditNanoparticle: async id => {
       const particle = store.getState().currentDesign?.nanoparticles?.find(item => item.id === id)
       if (!particle) return

@@ -50,7 +50,7 @@ PROOF_SNAPSHOT_KINDS = (
     | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
     | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | EXTENSION_KINDS
-    | frozenset({"corner", "flexible-relax", "nanoparticle-attach-overhang", "nanoparticle-connection-relax",
+    | frozenset({"corner", "bevel", "flexible-relax", "nanoparticle-attach-overhang", "nanoparticle-connection-relax",
                  "nanoparticle-biotin-dna", "photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence",
                  "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste", "cluster-dissolve", "placement-poses"})
 )
@@ -123,6 +123,9 @@ def capabilities():
 
 
 def dependencies(kind, params):
+    if kind == "bevel":
+        from backend.api.part_bevel_commands import dependencies as bevel_dependencies
+        return bevel_dependencies(params)
     if kind == "corner":
         from backend.api.part_corner_commands import dependencies as corner_dependencies
         return corner_dependencies(params)
@@ -618,6 +621,9 @@ def _execute_candidate(kind, design, params, *, expensive):
         from backend.api.part_nanoparticle_commands import build
         from backend.core.part_input_sources import EmbeddedResolver
         updated = build(kind, design, params, resolver=EmbeddedResolver(design.input_sources))
+    elif kind == "bevel":
+        from backend.api.part_bevel_commands import build
+        updated, report = build(design, params)
     elif kind == "corner":
         from backend.api.part_corner_commands import build
         updated, report = build(design, params)
@@ -737,7 +743,7 @@ def _execute_candidate(kind, design, params, *, expensive):
     lineage = advance_lineage(lineage, updated, trace=lineage_trace)
     # Keep reference/budget admission and detached group lineage above, but residue
     # deltas never rebuild placement membership or enable pending topology edits.
-    if kind not in NUCLEOTIDE_KINDS | {"corner"}:
+    if kind not in NUCLEOTIDE_KINDS | {"corner", "bevel"}:
         updated = reconcile_cluster_membership(design, updated, report)
         if kind not in {"auto-break", "full-autostaple", "cluster-join"}:
             updated = retry_pending_ligations(design, updated)

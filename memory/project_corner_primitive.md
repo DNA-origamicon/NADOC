@@ -1,6 +1,6 @@
 ---
 name: project_corner_primitive
-description: Native Corner tool, replayable scaffold/staple routing, approved seam geometry, Full preview, validation and remaining limits.
+description: Native Corner and Bevel tools, replayable routing/truncation, approved Corner seam geometry, Full preview, validation and limits.
 metadata: 
   node_type: memory
   type: project
@@ -8,6 +8,49 @@ metadata:
 ---
 
 # Corner tool — November 23, 2026
+
+## Bevel tool — November 27, 2026
+
+User scope: remove material beyond a plane, leaving mismatched/open scaffold and
+staple ends. Autoscaffold repairs are a separate session; eventual MagicDNA-style
+connections between bevel-ended bundles are future work.
+
+Tools → Bevel reuses Corner's cluster picker, popup styling, bp/nm controls,
+Full preview renderer and source-bound Apply handoff. Trim selects the higher-bp
+end or lower-bp start; 0° is perpendicular, with tilt below 90° and local azimuth.
+The cutting plane intersects every native bp station of the current straight or
+curved/posed axes. Whole stations are retained conservatively on the chosen side.
+On-plane samples count once despite floating-point residuals. Multiple crossings,
+an entirely removed helix, or an ambiguous material frame are refused.
+
+The native `bevel` command splits strands across removed intervals, preserves
+retained sequences and polarity, and removes crossover/ligation records with cut
+endpoints. It adds no junctions or terminal turnarounds. Original construction
+axes and deformation parameters remain intact to preserve retained positions;
+occupied domains define remaining material. No molecular placement provider or
+phase constant changed. Autoscaffold behavior on these retained construction
+axes has not been qualified.
+
+History edits replay from the recorded prefix; undo/redo, delete, guarded file
+publication, reopen and independent audit are tested. Preview candidates use the
+real recorder; Apply consumes the prepared candidate. Preview concurrency and
+retained memory are bounded, with source/revision/session/parameter checks.
+Cancellation discards the frontend result; an already-running bounded server
+projection may finish. Overlapping responses do not immediately evict one another.
+
+Like Corner, direct assembly invocation directs the user to its source part:
+shared-source versus independent-instance topology ownership remains unresolved.
+Organized parts, scoped placement members and attached references requiring
+remapping are refused explicitly. These restrictions do not imply MagicDNA export
+compatibility. `main.js` gained only three wiring lines in this task.
+
+Focused validation: 37 backend checks (including Corner axis-adapter regressions),
+25 frontend checks, and straight/curved live-app workflows pass. Native save/reopen
+uses `scripts.agent_structure_guard.publish` and independent audit. Browser runs
+use the isolated history launcher and verify removal of their entire scratch root.
+Both applied bundle views and the popup layout were inspected. Lint passes.
+Smoke: 28 passed, one existing assembly-fixture timeout at
+`scene_harness.js:434`; its scratch root was also verified absent.
 
 ## Geometry explicitly approved — November 23, 2026
 

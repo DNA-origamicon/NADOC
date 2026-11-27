@@ -1971,6 +1971,7 @@ class OverhangRotationLogEntry(FeatureLogProvenance):
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
     "corner",
+    "bevel",
     "annotations-state", "view-volumes-state",
     "diagnostic-process",
     "duplex-relax",

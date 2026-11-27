@@ -3,6 +3,7 @@ const names = new Map()
 function family(name, kinds) { for (const kind of kinds.split(' ')) names.set(kind, name) }
 family('Annotations', 'annotations-state')
 family('Corner', 'corner')
+family('Bevel', 'bevel')
 family('View Volumes', 'view-volumes-state')
 family('Extrude', 'bundle-create extrude-segment extrude-continuation extrude-deformed-continuation extrude-frame overhang-extrude')
 family('Move/Rotate', 'cluster_op cluster-pose placement-poses nucleotide-transform nucleotide-transform-batch nucleotide-transform-delete assembly-transform-group assembly-transform-instance assembly-transform-instance-cluster')
@@ -87,9 +88,9 @@ export function featureLabels(log, prefix = 'F') {
     const ordinal = (counts.get(name) ?? 0) + 1
     counts.set(name, ordinal)
     let raw = String(entry.label ?? entry.name ?? '').trim()
-    if (entry.op_kind === 'corner' && Number.isFinite(entry.params?.angle_deg)
-        && Number.isInteger(entry.params?.position_bp) && /^Corner: [\d.]+° at -?\d+ bp$/.test(raw)) {
-      raw = `Corner: ${entry.params.angle_deg}° at ${entry.params.position_bp} bp`
+    if (['corner', 'bevel'].includes(entry.op_kind) && Number.isFinite(entry.params?.angle_deg)
+        && Number.isInteger(entry.params?.position_bp) && /^(?:Corner|Bevel): [\d.]+° at -?\d+ bp$/.test(raw)) {
+      raw = `${entry.op_kind === 'bevel' ? 'Bevel' : 'Corner'}: ${entry.params.angle_deg}° at ${entry.params.position_bp} bp`
     }
     const detail = [entry.op_kind, entry.op_subtype, entry.feature_type, name].includes(raw) ? '' : raw
     return `${prefix}${index + 1}: ${name} ${ordinal}${detail ? ` [${detail}]` : ''}`
