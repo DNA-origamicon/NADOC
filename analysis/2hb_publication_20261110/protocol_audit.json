@@ -1,0 +1,581 @@
+[
+  {
+    "job_id": "7d5937e569c6",
+    "logs": [],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_800ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 200000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 297.3297017456359,
+            "min": 293.4688,
+            "max": 300.8816
+          },
+          "VOLUME": {
+            "mean": 614985.7433416458,
+            "min": 611370.1463,
+            "max": 618806.8518
+          },
+          "POTENTIAL": {
+            "mean": -237484.72709750623,
+            "min": -238115.4386,
+            "max": -236879.1277
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "logs": [],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "logs": [],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "e345c67349bf",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.22700972568583,
+            "min": 298.2115,
+            "max": 300.7804
+          },
+          "VOLUME": {
+            "mean": 4676584.568209227,
+            "min": 4665097.4442,
+            "max": 4686509.7711
+          },
+          "POTENTIAL": {
+            "mean": -1598665.8057157109,
+            "min": -1600325.9369,
+            "max": -1596781.3977
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "edb512c46112",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.16937630922695,
+            "min": 297.4019,
+            "max": 300.2181
+          },
+          "VOLUME": {
+            "mean": 4676660.5282798,
+            "min": 4668029.5965,
+            "max": 4687811.6433
+          },
+          "POTENTIAL": {
+            "mean": -1598738.6251399003,
+            "min": -1600248.3797,
+            "max": -1596944.1458
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "9b08bed08561",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.19727007481293,
+            "min": 297.8988,
+            "max": 300.7363
+          },
+          "VOLUME": {
+            "mean": 4676834.565853117,
+            "min": 4669758.5391,
+            "max": 4685863.5914
+          },
+          "POTENTIAL": {
+            "mean": -1598778.637168329,
+            "min": -1600334.9307,
+            "max": -1597049.5681
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "37d39cc6b88f",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.22707980049876,
+            "min": 298.0416,
+            "max": 300.6728
+          },
+          "VOLUME": {
+            "mean": 4676947.827985536,
+            "min": 4668590.9393,
+            "max": 4684186.569
+          },
+          "POTENTIAL": {
+            "mean": -1598707.4141296758,
+            "min": -1600373.0624,
+            "max": -1596859.5994
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "972af34aa9c5",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.18491770573564,
+            "min": 297.9113,
+            "max": 300.4893
+          },
+          "VOLUME": {
+            "mean": 4676858.652153616,
+            "min": 4666461.9067,
+            "max": 4685423.3948
+          },
+          "POTENTIAL": {
+            "mean": -1598695.6507910225,
+            "min": -1600518.5786,
+            "max": -1596787.1414
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "d6bcdef3d59f",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.20093715710726,
+            "min": 297.6733,
+            "max": 300.5619
+          },
+          "VOLUME": {
+            "mean": 4676445.7649104735,
+            "min": 4666857.8245,
+            "max": 4686311.6349
+          },
+          "POTENTIAL": {
+            "mean": -1598789.6912486283,
+            "min": -1600611.7921,
+            "max": -1597362.9251
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "395337bdb061",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.2220725685786,
+            "min": 298.1079,
+            "max": 301.0142
+          },
+          "VOLUME": {
+            "mean": 4676960.779865337,
+            "min": 4666655.5468,
+            "max": 4685911.1677
+          },
+          "POTENTIAL": {
+            "mean": -1598783.528905237,
+            "min": -1600614.5473,
+            "max": -1597225.1176
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "ffef0085e16d",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.17901895261843,
+            "min": 297.9944,
+            "max": 300.3371
+          },
+          "VOLUME": {
+            "mean": 4676624.850156609,
+            "min": 4666480.7221,
+            "max": 4686642.6353
+          },
+          "POTENTIAL": {
+            "mean": -1598747.9177915212,
+            "min": -1600319.4529,
+            "max": -1596774.6012
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "35254aa13b01",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.2241049875312,
+            "min": 298.039,
+            "max": 300.5576
+          },
+          "VOLUME": {
+            "mean": 4676399.02691596,
+            "min": 4667765.1227,
+            "max": 4684731.6416
+          },
+          "POTENTIAL": {
+            "mean": -1598752.8809992517,
+            "min": -1600675.8509,
+            "max": -1596925.8596
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "577c8d057768",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.2075024937656,
+            "min": 297.9261,
+            "max": 300.5143
+          },
+          "VOLUME": {
+            "mean": 4676814.2567219455,
+            "min": 4667812.8895,
+            "max": 4685779.548
+          },
+          "POTENTIAL": {
+            "mean": -1598704.4847182047,
+            "min": -1600232.3536,
+            "max": -1597048.6074
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "94d5148b6911",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.1637710723192,
+            "min": 297.8092,
+            "max": 300.4387
+          },
+          "VOLUME": {
+            "mean": 4676657.392742643,
+            "min": 4668756.9562,
+            "max": 4686425.9169
+          },
+          "POTENTIAL": {
+            "mean": -1598798.9503700745,
+            "min": -1600534.6928,
+            "max": -1596793.0565
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "770c4764d1a3",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.20433117206983,
+            "min": 297.8917,
+            "max": 300.4688
+          },
+          "VOLUME": {
+            "mean": 4676592.961678803,
+            "min": 4667642.7317,
+            "max": 4685420.5914
+          },
+          "POTENTIAL": {
+            "mean": -1598819.1953004987,
+            "min": -1600607.9573,
+            "max": -1597067.7891
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "be74a1436d66",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/nadoc_jobs/be74a1436d66/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.207721446384,
+            "min": 297.9133,
+            "max": 300.3671
+          },
+          "VOLUME": {
+            "mean": 4676839.661458854,
+            "min": 4668568.3975,
+            "max": 4685959.5448
+          },
+          "POTENTIAL": {
+            "mean": -1598954.9256566083,
+            "min": -1600420.9978,
+            "max": -1597055.9989
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/nadoc_jobs/be5dc708adb2/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.19514014962596,
+            "min": 297.887,
+            "max": 300.4196
+          },
+          "VOLUME": {
+            "mean": 4676853.40081571,
+            "min": 4664329.6655,
+            "max": 4687265.2721
+          },
+          "POTENTIAL": {
+            "mean": -1598930.2800905234,
+            "min": -1600481.8776,
+            "max": -1597162.4547
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "a9261569b8c7",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/nadoc_jobs/a9261569b8c7/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_20ns_k0.log",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.23188827930176,
+            "min": 297.9962,
+            "max": 300.4436
+          },
+          "VOLUME": {
+            "mean": 4676981.6849423945,
+            "min": 4668133.6575,
+            "max": 4688402.0361
+          },
+          "POTENTIAL": {
+            "mean": -1598907.0420271822,
+            "min": -1600957.6001,
+            "max": -1597149.106
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "949886d10003",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/2hb_1xT_CPD_cis-anti-I_01_production_100ns_k0.log",
+        "records": 189,
+        "first_step": 0.0,
+        "last_step": 11750000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 296.8719894179894,
+            "min": 295.5596,
+            "max": 300.629
+          },
+          "VOLUME": {
+            "mean": 4682868.279706349,
+            "min": 4675633.2866,
+            "max": 4693166.312
+          },
+          "POTENTIAL": {
+            "mean": -1594359.1253751323,
+            "min": -1598628.3747,
+            "max": -1592638.389
+          }
+        },
+        "normal_exit": false
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/2hb_1xT_CPD_cis-anti-I_01_production_100ns_k0.resume1.log",
+        "records": 211,
+        "first_step": 11875000.0,
+        "last_step": 25000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 296.85211137440757,
+            "min": 295.6908,
+            "max": 298.1494
+          },
+          "VOLUME": {
+            "mean": 4682879.243822275,
+            "min": 4674592.8378,
+            "max": 4691037.9195
+          },
+          "POTENTIAL": {
+            "mean": -1594293.0931298574,
+            "min": -1596747.4751,
+            "max": -1592734.9703
+          }
+        },
+        "normal_exit": true
+      }
+    ],
+    "dna_extrabonds": []
+  },
+  {
+    "job_id": "6613064f8c3f",
+    "logs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I_01_production_80ns_k0.log",
+        "records": 284,
+        "first_step": 0.0,
+        "last_step": 14150000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 296.89931936619723,
+            "min": 295.7074,
+            "max": 299.9845
+          },
+          "VOLUME": {
+            "mean": 4682689.081698944,
+            "min": 4673042.5493,
+            "max": 4692286.8753
+          },
+          "POTENTIAL": {
+            "mean": -1594360.4495542252,
+            "min": -1599166.4638,
+            "max": -1592639.4612
+          }
+        },
+        "normal_exit": false
+      }
+    ],
+    "dna_extrabonds": []
+  }
+]

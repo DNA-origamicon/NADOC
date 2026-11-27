@@ -1,0 +1,1116 @@
+[
+  {
+    "name": "small",
+    "proposals": {
+      "translation": 0.1,
+      "rotation": 0.2,
+      "maxclust": 12
+    },
+    "training_walkers": 1,
+    "distance_split": 0,
+    "seed": 211100,
+    "tuning_seconds": 120.7553558300715,
+    "equilibration_seconds": 25.10446336795576,
+    "sampling_and_native_analysis_seconds": 128.63253857195377,
+    "driver_seconds": 274.492357769981,
+    "full_analysis_seconds": 1.2878672019578516,
+    "total_timed_seconds": 275.7802249719389,
+    "full_hamiltonian_tm_c": null,
+    "ci95_c": null,
+    "replica_tm_c": [
+      null,
+      null,
+      null,
+      null
+    ],
+    "start_probabilities_70": [
+      1.0000000000000007,
+      1.0,
+      0.9999999999999992,
+      1.0000000000000002
+    ],
+    "same_frame_stacking_only_tm_c": null,
+    "all_interstrand_tm_c": null,
+    "reasons": [
+      "Melting is not bracketed in every replica."
+    ],
+    "replicas": [
+      {
+        "replica": 0,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.08,
+            0.297
+          ]
+        ],
+        "occupancy": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          7,
+          52,
+          40
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 1,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.079,
+            0.298
+          ]
+        ],
+        "occupancy": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          3,
+          11,
+          43,
+          43
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 2,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.072,
+            0.29
+          ]
+        ],
+        "occupancy": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          39,
+          55
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 3,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.076,
+            0.292
+          ]
+        ],
+        "occupancy": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          3,
+          48,
+          48
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      }
+    ],
+    "certified": false
+  },
+  {
+    "name": "medium",
+    "proposals": {
+      "translation": 0.5,
+      "rotation": 1.0,
+      "maxclust": 16
+    },
+    "training_walkers": 1,
+    "distance_split": 0,
+    "seed": 311100,
+    "tuning_seconds": 229.1594310561195,
+    "equilibration_seconds": 36.718164077959955,
+    "sampling_and_native_analysis_seconds": 144.77813514391892,
+    "driver_seconds": 410.6557302779984,
+    "full_analysis_seconds": 1.8507392711471766,
+    "total_timed_seconds": 412.50646954914555,
+    "full_hamiltonian_tm_c": 76.90122772819969,
+    "ci95_c": null,
+    "replica_tm_c": [
+      75.07036912882843,
+      null,
+      null,
+      null
+    ],
+    "start_probabilities_70": [
+      0.9028407525995843,
+      0.0,
+      0.9924029209769037,
+      0.0
+    ],
+    "same_frame_stacking_only_tm_c": 76.96421366887324,
+    "all_interstrand_tm_c": null,
+    "reasons": [
+      "Melting is not bracketed in every replica."
+    ],
+    "replicas": [
+      {
+        "replica": 0,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.029,
+            0.202
+          ]
+        ],
+        "occupancy": [
+          90,
+          1,
+          1,
+          0,
+          0,
+          3,
+          0,
+          2,
+          3
+        ],
+        "full": {
+          "passages": 1,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 1,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 1,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 1,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.031,
+            0.222
+          ]
+        ],
+        "occupancy": [
+          100,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 2,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.023,
+            0.145
+          ]
+        ],
+        "occupancy": [
+          33,
+          5,
+          6,
+          5,
+          4,
+          6,
+          11,
+          21,
+          9
+        ],
+        "full": {
+          "passages": 1,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 1,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 1,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 3,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.032,
+            0.226
+          ]
+        ],
+        "occupancy": [
+          100,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      }
+    ],
+    "certified": false
+  },
+  {
+    "name": "large",
+    "proposals": {
+      "translation": 1.0,
+      "rotation": 2.0,
+      "maxclust": 16
+    },
+    "training_walkers": 1,
+    "distance_split": 0,
+    "seed": 411100,
+    "tuning_seconds": 213.18730771704577,
+    "equilibration_seconds": 36.02016998385079,
+    "sampling_and_native_analysis_seconds": 170.83999536396004,
+    "driver_seconds": 420.0474730648566,
+    "full_analysis_seconds": 1.3446065050084144,
+    "total_timed_seconds": 421.392079569865,
+    "full_hamiltonian_tm_c": null,
+    "ci95_c": null,
+    "replica_tm_c": [
+      null,
+      null,
+      null,
+      null
+    ],
+    "start_probabilities_70": [
+      1.0,
+      0.0,
+      0.9999999999999997,
+      1.0
+    ],
+    "same_frame_stacking_only_tm_c": null,
+    "all_interstrand_tm_c": null,
+    "reasons": [
+      "Melting is not bracketed in every replica."
+    ],
+    "replicas": [
+      {
+        "replica": 0,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.004,
+            0.087
+          ]
+        ],
+        "occupancy": [
+          0,
+          9,
+          31,
+          54,
+          6,
+          0,
+          0,
+          0,
+          0
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 1,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.006,
+            0.126
+          ]
+        ],
+        "occupancy": [
+          100,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 2,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.004,
+            0.076
+          ]
+        ],
+        "occupancy": [
+          0,
+          2,
+          13,
+          60,
+          7,
+          0,
+          5,
+          5,
+          8
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 3,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.003,
+            0.07
+          ]
+        ],
+        "occupancy": [
+          0,
+          12,
+          8,
+          37,
+          10,
+          2,
+          5,
+          12,
+          14
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      }
+    ],
+    "certified": false
+  },
+  {
+    "name": "distance",
+    "proposals": {
+      "translation": 0.5,
+      "rotation": 1.0,
+      "maxclust": 12
+    },
+    "training_walkers": 4,
+    "distance_split": 1.0,
+    "seed": 611100,
+    "tuning_seconds": 252.48473079805262,
+    "equilibration_seconds": 31.212856092955917,
+    "sampling_and_native_analysis_seconds": 156.62663805508055,
+    "driver_seconds": 440.3242249460891,
+    "full_analysis_seconds": 10.697100895922631,
+    "total_timed_seconds": 451.0213258420117,
+    "full_hamiltonian_tm_c": 71.61863528650707,
+    "ci95_c": null,
+    "replica_tm_c": [
+      null,
+      null,
+      68.38419966774919,
+      74.33776823765288
+    ],
+    "start_probabilities_70": [
+      0.9999999999999999,
+      0.009304196074334168,
+      0.5579361136191989,
+      0.8706226012597954
+    ],
+    "same_frame_stacking_only_tm_c": 71.63413728558666,
+    "all_interstrand_tm_c": 71.724261619672,
+    "reasons": [
+      "Melting is not bracketed in every replica."
+    ],
+    "replicas": [
+      {
+        "replica": 0,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.008,
+            0.094
+          ]
+        ],
+        "occupancy": [
+          0,
+          1,
+          18,
+          82,
+          126,
+          160,
+          205,
+          216,
+          192
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 1,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.022,
+            0.17
+          ]
+        ],
+        "occupancy": [
+          244,
+          133,
+          161,
+          310,
+          146,
+          6,
+          0,
+          0,
+          0
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 2,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.019,
+            0.159
+          ]
+        ],
+        "occupancy": [
+          133,
+          214,
+          146,
+          244,
+          138,
+          25,
+          34,
+          28,
+          38
+        ],
+        "full": {
+          "passages": 2,
+          "round_trips": 1
+        },
+        "six": {
+          "passages": 2,
+          "round_trips": 1
+        },
+        "matched_10k_full": {
+          "passages": 2,
+          "round_trips": 1
+        }
+      },
+      {
+        "replica": 3,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.012,
+            0.12
+          ]
+        ],
+        "occupancy": [
+          103,
+          77,
+          77,
+          136,
+          145,
+          70,
+          65,
+          128,
+          199
+        ],
+        "full": {
+          "passages": 2,
+          "round_trips": 1
+        },
+        "six": {
+          "passages": 2,
+          "round_trips": 1
+        },
+        "matched_10k_full": {
+          "passages": 2,
+          "round_trips": 1
+        }
+      }
+    ],
+    "certified": false
+  },
+  {
+    "name": "multistart_q",
+    "proposals": {
+      "translation": 0.5,
+      "rotation": 1.0,
+      "maxclust": 12
+    },
+    "training_walkers": 4,
+    "distance_split": 0,
+    "seed": 711100,
+    "tuning_seconds": 247.52174218092114,
+    "equilibration_seconds": 26.80492317606695,
+    "sampling_and_native_analysis_seconds": 103.05708935111761,
+    "driver_seconds": 377.3837547081057,
+    "full_analysis_seconds": 10.697549405973405,
+    "total_timed_seconds": 388.0813041140791,
+    "full_hamiltonian_tm_c": 63.10929394024871,
+    "ci95_c": null,
+    "replica_tm_c": [
+      null,
+      68.74575077102102,
+      null,
+      null
+    ],
+    "start_probabilities_70": [
+      3.444522484189182e-05,
+      0.5819284953755031,
+      0.000139021448172413,
+      0.0011284926125368288
+    ],
+    "same_frame_stacking_only_tm_c": 63.036729170019946,
+    "all_interstrand_tm_c": 63.12199949029255,
+    "reasons": [
+      "Melting is not bracketed in every replica."
+    ],
+    "replicas": [
+      {
+        "replica": 0,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.031,
+            0.22
+          ]
+        ],
+        "occupancy": [
+          997,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 1,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.026,
+            0.194
+          ]
+        ],
+        "occupancy": [
+          697,
+          76,
+          58,
+          35,
+          4,
+          21,
+          30,
+          43,
+          36
+        ],
+        "full": {
+          "passages": 1,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 1,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 1,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 2,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.031,
+            0.221
+          ]
+        ],
+        "occupancy": [
+          988,
+          12,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      },
+      {
+        "replica": 3,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.031,
+            0.224
+          ]
+        ],
+        "occupancy": [
+          976,
+          12,
+          9,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "full": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "six": {
+          "passages": 0,
+          "round_trips": 0
+        },
+        "matched_10k_full": {
+          "passages": 0,
+          "round_trips": 0
+        }
+      }
+    ],
+    "certified": false
+  },
+  {
+    "name": "distance_confirmation",
+    "proposals": {
+      "translation": 0.5,
+      "rotation": 1.0,
+      "maxclust": 12
+    },
+    "training_walkers": 4,
+    "distance_split": 1.0,
+    "seed": 811100,
+    "tuning_seconds": 249.47327601909637,
+    "equilibration_seconds": 29.65699073392898,
+    "sampling_and_native_analysis_seconds": 1211.005396570079,
+    "driver_seconds": 1490.1356633231044,
+    "full_analysis_seconds": 85.4773718859069,
+    "total_timed_seconds": 1579.7614996240009,
+    "full_hamiltonian_tm_c": 69.84682597288491,
+    "ci95_c": null,
+    "replica_tm_c": [
+      69.35370234484184,
+      66.68391313084767,
+      73.82482491281192,
+      70.06310710873787
+    ],
+    "start_probabilities_70": [
+      0.6253719648684328,
+      0.4246539359730654,
+      0.8577041621211187,
+      0.670897804429051
+    ],
+    "same_frame_stacking_only_tm_c": 69.8454187908871,
+    "all_interstrand_tm_c": 70.07417426095661,
+    "reasons": [
+      "Too few long time batches, or bootstrap curves do not bracket melting."
+    ],
+    "replicas": [
+      {
+        "replica": 0,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.024,
+            0.186
+          ],
+          [
+            0.013,
+            0.126
+          ],
+          [
+            0.013,
+            0.12
+          ],
+          [
+            0.008,
+            0.094
+          ],
+          [
+            0.013,
+            0.125
+          ],
+          [
+            0.018,
+            0.156
+          ],
+          [
+            0.02,
+            0.165
+          ],
+          [
+            0.017,
+            0.149
+          ]
+        ],
+        "occupancy": [
+          1862,
+          690,
+          902,
+          726,
+          695,
+          978,
+          890,
+          713,
+          544
+        ],
+        "full": {
+          "passages": 12,
+          "round_trips": 6
+        },
+        "six": {
+          "passages": 12,
+          "round_trips": 6
+        },
+        "matched_10k_full": {
+          "passages": 8,
+          "round_trips": 4
+        }
+      },
+      {
+        "replica": 1,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.025,
+            0.191
+          ],
+          [
+            0.017,
+            0.146
+          ],
+          [
+            0.022,
+            0.175
+          ],
+          [
+            0.025,
+            0.192
+          ],
+          [
+            0.027,
+            0.199
+          ],
+          [
+            0.02,
+            0.16
+          ],
+          [
+            0.013,
+            0.125
+          ],
+          [
+            0.007,
+            0.092
+          ]
+        ],
+        "occupancy": [
+          2472,
+          952,
+          948,
+          822,
+          740,
+          679,
+          521,
+          488,
+          378
+        ],
+        "full": {
+          "passages": 7,
+          "round_trips": 3
+        },
+        "six": {
+          "passages": 9,
+          "round_trips": 4
+        },
+        "matched_10k_full": {
+          "passages": 7,
+          "round_trips": 3
+        }
+      },
+      {
+        "replica": 2,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.011,
+            0.116
+          ],
+          [
+            0.014,
+            0.133
+          ],
+          [
+            0.016,
+            0.136
+          ],
+          [
+            0.005,
+            0.08
+          ],
+          [
+            0.015,
+            0.134
+          ],
+          [
+            0.015,
+            0.136
+          ],
+          [
+            0.009,
+            0.1
+          ],
+          [
+            0.012,
+            0.118
+          ]
+        ],
+        "occupancy": [
+          886,
+          421,
+          645,
+          669,
+          781,
+          1274,
+          1191,
+          1041,
+          1092
+        ],
+        "full": {
+          "passages": 15,
+          "round_trips": 7
+        },
+        "six": {
+          "passages": 18,
+          "round_trips": 9
+        },
+        "matched_10k_full": {
+          "passages": 15,
+          "round_trips": 7
+        }
+      },
+      {
+        "replica": 3,
+        "translation_rotation_acceptance_by_block": [
+          [
+            0.01,
+            0.11
+          ],
+          [
+            0.021,
+            0.171
+          ],
+          [
+            0.016,
+            0.138
+          ],
+          [
+            0.011,
+            0.113
+          ],
+          [
+            0.019,
+            0.158
+          ],
+          [
+            0.008,
+            0.095
+          ],
+          [
+            0.014,
+            0.13
+          ],
+          [
+            0.027,
+            0.2
+          ]
+        ],
+        "occupancy": [
+          1535,
+          654,
+          843,
+          831,
+          950,
+          962,
+          835,
+          690,
+          700
+        ],
+        "full": {
+          "passages": 9,
+          "round_trips": 4
+        },
+        "six": {
+          "passages": 13,
+          "round_trips": 6
+        },
+        "matched_10k_full": {
+          "passages": 7,
+          "round_trips": 3
+        }
+      }
+    ],
+    "certified": false
+  }
+]

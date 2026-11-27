@@ -1909,11 +1909,14 @@ def build_atomistic_model(
     relaxed_oxdna_phase: bool = False,
     apply_design_geometry: bool = True,
     frame_sink: "dict[tuple, tuple[_np.ndarray, _np.ndarray]] | None" = None,
-    fast_bridges: bool = False,
+    fast_bridges: bool | None = None,
     measured_positioning: bool = True,
     _extra_base_placement_sink: "list[dict] | None" = None,
     _two_base_default: bool = True,
     _two_base_phosphate_clearance: bool = True,
+    _terminal_t_motifs: bool = True,
+    _forced_tt_motifs: bool = True,
+    _extension_plane_motifs: bool = True,
     strand_loop_display: bool = False,
     _loop_fit_sites: set[tuple[str, int, str]] | None = None,
     _loop_fit_records: list[dict] | None = None,
@@ -1940,6 +1943,12 @@ def build_atomistic_model(
       own insert positions, with only the phosphodiester linker atoms minimised to
       close the O3′→P chain.  Nothing here decides where an extra base belongs —
       the CG view does, and this follows it.
+
+    Native builds default to interpolated bridges: the viewport, export and NAMD
+    seed therefore share coordinates and the same reviewed motif placements.
+    ``fast_bridges=False`` explicitly requests the historical bridge solver for
+    diagnostics. Physical overrides and builds without design geometry preserve
+    their previous solver default; supplied simulation coordinates stay authoritative.
 
     Measured placement is the sole duplex template. The ``measured_positioning``
     argument may only be True. Requesting the removed alternative fails.
@@ -1976,6 +1985,14 @@ def build_atomistic_model(
         raise ValueError("Insertion-loop display does not support physical-frame overrides")
     from backend.core.native_full_placement import require_native_full_option
     require_native_full_option(measured_positioning)
+    # Native display/export/MD seeds share the reviewed interpolated geometry.
+    # Physical reconstructions retain their previous solver unless explicitly set.
+    native_geometry = apply_design_geometry and all(value is None for value in (
+        nuc_pos_override, nuc_frame_override, axis_override, frame_override,
+        xb_pos_override, ext_pos_override,
+    ))
+    if fast_bridges is None:
+        fast_bridges = native_geometry
 
     # frame_sink requires the full per-nucleotide loop (the cached-reference fast
     # path never computes per-nucleotide frames), so requesting one forces it.
@@ -2100,15 +2117,9 @@ def build_atomistic_model(
     # Total rigid roll per nucleotide, including the DX-junction balance term.
     _phase_rad = atomistic_phase_offset_rad(design)
 
-    # DISPLAY speed: the crossover/skip/insert phosphate bridges are placed by an
-    # L-BFGS-B minimiser for MD-SEED-quality bond angles — that dominates the build on
-    # a large crossover-dense structure (≈42 s of a 58 s VoltronCore build) and is
-    # pointless for a viewer. `fast_bridges` swaps it for the cheap chord interpolation
-    # that is ALREADY the minimiser's initial guess; only reciprocal scaffold phosphate
-    # groups that would contact receive the sub-angstrom Holliday bow computed below.
-    # This is 6× faster, and only the ~1.5% phosphate-linker atoms move (≤2.4 Å at
-    # junctions). Default False keeps the exact geometry for MD seeds / PDB export /
-    # NAMD / periodic-cell.
+    # Interpolation is the shared native starting geometry, including the reviewed
+    # motif placements below. Explicit fast_bridges=False retains the historical
+    # solver for diagnostic comparisons/reconstruction, not an implicit MD upgrade.
     _bridge_fn = (
         _interpolate_backbone_bridge if fast_bridges else _minimize_backbone_bridge
     )
@@ -2705,6 +2716,7 @@ def build_atomistic_model(
         bp_to_sugar_serials=bp_to_sugar_serials,
         ext_pos_override=ext_pos_override,
         bridge_fn=_bridge_fn,
+        native_multibase_bridges=native_geometry,
     )
 
     # ── Thread inserts + tails into the per-chain residue numbering ───────────
@@ -2764,6 +2776,18 @@ def build_atomistic_model(
             _apply_reciprocal_phosphate_clearance(
                 AtomisticModel(atoms=atoms, bonds=bonds)
             )
+        if (_two_base_default and nuc_pos_override is None and nuc_frame_override is None
+                and axis_override is None and frame_override is None
+                and xb_pos_override is None and ext_pos_override is None):
+            from backend.core.terminal_t_motifs import apply_terminal_t_motifs
+            if _terminal_t_motifs:
+                apply_terminal_t_motifs(design, atoms, bonds)
+            if _forced_tt_motifs:
+                from backend.core.forced_tt_motifs import apply_forced_tt_motifs
+                apply_forced_tt_motifs(design, atoms, bonds)
+            if _extension_plane_motifs:
+                from backend.core.extension_plane_motifs import apply_extension_plane_motifs
+                apply_extension_plane_motifs(design, atoms, bonds)
         # Saved residue poses are part of the authored design geometry too. A relaxed
         # CG frame already contains the final physical pose, so applying these deltas
         # after a simulation override would move the rendered/seeded residue away from
@@ -4328,6 +4352,7 @@ def _build_extension_atoms(
     bp_to_sugar_serials: dict[tuple[str, int, str], dict[str, int]],
     ext_pos_override: "dict[tuple[str, int], _np.ndarray] | None" = None,
     bridge_fn=_minimize_backbone_bridge,
+    native_multibase_bridges: bool = False,
 ) -> int:
     """Place all-atom residues for every strand extension (5′/3′ terminal tail).
 
@@ -4565,8 +4590,14 @@ def _build_extension_atoms(
 
         # The simulated bead centres stay fixed; only the explicit linker atoms are
         # re-seated because oxDNA does not provide atomistic O3'/P/O5' coordinates.
+        # Multi-base tails are outside the reviewed single-base motif bank.
+        # Keep their existing physical linker solver in display AND MD seeds;
+        # chord interpolation can compress these O3'-P bonds below 1 angstrom.
+        tail_bridge_fn = (
+            _minimize_backbone_bridge if native_multibase_bridges and n > 1 else bridge_fn
+        )
         for prev_s, next_s in zip(chain_s, chain_s[1:]):
-            bridge_fn(atoms, prev_s, next_s)
+            tail_bridge_fn(atoms, prev_s, next_s)
 
     return serial
 

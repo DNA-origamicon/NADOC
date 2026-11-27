@@ -1,0 +1,846 @@
+[
+  {
+    "name": "tune_0_walker_0",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.96105493302457,
+      "requested_steps": 200000,
+      "seed": 621100,
+      "timed_out": false,
+      "input_sha256": "df01c9a2f7078efe2b50ca4edadf6eebf5d507ca6eceb8f084871efed005ed7e"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621100\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_0_walker_0/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 1\n1 0 1\n2 0 1\n3 0 1\n4 0 1\n5 0 1\n6 0 1\n7 0 1\n8 0 1\n0 1 1\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "43b1df888dca6883ce6207c529a03dbfcddd8accf0eb2b114ac8aab90c21954a",
+      "last_hist.dat": "b3f13f4591c7f38aa9019b4cd22c31e129d924faecf41054d47a18c97bea8dea",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "6ebe645f835e918f8b5187814e6e9de5ee90494b7d76afcd6a19ef3599fe82ee",
+      "native.log": "e12eda4eebbd77d2ca5e7a9b4c42606941e01102e73eef81c63fcb4aa1444880"
+    }
+  },
+  {
+    "name": "tune_0_walker_1",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 17.037945352029055,
+      "requested_steps": 200000,
+      "seed": 621101,
+      "timed_out": false,
+      "input_sha256": "d144e12e6ab6a7e6990324e808eef78f24d31ba086e4fe164f9bd150d613a9b6"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621101\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_0_walker_1/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/unbound.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 1\n1 0 1\n2 0 1\n3 0 1\n4 0 1\n5 0 1\n6 0 1\n7 0 1\n8 0 1\n0 1 1\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "0e3374d0a7783dbd52024f05daa717d6ee52ad2b0296659fec10cee8b7e7a7ce",
+      "last_hist.dat": "486f4fd534143ce5908e047be839de695b429d1542782a61b118131bd1bab278",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "29b8fec9ab07679da2e9b028e86c7283b8276043ad06ca30ac4938dcf22b2690",
+      "native.log": "92c175e569d5a460de93a21c2faf35b9da749d552552c20d10e04b57a3fefd30"
+    }
+  },
+  {
+    "name": "tune_0_walker_2",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.862137543968856,
+      "requested_steps": 200000,
+      "seed": 621102,
+      "timed_out": false,
+      "input_sha256": "5008e7b99b3d003cd23068abf57aff2af4ec85e5cdedefd5fb435f847ecb2eb5"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621102\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_0_walker_2/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 1\n1 0 1\n2 0 1\n3 0 1\n4 0 1\n5 0 1\n6 0 1\n7 0 1\n8 0 1\n0 1 1\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "1a6882df6fab7d2907a693fcf96f384d453c922fc49790d97c0286869caec7d4",
+      "last_hist.dat": "f66323f43e9898dfbe3df0e685b643f7eacb50300e44bd457d0022c9a4300dea",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "6f2cb53174f9bc4ef96cd0d7b1e0e797655957a41de27448e635cd27b75e8ea9",
+      "native.log": "2d060713036d4e5027abb525f804c705cbd6a33f5fe555f2e69ad30fbb8fcc0b"
+    }
+  },
+  {
+    "name": "tune_0_walker_3",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 17.488931239116937,
+      "requested_steps": 200000,
+      "seed": 621103,
+      "timed_out": false,
+      "input_sha256": "181720262b2e94e7f7e7a5b93d841b2b9a165ce482af8a98b350343d1eb64b4c"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621103\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_0_walker_3/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/unbound.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 1\n1 0 1\n2 0 1\n3 0 1\n4 0 1\n5 0 1\n6 0 1\n7 0 1\n8 0 1\n0 1 1\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "59aabf413fb406195f55e13f586cacb7f82bfdc287dac50ca8afa86614bea386",
+      "last_hist.dat": "17393f58ab210b4dbd1673597d841a31772de6511228b547427357d53e5e122b",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "5065094107fad55994d7a58bddabeb844b6589265b4b019ce18383102f6ce837",
+      "native.log": "024e2787524be5b2426021a2d1e6e65afa581b64cb80727a00d21ca227000d19"
+    }
+  },
+  {
+    "name": "tune_1_walker_0",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.908813156886026,
+      "requested_steps": 200000,
+      "seed": 621104,
+      "timed_out": false,
+      "input_sha256": "88bcb463f7247ee778f4632a3ee70cbf8e7641eecadda0faa09dafeba2d78255"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621104\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_1_walker_0/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_0_walker_0/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.2422658882048058\n1 0 1\n2 0 1\n3 0 1\n4 0 1\n5 0 0.6433633812281085\n6 0 0.1021310559116126\n7 0 0.04523931973748761\n8 0 0.02660263740655395\n0 1 0.02245654436733419\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "a3f68e8e37364a0284acd862f89185c16b8113036bc1238b6a99de674d5d628c",
+      "last_hist.dat": "f08aab3e45e967534b66733efa91171008689c17152a567b48ce74ce8fe65e6a",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "ecce45ca6bf70b6bd422d78fe6633a9e91aa9fea499b8e687101b4518ddad3d2",
+      "native.log": "6aabff62350f0c21429323d1b35215f158f4786fb557b995adb6a8bfd2c384aa"
+    }
+  },
+  {
+    "name": "tune_1_walker_1",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 17.49072957993485,
+      "requested_steps": 200000,
+      "seed": 621105,
+      "timed_out": false,
+      "input_sha256": "20c5d999cc7173122196ad3c4421324294042eaa9dcc0dd8d1976a53ddff477d"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621105\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_1_walker_1/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_0_walker_1/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.2422658882048058\n1 0 1\n2 0 1\n3 0 1\n4 0 1\n5 0 0.6433633812281085\n6 0 0.1021310559116126\n7 0 0.04523931973748761\n8 0 0.02660263740655395\n0 1 0.02245654436733419\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "fcde613319df03eab3373a70e11cde3db33c334d88557a2347e0f5746f226155",
+      "last_hist.dat": "b66d22bf0cfa4c5daaa240880f38259a62b2ed9a40e2b6ceab831435b101ff1a",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "ca6b2a030b20bb1853f25190de8049fb462aed99297e94639bf8eb8d0ef34293",
+      "native.log": "5dce30b9a7245e00abed354888d90327f91d009bb7dbdf602e03f5ececbe1981"
+    }
+  },
+  {
+    "name": "tune_1_walker_2",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.759042978985235,
+      "requested_steps": 200000,
+      "seed": 621106,
+      "timed_out": false,
+      "input_sha256": "5d3053c0f5d184cdb089c3ec7d98574b453fecd15c921680f2f1d8384f016591"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621106\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_1_walker_2/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_0_walker_2/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.2422658882048058\n1 0 1\n2 0 1\n3 0 1\n4 0 1\n5 0 0.6433633812281085\n6 0 0.1021310559116126\n7 0 0.04523931973748761\n8 0 0.02660263740655395\n0 1 0.02245654436733419\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "b65bec19b6bac57c3518632b97bd8a8286311cecefa3d2ae7a48307b87db44b0",
+      "last_hist.dat": "719fca4378cfc6a4cd1cc381a1fa974359c2ce8be841f06845ca0ef7aab0c204",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "ddf26f95325de919e022047d2220fbf885e476b96fec537aff082ce58e4517ed",
+      "native.log": "e56e1debec1129aa9e833da914b34ca7d47d426c62abac56478a6b6f746d7448"
+    }
+  },
+  {
+    "name": "tune_1_walker_3",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 18.289098525885493,
+      "requested_steps": 200000,
+      "seed": 621107,
+      "timed_out": false,
+      "input_sha256": "66a860e6ef2e109a68f23d20924b89eb531c1db78f2b2a1fbb898faced6431d4"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621107\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_1_walker_3/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_0_walker_3/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.2422658882048058\n1 0 1\n2 0 1\n3 0 1\n4 0 1\n5 0 0.6433633812281085\n6 0 0.1021310559116126\n7 0 0.04523931973748761\n8 0 0.02660263740655395\n0 1 0.02245654436733419\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "44a8c0cf75f40c23816f3b0cb7bde19fda3ae4443b7ee52facc3be5296348d94",
+      "last_hist.dat": "800f929a00926cea3adc742d076e87f2ee9e1a8f2e051ba5ceefd5e98d2dedb1",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "4c2497bcc2fc2cf3a376faa20cc27318c4d40f761d637f5ac26a523b1d71582c",
+      "native.log": "289dbd378135192462371e50332bcbb84ce2f326d5a93d26a44cf13b93b660ac"
+    }
+  },
+  {
+    "name": "tune_2_walker_0",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 30.456428308971226,
+      "requested_steps": 200000,
+      "seed": 621108,
+      "timed_out": false,
+      "input_sha256": "154ad6da949cac5c4e0c12cf59860770ca43fb9b45fcb04fdd602a6c300a6397"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621108\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_2_walker_0/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_1_walker_0/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01921042427441128\n1 0 1\n2 0 1\n3 0 1\n4 0 0.8313495105184755\n5 0 0.06454450287107739\n6 0 0.005953984945337326\n7 0 0.001651397160479551\n8 0 0.000910058857553935\n0 1 0.0005233980547053932\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "9d00a5e6171a62e91a7d47ad25e7045bb7c6311aace8206acd06d93cab8b4cac",
+      "last_hist.dat": "e4ccbde4a3326e245fca02ab10232934dbe44d8bc20d4aa02691d155698ab7dc",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "30dd99f3bdd3ab3d0056258789593e10f16f7fc828bc1bb9624718305b152651",
+      "native.log": "12752bc16779a5cb70d645bb4d9977599994042b949044f9a2a26ccd0fdd22dc"
+    }
+  },
+  {
+    "name": "tune_2_walker_1",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 19.64127514883876,
+      "requested_steps": 200000,
+      "seed": 621109,
+      "timed_out": false,
+      "input_sha256": "140a15bcd889b38714f624acd8cf8a53c8afaf2bf605c6f1eb7ea577d1417f76"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621109\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_2_walker_1/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_1_walker_1/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01921042427441128\n1 0 1\n2 0 1\n3 0 1\n4 0 0.8313495105184755\n5 0 0.06454450287107739\n6 0 0.005953984945337326\n7 0 0.001651397160479551\n8 0 0.000910058857553935\n0 1 0.0005233980547053932\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "ce6c99b7f459cf97b84021869b2da22aa987d39306493a367da7fe995540c357",
+      "last_hist.dat": "72d10f52a9d8413c1c632182d1963f6c7e2b7c216735b2111ad1db692bf59a82",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "9f029ed5bcb4b1bcb68f51a705dd644b6523a7ee342aef7b7a590322bc3d0548",
+      "native.log": "e750514274deadb477e74ca9530c3ace2a2962064ace885504ea8efe124ab2be"
+    }
+  },
+  {
+    "name": "tune_2_walker_2",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.85850419406779,
+      "requested_steps": 200000,
+      "seed": 621110,
+      "timed_out": false,
+      "input_sha256": "78325e20e7f5c41f37bda2b477b4b4f3d1f26955d2daa7ced1075b3fb4efafb2"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621110\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_2_walker_2/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_1_walker_2/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01921042427441128\n1 0 1\n2 0 1\n3 0 1\n4 0 0.8313495105184755\n5 0 0.06454450287107739\n6 0 0.005953984945337326\n7 0 0.001651397160479551\n8 0 0.000910058857553935\n0 1 0.0005233980547053932\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "c11be8091a5fad57273d76ba657853dd530936214ef09d9b0b8e40be09af88dc",
+      "last_hist.dat": "692b07152c6208920e70e8acb67ff74f28e81d49ccb75458496bc565a1d8ca6d",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "1735a81b8acd38c46e39386b842b126f43dea2f7f311cb280c458174bd86d873",
+      "native.log": "d5dc7be6c584a020676b075c643840fa0c4165c3d3147dc734384755e81c652e"
+    }
+  },
+  {
+    "name": "tune_2_walker_3",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 26.250751110957935,
+      "requested_steps": 200000,
+      "seed": 621111,
+      "timed_out": false,
+      "input_sha256": "f11677ed8387e3de218da595b3366907660e74fbcbb52031499a00a516dd8d17"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621111\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_2_walker_3/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_1_walker_3/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01921042427441128\n1 0 1\n2 0 1\n3 0 1\n4 0 0.8313495105184755\n5 0 0.06454450287107739\n6 0 0.005953984945337326\n7 0 0.001651397160479551\n8 0 0.000910058857553935\n0 1 0.0005233980547053932\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "1ab8cddad01fadbcf6b026e9ef473c0020729157c5f9d26266aa27575d813a05",
+      "last_hist.dat": "9a9f28b01e32a0b35d9acf495197545f43278abd686e18037eb352ce5b8efe57",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "4b77d4e8537b36f2fb44571e1de0d23f5468fe0332d15ccee95e618f30341d25",
+      "native.log": "ef6a5ab18db3bfd8d869b610355cc7f87f5ecd07ea82c2264fb0e698a800a366"
+    }
+  },
+  {
+    "name": "tune_3_walker_0",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 29.105924741132185,
+      "requested_steps": 200000,
+      "seed": 621112,
+      "timed_out": false,
+      "input_sha256": "cf0635d7b65ea13f2dafeb4bf84adc84a8997b429be7252dc847a0bdf36e03af"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621112\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_3_walker_0/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_2_walker_0/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01153545078753393\n1 0 1\n2 0 0.7268384338712118\n3 0 0.4051810052420863\n4 0 0.302085662352562\n5 0 0.03112062155088701\n6 0 0.003591615912109539\n7 0 0.0008136021018635592\n8 0 0.000546239874602406\n0 1 0.0002050488518575884\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "81348208a014db5442cf238b8062e4ee3a42720dfd00ed8d708ab3ed2d477b53",
+      "last_hist.dat": "bd46025aea5291817b93e153b7ced594b418a0508e25080701a4d34d8af56587",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "25ba7face6693fe800d4f12983c539ed3deca6d49681f56c3cfe132d2a97243f",
+      "native.log": "557dcfbc6f2236c9e0cfb88f80ece4473de14e621f289af844e437cc9f586253"
+    }
+  },
+  {
+    "name": "tune_3_walker_1",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 25.650940313003957,
+      "requested_steps": 200000,
+      "seed": 621113,
+      "timed_out": false,
+      "input_sha256": "b37f62dd571809d6ff66ceda75c81ba9c0519efde6df83f4c5fa2d3e55e08ac4"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621113\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_3_walker_1/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_2_walker_1/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01153545078753393\n1 0 1\n2 0 0.7268384338712118\n3 0 0.4051810052420863\n4 0 0.302085662352562\n5 0 0.03112062155088701\n6 0 0.003591615912109539\n7 0 0.0008136021018635592\n8 0 0.000546239874602406\n0 1 0.0002050488518575884\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "ab750ee9349bfe15cb14f02ab3e18020373533db7ce04df64cd301780baa1412",
+      "last_hist.dat": "a23444dd1696b041f28b13dc805b0a84054b15442ebc28837e75d6b4f3aaaf97",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "46123923be07f0d9ca84ad7e1824b7eeb18efad4f884b12bad11094968cda98b",
+      "native.log": "3dcbfe23ed14d0c11323dde51cd1883617aa6a491b80a71b9fac98530fa79438"
+    }
+  },
+  {
+    "name": "tune_3_walker_2",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 30.207287406083196,
+      "requested_steps": 200000,
+      "seed": 621114,
+      "timed_out": false,
+      "input_sha256": "b99e63e211f672343cf2113119a77f35803e4da4699c5556e07be0220c59a60d"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621114\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_3_walker_2/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_2_walker_2/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01153545078753393\n1 0 1\n2 0 0.7268384338712118\n3 0 0.4051810052420863\n4 0 0.302085662352562\n5 0 0.03112062155088701\n6 0 0.003591615912109539\n7 0 0.0008136021018635592\n8 0 0.000546239874602406\n0 1 0.0002050488518575884\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "1332b8fb57f6080048b557085ade64c5d25b59ed1d874ae4542c1deb04a9db4e",
+      "last_hist.dat": "0c4f40441808218730d9e730b269f967d9ae38fe63cae0bc378777314a9fb04f",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "1807dcfdd35484930110835e0e5a86f06039ec254fb2818a2bb23ef219e2df00",
+      "native.log": "c5e66edcd34f2d9ff64c882e13ec528fbd7fc6076ae70289530d5af71f8019d2"
+    }
+  },
+  {
+    "name": "tune_3_walker_3",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 26.05150315607898,
+      "requested_steps": 200000,
+      "seed": 621115,
+      "timed_out": false,
+      "input_sha256": "51637c024cb2701f2547b501d8398e9e522c7f5e4949f45611e0504a5abf68d1"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621115\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_3_walker_3/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_2_walker_3/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01153545078753393\n1 0 1\n2 0 0.7268384338712118\n3 0 0.4051810052420863\n4 0 0.302085662352562\n5 0 0.03112062155088701\n6 0 0.003591615912109539\n7 0 0.0008136021018635592\n8 0 0.000546239874602406\n0 1 0.0002050488518575884\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "6677783824c26ffb618cc2a11e75cc5a8fdc0a70f540f65aec8f1aef5dcd1b15",
+      "last_hist.dat": "ce3860cc8d559ac996b0135980ec98fd478d9649803bf0120b1a54869d44b15c",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "589c0b5cb212264af7e4bebdbc910c3f0f6f36e245fc3d84004b8fb8056da40f",
+      "native.log": "94431a6d5af7a59a2f1a9fd4c2ad3c45089d95ec25918e05901c7e66510a7991"
+    }
+  },
+  {
+    "name": "tune_4_walker_0",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 30.50340297888033,
+      "requested_steps": 200000,
+      "seed": 621116,
+      "timed_out": false,
+      "input_sha256": "7e12c2ed04e3b99710c66d0ec79b6c0f5e42e92a779b497d701cf4522cfcd749"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621116\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_4_walker_0/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_3_walker_0/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02132551846822109\n1 0 1\n2 0 0.3388045651336519\n3 0 0.1768494373769981\n4 0 0.1293065125483749\n5 0 0.02088356563466927\n6 0 0.003253142868052203\n7 0 0.001196410291929548\n8 0 0.001260459356232484\n0 1 0.0003748750293101921\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "47e172ed9782aa21b4f33d866aef3f0139d48f331bc3e7e46aaaa7e8ab3bb6c4",
+      "last_hist.dat": "383a845afd6b851ab882242ad8ac707798bb785f00670e00f84207a26a5ec4a4",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "97b8879e1c80566ed79b4ca8c9cc15f0c3363db00fc27239427b8cdf916bed8f",
+      "native.log": "286599a7152ebc689e44bede32db903b577db132128820f3d08d068559b66224"
+    }
+  },
+  {
+    "name": "tune_4_walker_1",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 19.23748137615621,
+      "requested_steps": 200000,
+      "seed": 621117,
+      "timed_out": false,
+      "input_sha256": "cb96e817fd1fe75a65570e83b7ccd5d4b3072791755f601a93856b0d744d4478"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621117\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_4_walker_1/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_3_walker_1/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02132551846822109\n1 0 1\n2 0 0.3388045651336519\n3 0 0.1768494373769981\n4 0 0.1293065125483749\n5 0 0.02088356563466927\n6 0 0.003253142868052203\n7 0 0.001196410291929548\n8 0 0.001260459356232484\n0 1 0.0003748750293101921\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "4f8e503d821c0f1ecc286d3fbd0683b8392c92c566fc272f8202c147f85cb423",
+      "last_hist.dat": "01b153eba0ae32131705eeb4a846a5cf427c34377c343aba942da381484704ea",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "7f25fcda6610b56e450843f7773c0cfe00806c854903272c88d7ef2dc2125b31",
+      "native.log": "4d3a4be89262efd2a0a76899c80536ffd85404cc7fdd989b636429e042777272"
+    }
+  },
+  {
+    "name": "tune_4_walker_2",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 27.448976936051622,
+      "requested_steps": 200000,
+      "seed": 621118,
+      "timed_out": false,
+      "input_sha256": "28fc6d4133308f9b277a7b9aea3c1e2fbab232a017e574f9ac517b3c498455f7"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621118\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_4_walker_2/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_3_walker_2/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02132551846822109\n1 0 1\n2 0 0.3388045651336519\n3 0 0.1768494373769981\n4 0 0.1293065125483749\n5 0 0.02088356563466927\n6 0 0.003253142868052203\n7 0 0.001196410291929548\n8 0 0.001260459356232484\n0 1 0.0003748750293101921\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "a9f0cd9d73a95ceeceea8c77482f78a10e619c04e8f61619e0971ce0853d96fa",
+      "last_hist.dat": "2561809537c228a0f6da0d403a9deb120f11546a8be5a60115b3f24833b55352",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "f756c4f967889ab96fc5f31291f45a766eeaccc9ddcd3244c83dd5f5bc7a8b44",
+      "native.log": "19c7cd04b4807db4c898250b4ff29cf097c84138e40be2bf9cd5fcb58f4a99e2"
+    }
+  },
+  {
+    "name": "tune_4_walker_3",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 28.850860013859347,
+      "requested_steps": 200000,
+      "seed": 621119,
+      "timed_out": false,
+      "input_sha256": "60b6dea499670b96420fbc2f616c5759a4bf79bb91856a8ada771640214abdc5"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621119\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_4_walker_3/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_3_walker_3/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02132551846822109\n1 0 1\n2 0 0.3388045651336519\n3 0 0.1768494373769981\n4 0 0.1293065125483749\n5 0 0.02088356563466927\n6 0 0.003253142868052203\n7 0 0.001196410291929548\n8 0 0.001260459356232484\n0 1 0.0003748750293101921\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "970127c0ee30fc049b3b6409e8b47a837085eb5c36b0aee406811f4a73435507",
+      "last_hist.dat": "a35912e731ac4e2782696236c2558d04b66eeecff42c2265788f5ff7bcf0dafc",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "cc848ab06839f64da6c87cc213b1e825602bf0ef250f69f724512887f82bc2e5",
+      "native.log": "4423e5af4ff1b19f5cc797b37ac2bb551b44605c39bfb9e8a743ab696ac62c33"
+    }
+  },
+  {
+    "name": "tune_5_walker_0",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.75461729406379,
+      "requested_steps": 200000,
+      "seed": 621120,
+      "timed_out": false,
+      "input_sha256": "08ea6e97d3996b71362b6a6431886a150ee2230caefc60797547f6475a87510f"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621120\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_5_walker_0/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_4_walker_0/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01995521729819646\n1 0 1\n2 0 0.2944439542951437\n3 0 0.1093720282954956\n4 0 0.06156016893529093\n5 0 0.01427614203004867\n6 0 0.003079760823262538\n7 0 0.001847747838702821\n8 0 0.002150755847777446\n0 1 0.0002692744563591593\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "a14d8d3a105def96eb6650d69abcfe791f69d255e11f5963d6659e1ef24e3567",
+      "last_hist.dat": "ebafa7f70f117f139321114b6f25f98f7d3fd864ec7d78ab00b8e58f645d9c88",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "da0e194fbc81812cf786a9c35c4125cd6e41f12885f03e2643bfe1d0b2039739",
+      "native.log": "9e5a6951398acb1755cd80f606fb134f92f4df3e41129657de502bd4ce5315b2"
+    }
+  },
+  {
+    "name": "tune_5_walker_1",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 24.49484935309738,
+      "requested_steps": 200000,
+      "seed": 621121,
+      "timed_out": false,
+      "input_sha256": "85e8dd540eefbb55b7a9ca257142351d2afacc591d42623d5765316c00bc9ebd"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621121\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_5_walker_1/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_4_walker_1/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01995521729819646\n1 0 1\n2 0 0.2944439542951437\n3 0 0.1093720282954956\n4 0 0.06156016893529093\n5 0 0.01427614203004867\n6 0 0.003079760823262538\n7 0 0.001847747838702821\n8 0 0.002150755847777446\n0 1 0.0002692744563591593\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "983d90d6607cb69a45b6c2ea87412b2664a0e425d10ab9f1304f8c53059d02eb",
+      "last_hist.dat": "8397adc5e09cd6c57bc1f44763299306c604f90e7ada3b76441498e7d33ec3e5",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "98383bfab181aaf6439ff57af1142fbc33ba813e9cadba0cfe7b72d55f15c543",
+      "native.log": "06d2d671d3ec6064905e7707f9334094678635c5fb1dda8bc617d22d1b74ce93"
+    }
+  },
+  {
+    "name": "tune_5_walker_2",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.77732801483944,
+      "requested_steps": 200000,
+      "seed": 621122,
+      "timed_out": false,
+      "input_sha256": "b9320a9782bb2def2ad18be1ae8af95ac5ccc8c7fbe7353cadfdcdb7613567fe"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621122\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_5_walker_2/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_4_walker_2/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01995521729819646\n1 0 1\n2 0 0.2944439542951437\n3 0 0.1093720282954956\n4 0 0.06156016893529093\n5 0 0.01427614203004867\n6 0 0.003079760823262538\n7 0 0.001847747838702821\n8 0 0.002150755847777446\n0 1 0.0002692744563591593\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "172e52093ebe7bdb5c40ea950eecddc1eb57ef74919b73c71a1b7d53c0312aef",
+      "last_hist.dat": "41a7dce4604c8f8a60c3d16f11089c0b16b1d751cd7eb042d889a28fd241cf23",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "86f60ccec2b92bb050962ff8017cf6336aedf74ae689607ca562a82044b3fd74",
+      "native.log": "0454b6058b464242cdc79a50f99275b6f60c8aa011271113c02033574ebc2d67"
+    }
+  },
+  {
+    "name": "tune_5_walker_3",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 29.22393947816454,
+      "requested_steps": 200000,
+      "seed": 621123,
+      "timed_out": false,
+      "input_sha256": "6266a1df8c4df1bfe1376b8152e29e8ab3f4a0460a84c75836455b2374b68b59"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621123\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_5_walker_3/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_4_walker_3/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01995521729819646\n1 0 1\n2 0 0.2944439542951437\n3 0 0.1093720282954956\n4 0 0.06156016893529093\n5 0 0.01427614203004867\n6 0 0.003079760823262538\n7 0 0.001847747838702821\n8 0 0.002150755847777446\n0 1 0.0002692744563591593\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "b74554f183b38a8b45858164b2cccf9d5a95636a12f4416cc390ea9e2efeea1d",
+      "last_hist.dat": "6c57160657ca09793c30ca8ba1b93fe25bd5c64ecac65d88ff200603d225c178",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "2eb93cec744acb0e451351ccc8f1d52a54806c10b9e780b5408a3c9fb4ebf20d",
+      "native.log": "87e86de13b6199002621f2cc567ac4dbffe5787acc8569662cd925981a387a45"
+    }
+  },
+  {
+    "name": "tune_6_walker_0",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.559350239112973,
+      "requested_steps": 200000,
+      "seed": 621124,
+      "timed_out": false,
+      "input_sha256": "26879b8ee4b383864b8cd51a561f4d6c4e648c8dd16be8dbde9e4a3e83117556"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621124\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_6_walker_0/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_5_walker_0/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.03246225125985158\n1 0 1\n2 0 0.2945180221637179\n3 0 0.1272271939264013\n4 0 0.08204609331564985\n5 0 0.02306131926716201\n6 0 0.00370013045658768\n7 0 0.001272838628337444\n8 0 0.001042901293281236\n0 1 0.0004257910413712337\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "fb88df74066cbe1bf56b6aa6dbfc62df8b6c3a708417f9f40ea1a569e6e92ba3",
+      "last_hist.dat": "27a757b29cbb5f980ea0706a950f63cc52532bd28e789db52834bb1e70f0b8c8",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "9f65c1976206d8e6d4e2ae6106d7c9da6f5db7aafc522395486d02832337fa23",
+      "native.log": "96d262c57b8a3f98920c13439f7240668bdaae81ab007c07e49aaf6967130628"
+    }
+  },
+  {
+    "name": "tune_6_walker_1",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.959803140955046,
+      "requested_steps": 200000,
+      "seed": 621125,
+      "timed_out": false,
+      "input_sha256": "6b59e7d5243597db017b6b97365bf422123a41c7b6e14f600a12270138878751"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621125\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_6_walker_1/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_5_walker_1/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.03246225125985158\n1 0 1\n2 0 0.2945180221637179\n3 0 0.1272271939264013\n4 0 0.08204609331564985\n5 0 0.02306131926716201\n6 0 0.00370013045658768\n7 0 0.001272838628337444\n8 0 0.001042901293281236\n0 1 0.0004257910413712337\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "f88bd8601cdeb5d84a482240d2788dcd69a50de7fe4b1dd24f6ca042b9e3779c",
+      "last_hist.dat": "4b0479ee75ed70ad659dc192825dfb9adba12586f61804e88be831ca2c2c39f6",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "bf00a573d63a118831145bd93f741eedf383db551053072eedcfb2f493e3a5bf",
+      "native.log": "77a68951124c8fcda44befbe28ce26205c5c52c56ce591f90339fb49ac81cb91"
+    }
+  },
+  {
+    "name": "tune_6_walker_2",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 22.245290793012828,
+      "requested_steps": 200000,
+      "seed": 621126,
+      "timed_out": false,
+      "input_sha256": "22d104a61755a67970a0324fdebbeb831fbe9021290b3da45e4c99920a103457"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621126\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_6_walker_2/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_5_walker_2/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.03246225125985158\n1 0 1\n2 0 0.2945180221637179\n3 0 0.1272271939264013\n4 0 0.08204609331564985\n5 0 0.02306131926716201\n6 0 0.00370013045658768\n7 0 0.001272838628337444\n8 0 0.001042901293281236\n0 1 0.0004257910413712337\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "5cbc9a1934bd1d02e0b3fec38008a58bd822f24e9d14d2b2e28374bb92c173da",
+      "last_hist.dat": "54399d1dc58704b8ca1d0f51711d0e52e68244c7ff445e1e13b5a6ad18efa257",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "f90c0adec3c4caf4d3d43a9f4393fc6dc1bdb3e6df9049db6b1f4fec704dc725",
+      "native.log": "7ea9a18a2cf37f4230f0c3d7c9c6c5dc425b68191dad9f78e0085390b2bdf795"
+    }
+  },
+  {
+    "name": "tune_6_walker_3",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 32.009830478113145,
+      "requested_steps": 200000,
+      "seed": 621127,
+      "timed_out": false,
+      "input_sha256": "a4929cddc17e5b9f2b99bd19a5b09d8b5b8a3cd81b37859cf9237ebe957575a4"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621127\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_6_walker_3/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_5_walker_3/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.03246225125985158\n1 0 1\n2 0 0.2945180221637179\n3 0 0.1272271939264013\n4 0 0.08204609331564985\n5 0 0.02306131926716201\n6 0 0.00370013045658768\n7 0 0.001272838628337444\n8 0 0.001042901293281236\n0 1 0.0004257910413712337\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "0dfd85df577ebee71cf640fd10919f749247959f1c74b6c3782db805c59f810d",
+      "last_hist.dat": "b0f782875854fd786bfa43edc66e50aa99271fa3bf2b226d44f082534e30183d",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "eb1fd3c36ca13589c61e7092d057feacdf30d153b370535e373f731e023c2567",
+      "native.log": "8e532126fcde4cb2431252bbdc215026e8695508b16e66fcc0e79dcf90c3dec4"
+    }
+  },
+  {
+    "name": "tune_7_walker_0",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 25.44722943007946,
+      "requested_steps": 200000,
+      "seed": 621128,
+      "timed_out": false,
+      "input_sha256": "bc5b64a72ff4ed25fab3650d1505a887216c42f2173a8857f4cb953a301a2692"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621128\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_7_walker_0/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_6_walker_0/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01995092195245992\n1 0 1\n2 0 0.2844365873486964\n3 0 0.1910122102308937\n4 0 0.07618187300181363\n5 0 0.0113124710150845\n6 0 0.001456876780250803\n7 0 0.0004996878685846072\n8 0 0.000294737659099445\n0 1 0.0002297811539377632\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "473c93a7f888f5d7c26b83f23efff3f64e98dbc1b118caafee25cd299936481c",
+      "last_hist.dat": "c11c3df21ba1caf40b2279b2ac68b49a0a443d65c491e6b39774fba73c9799c7",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "87f4909e36d23c8f42b04d922df2d04d6fbbfde19fe0885677c8f2aa5952a44b",
+      "native.log": "1e3c4b4ffb98476396645ef7816d560efdc1958b019fbc37b16dfb550b51fa29"
+    }
+  },
+  {
+    "name": "tune_7_walker_1",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.9579842959065,
+      "requested_steps": 200000,
+      "seed": 621129,
+      "timed_out": false,
+      "input_sha256": "a39e37ba21c0eeb60278c8d03a9fe745d6536392ec23e72a5ae6ef67c8bd50ae"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621129\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_7_walker_1/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_6_walker_1/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01995092195245992\n1 0 1\n2 0 0.2844365873486964\n3 0 0.1910122102308937\n4 0 0.07618187300181363\n5 0 0.0113124710150845\n6 0 0.001456876780250803\n7 0 0.0004996878685846072\n8 0 0.000294737659099445\n0 1 0.0002297811539377632\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "bdfadb8100596989d6563aac8ffa3605ff0e67031bb6cbec173e0272c54f7982",
+      "last_hist.dat": "a1e04ff3e5b8ecc5836ca4983604519e612f5d709504cadd4fc36cf7cbab4967",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "f0ba58d04f268814a72fdf901eefa1f2f2e370d3afb5d22b058290e929f55b02",
+      "native.log": "61c4a2c6c29a11fbb7a125a6d4f51318799fb343ecaaf331afc27074654674f9"
+    }
+  },
+  {
+    "name": "tune_7_walker_2",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 22.29329514899291,
+      "requested_steps": 200000,
+      "seed": 621130,
+      "timed_out": false,
+      "input_sha256": "64b92a746232e7e3f91346d8eac0768ae752504f175b8bd55d3297bdf6342e10"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621130\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_7_walker_2/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_6_walker_2/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01995092195245992\n1 0 1\n2 0 0.2844365873486964\n3 0 0.1910122102308937\n4 0 0.07618187300181363\n5 0 0.0113124710150845\n6 0 0.001456876780250803\n7 0 0.0004996878685846072\n8 0 0.000294737659099445\n0 1 0.0002297811539377632\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "0e9c52b51ece5d94e3213d52c38406e344d1758daa972cae7079837e78593122",
+      "last_hist.dat": "3f499a2848d96098de503af07ca77b6dd8d7976f60dc9b71473fc607040ef87c",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "45386237e6525dd66f8ef57e988a88364538934f217755f442bd4d55a43f0c7b",
+      "native.log": "7d9f989ec29eca0878b512538ff2d43369f16b1b5178f9acd4663c087f271229"
+    }
+  },
+  {
+    "name": "tune_7_walker_3",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 30.305720226839185,
+      "requested_steps": 200000,
+      "seed": 621131,
+      "timed_out": false,
+      "input_sha256": "9872a1762e2ea12445027d37cb3886f0576d316f66e4ddc3b467db5bb3cd557e"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 621131\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_7_walker_3/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/tune_6_walker_3/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.01995092195245992\n1 0 1\n2 0 0.2844365873486964\n3 0 0.1910122102308937\n4 0 0.07618187300181363\n5 0 0.0113124710150845\n6 0 0.001456876780250803\n7 0 0.0004996878685846072\n8 0 0.000294737659099445\n0 1 0.0002297811539377632\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "a8549a5f5c47883c1975085fdcf268b71f8cb5a6918521df47e712305e2edcab",
+      "last_hist.dat": "ad5e8d0d9b751204fef41a0a6b70e49d1e54b3906a196f892a4faee61d36d3f6",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "d5f832b4f34975a9169a7511a1d7358b487e809eeb94eef9a21f28d779da9d9f",
+      "native.log": "9ec6c121778eb37c8934e4e7d4b3ca1086927d52d982cd26f0f08862b0821d3c"
+    }
+  },
+  {
+    "name": "equil_0",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 31.2102794139646,
+      "requested_steps": 200000,
+      "seed": 611200,
+      "timed_out": false,
+      "input_sha256": "1a34247a5e85cca7ffce29c687b1e072bd6d0d9db53ababe01ffbf3368cdac5b"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 611200\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/equil_0/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02274942114852509\n1 0 1\n2 0 0.2626021734138705\n3 0 0.1768496272609728\n4 0 0.08645783582756544\n5 0 0.01477149053909946\n6 0 0.001744645610520743\n7 0 0.0004085928009683431\n8 0 0.0002745204385825743\n0 1 0.0003214642319892239\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "333c99c39116ceb050edcd4807b0512bf47c26bab7512bc71a257ae2febb987d",
+      "last_hist.dat": "750a356920e3c23da39524455ddc905a17d652abb3eee7ae9b74fcfecd26397e",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "ac92b1695c84521cc8f9b00cc2d290fe4060b0f6921e506cde32496814f4f53e",
+      "native.log": "f274ffb3110ba58d1625d2e0859924f89774384c81e82bd5816057dbf643b96c"
+    }
+  },
+  {
+    "name": "equil_1",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 21.69533767993562,
+      "requested_steps": 200000,
+      "seed": 611201,
+      "timed_out": false,
+      "input_sha256": "cb608656b1524e3b40e69d9707d9fc486cd0a51743792aa223fb9cd707b61fde"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 611201\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/equil_1/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/unbound.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02274942114852509\n1 0 1\n2 0 0.2626021734138705\n3 0 0.1768496272609728\n4 0 0.08645783582756544\n5 0 0.01477149053909946\n6 0 0.001744645610520743\n7 0 0.0004085928009683431\n8 0 0.0002745204385825743\n0 1 0.0003214642319892239\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "3a392a480140910567e7f45d4af38819a26ce13c167e7c1e4dfe0cdf80391ccf",
+      "last_hist.dat": "183e23d325a1c00ad56ec45d034d7f8aed2856dba9cb327aaaafbef256393d57",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "a4a3eacc1887df4c19a813c8d7f0ce0a68f6bc6d4e398968f91cbfcaa5a22871",
+      "native.log": "653b3ac8ed4a1dfad5e0bb845235cc26c6da417067bd8518e69a9dda508fd0b3"
+    }
+  },
+  {
+    "name": "equil_2",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 30.008723543025553,
+      "requested_steps": 200000,
+      "seed": 611202,
+      "timed_out": false,
+      "input_sha256": "d63576d2b7cbcb11e3190ce14880684aa67559abf0b4636c46f8b922380ea739"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 611202\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/equil_2/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02274942114852509\n1 0 1\n2 0 0.2626021734138705\n3 0 0.1768496272609728\n4 0 0.08645783582756544\n5 0 0.01477149053909946\n6 0 0.001744645610520743\n7 0 0.0004085928009683431\n8 0 0.0002745204385825743\n0 1 0.0003214642319892239\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "de0aa61435ece7d4dbf21d01b19f8559f8fee8fc94d9abe8b398b81604a2d1db",
+      "last_hist.dat": "a5daa4f75c978bc1b1252beed28dfd075c8762dc597d7aebd2578733282ce65a",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "7e598141f95720ad81e6a7450a7e7bd997b7afd22d759dd7e8cb25b24b11e74b",
+      "native.log": "e8e16b480b64874fd727cbcf5f612add60db115ab3baf76bc59bdb3cb0d77f67"
+    }
+  },
+  {
+    "name": "equil_3",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 24.450083527946845,
+      "requested_steps": 200000,
+      "seed": 611203,
+      "timed_out": false,
+      "input_sha256": "463b08d47f71c58fd6e42a7042cb71307c43890c70678a0dda9847c83dcddb47"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 611203\nsteps = 200000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/equil_3/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = false\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/unbound.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02274942114852509\n1 0 1\n2 0 0.2626021734138705\n3 0 0.1768496272609728\n4 0 0.08645783582756544\n5 0 0.01477149053909946\n6 0 0.001744645610520743\n7 0 0.0004085928009683431\n8 0 0.0002745204385825743\n0 1 0.0003214642319892239\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "5f52f15112e7c22b8ea97403b9cc10c583a71455d2ddf60f627229e14ab689ac",
+      "last_hist.dat": "41fccb181a7905063828df3049a8e203def799794db6ff07dd5949eec84b34ed",
+      "trajectory.dat": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "energy.dat": "a2070fb5b1f55a1f1ebefa62f1b6cbc6a23f3b58ea7acbcdb845b687e585041e",
+      "native.log": "c08809129928e99f9c277108900abb6238ae51014c2d70dbeac635ddc6fb0be4"
+    }
+  },
+  {
+    "name": "replica_0_block_00",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 156.13582961191423,
+      "requested_steps": 1000000,
+      "seed": 612100,
+      "timed_out": false,
+      "input_sha256": "d885dea25a018c1740f6ce917f5459a245e6dac745dc94b58573620300c89caf"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 612100\nsteps = 1000000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/replica_0_block_00/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = true\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/equil_0/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02274942114852509\n1 0 1\n2 0 0.2626021734138705\n3 0 0.1768496272609728\n4 0 0.08645783582756544\n5 0 0.01477149053909946\n6 0 0.001744645610520743\n7 0 0.0004085928009683431\n8 0 0.0002745204385825743\n0 1 0.0003214642319892239\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "a1ad34286384b5c836832ec2937001a486b1b1dad0c7bdba59e7a21dd395d76d",
+      "last_hist.dat": "547a1bc080ec95aa9856e4aa5bc1a3d349be5fcf8cf43387e73e0b59941f9286",
+      "trajectory.dat": "14d547a378a0283462d0e62289e118bb7cc31457d617e11208acfbe1478338ec",
+      "energy.dat": "c689b197918f035e899c7c0d4bd908e90c3a0d732be63c356037e6c232a38566",
+      "traj_hist.dat": "57fe3a17079d4f1e08084b1acedc980fb51f0589e450a46f5a58c14cc8fd49b7",
+      "native.log": "68b9ffabd40601e4e207abfd47e6ed003067c5a4417467c0755ba337753850a4"
+    }
+  },
+  {
+    "name": "replica_1_block_00",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 123.28831917699426,
+      "requested_steps": 1000000,
+      "seed": 612101,
+      "timed_out": false,
+      "input_sha256": "0c3fc61114a76d151a2d70f7d2f7af12969f2e96daec3347017a7844b23b6df1"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 612101\nsteps = 1000000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/replica_1_block_00/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = true\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/equil_1/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02274942114852509\n1 0 1\n2 0 0.2626021734138705\n3 0 0.1768496272609728\n4 0 0.08645783582756544\n5 0 0.01477149053909946\n6 0 0.001744645610520743\n7 0 0.0004085928009683431\n8 0 0.0002745204385825743\n0 1 0.0003214642319892239\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "671b4f9e65eb69dd13356b69d2bfd06ec4c5d3201cb1cc5002ae1532d8cc21d8",
+      "last_hist.dat": "f7fddf2c73a6ef2c3c585d23ad571a9f1691ddb19adbb756484d6b4edf958afe",
+      "trajectory.dat": "d154e54ff44ec7ad75169b74bbe8215265dc6aab5b18663c57e3726b72b2adae",
+      "energy.dat": "b3f7e904733d4c47aab5a0dab57245975abd42a1f175b0e02c3e24546b660646",
+      "traj_hist.dat": "bf2b71e6fe1927c71f776e79bb8af744e812844ee379ec9fed3ea3107c288d9b",
+      "native.log": "f232bc2cedb61baee2bfc0aa92130a8a97c98109a427c1b81fe9e869f5291fa6"
+    }
+  },
+  {
+    "name": "replica_2_block_00",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 130.19803640409373,
+      "requested_steps": 1000000,
+      "seed": 612102,
+      "timed_out": false,
+      "input_sha256": "eaf50487895a739ecdcb463e05f082ad5cfe981b6737cfa5b15e6d82ad0004cd"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 612102\nsteps = 1000000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/replica_2_block_00/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = true\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/equil_2/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02274942114852509\n1 0 1\n2 0 0.2626021734138705\n3 0 0.1768496272609728\n4 0 0.08645783582756544\n5 0 0.01477149053909946\n6 0 0.001744645610520743\n7 0 0.0004085928009683431\n8 0 0.0002745204385825743\n0 1 0.0003214642319892239\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "688cbb042d1b5ebb9de9ad4aa42edeac9913b4ee7c27ed2ff89e6a9a18c710b9",
+      "last_hist.dat": "c51020834751fed9743561aadc3ebf954dc154800e6d96e3d403e88c8add379a",
+      "trajectory.dat": "0c399ecb773c693a2ad9affa33a608e6e0f4a6cf010a3bce62598afbb12f16ee",
+      "energy.dat": "61cfeade3affceaa5dca66ad3528f2bdd262cc43918388515cff57c4ef84c232",
+      "traj_hist.dat": "7972b5ee032235b96917c18ab6ae9940a1f300e0f6364e3fbaa7c17557eac7e2",
+      "native.log": "cad646ff74677e0ffc117f3ff1fe9f42b16d5f2d40ca00246df4eb1495686731"
+    }
+  },
+  {
+    "name": "replica_3_block_00",
+    "execution": {
+      "returncode": 0,
+      "elapsed_seconds": 143.56726032309234,
+      "requested_steps": 1000000,
+      "seed": 612103,
+      "timed_out": false,
+      "input_sha256": "d222e0d999bc01e95f1b466c7c7454bbc9966f573b2b69d7bd4586a16f6e9b5b"
+    },
+    "complete": true,
+    "input": "backend = CPU\nsim_type = VMMC\nensemble = NVT\ninteraction_type = DNA2\nseed = 612103\nsteps = 1000000\nT = 70.0C\nsalt_concentration = 0.3\nuse_average_seq = false\nseq_dep_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/oxDNA2_sequence_dependent_parameters.txt\ndelta_translation = 0.5\ndelta_rotation = 1.0\nverlet_skin = 1.0\nsmall_system = 1\nmaxclust = 12\npreserve_topology = false\ncheck_energy_every = 10\numbrella_sampling = 1\nsafe_weights = 1\nop_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/vmmc_op.txt\nweights_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/replica_3_block_00/weights.txt\nextrapolate_hist = 64C, 64.5C, 65C, 65.5C, 66C, 66.5C, 67C, 67.5C, 68C, 68.5C, 69C, 69.5C, 70C, 70.5C, 71C, 71.5C, 72C, 72.5C, 73C, 73.5C, 74C, 74.5C, 75C, 75.5C, 76C, 76.5C, 77C, 77.5C, 78C\nprint_traj_hist_file = true\ntraj_hist_file = traj_hist.dat\nlast_hist_file = last_hist.dat\nhist_file = last_hist.dat\ntopology = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/topology.top\nconf_file = /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/equil_3/last_conf.dat\nlastconf_file = last_conf.dat\ntrajectory_file = trajectory.dat\nenergy_file = energy.dat\nrestart_step_counter = true\ntime_scale = linear\nprint_conf_interval = 1000\nprint_energy_every = 1000\nmax_io = 1000\n",
+    "weights": "0 0 0.02274942114852509\n1 0 1\n2 0 0.2626021734138705\n3 0 0.1768496272609728\n4 0 0.08645783582756544\n5 0 0.01477149053909946\n6 0 0.001744645610520743\n7 0 0.0004085928009683431\n8 0 0.0002745204385825743\n0 1 0.0003214642319892239\n1 1 1\n2 1 1\n3 1 1\n4 1 1\n5 1 1\n6 1 1\n7 1 1\n8 1 1\n",
+    "output_sha256": {
+      "last_conf.dat": "5e6009f8e38bc5d6c57ac5248e4798bb821003ad4069602bb736c78f9950e54e",
+      "last_hist.dat": "2c8bfca96f686be44a34835a6c56d297cf4590ed7b4c0d5ddde20eb43946d2d9",
+      "trajectory.dat": "7399a3ca98553869dd339a89a4b4234d2883f14637481327eef24b954b113d18",
+      "energy.dat": "670c3ef16e84936aee78d0dbb30d185b65d8ebba1ee12df55cf6c85c4bafd128",
+      "traj_hist.dat": "ed9174d9bb52daa44a1bd4d3826aaa040cd22d9ec18db1a2d5db960571cf6ef6",
+      "native.log": "169646172fe1667d976d414d753625f28786471765b78acfdddd8bf6076142ef"
+    }
+  }
+]

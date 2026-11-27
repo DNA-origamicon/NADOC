@@ -1,5 +1,12 @@
 # Issues fix log
 
+## ISSUE-269 — Autoscaffold replay changes joined-cluster identities and tether order (2026-11-27)
+
+[x] Joined-cluster crossovers use the recorded Autoscaffold routing namespace.
+Replay preserves the recorded flexible-connection order and anchor selections.
+Eight focused tests passed and two optional local-design tests were skipped.
+Four rebuilt wheel layouts independently replayed after reopening.
+
 ## ISSUE-264 — Large-scene backbone rendering and native metadata assignment (2026-11-24)
 
 [x] Desktop enables fast CG backbone spheres independently of atomistic flags;
@@ -44,6 +51,14 @@ and strictly scoped linked-folder support. Pointer relocated byte-for-byte;
 Archive jobs and local designs remain in place. Thirty-nine focused tests and
 the read-only live Library browser check passed; no browser artifacts persisted.
 
+## 2026-11-23 — ISSUE-260: Constrain the scaffold sequence target selector
+
+[x] Scoped shared-control CSS fixes intrinsic-width overflow from imported
+scaffold IDs. Verified old-layout negative control, desktop/narrow containment
+and real M13 assignment in the isolated app. Sixteen frontend and two backend
+tests pass; Pointer's assigned M13mp18 offset 0 independently matches all 161
+published 2017 staple cores. Saved/reopened process replay passes.
+
 ## ISSUE-259 — NAMD runner scheduling fixture intermittently sees a busy lease (2026-11-22)
 
 [ ] Occupancy archive FAST validation failed in
@@ -54,6 +69,7 @@ budget directory; background activity sharing process state is a hypothesis, not
 an established cause. No runner or scheduling code changed for occupancy archival.
 Evidence: `.development-artifacts/occupancy-archive-backend.log` and
 `occupancy-archive-runner-retry.log`. Investigate worker/background lease isolation.
+
 
 
 
@@ -75,6 +91,14 @@ and verified by the focused rerun. Lint passed. Smoke: 22 passed, 2 skipped,
 2 existing Create/Close Session failures. Temporary sessions/screenshots cleaned;
 Gerling source checksum unchanged. Feature `main.js` LOC Δ: 0.
 
+
+## ISSUE-234 — VR build test captures background trajectory subprocess (2026-11-20)
+
+[ ] Intake during hybrid sampling validation. FAST: 21,002 passed, 90 skipped,
+one VR assertion failure from a third, background trajectory-precompute call.
+Isolated VR test passed; no fix claimed. Raw logs were pruned in the requested
+2026-11-21 cleanup; summary retained in `docs/oxdna_hybrid_benchmark.md`.
+See ledger for the open isolation investigation.
 
 ## 2026-11-21 — ISSUE-257: Close Move/Rotate after attachment Apply
 
@@ -976,6 +1000,16 @@ checkbox labels and grouped responsive fields. Inspected rendered desktop,
 narrow and small-window views; input alignment and bounds are checked in the
 existing browser workflow. Main.js LOC delta: 0. Review receipt:
 `.development-artifacts/thermal-ramp-layout-review.json`.
+
+
+## ISSUE-180 — Await the Square-lattice creation request (2026-11-16)
+
+Replaced a fixed sleep with Playwright's matching-request promise. The original
+smoke run had 23 passed, 2 skipped and this race failure. The next run passed
+Square creation but hit the known Close Session busy-overlay wait. That test now
+awaits fixture sequence completion before asserting the geometry busy modal,
+which is intentionally suppressed during sequence writes. Final full smoke: 24
+passed, two skipped; cleanup verified. No app behavior changed.
 
 
 ## ISSUE-202 — Skip background work for deleted jobs (2026-11-16)
@@ -3070,6 +3104,15 @@ assertion failed (missing captured lattice_type). Boot, real-design render,
 assembly exit and Close Session passed. Temporary images/traces/logs were
 removed after review; no new files remain in the inventoried workspace test,
 project or session roots. Unrelated worktree changes were preserved.
+
+### ISSUE-265 — D014 scaffold strokes excluded from staple matching (2026-11-26)
+
+Added observed lane/color-phase classification and conservative connected pixel
+tracing. Anchor screening accepts classified staple domains only and has no raw
+stroke fallback. The three visually identified scaffold false positives are now
+covered by source-image regression tests. Blue staples, alternate scaffold colors,
+ambiguous crossings, gaps and occlusion are covered separately. Full strand-end,
+polarity and native routing recovery remain unresolved and are reported as such.
 
 ### ISSUE-266 — Target the cluster row selection area in pattern checks (2026-11-27)
 

@@ -250,6 +250,12 @@ def apply_remote_progress(job: MdJob, finished: set[str], started: set[str]) -> 
     """
     changed = False
     running_idx: int | None = None
+    if job.minimization and job.minimization.status != "done":
+        stage = job.minimization
+        status = "done" if stage.name in finished else "running" if stage.name in started else "pending"
+        if stage.status != status:
+            stage.status = status
+            changed = True
     for idx, seg in enumerate(job.segments):
         if seg.name in finished:
             new = "done"
@@ -648,6 +654,8 @@ async def submit_job(
     job.error = None
     job.failure_kind = None
     job.user_stopped = False
+    from backend.core.alpine_submission import record_submission
+    record_submission(job, workspace_dir)
     job.save(workspace_dir)
     logger.info("[%s] submitted to %s as SLURM %s", job.job_id, profile.name, slurm_id)
     return job
@@ -926,6 +934,7 @@ async def resume_job(
     profile: ClusterProfile,
     resources: dict | None = None,
     conn=None,
+    allow_small_image_gap: bool = False,
 ) -> MdJob:
     """Resume a timed-out remote job from its latest checkpoint (user-triggered).
 
@@ -962,14 +971,19 @@ async def resume_job(
 
     await asyncio.to_thread(validate_graphene_wall_package, package_dir)
 
+    from backend.core.alpine_submission import recover_active_submission
+    if await recover_active_submission(job, workspace_dir, conn):
+        return job
+
     # 1) which segments finished on the cluster.
     ls = await conn.run(
         f"cd {_shq(scratch)} && ls -1 output/*.coor 2>/dev/null; ls -1 *.log 2>/dev/null"
     )
-    finished, _ = parse_progress_listing(ls.stdout)
+    finished, started = parse_progress_listing(ls.stdout)
 
     # 2) first unfinished segment.
-    interrupted = next((s for s in job.segments if s.name not in finished), None)
+    stages = ([job.minimization] if job.minimization else []) + job.segments
+    interrupted = next((s for s in stages if s.name not in finished), None)
     resume_conf_for: dict[str, str] = {}
     if interrupted is not None:
         # 3) mid-segment checkpoint? read its restart step.
@@ -977,8 +991,12 @@ async def resume_job(
         step = await _remote_restart_step(
             conn, scratch, interrupted.name, workspace_dir, job
         )
+        has_prior_run = interrupted.name in started or f"{interrupted.name}.restart" in finished
+        if has_prior_run and not (step and total_steps and 0 < step < total_steps):
+            raise ValueError("Interrupted stage has no usable mid-stage checkpoint; refusing to restart it from its seed")
+        conf_path = package_dir / f"{interrupted.name}.conf"
+        resume_text = conf_path.read_text()
         if step and total_steps and 0 < step < total_steps:
-            conf_path = package_dir / f"{interrupted.name}.conf"
             resume_text = md_protocols.build_remote_resume_conf(
                 conf_path.read_text(),
                 segment_name=interrupted.name,
@@ -986,6 +1004,14 @@ async def resume_job(
                 total_steps=total_steps,
                 cont_index=(job.resubmit_count or 0) + 1,
             )
+        from backend.core.md_remote_clearance import verify_resume_inputs
+
+        resume_text = await verify_resume_inputs(
+            job, workspace_dir, conn, interrupted.name, resume_text,
+            allow=allow_small_image_gap,
+            expected_step=step if step and total_steps and 0 < step < total_steps else None,
+        )
+        if resume_text != conf_path.read_text():
             if not is_gpu_target(profile, job.resources or {}):
                 resume_text = strip_gpu_resident(resume_text)
             resume_base = f"{interrupted.name}.resume"
@@ -994,7 +1020,7 @@ async def resume_job(
             )
             resume_conf_for[interrupted.name] = resume_base
             logger.info(
-                "[%s] resume seg %s from step %d/%d",
+                "[%s] resume seg %s from step %s/%d",
                 job.job_id,
                 interrupted.name,
                 step,
@@ -1071,6 +1097,8 @@ async def resume_job(
     job.download_status = None
     job.fetch_attempts = 0
     job.user_stopped = False
+    from backend.core.alpine_submission import record_submission
+    record_submission(job, workspace_dir)
     job.save(workspace_dir)
     logger.info(
         "[%s] resumed as SLURM %s (resume #%d)",
@@ -1104,7 +1132,7 @@ async def _remote_restart_step(
 
 
 def _segment_total_steps(manifest: dict, seg_name: str) -> int:
-    for seg in manifest.get("segments", []):
+    for seg in [manifest.get("minimization") or {}, *manifest.get("segments", [])]:
         if seg.get("name") == seg_name:
             return int(seg.get("steps", 0))
     return 0

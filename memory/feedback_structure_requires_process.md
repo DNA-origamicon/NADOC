@@ -8,6 +8,18 @@ status: active
 
 # Structure requires its complete process
 
+## Narrow exception — November 21, 2026
+
+[Session-authorized A/B geometry testing](feedback_session_authorized_ab_testing.md)
+permits isolated diagnostic rebuilds, including of legacy sources, only after a
+direct, scoped **“A/B testing authorized”** user grant in the active conversation.
+A reproducible diagnostic execution record replaces native authoring features
+for those comparison states only; it does not certify missing source history.
+Authored `.nadoc`/`.nass` files, source changes and production promotion are not
+covered. The policy's session/scope boundaries, independent replay and evidence
+requirements are mandatory. All rules below continue to apply outside this
+explicit exception; no agent may infer or grant an exception unilaterally.
+
 ## Mandatory quantitative bond review — November 22, 2026
 
 User instruction: an imported design with **more than 20%** of its bonds marked
@@ -57,6 +69,8 @@ Investigate importer classification, lattice coordinates, phase and bp-index
 origins first. A replayable history or matching sequences cannot validate these
 substitutions. The 865-command Gür review file was rejected despite those checks;
 do not reuse it as a simulation seed or a successful construction precedent.
+
+## Default construction requirement
 
 User correction, November 1, 2026: the purpose of the feature revamp is that no
 structure can be generated without a complete feature log. A final geometry

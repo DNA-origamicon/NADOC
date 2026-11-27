@@ -1,0 +1,205 @@
+{
+  "precision": {
+    "tm_c": 70.0741742609567,
+    "ci95_c": null,
+    "stopping_ci_c": null,
+    "halfwidth_c": null,
+    "replica_tm_c": [
+      70.0809316646161,
+      66.69338105249176,
+      74.13686940720042,
+      70.0653231113415
+    ],
+    "target_halfwidth_c": 1,
+    "nominal_target_met": false,
+    "early_stop_target_met": false,
+    "status": "inconclusive",
+    "reasons": [
+      "Too few long time batches, or bootstrap curves do not bracket melting."
+    ],
+    "temperatures_c": [
+      60.0,
+      60.5,
+      61.0,
+      61.5,
+      62.0,
+      62.5,
+      63.0,
+      63.5,
+      64.0,
+      64.5,
+      65.0,
+      65.5,
+      66.0,
+      66.5,
+      67.0,
+      67.5,
+      68.0,
+      68.5,
+      69.0,
+      69.5,
+      70.0,
+      70.5,
+      71.0,
+      71.5,
+      72.0,
+      72.5,
+      73.0,
+      73.5,
+      74.0,
+      74.5,
+      75.0,
+      75.5,
+      76.0,
+      76.5,
+      77.0,
+      77.5,
+      78.0,
+      78.5,
+      79.0,
+      79.5,
+      80.0
+    ],
+    "duplex_yield": [
+      0.8551150333243535,
+      0.8447668479495685,
+      0.8337564057854306,
+      0.8220548794533585,
+      0.8096337362090805,
+      0.7964663940210654,
+      0.7825276164584327,
+      0.7677956304675599,
+      0.7522510511726355,
+      0.7358790519029068,
+      0.7186696418815506,
+      0.7006183839148359,
+      0.6817281069048269,
+      0.6620089611408819,
+      0.6414791099464451,
+      0.6201684518632448,
+      0.5981154334644887,
+      0.5753705997147336,
+      0.5519962499303763,
+      0.5280681046922819,
+      0.5036734231483471,
+      0.47891130822487255,
+      0.4538940260485377,
+      0.42874259929244296,
+      0.40358678003824455,
+      0.3785644293079805,
+      0.35381478902120705,
+      0.3294798069186507,
+      0.3056980590064378,
+      0.28260115259665247,
+      0.2603118563677527,
+      0.2389384597044497,
+      0.2185761953543017,
+      0.1992996499013991,
+      0.18116472604547787,
+      0.16420874782696615,
+      0.14844736431380154,
+      0.13387910424491214,
+      0.12048503092428545,
+      0.10823171443462226,
+      0.0970737039701855
+    ],
+    "qualification": "Sampling uncertainty only; no CPD/force-field uncertainty included.",
+    "between_replica_ci95_c": [
+      65.3985235787999,
+      75.08972903902502
+    ],
+    "replica_tm_sem_c": 1.522603137739534,
+    "inefficiencies": [
+      172.53474417529952,
+      362.64559953653105,
+      86.7774682708473,
+      187.72325895339833
+    ],
+    "batch_length_histograms": 1814,
+    "effective_histogram_blocks": [
+      46.36747246613589,
+      22.060104990172704,
+      92.1898294500899,
+      42.615923272384556
+    ],
+    "batch_checks": [
+      null,
+      null
+    ]
+  },
+  "replicas": [
+    {
+      "replica": 0,
+      "true_unbound_to_native8": {
+        "passages": 12,
+        "round_trips": 6
+      },
+      "true_unbound_to_native6": {
+        "passages": 12,
+        "round_trips": 6
+      },
+      "matched_10k_true_unbound_to_native8": {
+        "passages": 8,
+        "round_trips": 4
+      },
+      "native0_frames": 1862,
+      "native0_with_interstrand_bonds": 458
+    },
+    {
+      "replica": 1,
+      "true_unbound_to_native8": {
+        "passages": 7,
+        "round_trips": 3
+      },
+      "true_unbound_to_native6": {
+        "passages": 9,
+        "round_trips": 4
+      },
+      "matched_10k_true_unbound_to_native8": {
+        "passages": 7,
+        "round_trips": 3
+      },
+      "native0_frames": 2472,
+      "native0_with_interstrand_bonds": 76
+    },
+    {
+      "replica": 2,
+      "true_unbound_to_native8": {
+        "passages": 15,
+        "round_trips": 7
+      },
+      "true_unbound_to_native6": {
+        "passages": 18,
+        "round_trips": 9
+      },
+      "matched_10k_true_unbound_to_native8": {
+        "passages": 15,
+        "round_trips": 7
+      },
+      "native0_frames": 886,
+      "native0_with_interstrand_bonds": 199
+    },
+    {
+      "replica": 3,
+      "true_unbound_to_native8": {
+        "passages": 9,
+        "round_trips": 4
+      },
+      "true_unbound_to_native6": {
+        "passages": 13,
+        "round_trips": 6
+      },
+      "matched_10k_true_unbound_to_native8": {
+        "passages": 7,
+        "round_trips": 3
+      },
+      "native0_frames": 1535,
+      "native0_with_interstrand_bonds": 28
+    }
+  ],
+  "bound_start_tm_c": 72.02943178379915,
+  "unbound_start_tm_c": 68.37719928147769,
+  "analysis_seconds": 0.15670566190965474,
+  "certified": false,
+  "qualification": "Any interstrand hydrogen bond defines association; unbound macrostate excludes non-native interstrand bonds. Sampling uncertainty remains conditional and uncalibrated for hidden states."
+}

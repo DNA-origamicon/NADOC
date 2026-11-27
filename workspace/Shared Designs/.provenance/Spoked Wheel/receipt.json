@@ -1,0 +1,22 @@
+{
+  "schema": "nadoc-design-bond-review-v1",
+  "design_sha256": "9c3042aca8f920b9acbac7e7d9532f8fd036897efb56f8b3d3ad3f6dfbf79b7c",
+  "report_sha256": "78703949f28aa75282ff81e68a2575c87ab4a895ab56c5a73cec1879a0681728",
+  "reviewer": "Codex agent",
+  "reviewed_at": "2026-11-27T01:50:55.972532-07:00",
+  "decision": "reviewed-for-publication",
+  "rationale": "All 112 forced edges (112/439 interhelix, 112/7192 overall) are the two roots of each of 56 explicit native Join single-stranded DNA connector legs. The exact attachment census maps 12 legs to the two rim seams (six at each seam), 24 to shaft-to-spoke attachments and 20 to spoke-to-rim attachments. Wheel-axis and oblique Full-geometry views show the perpendicular shaft, four radial bundles and the curved rim. Every spoke has six connector legs at its inner end and four to six at its outer end. The native Join operations record endpoint selections and applied rigid poses. Autoscaffold retained these bridge bonds, with lattice-valid crossover records for the internal routing.",
+  "limitations": "All 7,192 edges were measured. There are 32 Full-view O5′ separations above 1.2 nm, including 16 Join roots and 16 internal rim/clasp crossovers. The maximum is 1.801 nm at a Spoke 3 connector root on visible rim helix 4. The longest ordinary rim crossover is 1.782 nm between visible helices 4 and 3. This review explains the deliberate Join connections and quantifies the unrelaxed long spans. Physical qualification depends on the oxDNA checks.",
+  "evidence": [
+    {
+      "kind": "visual",
+      "path": "wheel-reinforced.geometry.png",
+      "sha256": "d03b9a5cc3ea2300d024f6ced7bb9060a7176617bec84f3ae3fbed333f54c0a1"
+    },
+    {
+      "kind": "bond-report",
+      "path": "wheel-reinforced.bonds.json",
+      "sha256": "9a1d0f47a99ddfde74e22856b63604882ec30c41072562d4df1767350b8d0add"
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "tm_c": null,
+  "ci95_c": null,
+  "stopping_ci_c": null,
+  "halfwidth_c": null,
+  "replica_tm_c": [
+    null,
+    null,
+    null,
+    null
+  ],
+  "target_halfwidth_c": 1.0,
+  "nominal_target_met": false,
+  "early_stop_target_met": false,
+  "status": "inconclusive",
+  "reasons": [
+    "Melting is not bracketed in every replica.",
+    "Fewer than twenty recorded binding/unbinding transitions in a replica."
+  ],
+  "temperatures_c": [
+    64.0,
+    64.5,
+    65.0,
+    65.5,
+    66.0,
+    66.5,
+    67.0,
+    67.5,
+    68.0,
+    68.5,
+    69.0,
+    69.5,
+    70.0,
+    70.5,
+    71.0,
+    71.5,
+    72.0,
+    72.5,
+    73.0,
+    73.5,
+    74.0,
+    74.5,
+    75.0,
+    75.5,
+    76.0,
+    76.5,
+    77.0,
+    77.5,
+    78.0
+  ],
+  "duplex_yield": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "qualification": "Sampling uncertainty only; no CPD/force-field uncertainty included.",
+  "histogram_interval_steps": 10000,
+  "recorded_transitions": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "elapsed_seconds": 274.492357769981,
+  "completed_blocks": 1,
+  "production_steps_per_replica": 1000000,
+  "production_directories": [
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/small/replica_0_block_00"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/small/replica_1_block_00"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/small/replica_2_block_00"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/small/replica_3_block_00"
+    ]
+  ]
+}

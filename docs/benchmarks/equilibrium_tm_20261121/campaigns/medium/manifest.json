@@ -1,0 +1,62 @@
+{
+  "proposals": {
+    "translation": 0.5,
+    "rotation": 1.0,
+    "maxclust": 16
+  },
+  "training_walkers": 1,
+  "cadence": 10000,
+  "source": "/media/jojo/Archive/NADOC/oxDNA_jobs/c795362c46bc",
+  "binary": "/home/jojo/.local/share/nadoc/engines/oxdna/8028cf33b3cba12992b771156085fa54879f50cd-upstream-physics-v3-vmmc-v1/bin/oxDNA",
+  "binary_sha256": "8e3d5e6ee51dea30f7c3dc0d5f3455bdca3c76edc95d465cd47e3314acc0463f",
+  "library_sha256": "604140ae14878f90ecb279849a3d514bcace371039985d2f28d37eeb743b617b",
+  "driver_sha256": "e155be323e137c72c35b55cc9d790bb51c44f8d59d7a55a0d3bf8a77d3512045",
+  "inputs": {
+    "topology.top": {
+      "source": "/media/jojo/Archive/NADOC/oxDNA_jobs/c795362c46bc/topology.top",
+      "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+    },
+    "conf.dat": {
+      "source": "/media/jojo/Archive/NADOC/oxDNA_jobs/c795362c46bc/conf.dat",
+      "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+    },
+    "oxDNA2_sequence_dependent_parameters.txt": {
+      "source": "/media/jojo/Archive/NADOC/oxDNA_jobs/c795362c46bc/oxDNA2_sequence_dependent_parameters.txt",
+      "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+    },
+    "vmmc_op.txt": {
+      "source": "/media/jojo/Archive/NADOC/oxDNA_jobs/c795362c46bc/vmmc_op.txt",
+      "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+    },
+    "unbound.dat": {
+      "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/gpu-umbrella/inputs/unbound.dat",
+      "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+    }
+  },
+  "protocol": {
+    "temperature_c": 70.0,
+    "start_c": 64.0,
+    "end_c": 78.0,
+    "step_c": 0.5,
+    "tuning_rounds": 8,
+    "tuning_steps": 200000,
+    "equil_steps": 200000,
+    "production_steps": 1000000,
+    "replicas": 4
+  },
+  "salt_M": 0.3,
+  "workers": 4,
+  "seed": 311100,
+  "block_steps": 1000000,
+  "max_blocks": 1,
+  "wall_budget_seconds": 420.0,
+  "target_tm_halfwidth_c": 1.0,
+  "maximum_precision_looks": 1,
+  "starts": [
+    "bound",
+    "unbound",
+    "bound",
+    "unbound"
+  ],
+  "cost_scope": "Fresh tuning and equilibration included; existing prepared configurations reused."
+}

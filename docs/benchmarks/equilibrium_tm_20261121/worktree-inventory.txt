@@ -1,0 +1,59 @@
+ M backend/core/oxdna_vmmc.py
+ M backend/core/oxdna_vmmc_runner.py
+ M docs/oxdna_setup.md
+ M frontend/e2e/oxdna_umbrella_results.spec.js
+ M frontend/e2e/oxdna_vmmc.spec.js
+ M frontend/e2e/smoke.spec.js
+ M frontend/index.html
+ M frontend/src/main.js
+ M frontend/src/scene/compile_presentation.js
+ M frontend/src/scene/compile_presentation.test.js
+ M frontend/src/scene/encode_webm.js
+ M frontend/src/scene/export_video.js
+ M frontend/src/scene/photo_mode.js
+ M frontend/src/scene/photo_mode.test.js
+ M frontend/src/scene/photo_renderer/material_presets.js
+ M frontend/src/ui/animation_compile.js
+ M frontend/src/ui/animation_panel.js
+ M frontend/src/ui/oxdna_umbrella_results.js
+ M frontend/src/ui/oxdna_vmmc.js
+ M frontend/src/ui/oxdna_vmmc.test.js
+ M frontend/src/ui/photo_panel.js
+ M frontend/src/ui/photo_panel.test.js
+ M frontend/src/ui/runpod_status.js
+ M frontend/src/ui/runpod_status.test.js
+ M frontend/src/ui/simulate_jobs.js
+ M frontend/src/ui/simulate_jobs.test.js
+ M issues_fix_log.md
+ M issues_ledger.md
+ M memory/project_oxdna_relaxation.md
+ M memory/project_photo_mode.md
+ M scripts/build-oxdna.sh
+ M tests/conftest.py
+ M tests/test_oxdna_vmmc.py
+?? analysis/1xt_formation_20261110/
+?? analysis/1xt_formation_20261112/
+?? analysis/2hb_publication_20261110/
+?? backend/core/oxdna_vmmc_precision.py
+?? frontend/e2e/photo_art_themes.spec.js
+?? frontend/src/scene/photo_renderer/art_themes.js
+?? frontend/src/scene/photo_renderer/art_themes.test.js
+?? frontend/src/scene/photo_renderer/color_grade.js
+?? frontend/src/scene/photo_renderer/color_grade.test.js
+?? frontend/src/scene/photo_renderer/material_availability.js
+?? frontend/src/scene/photo_renderer/material_availability.test.js
+?? frontend/src/scene/video_quality.js
+?? frontend/src/scene/video_quality.test.js
+?? frontend/src/ui/oxdna_vmmc_diagnostics.js
+?? frontend/src/ui/oxdna_vmmc_diagnostics.test.js
+?? frontend/src/ui/photo_art_controls.js
+?? frontend/src/ui/photo_art_controls.test.js
+?? tests/fixtures/vmmc/
+?? tests/test_oxdna_hybrid.py
+?? tests/test_oxdna_umbrella_analysis.py
+?? tests/test_oxdna_vmmc_periodic.py
+?? tests/test_oxdna_vmmc_precision.py
+?? tools/oxdna_hybrid/
+?? tools/oxdna_tm_research/
+?? tools/oxdna_umbrella/
+?? tools/oxdna_vmmc/

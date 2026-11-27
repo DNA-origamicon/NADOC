@@ -1,0 +1,20 @@
+--- a/src/CUDA/Forces/metad_forces.cuh
++++ b/src/CUDA/Forces/metad_forces.cuh
+@@ -439,7 +439,7 @@
+         get_vectors_from_quat(or2, b1, b2, b3);
+ 
+         c_number4 r = box->minimum_image(pos1, pos2);
+-        c_number4 rhydro = r + POS_BASE * (b1 - a1);
++        c_number4 rhydro = box->minimum_image(pos1 + POS_BASE * a1, pos2 + POS_BASE * b1);
+ 
+         coordination += get_pair_contribution(coord, r, rhydro, pos1, a1, a3, pos2, b1, b3);
+     }
+@@ -461,7 +461,7 @@
+     get_vectors_from_quat(qor, b1, b2, b3);
+ 
+     c_number4 r = box->minimum_image(ppos, qpos);
+-    c_number4 rhydro = r + POS_BASE * (b1 - a1);
++    c_number4 rhydro = box->minimum_image(ppos + POS_BASE * a1, qpos + POS_BASE * b1);
+ 
+     c_number4 force = make_c_number4(0.f, 0.f, 0.f, 0.f);
+     c_number4 torque = make_c_number4(0.f, 0.f, 0.f, 0.f);

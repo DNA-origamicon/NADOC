@@ -5120,7 +5120,7 @@
                       <div style="font-size:10px;color:#6e7681;margin-top:5px">Whole machine · live · not saved (0–100%).</div>
                     </div>
                   </div>
-                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Twist, curvature &amp; base-pairing over a production run — spatial (vs position) &amp; temporal (vs sim time).</div>
+                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Twist, curvature, base-pairing and potential energy over a production run. Energy includes all recorded samples so far.</div>
                   <div style="display:flex;gap:12px;margin-bottom:8px;font-size:var(--text-xs);color:#8b949e">
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="oxdna-metrics-scope" id="oxdna-metrics-scope-latest" checked> Latest job</label>
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="Concatenate this job's whole parent/child lineage into one timeline (spatial profiles overlay per job)."><input type="radio" name="oxdna-metrics-scope" id="oxdna-metrics-scope-chain"> All parent/child jobs</label>
@@ -5168,6 +5168,17 @@
                     </div>
                     <div id="oxdna-metrics-bp-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="oxdna-metrics-bp-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
                     <div id="oxdna-metrics-bp-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
+                  </div>
+                  <!-- Potential energy -->
+                  <div>
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9" title="Potential energy per particle in oxDNA units; full recorded history">Potential energy</span>
+                      <button id="oxdna-metrics-energy-gen"     title="Generate / refresh energy samples recorded so far" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                      <button id="oxdna-metrics-energy-display" title="Show energy versus time with temperature markers" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Display</button>
+                      <button id="oxdna-metrics-energy-export"  title="Export PNG and/or CSV" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    </div>
+                    <div id="oxdna-metrics-energy-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="oxdna-metrics-energy-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                    <div id="oxdna-metrics-energy-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
                   </div>
                 </div>
               </div>
@@ -7059,6 +7070,29 @@
                #3f464f→#20252b gradient on border-box — which is what makes them
                pop out even when packed flush. Chevron sits LEFT of the title. -->
           <div class="pxr-cards">
+          <div class="ox-card" id="photo-materials-panel">
+            <div id="photo-materials-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photo-materials-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Art &amp; materials</span>
+            </div>
+            <div id="photo-materials-body" class="ox-card__body">
+              <div class="pxr-col">
+                <label class="pxr-row"><span class="pxr-lbl">Art Themes</span><select id="photo-art-theme" class="pxr-sel"></select></label>
+                <div class="pxr-note">A complete look: lighting, materials, background, lens and figure effects. Your molecular colors and export size stay unchanged.</div>
+                <label class="pxr-row"><span class="pxr-lbl">Material</span><select id="photo-material" class="pxr-sel"></select></label>
+                <div id="photo-material-note" class="pxr-note"></div>
+                <details id="photo-advanced">
+                  <summary style="cursor:pointer;padding:8px 0">Advanced</summary>
+                  <div class="pxr-col">
+                    <label class="pxr-row"><span class="pxr-lbl">Exposure</span><input id="photo-exposure" class="pxr-rng" type="range" min="0.1" max="4" step="0.05" value="1"><span id="photo-exposure-label" class="pxr-val">1.00</span></label>
+                    <label class="pxr-row"><span class="pxr-lbl">Contrast</span><input id="photo-contrast" class="pxr-rng" type="range" min="0.5" max="1.5" step="0.01" value="1"><span id="photo-contrast-label" class="pxr-val">1.00</span></label>
+                    <label class="pxr-row"><span class="pxr-lbl">Saturation</span><input id="photo-saturation" class="pxr-rng" type="range" min="0" max="2" step="0.05" value="1"><span id="photo-saturation-label" class="pxr-val">1.00</span></label>
+                    <div class="pxr-note">Applied to preview, images and photo videos. Annotations keep their original colors.</div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+
           <div class="ox-card" id="photo-lighting-panel">
             <div id="photo-lighting-heading" class="ox-card__header" style="color:#c9d1d9">
               <span id="photo-lighting-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Lighting</span>
@@ -7287,39 +7321,6 @@
                     <input id="photo-bg-color" type="color" value="#0b0d10"
                            style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="ox-card" id="photo-materials-panel">
-            <div id="photo-materials-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photo-materials-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Materials</span>
-            </div>
-            <div id="photo-materials-body" class="ox-card__body">
-              <div class="pxr-col">
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="Backbone beads, base slabs, 5′ cones and fluorophores.">Full</span>
-                  <select id="photo-mat-full" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="Helix and overhang cylinders.">Cylinders</span>
-                  <select id="photo-mat-cylinders" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="The marching-cubes molecular surface. Its SSS presets (wax, skin, gummy) only read below full opacity.">Surface</span>
-                  <select id="photo-mat-surface" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="Atoms and bonds in the VDW / ball-and-stick representations.">Atomistic</span>
-                  <select id="photo-mat-atomistic" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-note">
-                  The <b>Flat</b> presets kill the specular lobe entirely
-                  (<code style="color:#8b949e">specularIntensity: 0</code>) — no highlight
-                  anywhere, so shape is read from the cast shadow rather than from a glint.
-                  That is the molecular-figure convention; the glossy/metallic presets are
-                  the product-render look.
                 </div>
               </div>
             </div>

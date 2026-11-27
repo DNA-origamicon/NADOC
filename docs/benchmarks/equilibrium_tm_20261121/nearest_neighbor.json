@@ -1,0 +1,13 @@
+{
+  "sequence": "GCGTTGCG",
+  "total_strands_M": 0.012,
+  "sodium_M": 0.3,
+  "enthalpy_kcal_mol": -65.4,
+  "entropy_1M_cal_mol_K": -176.10000000000002,
+  "entropy_salt_cal_mol_K": -179.20143394394364,
+  "tm_c": 69.71756627256224,
+  "calculation_seconds": 1.3555865734815598e-05,
+  "source": "https://doi.org/10.1073/pnas.95.4.1460",
+  "qualification": "Different empirical physical model. No sampling CI; model uncertainty uncalibrated here. No CPD-isomer prediction.",
+  "process_wall_seconds": 0.015533359022811055
+}

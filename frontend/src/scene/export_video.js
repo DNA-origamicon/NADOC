@@ -170,16 +170,21 @@ async function _frameToCanvas(session, w, h, scratch, ctx) {
   return scratch
 }
 
+/** Shared photo frame path for release videos and compiled presentation clips. */
+export function photoVideoFrame({ player, session, canvas, ctx, w, h }) {
+  return async t => {
+    player.seekTo(t)
+    if (await player.settleFrame?.() === false) throw new Error('Animation frame is not ready for export')
+    await _frameToCanvas(session, w, h, canvas, ctx)
+    _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
+  }
+}
+
 async function _captureWebMPhoto({ animation, player, session, w, h, fps, totalDur, onProgress, onPhase, signal }) {
   const scratch = Object.assign(document.createElement('canvas'), { width: w, height: h })
   const ctx = scratch.getContext('2d', { willReadFrequently: true })
   const blob = await encodeWebM({ canvas: scratch, fps, totalDur, onProgress, onPhase, signal,
-    renderFrame: async t => {
-      player.seekTo(t)
-      if (await player.settleFrame?.() === false) throw new Error('Animation frame is not ready for export')
-      await _frameToCanvas(session, w, h, scratch, ctx)
-      _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
-    },
+    renderFrame: photoVideoFrame({ player, session, canvas: scratch, ctx, w, h }),
   })
   onPhase?.('save')
   _download(blob, `${animation.name || 'animation'}-photo.webm`)

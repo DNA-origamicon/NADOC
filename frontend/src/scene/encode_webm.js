@@ -1,3 +1,5 @@
+import { videoBitrate } from './video_quality.js'
+
 /** Offline encoding: presentation timestamps come from the animation clock,
  * never from how long rendering, GPU readback, or background loading took.
  * CanvasSource queues native encoding (up to its bounded backpressure threshold)
@@ -6,7 +8,7 @@
  */
 export async function encodeWebM({ canvas, fps, totalDur, renderFrame, onProgress, onPhase, signal }) {
   const { Output, WebMOutputFormat, BufferTarget, CanvasSource, getFirstEncodableVideoCodec, canEncodeVideo } = await import('mediabunny')
-  const dimensions = { width: canvas.width, height: canvas.height, frameRate: fps, bitrate: 8_000_000 }
+  const dimensions = { width: canvas.width, height: canvas.height, frameRate: fps, bitrate: videoBitrate(canvas.width, canvas.height, fps) }
   let codec = null, hardwareAcceleration = 'prefer-hardware'
   for (const candidate of ['vp9', 'vp8']) {
     if (await canEncodeVideo(candidate, { ...dimensions, hardwareAcceleration })) { codec = candidate; break }

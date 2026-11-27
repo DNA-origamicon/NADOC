@@ -5,6 +5,7 @@ An allocation restart never silently repeats an interrupted stage from its seed.
 """
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -213,6 +214,30 @@ def trim_to_checkpoint(package, segment, step, folder):
     return changes
 
 
+def reviewed_resume(package, source):
+    """A user-reviewed immutable continuation wins over automatic restart discovery."""
+    text = (package / (source + ".conf")).read_text()
+    prefix = "# NADOC_REVIEWED_RESUME "
+    if not text.startswith(prefix):
+        return None
+    review = json.loads(text.splitlines()[0][len(prefix):])
+    for name, expected in review["sha256"].items():
+        path = (package / name).resolve()
+        if not str(path).startswith(str((package / ".resume-inputs").resolve()) + os.sep):
+            raise ValueError("Reviewed checkpoint is outside immutable inputs")
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != expected:
+            raise ValueError("Reviewed checkpoint changed: " + name)
+    for key in ("binCoordinates", "extendedSystem", "binVelocities"):
+        name = directive(text, key)
+        if name and name not in review["sha256"]:
+            raise ValueError("Unreviewed continuation input: " + key)
+    return review
+
+
 def prepare(package, segment, source, total):
     try:
         from nadoc_resume_conf import build_resume_conf
@@ -223,6 +248,38 @@ def prepare(package, segment, source, total):
     attempt = journal["attempts"][-1]
     record = dict(segment=segment, mode="fresh", checkpoint_step=0)
     attempt["segments"].append(record)
+    try:
+        review = reviewed_resume(package, source)
+        if review is not None and any(
+                s.get("reviewed_sha256") == review["sha256"]
+                for a in journal["attempts"][:-1] for s in a.get("segments", [])):
+            # A Slurm requeue must advance from the newer rolling checkpoint,
+            # never replay the input already consumed by the preceding allocation.
+            # Keep the normal dynamics recovery path; minimization below still
+            # requires another explicit review, as it did before this feature.
+            source = segment
+            review = None
+        if review is not None:
+            if review.get("step") is None:
+                old_logs = (package / "output" / "attempts" / attempt["id"]).glob(segment + "*.log")
+                if (any(old_logs) or any((package / "output").glob(segment + ".restart.*"))
+                        or any(s.get("segment") == segment for a in journal["attempts"][:-1]
+                               for s in a.get("segments", []))):
+                    raise ValueError("Interrupted stage has no reviewed checkpoint; refusing seed fallback")
+            if review.get("step") is not None:
+                folder = package / "output" / "attempts" / attempt["id"] / segment
+                folder.mkdir(parents=True, exist_ok=True)
+                record["trajectory_repairs"] = trim_to_checkpoint(
+                    package, segment, review["step"], folder)
+            record.update(mode="reviewed-continuation", source_conf=source,
+                          checkpoint_step=review.get("step") or 0,
+                          reviewed_sha256=review["sha256"])
+            atomic_json(path, journal)
+            return source
+    except Exception as exc:
+        record.update(mode="blocked", error=str(exc))
+        atomic_json(path, journal)
+        raise
     saved_logs = list(
         (package / "output" / "attempts" / attempt["id"]).glob(segment + "*.log")
     )

@@ -1,0 +1,107 @@
+{
+  "tm_c": null,
+  "ci95_c": null,
+  "stopping_ci_c": null,
+  "halfwidth_c": null,
+  "replica_tm_c": [
+    null,
+    68.72924834982518,
+    null,
+    null
+  ],
+  "target_halfwidth_c": 1.0,
+  "nominal_target_met": false,
+  "early_stop_target_met": false,
+  "status": "inconclusive",
+  "reasons": [
+    "Melting is not bracketed in every replica.",
+    "Fewer than twenty recorded binding/unbinding transitions in a replica."
+  ],
+  "temperatures_c": [
+    64.0,
+    64.5,
+    65.0,
+    65.5,
+    66.0,
+    66.5,
+    67.0,
+    67.5,
+    68.0,
+    68.5,
+    69.0,
+    69.5,
+    70.0,
+    70.5,
+    71.0,
+    71.5,
+    72.0,
+    72.5,
+    73.0,
+    73.5,
+    74.0,
+    74.5,
+    75.0,
+    75.5,
+    76.0,
+    76.5,
+    77.0,
+    77.5,
+    78.0
+  ],
+  "duplex_yield": [
+    0.4491074275848504,
+    0.42450495044206754,
+    0.39986175588156997,
+    0.3753028956070483,
+    0.3509580060358741,
+    0.3269594385784608,
+    0.30343869398999396,
+    0.280523704445116,
+    0.25833613183902643,
+    0.23698562947866766,
+    0.216571798181007,
+    0.19717549219995742,
+    0.17886431478188078,
+    0.1616842618106214,
+    0.14566484633437515,
+    0.13081528652337507,
+    0.11712962795088565,
+    0.10458518348975979,
+    0.09314648718935577,
+    0.08276580043003315,
+    0.07338871424184876,
+    0.06495292154979072,
+    0.057393101504537705,
+    0.05064170705761712,
+    0.0446312676781437,
+    0.039295458978133496,
+    0.03457036245462999,
+    0.030395347762763647,
+    0.02671344258059877
+  ],
+  "qualification": "Sampling uncertainty only; no CPD/force-field uncertainty included.",
+  "histogram_interval_steps": 1000,
+  "recorded_transitions": [
+    2,
+    5,
+    1,
+    2
+  ],
+  "elapsed_seconds": 377.3837547081057,
+  "completed_blocks": 1,
+  "production_steps_per_replica": 1000000,
+  "production_directories": [
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/multistart_q/replica_0_block_00"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/multistart_q/replica_1_block_00"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/multistart_q/replica_2_block_00"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/multistart_q/replica_3_block_00"
+    ]
+  ]
+}

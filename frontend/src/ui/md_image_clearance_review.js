@@ -5,7 +5,8 @@ export function mountImageClearanceReview(container, report, submitButton) {
     detail: 'Periodic-image clearance was not provided. Reopen the review to check it.',
   }
   // Unknown/malformed results must not look like a successful measurement.
-  const blocked = !['pass', 'not_applicable'].includes(data.status) || !!data.requires_override
+  const pending = data.status === 'verify_on_resume' && data.requires_override === false
+  const blocked = (!pending && !['pass', 'not_applicable'].includes(data.status)) || !!data.requires_override
   const heading = document.createElement('strong')
   heading.textContent = 'Periodic-image clearance'
   container.appendChild(heading)

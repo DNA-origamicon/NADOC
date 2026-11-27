@@ -152,8 +152,6 @@ def locate_unpaired_scaffold(classified, insertions, table, alignment, sequence,
 
 
 def aligned_unpaired_scaffold(classified, insertions, table, alignment, lattice, custom_sequence=None):
-    from backend.core.sequences import SCAFFOLD_LIBRARY, P7704_SEQUENCE
-    library = {name: seq for name, _, seq in SCAFFOLD_LIBRARY}
-    library['p7704'] = P7704_SEQUENCE
-    sequence = custom_sequence or library.get(alignment.get('scaffold_name'), '')
+    from backend.core.sequences import PUBLICATION_SCAFFOLDS
+    sequence = custom_sequence or PUBLICATION_SCAFFOLDS.get(alignment.get('scaffold_name'), '')
     return locate_unpaired_scaffold(classified, insertions, table, alignment, sequence, lattice)

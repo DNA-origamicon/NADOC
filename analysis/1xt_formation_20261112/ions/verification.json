@@ -1,0 +1,38 @@
+{
+  "passed": true,
+  "checks": [
+    "monotone enclosed counts",
+    "full-cell net charge zero",
+    "density shell volumes sum to instantaneous cell volume",
+    "density shell counts conserve 66 Mg and 39 Cl",
+    "independent MDAnalysis minimum-image Mg distances at 5 frames",
+    "independent scrambled Sobol volume integration with 8x points at 5 frames; far-field volume within 2%"
+  ],
+  "volume_checks": [
+    {
+      "frame": 0,
+      "max_shell_volume_difference_fraction_box": 0.0018768282548379954,
+      "far_20A_relative_volume_difference": 1.068887859788655e-05
+    },
+    {
+      "frame": 2500,
+      "max_shell_volume_difference_fraction_box": 0.001468658128825354,
+      "far_20A_relative_volume_difference": -0.00019057409159261947
+    },
+    {
+      "frame": 5000,
+      "max_shell_volume_difference_fraction_box": 0.001209261765334884,
+      "far_20A_relative_volume_difference": -0.00022648486572876816
+    },
+    {
+      "frame": 7500,
+      "max_shell_volume_difference_fraction_box": 0.0016365050706092744,
+      "far_20A_relative_volume_difference": -0.0009137470518252879
+    },
+    {
+      "frame": 9975,
+      "max_shell_volume_difference_fraction_box": 0.0009574895163973676,
+      "far_20A_relative_volume_difference": -0.0005865535209468887
+    }
+  ]
+}

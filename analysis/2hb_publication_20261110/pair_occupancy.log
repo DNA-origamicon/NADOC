@@ -1,0 +1,17 @@
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/NADOC_archive/4c0ba3a85587/package/2hb_1xT_namd_solvated/2hb_1xT_hmr.psf. Skipping this file.
+  warnings.warn(
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/coordinates/DCD.py:171: DeprecationWarning: DCDReader currently makes independent timesteps by copying self.ts while other readers update self.ts inplace. This behavior will be changed in 3.0 to be the same as other readers. Read more at https://github.com/MDAnalysis/mdanalysis/issues/3889 to learn if this change in behavior might affect you.
+  warnings.warn("DCDReader currently makes independent timesteps"
+2hb_1xT 08-13T01:10 low occupancy [('D001:THY28', 'D002:ADE31', 0.26), ('D001:ADE1', 'D002:THY23', 0.22), ('D001:ADE29', 'D002:THY30', 0.0), ('D001:THY2', 'D002:ADE22', 0.32), ('D000:ADE3', 'D002:THY48', 0.34), ('D000:GUA1', 'D002:CYT50', 0.28), ('D000:CYT2', 'D002:GUA49', 0.34), ('D000:GUA14', 'D002:CYT4', 0.68), ('D000:CYT15', 'D002:GUA3', 0.52)]
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/2hb_1xT_hmr.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT 08-28T20:52 low occupancy [('D001:THY28', 'D002:ADE31', 0.0), ('D000:THY4', 'D002:ADE47', 0.43), ('D001:ADE1', 'D002:THY23', 0.0), ('D001:ADE29', 'D002:THY30', 0.0), ('D001:THY2', 'D002:ADE22', 0.12), ('D000:ADE3', 'D002:THY48', 0.47), ('D000:THY9', 'D002:ADE9', 0.0), ('D000:GUA10', 'D002:CYT8', 0.13), ('D000:GUA1', 'D002:CYT50', 0.0), ('D000:CYT2', 'D002:GUA49', 0.48), ('D001:GUA27', 'D002:CYT32', 0.17), ('D000:CYT15', 'D002:GUA3', 0.4)]
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/NADOC_archive/07d7cd2766e3/package/2hb_1xT_namd_solvated/2hb_1xT_hmr.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT 08-29T00:12 low occupancy [('D001:ADE1', 'D002:THY23', 0.0), ('D000:THY9', 'D002:ADE9', 0.24), ('D000:GUA10', 'D002:CYT8', 0.47), ('D000:GUA1', 'D002:CYT50', 0.43), ('D000:CYT2', 'D002:GUA49', 0.61)]
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/2hb_1xT_CPD_cis-anti-I_hmr.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_cis-anti-I 11-04T07:57 low occupancy [('D001:ADE1', 'D002:THY23', 0.0), ('D001:ADE29', 'D002:THY30', 0.25), ('D001:THY2', 'D002:ADE22', 0.54), ('D001:GUA14', 'D002:CYT10', 0.52), ('D001:GUA16', 'D002:CYT43', 0.34), ('D000:GUA7', 'D002:CYT44', 0.68)]
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I_hmr.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_cis-syn-I 11-07T21:10 low occupancy [('D001:ADE1', 'D002:THY23', 0.0), ('D001:ADE29', 'D002:THY30', 0.0), ('D000:THY9', 'D002:ADE9', 0.0)]

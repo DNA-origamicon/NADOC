@@ -60,11 +60,15 @@ def test_controller_freezes_weights_and_reports_only_production(tmp_path,monkeyp
     root=job.job_dir(tmp_path);root.mkdir(parents=True)
     topology(root);(root/'conf.dat').write_text('t = 0\nb = 10 10 10\nE = 0 0 0\n')
     monkeypatch.setattr(runner,'find_oxdna',lambda:'/fake/oxDNA')
+    monkeypatch.setattr(runner,'_oxdna_contains_signature',lambda *args:True)
     monkeypatch.setattr(runner,'conf_is_restartable',lambda *a:True)
     seen=[]
     async def native(binary,inp,directory,log,jid,on_spawn=None):
         seen.append(directory.name)
         assert 'sim_type = VMMC' in inp.read_text() and 'backend = CPU' in inp.read_text()
+        assert 'maxclust = 12' in inp.read_text()
+        assert 'preserve_topology = false' in inp.read_text()
+        assert 'check_energy_every = 10' in inp.read_text()
         write_samples(directory,next(s.steps for s in specs if s.name==directory.name))
         return 0,123
     monkeypatch.setattr(runner,'_run_oxdna_async',native)
@@ -75,9 +79,24 @@ def test_controller_freezes_weights_and_reports_only_production(tmp_path,monkeyp
     assert len(seen)==8 and len(result['replicas'])==3
     assert result['status']=='sampling_checks_passed' and result['tm_c']==pytest.approx(70)
     assert result['replica_tm_sem_c']==0
+    assert result['engine_revision']=='periodic-image-v1'
+    replica=result['replicas'][0]
+    assert replica['pair_counts']==[0,1,2]
+    assert replica['biased_counts']==[100,100,100]
+    assert replica['biased_occupancy']==pytest.approx([1/3]*3)
+    assert replica['unbiased_probability']==pytest.approx([1/3]*3)
+    assert replica['recorded_samples']==101
     weights=[(root/s.name/'weights.txt').read_text() for s in specs if '_sample_' in s.name]
     assert len(set(weights))==1
     before=len(seen);asyncio.run(run(loaded,tmp_path,specs));assert len(seen)==before
+    # An old engine receipt must not allow old sampling to be mixed with the fix.
+    receipt=root/specs[0].name/'vmmc_complete.json'
+    receipt.write_text('{}')
+    asyncio.run(run(loaded,tmp_path,specs))
+    assert len(seen)==before+len(specs)
+    assert list(root.glob('interrupted_analysis_*/vmmc_result.json'))
+    before=len(seen)
+    assert loaded.run_config['vmmc_restarts'][-1]['from_stage']==specs[0].name
     # Recover a crash after the final stage receipt but before result publication.
     loaded.run_config.pop('vmmc_result')
     loaded.status = OxdnaStatus.stopped
@@ -93,12 +112,14 @@ def test_controller_freezes_weights_and_reports_only_production(tmp_path,monkeyp
     assert all(s.status == 'done' for s in loaded.stages)
     # Invalid native output fails this stage and does not silently advance.
     async def broken(*args, **kwargs):
+        (args[2]/'oxdna.log').write_text('ERROR: energy consistency failure\n')
         return 1, 123
     monkeypatch.setattr(runner, '_run_oxdna_async', broken)
     loaded.stages[-1].status = 'stopped'
     with pytest.raises(ValueError, match='exit 1'):
         asyncio.run(run(loaded, tmp_path, specs))
     assert loaded.status == OxdnaStatus.failed and loaded.stages[-1].status == 'failed'
+    assert 'energy consistency failure' in loaded.error
     monkeypatch.setattr(runner, '_run_oxdna_async', native)
     asyncio.run(run(loaded, tmp_path, specs))
     # Completed but statistically insufficient simulations are inconclusive, not execution failures.
@@ -127,3 +148,37 @@ def test_full_system_wizard_wrapper_is_not_an_active_submodel(tmp_path):
         "min_corner": [0, 0, 0], "max_corner": [10, 10, 10]}})
     with pytest.raises(ValueError, match="submodels"):
         validate_request(body, tmp_path, parent)
+
+
+def test_guide_production_defaults_and_output_cadence():
+    cfg=VmmcMelting()
+    assert cfg.production_steps==2_000_000_000
+    job=new_oxdna_job('defaults',[],n_nucleotides=16);job.run_config={}
+    specs=configure(job,build_production_stage(),cfg)
+    sample=next(s for s in specs if '_sample_' in s.name)
+    assert sample.print_conf_interval_override==1_000_000
+    assert sample.print_energy_every_override==100_000
+
+
+def test_refuses_unpatched_engine_before_modifying_inputs(tmp_path,monkeypatch):
+    from backend.core import oxdna_runner as runner
+    from backend.core.oxdna_vmmc_runner import run
+    job=new_oxdna_job('old engine',[],n_nucleotides=4)
+    job.run_config={'vmmc_melting':VmmcMelting().model_dump()}
+    root=job.job_dir(tmp_path);root.mkdir(parents=True)
+    (root/'sentinel').write_text('untouched')
+    monkeypatch.setattr(runner,'find_oxdna',lambda:'/fake/old-oxDNA')
+    monkeypatch.setattr(runner,'_oxdna_contains_signature',lambda *args:False)
+    with pytest.raises(ValueError,match='periodic-image-safe'):
+        asyncio.run(run(job,tmp_path,[]))
+    assert [p.name for p in root.iterdir()]==['sentinel']
+
+
+def test_vmmc_engine_signature_tracks_linked_library(tmp_path):
+    from backend.core.oxdna_runner import _oxdna_contains_signature
+    from backend.core.oxdna_vmmc import VMMC_ENGINE_SIGNATURE
+    binary=tmp_path/'bin/oxDNA';binary.parent.mkdir();binary.write_bytes(b'executable')
+    lib=tmp_path/'lib/liboxdna_common.so';lib.parent.mkdir();lib.write_bytes(b'old engine')
+    assert not _oxdna_contains_signature(str(binary),VMMC_ENGINE_SIGNATURE)
+    lib.write_bytes(VMMC_ENGINE_SIGNATURE)
+    assert _oxdna_contains_signature(str(binary),VMMC_ENGINE_SIGNATURE)

@@ -1,0 +1,4 @@
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT 2026-07-28T18:50:49.813139-06:00 [0.010000000029814058, 1.9700000058733693] n 11 maxbond 1.682
+2hb_1xT 2026-07-28T19:09:55.501707-06:00 [0.010000000029814058, 199.81000059571465] n 1000 maxbond 1.717

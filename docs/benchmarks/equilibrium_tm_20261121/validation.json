@@ -1,0 +1,33 @@
+{
+  "focused_tests": [
+    {
+      "target": "tests/test_oxdna_vmmc_periodic.py",
+      "passed": 2,
+      "seconds": 1.61
+    },
+    {
+      "target": "tests/test_oxdna_vmmc_precision.py",
+      "passed": 5,
+      "seconds": 1.77
+    },
+    {
+      "target": "tests/test_oxdna_tm_research.py",
+      "passed": 4,
+      "seconds": 1.73,
+      "final_recheck_seconds": 1.61
+    }
+  ],
+  "lint": "ruff check tools/oxdna_tm_research tests/test_oxdna_tm_research.py passed",
+  "native_smoke": "distance_smoke: four 10k equilibration +10k production runs; no equilibrium inference",
+  "periodic_patch_matches_installed_build": true,
+  "periodic_header_matches_installed_build": true,
+  "force_changes": false,
+  "validation_scope": "No production backend/frontend behavior changed; no broad software suite or app check required. Native Monte Carlo energy checks remain every 10 sweeps. No new force-based sampler was introduced.",
+  "native_audits": {
+    "confirmation_frames": 32000,
+    "source_energy_checks": "passed",
+    "native_pair_counts": "passed",
+    "distance_bins": "passed, zero near-boundary exceptions",
+    "round_trip_definition": "all-interstrand unbound and native-8 endpoint; 6/3/7/4 trips"
+  }
+}

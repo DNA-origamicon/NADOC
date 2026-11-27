@@ -1,0 +1,74 @@
+[
+  {
+    "job_id": "2bc15e9e2531",
+    "quarter": 1,
+    "frames": 2500,
+    "midpoint_mean_A": 12.411335945129395,
+    "wc_mean": 0.9344190476190477,
+    "local_wc_mean": 0.9343,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "2bc15e9e2531",
+    "quarter": 2,
+    "frames": 2500,
+    "midpoint_mean_A": 13.512152671813965,
+    "wc_mean": 0.9161714285714286,
+    "local_wc_mean": 0.9265,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "2bc15e9e2531",
+    "quarter": 3,
+    "frames": 2500,
+    "midpoint_mean_A": 12.836289405822754,
+    "wc_mean": 0.906647619047619,
+    "local_wc_mean": 0.911,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "2bc15e9e2531",
+    "quarter": 4,
+    "frames": 2500,
+    "midpoint_mean_A": 11.860594749450684,
+    "wc_mean": 0.9159333333333334,
+    "local_wc_mean": 0.9136,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

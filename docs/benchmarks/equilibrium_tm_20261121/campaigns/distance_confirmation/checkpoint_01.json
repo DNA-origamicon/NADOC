@@ -1,0 +1,107 @@
+{
+  "tm_c": 68.27409980985227,
+  "ci95_c": null,
+  "stopping_ci_c": null,
+  "halfwidth_c": null,
+  "replica_tm_c": [
+    null,
+    null,
+    null,
+    75.44645979327908
+  ],
+  "target_halfwidth_c": 1.0,
+  "nominal_target_met": false,
+  "early_stop_target_met": false,
+  "status": "inconclusive",
+  "reasons": [
+    "Melting is not bracketed in every replica.",
+    "Fewer than twenty recorded binding/unbinding transitions in a replica."
+  ],
+  "temperatures_c": [
+    64.0,
+    64.5,
+    65.0,
+    65.5,
+    66.0,
+    66.5,
+    67.0,
+    67.5,
+    68.0,
+    68.5,
+    69.0,
+    69.5,
+    70.0,
+    70.5,
+    71.0,
+    71.5,
+    72.0,
+    72.5,
+    73.0,
+    73.5,
+    74.0,
+    74.5,
+    75.0,
+    75.5,
+    76.0,
+    76.5,
+    77.0,
+    77.5,
+    78.0
+  ],
+  "duplex_yield": [
+    0.6806989456508273,
+    0.6621367297124389,
+    0.6428250225064556,
+    0.6227833321416002,
+    0.6020373262315168,
+    0.5806241633045723,
+    0.558589472769584,
+    0.5359895240557583,
+    0.5128924592065353,
+    0.48937464061796404,
+    0.4655253457385372,
+    0.44144309038623203,
+    0.41723587998584327,
+    0.3930202539452367,
+    0.3689178181927883,
+    0.3450550624518724,
+    0.3215602586140048,
+    0.29856016157865906,
+    0.2761765244513421,
+    0.25452447793394173,
+    0.23370901501094862,
+    0.21382140494625812,
+    0.1949390495456892,
+    0.17712061422526396,
+    0.16040921134402084,
+    0.14482856128021318,
+    0.13038576052201148,
+    0.11707130387030312,
+    0.10486130221042339
+  ],
+  "qualification": "Sampling uncertainty only; no CPD/force-field uncertainty included.",
+  "recorded_transitions": [
+    51,
+    44,
+    6,
+    2
+  ],
+  "histogram_interval_steps": 1000,
+  "elapsed_seconds": 426.4550344401505,
+  "completed_blocks": 1,
+  "production_steps_per_replica": 1000000,
+  "production_directories": [
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_00"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_00"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_00"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_00"
+    ]
+  ]
+}

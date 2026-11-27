@@ -12,6 +12,80 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
+- Hybrid research closed out (2026-11-21): experimental prototype only, no
+  production Tm feature or precision certification. User-authorized cleanup
+  removed `.development-artifacts/oxdna-hybrid/` (554,338,810 logical bytes).
+  Retained notes/metrics: `docs/benchmarks/oxdna_hybrid/`; status and next-session
+  prompt: `docs/oxdna_equilibrium_tm_research.md`. References below to raw hybrid
+  artifacts are historical and no longer resolvable. Local prototype source is
+  retained uncommitted; native candidates must be rebuilt and revalidated.
+
+- Hybrid longer-training follow-up (2026-11-21): see
+  `docs/oxdna_hybrid_training_benchmark.md`. Same v3 engine, four walkers,
+  2M production; training 2M/6M/12M gives 1/5/4 q=0↔q>=6 passages in
+  4.11/7.95/13.73min. Last-500k bias drift improves 0.623/0.267/0.129 kBT RMS,
+  but initial-state gaps remain 0.994/0.227/0.681; no q=0↔q=8 round trips or
+  bracketed Tm. Both new campaigns completed; no reliable +/-1 C claim or
+  application/default changes. Evidence: `.development-artifacts/oxdna-hybrid/training-duration-20261121/`.
+
+- Hybrid metadynamics/frozen-bias research CLI (2026-11-20):
+  `tools/oxdna_hybrid/`, report `docs/oxdna_hybrid_benchmark.md`, evidence
+  `.development-artifacts/oxdna-hybrid/`. No wizard/job integration or CPD
+  promotion; existing engine symlink and managed jobs unchanged. Persistent oxpy
+  GPU walkers learn a shared well-tempered bias, then fresh bound/unbound starts
+  run fixed equilibration/production with a hashed frozen bias. Exact native
+  temperature-energy reevaluation, concentration correction, autocorrelation,
+  state-disagreement checks, raw energies/trajectories and ordered hill replay.
+  Isolated native patches repair coordination GPU base-site derivatives/grid
+  bounds, radial cutoff smoothing, base-site PBC, and stale CPU step-keyed CV
+  caching. Nonlinear force/torque and CPU/CUDA checks pass on final candidate.
+  Six 8-bp GPU campaigns, 100.8M MD steps total, ~23min sampling: initial mixed
+  coordinate increased q=0/1 crossings to84, but produced0 q=0↔q>=6 passages;
+  final-engine narrow/broad trials produced1/0 such passages. All retain severe
+  starting-state dependence. No replica Tm bracket in60–80C for evaluated mixed
+  trials, no +/-1C claim. Broader contact radius did not help this short pilot.
+  Native bias energies avoid four-decimal COM-coordinate rounding errors.
+  These are inconclusive sampling pilots, not evidence metadynamics generally
+  fails or that additional independent replicas alone would solve the problem.
+
+- Sampling/variability follow-up (2026-11-20): continued the four VMMC replicas
+  with unchanged conditions/weights for23.72min, +10M sweeps/replica. Total
+  warm-start active time55.10min, production110M (27.5M/replica), all16 new blocks
+  passed. Replica Tm70.76/66.68/73.37/71.21C; provisional replica95% half-width
+  **±4.45C**, versus±3.87C at17.5M. Long-batch bootstrap remains unresolved;
+  transitions24/30/16/18, longest category dwell10.94M. Across correlated prefixes,
+  descriptive slope−0.10, recent slope+1.02: no reliable inverse-square convergence
+  forecast. Conditional ±1C per-design planning envelope94–543M sweeps/replica,
+  ~3–18h/four workers; NOT an approved budget or confidence-bound forecast.
+  Original job remains stopped, no benchmark children left. Tools now support
+  checked continuation (`--continue-campaign`, identical frozen weights, new seed),
+  `sampling_trend`, and native `binding_states` audit. 7,000 original frames matched
+  native q exactly; only22/923 q=0 frames had any non-native interstrand HB, so
+  widespread off-register binding does not explain q=0 sampling. Frame counts are
+  biased, not equilibrium populations. Plots/data in
+  `.development-artifacts/vmmc-sampling-trend-extended/`; source native outputs in
+  `vmmc-sampling-extension/`, pairing audit in `vmmc-pairing-audit/`. Original warm
+  campaign is a retained dependency. Focused5 passed; tools lint/diff passed.
+
+- Bounded VMMC precision benchmark completed (user follow-up 2026-11-20).
+  `c795362c46bc` is now **stopped**, not running: API cancellation was explicitly
+  authorized when remaining time exceeded one hour (~29h current replica/~190h
+  series). Original scientific outputs preserved. Research CLI
+  `tools.oxdna_vmmc.benchmark` runs four independent CPU replicas with opposite
+  starts, fixed blocks, exact native histogram output and a wall cap; precision
+  analysis is `backend/core/oxdna_vmmc_precision.py`. Existing wizard protocols
+  are unchanged. Fresh short tuning failed; a warm start with flat-occupancy
+  weights learned from the old 569M-sweep histogram produced 70M new production
+  sweeps in31.37min; all attempts together48.74min. No old production samples
+  were pooled into this estimate. Replica Tm:69.43,67.36,73.17,70.74C; mean70.18C,
+  diagnostic Student-t95%66.30–74.05C (±3.87C), pooled69.84C. Only22/18/10/14
+  recorded transitions and insufficient long bootstrap batches: **inconclusive**,
+  ±0.7C per-design/roughly±1C difference target not reached. Do not claim a
+  validated sub-hour ±1C method or CPD support. All native benchmark processes
+  ended; ~67MB useful evidence retained under `.development-artifacts/vmmc-precision-hour*`.
+  `train_weights` and `report_benchmark` reproduce bias preparation and exports.
+  FAST20994 passed/90 skipped, focused5 passed, lint passed; FULL deferred.
+
 - Plasmonic mobile-gold startup (2026-11-22): direct CUDA MD from the CAD seed
   diverged on both `Plasmonic_test` and the existing two-attached-particle part.
   The MC replacement now uses a 10k-step overdamped startup (dt 1e-5,
@@ -311,3 +385,54 @@ outputs are ordinary managed jobs. Focused4 tests, real-app headless review and 
 passed; source snapshots independently replay. See docs/simulation_submodel.md.
 
 - 2026-11-18: Local CPU VMMC duplex workflow in `oxdna_vmmc.py` / `oxdna_vmmc_runner.py`; wizard toggle mutually exclusive with ramp. Native-pair umbrella tuning → frozen-weight independent replicas → finite-size-corrected histogram analysis, CSV/JSON and explicit inconclusive diagnostics. Scope undamaged complementary linear DNA duplex only; no CPD VMMC validation. Interrupted stages replay whole-stage inputs/seeds; completed stages retained. Native browser/API validation of existing duplex completed all 8 short stages; not a convergence study. See `docs/oxdna_setup.md` and `.development-artifacts/vmmc-development/validation.json`.
+
+- VMMC guide alignment: new production defaults 2e9 steps/replica, output 1e6 trajectory/1e5 energy, moves 0.1/0.2. RNA-specific weights/temperatures are not DNA defaults; short tuning remains unvalidated. Unified and legacy job menus both expose View results. Results include replica curves/conditions/transition counts and new analyses persist pair-count distributions. Old analyses display available fields without migration.
+
+- VMMC compact-box root cause c795362c46bc: earlier maxclust=12 / preserve_topology=true
+  mitigation failed again at 22,655,761 sweeps (first failure 8,637,171). Native fresh-pair
+  audit reproduced an accepted rotation changing an internal Debye–Hückel energy at
+  sweep 1,056,435 because the minimum-image pair vector changed by one box length.
+  `tools/oxdna_vmmc/periodic-clusters.patch` rejects image-inconsistent rotations with
+  a symmetric geometric predicate; absolute energy discrepancy check retains 1e-4
+  tolerance/every10 sweeps. Build installs `-vmmc-v1`; controller requires native
+  signature and revisions stage receipts. Incompatible completed stages and suffix
+  rerun with old outputs/analysis archived, never mixed. maxclust12 retained;
+  preserve_topology=false removes the ineffective displacement mitigation. No changes
+  to concentration, salt or force field. Details/reproduction in tools/oxdna_vmmc/README.md
+  and .development-artifacts/vmmc-root-cause/. Numerical correctness is not convergence.
+  Validation: three independent 2M-sweep fresh-pair native audits passed at 1e-8;
+  actual installed engine completed all14 short workflow stages, correctly
+  inconclusive. Two compiled predicate tests passed; FAST20,986 passed/90skipped,
+  FULL deferred (no dedicated session), lint passed. Corrected user job restarted
+  from tuning, first5 stages completed; production still running, not certified
+  complete/converged. Event-driven30M observer: .development-artifacts/vmmc-root-cause/watch_production.py;
+  check production_validation.json for actual milestone evidence, never assume it exists.
+
+- 2026-11-19 GPU umbrella investigation: experimental CLI `tools/oxdna_umbrella/`
+  uses fixed periodic COM-distance MD windows and unbinned WHAM/MBAR at one T,
+  with overlap/correlation/block-bootstrap diagnostics. Not integrated into the
+  managed wizard; no Tm or CPD validation claimed. Native LTCOMTrap CUDA ignored
+  PBC; `gpu-com-periodic.patch` corrects the minimum image and zero-distance guard.
+  Candidate engine suffix `-umbrella-v1` remains isolated while benchmarking;
+  build script reproduces it and writes a checked library-hash receipt. One-step
+  boundary-frame CPU/GPU max velocity error fell from 5.96e-4 to 4.49e-8.
+  Two-sided restraint reports double energy: analysis correctly uses one pair
+  potential. Compact cells need max_density_multiplier10. MPS helper owns/cleans
+  its service; copied source structures are existing native exports only.
+  Short bound/unbound-start pilots disagree severely; do not treat their narrow
+  bootstrap intervals as convergence. Extended fixed-budget trials and size
+  benchmarks are under .development-artifacts/gpu-umbrella/. User authorized
+  canceling VMMC c795362c46bc only if a credible improvement is demonstrated.
+  Completed evidence: two 12-window pilots (100k equil +500k production/window)
+  and two continued campaigns (1M equil +2M production/window). Extended72M MD
+  steps finished in433s combined under MPS, but p(bound) at70C was0.817 vs0.107
+  for bound/unbound starts (VMMC reference0.709). No credible sampling improvement;
+  VMMC remains running. Native MD GPU/CPU loop speedups:16nt0.45x,100nt2.60x,
+  404nt20.15x,504nt39.99x. Existing30849-particle DNANM surface job91.90x,
+  preserving all original parameters/forces; not a controlled pure-DNA N series.
+  The32768-nt upstream DNA1 example failed DNA2 preparation and was excluded.
+  `scaling.py` defaults to the four working DNA cases; `scaling_job.py` handles
+  existing completed MD jobs. All experimental processes/MPS/scratch directories
+  cleaned; retained compact provenance and data under gpu-umbrella/ (summary.json).
+  FAST20989 passed/90skipped; focused4 passed; lint and native parity passed;
+  FULL deferred because no dedicated session. Current engine symlink unchanged.

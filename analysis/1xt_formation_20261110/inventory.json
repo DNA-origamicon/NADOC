@@ -1,0 +1,200 @@
+[
+  {
+    "job_id": "c8bcf4c1406f",
+    "created": "2026-07-28T16:39:37.384935-06:00",
+    "parent": null,
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f",
+    "package": "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated",
+    "production": false,
+    "files": [
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_02_300K_NPT_ENM_k0p1_p100.dcd",
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_02_300K_NPT_ENM_k0p1_p50.dcd",
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p100.dcd",
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p50.dcd",
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_04_300K_NPT_MGHH_only_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_04_300K_NPT_MGHH_only_p100.dcd",
+      "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated/output/2hb_1xT_04_300K_NPT_MGHH_only_p50.dcd"
+    ],
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2"
+  },
+  {
+    "job_id": "e4a49b2057a5",
+    "created": "2026-07-28T18:50:49.813139-06:00",
+    "parent": "c8bcf4c1406f",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/NADOC_archive/e4a49b2057a5",
+    "package": "/media/jojo/Archive/NADOC_archive/e4a49b2057a5/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/NADOC_archive/e4a49b2057a5/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_2ns_k0.cont1.dcd",
+      "/media/jojo/Archive/NADOC_archive/e4a49b2057a5/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_2ns_k0.dcd"
+    ],
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2"
+  },
+  {
+    "job_id": "29c5b267380f",
+    "created": "2026-07-28T19:09:55.501707-06:00",
+    "parent": "e4a49b2057a5",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/NADOC_archive/29c5b267380f",
+    "package": "/media/jojo/Archive/NADOC_archive/29c5b267380f/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/NADOC_archive/29c5b267380f/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd"
+    ],
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2"
+  },
+  {
+    "job_id": "066b8dd60a2e",
+    "created": "2026-07-30T14:33:42.037513-06:00",
+    "parent": null,
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/NADOC_archive/066b8dd60a2e",
+    "package": "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated",
+    "production": false,
+    "files": [
+      "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_300K_NPT_ENM_k0p5_p25.dcd",
+      "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_300K_NPT_ENM_k0p5_p50.dcd",
+      "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated/output/2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p25.dcd",
+      "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p50.dcd",
+      "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated/output/2hb_1xT_04_300K_NPT_MGHH_only_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated/output/2hb_1xT_0S_300K_NPT_settle_fixed_dna_p100.dcd"
+    ],
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2"
+  },
+  {
+    "job_id": "8c116f8db22b",
+    "created": "2026-07-30T15:26:38.421415-06:00",
+    "parent": null,
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/NADOC_archive/8c116f8db22b",
+    "package": "/media/jojo/Archive/NADOC_archive/8c116f8db22b/package/2hb_1xT_namd_solvated",
+    "production": false,
+    "files": [
+      "/media/jojo/Archive/NADOC_archive/8c116f8db22b/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/8c116f8db22b/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_300K_NPT_ENM_k0p5_p25.dcd",
+      "/media/jojo/Archive/NADOC_archive/8c116f8db22b/package/2hb_1xT_namd_solvated/output/2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/8c116f8db22b/package/2hb_1xT_namd_solvated/output/2hb_1xT_02_300K_NPT_ENM_k0p1_p25.dcd",
+      "/media/jojo/Archive/NADOC_archive/8c116f8db22b/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/8c116f8db22b/package/2hb_1xT_namd_solvated/output/2hb_1xT_04_300K_NPT_MGHH_only_p10.dcd",
+      "/media/jojo/Archive/NADOC_archive/8c116f8db22b/package/2hb_1xT_namd_solvated/output/2hb_1xT_0S_300K_NPT_settle_fixed_dna_p100.dcd"
+    ],
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2"
+  },
+  {
+    "job_id": "7d5937e569c6",
+    "created": "2026-08-07T21:14:14.272518-06:00",
+    "parent": "8c116f8db22b",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/NADOC_archive/7d5937e569c6",
+    "package": "/media/jojo/Archive/NADOC_archive/7d5937e569c6/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/NADOC_archive/7d5937e569c6/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd"
+    ],
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2"
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "created": "2026-08-13T01:10:37.132622-06:00",
+    "parent": "7d5937e569c6",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587",
+    "package": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/NADOC_archive/4c0ba3a85587/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_800ns_k0.dcd"
+    ],
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2"
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "created": "2026-08-28T20:52:25.655920-06:00",
+    "parent": "8c116f8db22b",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/NADOC_archive/bd13e4dfa6c5",
+    "package": "/media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_500ns_k0.dcd"
+    ],
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2"
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "created": "2026-08-29T00:12:46.045661-06:00",
+    "parent": "8c116f8db22b",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/NADOC_archive/07d7cd2766e3",
+    "package": "/media/jojo/Archive/NADOC_archive/07d7cd2766e3/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/NADOC_archive/07d7cd2766e3/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_500ns_k0.dcd"
+    ],
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2"
+  },
+  {
+    "job_id": "e00227c3d4e0",
+    "created": "2026-10-25T16:04:14.677810-06:00",
+    "parent": null,
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/nadoc_jobs/e00227c3d4e0",
+    "package": "/media/jojo/Archive/nadoc_jobs/e00227c3d4e0/package/2hb_1xT_namd_solvated",
+    "production": false,
+    "files": [
+      "/media/jojo/Archive/nadoc_jobs/e00227c3d4e0/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+      "/media/jojo/Archive/nadoc_jobs/e00227c3d4e0/package/2hb_1xT_namd_solvated/output/2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+      "/media/jojo/Archive/nadoc_jobs/e00227c3d4e0/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+      "/media/jojo/Archive/nadoc_jobs/e00227c3d4e0/package/2hb_1xT_namd_solvated/output/2hb_1xT_04_300K_NPT_MGHH_only_p10.dcd",
+      "/media/jojo/Archive/nadoc_jobs/e00227c3d4e0/package/2hb_1xT_namd_solvated/output/2hb_1xT_04_300K_NPT_MGHH_only_p25.dcd",
+      "/media/jojo/Archive/nadoc_jobs/e00227c3d4e0/package/2hb_1xT_namd_solvated/output/2hb_1xT_0S_300K_NPT_settle_fixed_dna_p100.dcd"
+    ],
+    "design_sha256": "11f9c14979f15ab79136a37c7f5f9ddc88e1d70e7a1351dff43767f29e4d83d6"
+  },
+  {
+    "job_id": "be74a1436d66",
+    "created": "2026-10-25T19:59:48.010237-06:00",
+    "parent": "e00227c3d4e0",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/nadoc_jobs/be74a1436d66",
+    "package": "/media/jojo/Archive/nadoc_jobs/be74a1436d66/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/nadoc_jobs/be74a1436d66/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_20ns_k0.dcd"
+    ],
+    "design_sha256": "11f9c14979f15ab79136a37c7f5f9ddc88e1d70e7a1351dff43767f29e4d83d6"
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "created": "2026-10-25T20:05:12.675241-06:00",
+    "parent": "e00227c3d4e0",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/nadoc_jobs/be5dc708adb2",
+    "package": "/media/jojo/Archive/nadoc_jobs/be5dc708adb2/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/nadoc_jobs/be5dc708adb2/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_20ns_k0.dcd"
+    ],
+    "design_sha256": "11f9c14979f15ab79136a37c7f5f9ddc88e1d70e7a1351dff43767f29e4d83d6"
+  },
+  {
+    "job_id": "a9261569b8c7",
+    "created": "2026-10-25T20:11:07.677257-06:00",
+    "parent": "e00227c3d4e0",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/nadoc_jobs/a9261569b8c7",
+    "package": "/media/jojo/Archive/nadoc_jobs/a9261569b8c7/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/nadoc_jobs/a9261569b8c7/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_20ns_k0.dcd"
+    ],
+    "design_sha256": "11f9c14979f15ab79136a37c7f5f9ddc88e1d70e7a1351dff43767f29e4d83d6"
+  }
+]

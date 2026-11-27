@@ -1,0 +1,17 @@
+--- a/src/Forces/Metadynamics/LTCoordination.cpp
++++ b/src/Forces/Metadynamics/LTCoordination.cpp
+@@ -214,9 +214,8 @@
+ }
+ 
+ number LTCoordination::_coordination(llint step) {
+-    if(step != _last_step_calculated) {
+-        _current_coordination = Utils::clamp(meta::coordination(settings, all_pairs), coord_min, coord_max);
+-        _last_step_calculated = step;
+-    }
+-    return _current_coordination;
+-}
++    // A step label is not a configuration identity: Verlet updates positions
++    // after observables/initial forces have queried this same step. Recompute
++    // to keep nonlinear tabulated forces consistent with the current state.
++    return Utils::clamp(meta::coordination(settings, all_pairs), coord_min, coord_max);
++}

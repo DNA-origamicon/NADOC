@@ -1,0 +1,14 @@
+{
+  "jobs": 21,
+  "sampled_frames": 14020,
+  "finite_metrics": true,
+  "strictly_increasing_times": true,
+  "source_dcd_size_mtime_unchanged": true,
+  "packaged_asset_checks": "see provenance_checks.json",
+  "independent_math_checks": "Kabsch versus MDAnalysis QCP; independent noise and AR(1) ESS sanity checks passed earlier in this session",
+  "figures_visually_inspected": [
+    "long_runs.png",
+    "long_cpd.png",
+    "short_replicas.png"
+  ]
+}

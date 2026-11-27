@@ -1,0 +1,8 @@
+{
+  "name": "p8634",
+  "length": 8634,
+  "sequence_sha256": "533a462b0fb6af196bfc3443e8afc0930d4872ba1ffea8b79281ba8dcd068758",
+  "source": "https://github.com/sdouglas/cadnano/blob/master/edu/harvard/med/cadnano/data/Sequence.as",
+  "source_sha256": "4146df850f9ca6749e825e454e60f4b0a90c9a8fd51fa55c7fc7c9cc94c283a0",
+  "basis": "Legacy caDNAno scaffold sequence, with register checked against the original publication table."
+}

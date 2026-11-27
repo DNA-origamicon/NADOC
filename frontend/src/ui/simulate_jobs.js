@@ -1,3 +1,5 @@
+import {umbrellaResultActions} from './oxdna_umbrella_results.js'
+
 import { snupiDynamicsProgress } from './snupi_progress.js'
 import { thermalRunNumbers } from './oxdna_thermal_job.js'
 import { whenOperationIdle } from '../perf/operation_timing.js'
@@ -767,6 +769,7 @@ export function initSimulateJobs({
       })
       items.push({ type: 'separator' })
     }
+    if (!node.remote_only && node.engine === 'oxdna') items.push(...umbrellaResultActions(node))
     const skip = thermalSkipAction(node)
     if (skip) items.push({ label: 'Skip to next stage', disabled: !skip.enabled, title: skip.title,
       onClick: () => { void skipThermalStage(node, { api, refresh: _fetch, toast: showToast }) },

@@ -445,3 +445,31 @@ def test_manual_resume_of_guarded_config_resolves_original_physics(tmp_path):
     text = (p / (name + ".conf")).read_text()
     assert "exec python3" not in text
     assert "constraints on" in text and "run 0" in text
+
+
+def test_requeue_after_reviewed_resume_advances_to_newer_checkpoint(tmp_path):
+    import hashlib
+    import shutil
+    p = package(tmp_path)
+    write_checkpoint(p, step=20000)
+    from backend.core.remote_resume_conf import build_resume_conf
+    text = build_resume_conf((p / 's.conf').read_text(), 's', 20000, 50000)
+    folder = p / '.resume-inputs' / 'review'
+    folder.mkdir(parents=True)
+    hashes = {}
+    for ext in ('coor', 'vel', 'xsc'):
+        original = f'output/s.restart.{ext}'
+        target = f'.resume-inputs/review/s.restart.{ext}'
+        shutil.copyfile(p / original, p / target)
+        hashes[target] = hashlib.sha256((p / target).read_bytes()).hexdigest()
+        text = text.replace(original, target)
+    (p / 's.resume.conf').write_text('# NADOC_REVIEWED_RESUME ' + json.dumps({'step': 20000, 'sha256': hashes}) + '\n' + text)
+    node.begin(p)
+    assert node.prepare(p, 's', 's.resume', 50000) == 's.resume'
+    write_checkpoint(p, step=30000)
+    node.begin(p)
+    name = node.prepare(p, 's', 's.resume', 50000)
+    resumed = (p / (name + '.conf')).read_text()
+    assert 'firsttimestep      30000' in resumed
+    assert 'run                20000' in resumed
+    assert '.resume-inputs/review/' not in resumed

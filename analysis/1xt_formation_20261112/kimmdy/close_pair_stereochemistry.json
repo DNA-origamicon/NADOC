@@ -1,0 +1,84 @@
+[
+  {
+    "pair": "D001:28~D002:30",
+    "frame": 4501,
+    "time_ns": 90.04000026844577,
+    "midpoint_A": 4.402682717985918,
+    "eta_deg": 49.479524645188604,
+    "upstream_score": 0.21138817269222943,
+    "isomers": [
+      {
+        "id": "tt-cpd-cis-syn",
+        "eligible": false,
+        "signs_match": false,
+        "face_margin": 0.5616404656219122,
+        "max_forming_distance_ang": 5.057002104461407,
+        "min_forming_distance_ang": 3.8188842794990534,
+        "mapped_twist_deg": 49.47952244079189
+      },
+      {
+        "id": "tt-cpd-cis-syn-ii",
+        "eligible": false,
+        "signs_match": false,
+        "face_margin": 0.5616404656219122,
+        "max_forming_distance_ang": 5.057002104461407,
+        "min_forming_distance_ang": 3.8188842794990534,
+        "mapped_twist_deg": 49.47952244079189
+      },
+      {
+        "id": "tt-cpd-trans-syn-i",
+        "eligible": false,
+        "signs_match": false,
+        "face_margin": 0.5616404656219122,
+        "max_forming_distance_ang": 5.057002104461407,
+        "min_forming_distance_ang": 3.8188842794990534,
+        "mapped_twist_deg": 49.47952244079189
+      },
+      {
+        "id": "tt-cpd-trans-syn-ii",
+        "eligible": false,
+        "signs_match": true,
+        "face_margin": 0.5616404656219122,
+        "max_forming_distance_ang": 5.057002104461407,
+        "min_forming_distance_ang": 3.8188842794990534,
+        "mapped_twist_deg": 49.47952244079189
+      },
+      {
+        "id": "tt-cpd-cis-anti-i",
+        "eligible": false,
+        "signs_match": true,
+        "face_margin": 0.5729244126217082,
+        "max_forming_distance_ang": 4.85177889684499,
+        "min_forming_distance_ang": 4.162083331571376,
+        "mapped_twist_deg": -127.00091261525772
+      },
+      {
+        "id": "tt-cpd-cis-anti-ii",
+        "eligible": false,
+        "signs_match": false,
+        "face_margin": 0.5729244126217082,
+        "max_forming_distance_ang": 4.85177889684499,
+        "min_forming_distance_ang": 4.162083331571376,
+        "mapped_twist_deg": -127.00091261525772
+      },
+      {
+        "id": "tt-cpd-trans-anti-i",
+        "eligible": false,
+        "signs_match": false,
+        "face_margin": 0.5729244126217082,
+        "max_forming_distance_ang": 4.85177889684499,
+        "min_forming_distance_ang": 4.162083331571376,
+        "mapped_twist_deg": -127.00091261525772
+      },
+      {
+        "id": "tt-cpd-trans-anti-ii",
+        "eligible": false,
+        "signs_match": false,
+        "face_margin": 0.5729244126217082,
+        "max_forming_distance_ang": 4.85177889684499,
+        "min_forming_distance_ang": 4.162083331571376,
+        "mapped_twist_deg": -127.00091261525772
+      }
+    ]
+  }
+]

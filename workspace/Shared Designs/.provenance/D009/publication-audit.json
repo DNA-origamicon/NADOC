@@ -6,8 +6,8 @@
     "recovery_snapshots_used": false,
     "bond_review": {
       "schema": "nadoc-design-bond-report-v1",
-      "design_sha256": "afaa138bc3c935446772f0157829077aaabbfb518f84900bb1671ef6de209b6a",
-      "report_sha256": "11d7b505d2ed30d96f3ba4ff90c07252e17733a78f5d659c52393b30383c76b3",
+      "design_sha256": "3ab52abdb9065a5bb325c9e9121095d2fa8925e7f45759ffb48750970bb7ea5a",
+      "report_sha256": "3b83e1079d3faff3a961306473e6dcd96e9f005a7f4f167bbed8cbc424ab5457",
       "report": {
         "schema_version": 1,
         "review_required": false,
@@ -60,82 +60,6 @@
             {
               "from": {
                 "kind": "nucleotide",
-                "helix_label": "42",
-                "bp": 118,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "to": {
-                "kind": "nucleotide",
-                "helix_label": "42",
-                "bp": 119,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "interhelix": false,
-              "forced_ligation": false,
-              "distance_nm": 6.199241449020671
-            },
-            {
-              "from": {
-                "kind": "nucleotide",
-                "helix_label": "42",
-                "bp": 119,
-                "direction": "FORWARD",
-                "copy_index": 39
-              },
-              "to": {
-                "kind": "nucleotide",
-                "helix_label": "42",
-                "bp": 120,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "interhelix": false,
-              "forced_ligation": false,
-              "distance_nm": 6.199241449020671
-            },
-            {
-              "from": {
-                "kind": "nucleotide",
-                "helix_label": "30",
-                "bp": 118,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "to": {
-                "kind": "nucleotide",
-                "helix_label": "30",
-                "bp": 119,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "interhelix": false,
-              "forced_ligation": false,
-              "distance_nm": 6.199241449020671
-            },
-            {
-              "from": {
-                "kind": "nucleotide",
-                "helix_label": "30",
-                "bp": 119,
-                "direction": "FORWARD",
-                "copy_index": 39
-              },
-              "to": {
-                "kind": "nucleotide",
-                "helix_label": "30",
-                "bp": 120,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "interhelix": false,
-              "forced_ligation": false,
-              "distance_nm": 6.199241449020671
-            },
-            {
-              "from": {
-                "kind": "nucleotide",
                 "helix_label": "6",
                 "bp": 300,
                 "direction": "FORWARD",
@@ -151,6 +75,82 @@
               "interhelix": true,
               "forced_ligation": true,
               "distance_nm": 2.8316102044269593
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": "42",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 39
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": "42",
+                "bp": 120,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": false,
+              "distance_nm": 1.2586326236055307
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": "30",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 39
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": "30",
+                "bp": 120,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": false,
+              "distance_nm": 1.2586326236055247
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": "42",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": "42",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 1
+              },
+              "interhelix": false,
+              "forced_ligation": false,
+              "distance_nm": 1.2526029481923568
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": "30",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": "30",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 1
+              },
+              "interhelix": false,
+              "forced_ligation": false,
+              "distance_nm": 1.252602948192356
             },
             {
               "from": {
@@ -425,7 +425,7 @@
       "review_status": "not_required"
     },
     "path": "workspace/Shared Designs/D009.nadoc",
-    "sha256": "729bd1e8378e31d09e9bd8ed4d4d4f13fbcd092a884270b05567222a801ecb94"
+    "sha256": "3070578673df012f468408345ce2430e4ab21ffcd5dd1e80bb4abb97bfcb0e33"
   },
   "reopened": {
     "status": "verified",
@@ -434,8 +434,8 @@
     "recovery_snapshots_used": false,
     "bond_review": {
       "schema": "nadoc-design-bond-report-v1",
-      "design_sha256": "afaa138bc3c935446772f0157829077aaabbfb518f84900bb1671ef6de209b6a",
-      "report_sha256": "11d7b505d2ed30d96f3ba4ff90c07252e17733a78f5d659c52393b30383c76b3",
+      "design_sha256": "3ab52abdb9065a5bb325c9e9121095d2fa8925e7f45759ffb48750970bb7ea5a",
+      "report_sha256": "3b83e1079d3faff3a961306473e6dcd96e9f005a7f4f167bbed8cbc424ab5457",
       "report": {
         "schema_version": 1,
         "review_required": false,
@@ -488,82 +488,6 @@
             {
               "from": {
                 "kind": "nucleotide",
-                "helix_label": "42",
-                "bp": 118,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "to": {
-                "kind": "nucleotide",
-                "helix_label": "42",
-                "bp": 119,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "interhelix": false,
-              "forced_ligation": false,
-              "distance_nm": 6.199241449020671
-            },
-            {
-              "from": {
-                "kind": "nucleotide",
-                "helix_label": "42",
-                "bp": 119,
-                "direction": "FORWARD",
-                "copy_index": 39
-              },
-              "to": {
-                "kind": "nucleotide",
-                "helix_label": "42",
-                "bp": 120,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "interhelix": false,
-              "forced_ligation": false,
-              "distance_nm": 6.199241449020671
-            },
-            {
-              "from": {
-                "kind": "nucleotide",
-                "helix_label": "30",
-                "bp": 118,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "to": {
-                "kind": "nucleotide",
-                "helix_label": "30",
-                "bp": 119,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "interhelix": false,
-              "forced_ligation": false,
-              "distance_nm": 6.199241449020671
-            },
-            {
-              "from": {
-                "kind": "nucleotide",
-                "helix_label": "30",
-                "bp": 119,
-                "direction": "FORWARD",
-                "copy_index": 39
-              },
-              "to": {
-                "kind": "nucleotide",
-                "helix_label": "30",
-                "bp": 120,
-                "direction": "FORWARD",
-                "copy_index": 0
-              },
-              "interhelix": false,
-              "forced_ligation": false,
-              "distance_nm": 6.199241449020671
-            },
-            {
-              "from": {
-                "kind": "nucleotide",
                 "helix_label": "6",
                 "bp": 300,
                 "direction": "FORWARD",
@@ -579,6 +503,82 @@
               "interhelix": true,
               "forced_ligation": true,
               "distance_nm": 2.8316102044269593
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": "42",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 39
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": "42",
+                "bp": 120,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": false,
+              "distance_nm": 1.2586326236055307
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": "30",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 39
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": "30",
+                "bp": 120,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "interhelix": false,
+              "forced_ligation": false,
+              "distance_nm": 1.2586326236055247
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": "42",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": "42",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 1
+              },
+              "interhelix": false,
+              "forced_ligation": false,
+              "distance_nm": 1.2526029481923568
+            },
+            {
+              "from": {
+                "kind": "nucleotide",
+                "helix_label": "30",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 0
+              },
+              "to": {
+                "kind": "nucleotide",
+                "helix_label": "30",
+                "bp": 119,
+                "direction": "FORWARD",
+                "copy_index": 1
+              },
+              "interhelix": false,
+              "forced_ligation": false,
+              "distance_nm": 1.252602948192356
             },
             {
               "from": {
@@ -856,6 +856,7 @@
   "comparison": {
     "routes": 195,
     "insertions": 2,
+    "strand_owned_loops": 2,
     "published_staples": 194,
     "derived_staples": 0,
     "scaffold_sequence_matches": true,
@@ -864,5 +865,5 @@
     "native_reference_consulted": false
   },
   "source_sha256": "7c48c56b081a51493c6d148fac3bab19c4801a4adb120e6d59a71ad611ee5d88",
-  "design_sha256": "729bd1e8378e31d09e9bd8ed4d4d4f13fbcd092a884270b05567222a801ecb94"
+  "design_sha256": "3070578673df012f468408345ce2430e4ab21ffcd5dd1e80bb4abb97bfcb0e33"
 }

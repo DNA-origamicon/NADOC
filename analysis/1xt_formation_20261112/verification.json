@@ -1,0 +1,27 @@
+{
+  "all_source_size_mtime_unchanged": true,
+  "classifier_planar_audit": true,
+  "extraction_firstframe_MDA_comparison": true,
+  "extraction_periodic_image_comparison": true,
+  "summary_descriptor_recomputation_and_rigid_transform": true,
+  "code_sha256": {
+    "checks.py": "4410feb7f68ddb9fa6e9d2cdcd726fe610f43c891bd306bc71836b049b40b6fe",
+    "thermal.py": "359a140f58518b457f6045ef09cdab5f0bbd8e276b1bf8c56dca568224c4e308",
+    "summarize.py": "453e088c1ad6ac98b5cdde934d31bf3fc4e4d21d07789a33ec328d5d4c3c824c",
+    "report.py": "013d009081c1a23de0c6a2aaa5a65029dbee949ed3db883fafab1cde02d493ed",
+    "verify.py": "e70af31109433b60350af3363b747c557813c9e4b59a788d70a6f36a668c1cbf",
+    "all_frame_box.py": "a87e6ebadf0668b289a3a9ef2132b0459294b958115660283b5040e32bd1759e",
+    "extract.py": "c217e55f29e5ed6c73f6e9cb7874734f96ea813719ac3f7e5eae9aaf3d57d390",
+    "followup.py": "6578a11ed1a4ad654b9a886336a37e1835c44f461934e804857277cee1b2c784",
+    "additional_shape.py": "c66de465d4fd1a70874b366f2d5e82073f959c17f49a70281ed3f757f4dbbcca"
+  },
+  "final_source_config_parameter_design_hashes_unchanged": true,
+  "periodic_image_bruteforce_checks": 4,
+  "all_atom_native_vs_heavy_atom_sampled_consistent": true,
+  "old_new_physical_wc_pair_mapping_verified": true,
+  "part_unchanged_since_followup_hash": true,
+  "deliverable_sha256": {
+    "review.md": "2860eae5290791ee56fb5cc79581c36de46e527fbe1ac84d0bfbc948f77ba219",
+    "followup_timeseries.png": "2d15b698ddaf61b2fcf3991f06136ec534eb5c6f0ec8ba6bd8ec9553afe35fe0"
+  }
+}

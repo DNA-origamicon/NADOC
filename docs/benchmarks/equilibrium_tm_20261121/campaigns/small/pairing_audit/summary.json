@@ -1,0 +1,40 @@
+{
+  "replicas": [
+    {
+      "replica": 1,
+      "frames": 100,
+      "native_unpaired_frames": 0,
+      "native_unpaired_with_interstrand_hb": 0,
+      "native_unpaired_with_intrastrand_hb": 0,
+      "any_non_native_interstrand_frames": 0
+    },
+    {
+      "replica": 2,
+      "frames": 100,
+      "native_unpaired_frames": 0,
+      "native_unpaired_with_interstrand_hb": 0,
+      "native_unpaired_with_intrastrand_hb": 0,
+      "any_non_native_interstrand_frames": 0
+    },
+    {
+      "replica": 3,
+      "frames": 100,
+      "native_unpaired_frames": 0,
+      "native_unpaired_with_interstrand_hb": 0,
+      "native_unpaired_with_intrastrand_hb": 0,
+      "any_non_native_interstrand_frames": 0
+    },
+    {
+      "replica": 4,
+      "frames": 100,
+      "native_unpaired_frames": 0,
+      "native_unpaired_with_interstrand_hb": 0,
+      "native_unpaired_with_intrastrand_hb": 0,
+      "any_non_native_interstrand_frames": 0
+    }
+  ],
+  "binary": "/home/jojo/.local/share/nadoc/engines/oxdna/8028cf33b3cba12992b771156085fa54879f50cd-upstream-physics-v3-vmmc-v1/bin/DNAnalysis",
+  "binary_sha256": "9338fcdbb04edade0a98e0dd863acdbab86fa4329e83847b6e3c760f5fdd5d37",
+  "library_sha256": "604140ae14878f90ecb279849a3d514bcace371039985d2f28d37eeb743b617b",
+  "qualification": "Recorded biased-ensemble frame counts, not equilibrium populations. Tests whether zero native pairs actually means no interstrand hydrogen bonds at saved frames."
+}

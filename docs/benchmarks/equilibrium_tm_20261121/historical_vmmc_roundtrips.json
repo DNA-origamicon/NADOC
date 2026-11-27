@@ -1,0 +1,58 @@
+{
+  "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vmmc-sampling-extension",
+  "source_result_sha256": "269f11415fd1d008b1c493318a4d7c4826d9dcdc61321f3a0e4497a0c7bdbc6b",
+  "source_library_sha256": "604140ae14878f90ecb279849a3d514bcace371039985d2f28d37eeb743b617b",
+  "replicas": [
+    {
+      "replica": 0,
+      "frames": 2750,
+      "full": {
+        "passages": 16,
+        "round_trips": 8
+      },
+      "six": {
+        "passages": 18,
+        "round_trips": 9
+      }
+    },
+    {
+      "replica": 1,
+      "frames": 2750,
+      "full": {
+        "passages": 23,
+        "round_trips": 11
+      },
+      "six": {
+        "passages": 25,
+        "round_trips": 12
+      }
+    },
+    {
+      "replica": 2,
+      "frames": 2750,
+      "full": {
+        "passages": 16,
+        "round_trips": 8
+      },
+      "six": {
+        "passages": 16,
+        "round_trips": 8
+      }
+    },
+    {
+      "replica": 3,
+      "frames": 2750,
+      "full": {
+        "passages": 16,
+        "round_trips": 8
+      },
+      "six": {
+        "passages": 16,
+        "round_trips": 8
+      }
+    }
+  ],
+  "production_steps_per_replica": 27500000,
+  "sampling_wall_seconds": 3305.7183588091284,
+  "qualification": "Historical warm-start continuation; prior 569M-sweep bias-learning cost excluded. Read-only endpoint recount at 10k cadence; no temperature or precision revalidation."
+}

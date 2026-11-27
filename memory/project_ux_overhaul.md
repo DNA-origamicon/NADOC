@@ -65,6 +65,11 @@ and name collisions are excluded; bulk selections are checked together. A fixed
 30px status slot keeps the file tree stationary when initial simulation refresh
 finishes. Later polling remains silent.
 
+**Welcome search expansion (2026-11-22):** Search snapshots the pre-search folder
+expansion once and restores it when the query clears (including whitespace).
+Query edits and refreshes retain that snapshot; switching computers discards it,
+and folder renames remap its paths. Browser regression: `welcome_library_search.spec.js`.
+
 **Feature reorder selector (2026-11-14):** The Move dialog uses the shared
 `createSelect` control for standard canvas/text colors and fits it to the modal
 width. The Feature Log designer guide excludes advanced repair proposals.
@@ -77,6 +82,10 @@ Shared reconstructions go here; other workspace data remains ignored. The setup
 helper creates only a missing folder, never a nested repository. See `START.md`
 and the shared folder README for legacy nested repositories and custom workspaces.
 Hidden directories remain pruned from Library listing at every depth.
+Archive-backed installations use the ignored `.nadoc-workspace` storage link
+(`NADOC_WORKSPACE` takes precedence), with a trusted Shared Designs link back to
+the checkout. Listing, path validation and reference bookkeeping support only
+that linked shared root; arbitrary external links remain blocked.
 
 | Archive claim | Reality |
 |---|---|

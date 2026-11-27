@@ -1,0 +1,118 @@
+{
+  "tm_c": 70.14114039602939,
+  "ci95_c": null,
+  "stopping_ci_c": null,
+  "halfwidth_c": null,
+  "replica_tm_c": [
+    71.05129952309102,
+    null,
+    75.23630348249455,
+    71.90603297773457
+  ],
+  "target_halfwidth_c": 1.0,
+  "nominal_target_met": false,
+  "early_stop_target_met": false,
+  "status": "inconclusive",
+  "reasons": [
+    "Melting is not bracketed in every replica."
+  ],
+  "temperatures_c": [
+    64.0,
+    64.5,
+    65.0,
+    65.5,
+    66.0,
+    66.5,
+    67.0,
+    67.5,
+    68.0,
+    68.5,
+    69.0,
+    69.5,
+    70.0,
+    70.5,
+    71.0,
+    71.5,
+    72.0,
+    72.5,
+    73.0,
+    73.5,
+    74.0,
+    74.5,
+    75.0,
+    75.5,
+    76.0,
+    76.5,
+    77.0,
+    77.5,
+    78.0
+  ],
+  "duplex_yield": [
+    0.7543176021497338,
+    0.7382319542742526,
+    0.7212952111442682,
+    0.7034982385579974,
+    0.6848376720651499,
+    0.6653186883768706,
+    0.6449540101384861,
+    0.6237658258846543,
+    0.6017879037867189,
+    0.5790642124343278,
+    0.5556522755460092,
+    0.5316221917145041,
+    0.5070575654281629,
+    0.4820556325063728,
+    0.4567265223129288,
+    0.43119223459118117,
+    0.4055864613107375,
+    0.38005009966321757,
+    0.354731178896705,
+    0.329779946188542,
+    0.3053460264549528,
+    0.28157438317611694,
+    0.25860125254387173,
+    0.23655008590521415,
+    0.21552900263705235,
+    0.1956262459896936,
+    0.17691057537497343,
+    0.1594278256017373,
+    0.14320247274933393
+  ],
+  "qualification": "Sampling uncertainty only; no CPD/force-field uncertainty included.",
+  "recorded_transitions": [
+    69,
+    133,
+    24,
+    44
+  ],
+  "histogram_interval_steps": 1000,
+  "elapsed_seconds": 876.2145435709972,
+  "completed_blocks": 4,
+  "production_steps_per_replica": 4000000,
+  "production_directories": [
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_01",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_02",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_03"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_01",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_02",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_03"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_01",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_02",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_03"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_01",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_02",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_03"
+    ]
+  ]
+}

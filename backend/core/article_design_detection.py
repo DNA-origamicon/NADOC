@@ -15,12 +15,15 @@ from statistics import median
 
 import pymupdf
 
+from backend.core.publication_table_import import import_pdf_tables
+from backend.core.publication_raster_tracing import register_and_trace
 from backend.core.article_reconstruction import decode_pdf
 from backend.core.article_sequence_inference import rank_directions
 from backend.core.image_evaluation import evaluate_pdf, clusters
 from backend.core.sequences import M13MP18_SEQUENCE
 from backend.core.diagram_route_extraction import recover_vector_graph, orient_with_sequences
 from backend.core.publication_routing import extract_publication_paths, staple_tables, publication_evidence
+from backend.core.publication_vector_panels import calibrate_panels, extract_panel_hypotheses, select_panel_graph
 
 
 def sequence_rows(text):
@@ -203,9 +206,17 @@ def detect_designs(payload):
         digest = report['source_sha256']
         notes.extend(f'{name}: {note}' for note in report['notes'])
         with pymupdf.open(stream=data, filetype='pdf') as doc:
+            imported_tables = import_pdf_tables(doc)
+            imported_pages = {p for t in imported_tables for p in t['pages']}
+            for table in imported_tables:
+                lists.append({'id': f'{digest[:12]}-p{table["page"]}-structured',
+                              'label': f'{name} · table pages {table["pages"]}',
+                              'source_sha256': digest, 'page': table['page'], 'pages': table['pages'],
+                              'sequences': [r['sequence'] for r in table['rows']],
+                              'context': table['context'], 'table_import': table})
             for index, page in enumerate(doc):
                 text = page.get_text()
-                seqs = sequence_rows(text)
+                seqs = [] if index+1 in imported_pages else sequence_rows(text)
                 if len(seqs) >= 2:
                     lists.append({'id': f'{digest[:12]}-p{index+1}-list', 'label': f'{name} · page {index+1}',
                                   'source_sha256': digest, 'page': index+1, 'sequences': seqs,
@@ -214,11 +225,34 @@ def detect_designs(payload):
             endpoint_tables = staple_tables(doc)
             if endpoint_tables:
                 for index, page in enumerate(doc):
+                    custom = scaffold if payload.get('scaffold_sequence') else None
                     try:
                         observed = extract_publication_paths(page)
-                        evidence = publication_evidence(observed, endpoint_tables, scaffold if payload.get('scaffold_sequence') else None)
                     except ValueError:
-                        continue
+                        try:
+                            hypotheses = list(extract_panel_hypotheses(page, calibrate_panels(page)))
+                        except ValueError:
+                            continue
+                        evidence = []
+                        observed = None
+                        for table in endpoint_tables:
+                            try:
+                                candidate = select_panel_graph(page, table, hypotheses=hypotheses)
+                                if not candidate or candidate['panel_selection']['matching_rows'] < len(table['rows']) / 2:
+                                    continue
+                                rows = publication_evidence(candidate, [table], custom)
+                            except ValueError:
+                                continue
+                            if rows:
+                                rows[0]['vector_panel_registration'] = candidate['panel_selection']
+                                evidence.extend(rows)
+                                if observed is None:
+                                    observed = candidate
+                    else:
+                        try:
+                            evidence = publication_evidence(observed, endpoint_tables, custom)
+                        except ValueError:
+                            continue
                     if not evidence:
                         continue
                     publication_graphs[index+1] = evidence
@@ -270,7 +304,8 @@ def detect_designs(payload):
                 figures.append({'id': f'{digest[:12]}-p{index+1}-raster', 'label': f'{name} · page {index+1} · raster candidate',
                                 'source_sha256': digest, 'page': index+1, 'context': text[:1500],
                                 'image': 'data:image/png;base64,' + base64.b64encode(pix.tobytes('png')).decode(),
-                                'rows': 0, 'branches': 0, 'observed_paths': [], 'flags': [], 'pairings': [], '_routes': []})
+                                'rows': 0, 'branches': 0, 'observed_paths': [], 'flags': [], 'pairings': [], '_routes': [],
+                                'raster_evidence': register_and_trace(page)})
     # Repeated files are one source of evidence, not independent corroboration.
     lists = list({item['id']: item for item in lists}.values())
     figures = list({item['id']: item for item in figures}.values())
@@ -287,6 +322,8 @@ def detect_designs(payload):
                     'publication_evidence':endpoint_evidence})
                 continue
             score, shared = context_score(figure, staple_list)
+            if staple_list.get('table_import') and figure['source_sha256'] == staple_list['source_sha256'] and 0 < staple_list['page']-figure['page'] <= 2:
+                score = max(score, 20)
             alternatives = []
             graph_result = None
             if figure.get('_graph'):
@@ -326,6 +363,8 @@ def detect_designs(payload):
             if likely:
                 figure['pairings'].append({'list_id': staple_list['id'], 'label': staple_list['label'],
                                           'list_rows': len(staple_list['sequences']), 'context_score': score, 'shared_labels': shared,
+                                          'table_import': staple_list.get('table_import'),
+                                          'table_page': staple_list['page'], 'table_source_sha256': staple_list['source_sha256'],
                                           'basis': 'sequence agreement' if best and best['matched_staples'] >= 3 else 'caption/context only',
                                           'direction_resolved': bool(best and best['matched_staples'] >= 3 and ties == 1),
                                           'alternatives': alternatives[:8], 'best_ties': ties,
@@ -347,6 +386,6 @@ def detect_designs(payload):
         figure['publication_pairings_tested'] = len(figure.pop('_publication', []))
         figure['route_hypotheses_tested'] = len(figure.pop('_routes')) + bool(figure.pop('_graph', None))
     return {'designs': figures, 'staple_lists': [{k: v for k, v in item.items() if k != 'sequences'} | {'count': len(item['sequences'])} for item in lists],
-            'notes': notes, 'method': 'vector-graph-and-staple-hypotheses-v2',
+            'notes': notes, 'method': 'vector-raster-and-structured-tables-v3',
             'scaffold': {'name': 'custom' if payload.get('scaffold_sequence') else 'M13mp18 hypothesis', 'length': len(scaffold)},
             'can_reconstruct': False}

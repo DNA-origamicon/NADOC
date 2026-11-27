@@ -1,0 +1,14 @@
+--- a/src/CUDA/Backends/CUDA_MD.cuh
++++ b/src/CUDA/Backends/CUDA_MD.cuh
+@@ -484,8 +484,10 @@
+ 					p2a_vec.z += poss[extF.ltcomtrap.p2a[will]].z / extF.ltcomtrap.p2a_size;
+ 				}
+ 
+-				c_number4 dr = p1a_vec - p2a_vec;
++				// Match LTCOMTrap::_distance on CPU: honour the requested pair image.
++				c_number4 dr = extF.ltcomtrap.PBC ? box->minimum_image(p2a_vec, p1a_vec) : p1a_vec - p2a_vec;
+ 				c_number dr_mod = _module(dr);
++				if(dr_mod == 0.f) break;
+ 
+ 				int ix_left = (int) ((dr_mod - extF.ltcomtrap.xmin) / extF.ltcomtrap.dX);
+ 				int ix_right = ix_left + 1;

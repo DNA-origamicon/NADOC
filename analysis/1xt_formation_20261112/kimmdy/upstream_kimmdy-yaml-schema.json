@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "$id": "dimerization-config",
+  "description": "Settings for TT-Dimerization",
+  "additionalProperties": false,
+  "properties": {
+    "k1": {
+      "description": "Distance scaling [1/nm]",
+      "type": "number",
+      "pytype": "float",
+      "default": 2.017017017017017
+    },
+    "k2": {
+      "description": "Angle scaling [1/deg]",
+      "type": "number",
+      "pytype": "float",
+      "default": 0.03003003003003003
+    },
+    "d0": {
+      "description": "Optimal distance [nm]",
+      "type": "number",
+      "pytype": "float",
+      "default": 0.157177
+    },
+    "n0": {
+      "description": "Optimal angle [deg]",
+      "type": "number",
+      "pytype": "float",
+      "default": 16.743651884789273
+    },
+    "kmc": {
+      "description": "KMC algorithm for this reaction.",
+      "type": "string",
+      "pytype": "str",
+      "enum": ["rfkmc", "frm", "extrande", "extrande_mod"],
+      "default": "extrande_mod"
+    },
+    "reslist": {
+      "description": "Residues considered for reactions (dot-separated)",
+      "type": "string",
+      "pytype": "str",
+      "default": "all"
+    }
+
+  },
+  "required": []
+}

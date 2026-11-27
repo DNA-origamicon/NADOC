@@ -1,0 +1,133 @@
+{
+  "tm_c": 68.55971860018472,
+  "ci95_c": null,
+  "stopping_ci_c": null,
+  "halfwidth_c": null,
+  "replica_tm_c": [
+    67.70032553181076,
+    64.99367642059411,
+    73.90328198076189,
+    70.02296903602186
+  ],
+  "target_halfwidth_c": 1.0,
+  "nominal_target_met": false,
+  "early_stop_target_met": false,
+  "status": "inconclusive",
+  "reasons": [
+    "Too few long time batches, or bootstrap curves do not bracket melting.",
+    "Fewer than twenty recorded binding/unbinding transitions in a replica."
+  ],
+  "temperatures_c": [
+    64.0,
+    64.5,
+    65.0,
+    65.5,
+    66.0,
+    66.5,
+    67.0,
+    67.5,
+    68.0,
+    68.5,
+    69.0,
+    69.5,
+    70.0,
+    70.5,
+    71.0,
+    71.5,
+    72.0,
+    72.5,
+    73.0,
+    73.5,
+    74.0,
+    74.5,
+    75.0,
+    75.5,
+    76.0,
+    76.5,
+    77.0,
+    77.5,
+    78.0
+  ],
+  "duplex_yield": [
+    0.6938444381271717,
+    0.6756013313128406,
+    0.6565528725934321,
+    0.6367113934023702,
+    0.6160974384879038,
+    0.5947419261557693,
+    0.5726855180596301,
+    0.5499803352957444,
+    0.5266907661034193,
+    0.5028925608218426,
+    0.4786743037554087,
+    0.4541365418069953,
+    0.4293909556966977,
+    0.40455950532975127,
+    0.3797720154822227,
+    0.3551644863780911,
+    0.3308768000989468,
+    0.30704828122638084,
+    0.28381522451275065,
+    0.2613070751679028,
+    0.2396432243176239,
+    0.21892880169919335,
+    0.19925339677953166,
+    0.18068721195509552,
+    0.16328153168231463,
+    0.1470672042982539,
+    0.1320551424437013,
+    0.11823796447164145,
+    0.105591535917682
+  ],
+  "qualification": "Sampling uncertainty only; no CPD/force-field uncertainty included.",
+  "between_replica_ci95_c": [
+    63.149575147930165,
+    75.16055133666416
+  ],
+  "replica_tm_sem_c": 1.8870665891192846,
+  "inefficiencies": [
+    203.86907178017375,
+    174.50646005563087,
+    81.19036171792894,
+    189.99386927154143
+  ],
+  "batch_length_histograms": 1020,
+  "effective_histogram_blocks": [
+    9.81021781546415,
+    11.460893764978216,
+    24.633465816403035,
+    10.526655452979785
+  ],
+  "batch_checks": [
+    null,
+    null
+  ],
+  "recorded_transitions": [
+    67,
+    62,
+    14,
+    34
+  ],
+  "histogram_interval_steps": 1000,
+  "elapsed_seconds": 569.0004656871315,
+  "completed_blocks": 2,
+  "production_steps_per_replica": 2000000,
+  "production_directories": [
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_01"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_01"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_01"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_01"
+    ]
+  ]
+}

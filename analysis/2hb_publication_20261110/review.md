@@ -1,0 +1,88 @@
+Publication assessment, 10 November 2026
+
+This assessment concerns the available 2hb_1xT reactant and four imposed TT-CPD isomers: cis-syn-I, cis-anti-I, trans-syn-I, and trans-syn-II. It is a read-only analysis of existing simulations. No structures, force fields, or production jobs were changed. Results describe ensembles conditional on these starting topologies and force fields; classical fixed-topology survival cannot establish photochemical accessibility, yields, or relative isomer populations.
+
+The strongest prospective paper is “Isomer-dependent structural ensembles and effective junction mechanics of a UV-weldable DNA crossover.” A computational prediction paper is reasonable in principle. A claim that these runs identify the experimentally formed isomer, or supply general transferable isomer constants, needs additional evidence. More trajectory time reduces sampling uncertainty; it does not by itself validate provisional CPD potentials.
+
+Measured results and present verdict
+
+The collection covers **21 jobs and 14,020 sampled frames**: three 20 ns replicas for each of four isomers and the October unwelded control; a 100 ns cis-anti run; a **56.64 ns available cis-syn continuation** requested as 80 ns; three older 800/500/500 ns unwelded trajectories; and one historical nominal 200 ns job retaining only 69.81–82.06 ns. The cis-syn continuation descends from the October 18 20 ns run; it is not an independent replica and is not concatenated across the timestep change. The 100 ns cis-anti trajectory includes both its original and resume DCDs.
+
+[Full numerical tables](numerical_findings.md), [replica traces](short_replicas.png), [long CPD traces](long_cpd.png), and [historical long-run traces](long_runs.png) accompany the machine-readable results. Per-job CSVs contain the scalar trajectories; `summary.csv` collects means, fluctuations, ESS and drift. `replica_diagnostics.json`, `window_sensitivity.json`, `protocol_audit.json`, and `provenance_checks.json` preserve the checks and limitations.
+
+The short cis-syn replicas have late-window mean tilts of **10.3°, 38.9°, and 8.7°**; trans-syn-II gives **18.0°, 12.5°, and 40.9°**. Their classical split-Rhat values for tilt are **3.21 and 2.45**, respectively. Cis-anti separation also disagrees strongly between replicas (split-Rhat **2.52**). The unwelded control's mean tilts agree more closely (7.6–8.7°), but its reactive-base midpoint distance does not (7.9–12.0 Å; split-Rhat **2.38**). These diagnostics do not support a unique converged isomer ranking or equilibrium reactive-contact probability.
+
+In the final 75% of the long cis-anti run, helix tilt is **31.3 ± 10.5°** (temporal SD), centroid separation **25.07 ± 1.81 Å**, and the WC proxy **0.872**. Tilt ESS is only **6.1**, and the two halves of this window differ by **5.6°**. The long cis-syn continuation gives **21.4 ± 6.7°**, **26.40 ± 1.75 Å**, and **0.889**, with tilt ESS **11.5** and separation ESS **6.9**. These are observed-window descriptors, not equilibrium constants. Short/long comparisons are also confounded by the 2 fs → 4 fs HMR change.
+
+All **4,358 analyzed CPD frames** pass the stereochemistry check; the largest sampled DNA bond across all jobs is below **1.76 Å**. Long-run crosslink means remain approximately **1.55–1.56 Å**, with hundreds of effective samples for these fast observables. Chemical integrity and shape convergence are therefore giving different answers. This does not establish a chemical lifetime or exclude unsaved stereochemical excursions.
+
+The long unwelded late-window WC fractions are **0.84, 0.76 and 0.90**, and tilt means span **13.3–27.0°**. Sparse localization (`long_run_pair_occupancy.json`, up to 120 frames per DCD) finds both strand-end losses and junction-adjacent losses. In long cis-anti, the pairs involving **D001:GUA14 and D001:GUA16**, immediately flanking inserted residue 15, have roughly **52% and 34%** occupancy under the distance criterion. In the cis-syn continuation, the pair involving **D000:THY9**, immediately following inserted residue 8, has **0%** occupancy in the sampled late window. These are distance-proxy observations requiring angular/stacking inspection, but they rule out dismissing all pairing loss as terminal fraying. They also caution against fitting a fully paired elastic motif to an ensemble containing altered pairing states.
+
+Logged mean temperatures are about **299.2 K** for the recent 2 fs cohorts and **296.9 K** for the longer 4 fs cohorts, despite a 300 K target. This is a reported-temperature difference; this analysis does not establish its origin or the configurational temperature. Resolve the integrator/constraint degrees-of-freedom convention before treating the protocols as equivalent. No DNA-involving extra-bond restraints were found in the configured extra-bond files, and production positional constraints are off. Three older jobs have no package-level production logs available; missing thermodynamic evidence is not recorded as a pass.
+
+**Present verdict:** a scientifically interesting, potentially publishable *conditional ensemble* study, but the current results are not submission-ready evidence for a definitive 2hb shape or general SNUPI parameter set. The strongest observed result is the separation between stable product chemistry and slow, heterogeneous junction/whole-construct rearrangement. The current small-isomer series can motivate hypotheses and scope preliminary, explicitly context-specific estimates; it cannot yet establish their transferability.
+
+Literature comparison
+
+| Primary study | Relevant evidence | Implication for this project |
+|---|---|---|
+| [Yoo & Aksimentiev, PNAS 2013](https://doi.org/10.1073/pnas.1316521110) | Atomistic DNA origami simulations resolve local distortions and obtain mechanical information from fluctuations. | There is a clear precedent for atomistic structural/mechanical predictions. Compare distributions and local deformations, not just RMSD. |
+| [Gerling et al., Science Advances 2018](https://doi.org/10.1126/sciadv.aau1157) | UV point welding adds designed interhelical connections and improves environmental stability; cryo-EM shows retained global architecture and salt-dependent swelling. | Experimental motivation and a possible larger-scale validation target. Global density does not uniquely identify the stereochemistry of an individual weld. |
+| [Lee et al., ACS Nano 2021](https://doi.org/10.1021/acsnano.0c07717) | DNA motif geometry/mechanics from all-atom MD are mapped to finite elements. NAMD/CHARMM36, TIP3P, 20 mM MgCl2, 2 fs; at least 100 ns of equilibrated motif trajectories. | Direct methodological precedent for SNUPI parameter extraction. Their SI specifies base-pair triads, crossover frame corrections and covariance-based mechanics; whole-helix separation is not that parameterization. |
+| [Lee, Koh & Kim, Nature Communications 2023](https://doi.org/10.1038/s41467-023-42873-4) | SNUPI combines structural, electrostatic, stacking and hydrodynamic models for equilibrium and driven dynamics. | Equilibrium elastic parameters and dynamic friction require distinct validation. Thermostatted atomistic correlation times are not automatically transferable kinetic constants. |
+| [SNUPI framework, 2025](https://pmc.ncbi.nlm.nih.gov/articles/PMC12648286/) | Static, normal-mode and Langevin analyses use motif-level mechanical input. | A useful destination for a validated local crosslink model, including its applicability domain. |
+| [Hartmann et al., Nature Communications 2026](https://doi.org/10.1038/s41467-026-71955-2) | KIMMDY uses calibrated geometric reaction propensities and examines DNA origami motifs; its crossover comparison uses six separate 100 ns MD simulations. It reports low predicted crossover yields and explicitly discusses unmodeled cis-anti/trans-anti/6-4 products and the difference between isolated motifs and packed origami. | Particularly close scientific context. Resolving the consequences of alternative imposed isomers could address an open question, but a formation-rate claim would need calibrated photochemistry. |
+| [Dehez et al., NAR 2017](https://doi.org/10.1093/nar/gkx148) | Long simulations of duplex CPD/6-4 lesions distinguish limited CPD deformation from 6-4 polymorphism; the 6-4 study reaches 2 microseconds and uses replica-exchange corroboration. | Ensemble heterogeneity, slow changes and experimental comparison matter. Duplex intrastrand CPD results cannot be transferred directly to an interhelical extra-T weld. |
+
+The local copy `Literature/SNUPI_SI.pdf` was also inspected, especially Notes S3–S4 and S14. Note S14 excludes poorly paired/irregular ordinary crossovers from a quasi-harmonic fit. Applying those same length cutoffs blindly to an extra-T/CPD motif would select away the deformation under study. Define inclusion criteria for this chemistry explicitly and report excluded populations.
+
+Analysis definitions and scope
+
+`collect.py` resolves jobs through the archive-aware job API. It records each DCD's path, byte size, modification time, actual frame count, header timing, stride and time extent, plus the topology hash. Executed configuration timestep is checked against DCD spacing. Resume DCDs are included; overlapping times are removed rather than counted as independent samples. The original trajectories remain unchanged.
+
+Recent runs are sampled at approximately 0.1 ns (0.08 ns for 40 ps output because the stride is integral); older runs at approximately 0.2 ns. This is a structural screening cadence, not a claim to resolve fast bond dynamics or all rare events. Scalar CSVs retain the actual time of every sample. Summary statistics use the final 75% of the *available* trajectory, a declared sensitivity window rather than proof of equilibration. The first quarter is retained in the plots and raw CSVs.
+
+Metrics: equally weighted DNA heavy-atom RMSD to the first available frame; independently fitted six-residue lesion-neighborhood RMSD; geometric heavy-atom radius of gyration; reference-relative Watson–Crick distance fraction; topology-assigned helix centroid distance and relative PCA-axis tilt; C5=C6 midpoint distance and signed dihedral; and the two product crosslink lengths. The dihedral remains in the CSV and is not averaged linearly across its periodic boundary. Whole-DNA RMSD references differ by run and therefore are not an inter-isomer structural distance.
+
+Helix assignment comes from the saved scaffold domain traversal, checked against the 52 scaffold residues and existing base-pair identities. Each helix fit uses paired C1′ midpoints at bp 8–27, excluding bp 13–14 around the weld junction. Axes point toward increasing bp index. This avoids Euler-angle singularities and crossover-base centroid bias; the resulting centroid distance/tilt are still global descriptors of this short construct, not intrinsic crossover beam coordinates. Base-pair plans reused from sibling runs require matching DNA atom identities and ordering.
+
+The WC metric requires all planned donor/acceptor distances for a pair to remain within its reference distance +0.75 Å. It is a distance proxy, not a full angular hydrogen-bond criterion. CPD chirality is checked against the chemical definition on every analyzed frame. Bond continuity is checked throughout the selected frames; this does not replace a catenation/ring-piercing audit.
+
+Uncertainty diagnostics use quarter means, half-window shifts and FFT autocorrelation with an initial positive paired-sequence cutoff. ESS and integrated correlation time assume stationarity and regular sampling. They are screening estimates, especially unreliable when a run has few slow transitions. Frame counts are not replicate counts. Shared starting conformations, continuation ancestry and changes in timestep must remain visible in statistical comparisons.
+
+Protocol qualification
+
+The November 4 HMR audit (`docs/audits/cpd_hmr_validation_20261104.json`) records a short-window cis-anti drift failure followed by the predefined 50 ps confirmation, which passed. This is useful numerical evidence, not equilibrium-distribution equivalence. Longer production configurations use 4 fs and HMR PSFs, while the copied photoproduct manifest can still report 2 fs/no HMR. Publication methods must reflect the executed configuration and reconcile that provenance discrepancy. Do not silently pool 2 fs and 4 fs data or infer physical rates from HMR trajectories.
+
+The October 17 model scope audit explicitly concluded “physical validation insufficient.” The four packages are CGenFF-derived provisional models with charge-transfer and context limitations. Longer stability cannot promote that conclusion to validated force fields. Preserve the finite qualification result, including failed pilot criteria and the confirmation rule.
+
+What a SNUPI parameter claim requires
+
+For each chemically and topologically defined junction, specify a consistent local frame and the six relative coordinates q (three translations, three rotations in radians). In a single equilibrated near-harmonic basin, a candidate effective stiffness is K_eff = k_B T Cov(q)^(-1), with the full coupled matrix and q0. At 300 K, k_B T is approximately 2.494 kJ/mol. Invert the covariance, not each marginal variance independently. Report units, conditioning, eigenmodes, block/replica uncertainty and sensitivity to the frame and analysis window. Use rotation-vector or the SNUPI triad convention, not near-singular Euler angles.
+
+The inverse *marginal* covariance includes the relaxation of surrounding DNA, other junctions and electrostatics. It is a construct-dependent effective stiffness, not an isolated chemical spring. Installing it beside the same DNA beams/electrostatics can double-count their restoring forces. Establish identifiability by fitting the complete coarse-grained motif or a defined reference/perturbation model, then predict held-out constructs. A multimodal distribution calls for state-specific models or a nonharmonic potential; its pooled covariance is not a universal spring.
+
+Prioritized route to a defensible manuscript
+
+1. Close data/protocol coverage: explicit continuation graph, actual DCD extent, seeds, chemical definitions, parameter hashes, ionic conditions, thermostat/barostat settings, restraint audit, and original structure construction provenance. Existing legacy input inspection does not certify authoring replay. Any new structure deliverables must pass the project publication guard.
+2. Establish the structural claim with matched conditions, independently initialized replicas and agreement of local and global distributions. Extend the slowest *observable*, not merely all jobs to the same nominal duration. Use block-bootstrap confidence intervals and replica-aware comparisons; require stability under several burn-in/window choices. Audit topology and ring piercing at source and endpoint, with additional frames around unusual changes.
+3. Validate the lesion potential against independent chemical/structural references: relevant QM torsion/pucker energetics and geometries, and available solution/crystal/NMR observations. A conventional duplex cis-syn comparator is useful but is not a complete validation of an interhelical anti or trans weld. Quantify defensible parameter/model sensitivity.
+4. Fit a local model only after resolving basins and statistical uncertainty. Test transfer across flanking sequence, crossover spacing, extra-base count, bundle confinement and ionic conditions; reserve at least one construct/context for prediction without refitting. Avoid presenting four isomers of one sequence as “general isomer parameters.”
+5. Make experimentally discriminating predictions: interhelix-angle/separation distributions or label-distance distributions with dye/linker uncertainty, salt-dependent changes, and global twist/swelling for a weld-containing bundle. Experimental confirmation would strengthen the paper substantially; a computational-only paper still needs independent benchmark validation.
+
+A narrow, conditional structural prediction is the nearer publication target. A transferable parameter library is a second, more demanding claim. Neither requires claiming that fixed-topology MD determines photoproduct yield or isomer thermodynamics.
+
+Verification and reproduction
+
+Run from the repository root, using the existing Python environment:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python analysis/2hb_publication_20261110/collect.py
+OPENBLAS_NUM_THREADS=1 .venv/bin/python analysis/2hb_publication_20261110/summarize.py
+OPENBLAS_NUM_THREADS=1 .venv/bin/python analysis/2hb_publication_20261110/diagnostics.py
+.venv/bin/python analysis/2hb_publication_20261110/findings.py
+.venv/bin/python analysis/2hb_publication_20261110/provenance_check.py
+PYTHONPATH=. OPENBLAS_NUM_THREADS=1 .venv/bin/python analysis/2hb_publication_20261110/pair_occupancy.py
+```
+
+DCD sizes/mtimes remained unchanged across the analysis and final provenance check. All packaged force-field asset hashes match their manifests. Active and packaged chemical definitions agree as complete parsed JSON; cis-syn serialization bytes differ, recorded explicitly. Kabsch RMSD was checked against independent MDAnalysis QCP on deterministic numerical input; autocorrelation estimates passed independent-noise and AR(1) sanity checks. The figures were inspected. No full molecular topology/piercing audit, independent force-field accuracy validation, or fitted six-dimensional stiffness validation was performed. Energy CSVs contain records with an available ETITLE header; logs missing from a package cannot be reconstructed by this analysis.

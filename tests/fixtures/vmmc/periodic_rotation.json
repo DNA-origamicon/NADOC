@@ -1,0 +1,36 @@
+{
+  "provenance": "Derived from native VMMC diagnostic replay of job c795362c46bc; seed 778837659; step 1056435; rotation cluster size 8; pair 0,7. Simulation evidence, not an authored NADOC structure.",
+  "before_sha256": "d6bbe5322c951ba06f598a11c0601076da07268cc0bd10f35af97f3923445154",
+  "after_sha256": "31a9b2f8d66f32b8478db03ca5a3a03c48e0c38c15f93c51eebbd4003ed07c94",
+  "box_side": 7.6505909078802,
+  "old_minimum_image": [
+    0.2898989910026746,
+    0.22077289842403847,
+    -3.823150293080146
+  ],
+  "new_minimum_image": [
+    0.6830202513774388,
+    -0.03641493306268906,
+    3.783416583769524
+  ],
+  "rotation": [
+    [
+      0.9802097986357602,
+      0.17413069789242758,
+      0.09416608046380312
+    ],
+    [
+      -0.16968061981870583,
+      0.9840499933038535,
+      -0.0534237581661537
+    ],
+    [
+      -0.10196684714335785,
+      0.03638833233541187,
+      0.9941220505317636
+    ]
+  ],
+  "old_debye_energy": 3.871840338567877e-08,
+  "new_debye_energy": 0.0,
+  "residual_norm": 7.650590907880177
+}

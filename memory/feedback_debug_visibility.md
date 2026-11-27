@@ -8,6 +8,22 @@ authority: canonical
 
 # Make debugging observable
 
+## Reopening a reported design — November 23, 2026
+
+A request to diagnose a design's loading or display failure authorizes reopening
+that existing design through the ordinary application path without asking the
+user to do it. Prefer a separate document session to preserve unsaved work.
+Inspect the actual HTTP failure and rendered result; do not stop at an isolated
+geometry calculation. If browser control is unavailable, distinguish that tool
+limitation from missing authorization and use available application APIs.
+For loading failures, check for a stale browser session and try a normal reload
+or reopen as an early diagnostic step, after checking that unsaved work will
+not be lost. Do not ask the user to perform these routine actions when agent
+tools can perform them. A successful retry establishes recovery, not the cause
+of an earlier HTTP error whose response was not captured.
+This permits diagnosis of existing files, not saving migrated structures,
+changing molecular geometry, or bypassing construction/provenance requirements.
+
 On 2026-09-22 the user explicitly praised autonomously tilting the Extrude panel for
 better viewing and asked to reinforce this approach through durable guidance and skills.
 

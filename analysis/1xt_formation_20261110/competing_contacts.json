@@ -1,0 +1,80 @@
+[
+  {
+    "job_id": "bd13e4dfa6c5",
+    "a": [
+      "D000",
+      8
+    ],
+    "b": [
+      "D000",
+      9
+    ],
+    "intended": false,
+    "category": "extra_native",
+    "same_strand": true,
+    "frames": 29,
+    "fraction": 0.00116,
+    "isomer_counts": [
+      29,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "a": [
+      "D000",
+      8
+    ],
+    "b": [
+      "D000",
+      9
+    ],
+    "intended": false,
+    "category": "extra_native",
+    "same_strand": true,
+    "frames": 69,
+    "fraction": 0.00276,
+    "isomer_counts": [
+      69,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "a": [
+      "D000",
+      8
+    ],
+    "b": [
+      "D000",
+      9
+    ],
+    "intended": false,
+    "category": "extra_native",
+    "same_strand": true,
+    "frames": 3,
+    "fraction": 0.003,
+    "isomer_counts": [
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

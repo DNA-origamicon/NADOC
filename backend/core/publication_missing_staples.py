@@ -3,16 +3,14 @@ from copy import deepcopy
 
 
 def recover_unlisted_staples(classified, insertions, alignment):
-    from backend.core.sequences import SCAFFOLD_LIBRARY, P7704_SEQUENCE
+    from backend.core.sequences import PUBLICATION_SCAFFOLDS
     result = deepcopy(classified)
     recovered = []
     if (not alignment.get('resolved') or alignment.get('length_discrepancy')
             or alignment['best']['reverse'] or insertions['unresolved']
             or len(classified['scaf']) != 1):
         return result, recovered
-    library = {name: seq for name, _, seq in SCAFFOLD_LIBRARY}
-    library['p7704'] = P7704_SEQUENCE
-    seq = library.get(alignment.get('scaffold_name'))
+    seq = PUBLICATION_SCAFFOLDS.get(alignment.get('scaffold_name'))
     if not seq:
         return result, recovered
     offset = alignment['best']['offset']

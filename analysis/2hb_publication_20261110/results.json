@@ -1,0 +1,3821 @@
+[
+  {
+    "job_id": "7d5937e569c6",
+    "design": "2hb_1xT",
+    "created": "2026-08-07T21:14:14.272518-06:00",
+    "status": "completed",
+    "parent": "8c116f8db22b",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/7d5937e569c6/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd",
+        "bytes": 922222592,
+        "mtime_ns": 1786309344770234637,
+        "frames": 1226,
+        "dt_ns": 0.010000000029814058,
+        "istart": 17452500,
+        "stride": 20,
+        "first_ns": 69.81000020813192,
+        "last_ns": 82.06000024465415
+      }
+    ],
+    "config": {
+      "timestep": "4",
+      "structure": "2hb_1xT_hmr.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": null,
+    "psf_sha256": "cadaea3d2a3d35ccb2f7e33165efbaa7d029f5cf154acfac4cddc1c7433257e1",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 62,
+    "sample_dt_ns": 0.2000000005962761,
+    "max_sample_gap_ns": 0.20000000059630452,
+    "max_dna_bond_A": 1.7031580647747178,
+    "chirality_failures": null,
+    "first_last_ns": [
+      69.81000020813192,
+      82.01000024450508
+    ],
+    "late_window_start_ns": 73.01000021767244,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 4.248871770693576,
+        "sd": 0.3737951995158745,
+        "p05": 3.759895287628756,
+        "p95": 4.878326137518929,
+        "quarter_means": [
+          4.160738585559652,
+          4.292143843660392,
+          4.195952979154143,
+          4.350729957324397
+        ],
+        "half_shift": 0.07038595501437772,
+        "ess": 24.022607804650434,
+        "tau_int_ns": 0.19148628871274567,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 1.1240044041014607,
+        "sd": 0.1925891073084398,
+        "p05": 0.8891632822197013,
+        "p95": 1.488923200638976,
+        "quarter_means": [
+          1.30047589306261,
+          1.0806782943422146,
+          1.084003615092326,
+          1.0187556885267006
+        ],
+        "half_shift": -0.15352961166196,
+        "ess": 11.155872167440526,
+        "tau_int_ns": 0.4123388960246325,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.56624884461334,
+        "sd": 0.3847529052694124,
+        "p05": 26.957497445674097,
+        "p95": 28.22867565659279,
+        "quarter_means": [
+          27.67114585239946,
+          27.869679666195594,
+          27.37407959434628,
+          27.312969553751262
+        ],
+        "half_shift": -0.3679212091485162,
+        "ess": 6.200058897476931,
+        "tau_int_ns": 0.7419284380647233,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9171842650103522,
+        "sd": 0.01644917076376147,
+        "p05": 0.8869047619047619,
+        "p95": 0.9285714285714286,
+        "quarter_means": [
+          0.9107142857142859,
+          0.9265873015873017,
+          0.9155844155844157,
+          0.9155844155844156
+        ],
+        "half_shift": -0.0020703933747411307,
+        "ess": 30.569889364537055,
+        "tau_int_ns": 0.15047486626008638,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 27.12619926347689,
+        "sd": 0.6403668798718811,
+        "p05": 26.18354761995713,
+        "p95": 28.027153496750486,
+        "quarter_means": [
+          27.11744300495688,
+          26.91806100952248,
+          27.29905965039894,
+          27.18995107198151
+        ],
+        "half_shift": 0.2658287980051597,
+        "ess": 25.13305606485081,
+        "tau_int_ns": 0.18302589234850603,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 14.019872137454248,
+        "sd": 4.474592132068224,
+        "p05": 8.335049267559977,
+        "p95": 23.39012736175343,
+        "quarter_means": [
+          12.962267034044181,
+          10.090771036237426,
+          18.62915297475515,
+          14.850634432473596
+        ],
+        "half_shift": 4.7863067362110225,
+        "ess": 7.4935602220627855,
+        "tau_int_ns": 0.6138604184658287,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 8.24372168644644,
+        "sd": 0.560561694711125,
+        "p05": 7.450032230331564,
+        "p95": 9.167495182926643,
+        "quarter_means": [
+          8.004021979864662,
+          8.52342386710839,
+          8.448649005100215,
+          7.9951553051597495
+        ],
+        "half_shift": 0.009465266614670398,
+        "ess": 18.558937207951605,
+        "tau_int_ns": 0.24785902135298316,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "design": "2hb_1xT",
+    "created": "2026-08-13T01:10:37.132622-06:00",
+    "status": "completed",
+    "parent": "7d5937e569c6",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_800ns_k0.dcd",
+        "bytes": 30088160276,
+        "mtime_ns": 1786916593325145557,
+        "frames": 40000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 5000,
+        "stride": 10,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 800.0000023851246
+      }
+    ],
+    "config": {
+      "timestep": "4",
+      "structure": "2hb_1xT_hmr.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": null,
+    "psf_sha256": "cadaea3d2a3d35ccb2f7e33165efbaa7d029f5cf154acfac4cddc1c7433257e1",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 4000,
+    "sample_dt_ns": 0.2000000005962761,
+    "max_sample_gap_ns": 0.20000000059644663,
+    "max_dna_bond_A": 1.7553726082959094,
+    "chirality_failures": null,
+    "first_last_ns": [
+      0.020000000059628115,
+      799.8200023845878
+    ],
+    "late_window_start_ns": 200.02000059634076,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 8.36415872250618,
+        "sd": 1.1119454587844109,
+        "p05": 6.464944385229365,
+        "p95": 10.206926864939126,
+        "quarter_means": [
+          7.627968535745024,
+          8.345555143527475,
+          9.02755304487327,
+          8.455558165878953
+        ],
+        "half_shift": 0.7547937657398602,
+        "ess": 11.172515200543403,
+        "tau_int_ns": 26.85160821081925,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 3.8490721450378107,
+        "sd": 0.21821017188562927,
+        "p05": 3.5509141633025627,
+        "p95": 4.219343826636635,
+        "quarter_means": [
+          3.960213191910016,
+          3.800031245384449,
+          3.7821988990242716,
+          3.8538452438325077
+        ],
+        "half_shift": -0.06210014721884338,
+        "ess": 33.22743001932032,
+        "tau_int_ns": 9.028685056893568,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.064104505678007,
+        "sd": 0.7647153740287457,
+        "p05": 25.867725922836758,
+        "p95": 28.405991168378062,
+        "quarter_means": [
+          27.287529795205206,
+          26.582550597881,
+          26.679195934784076,
+          27.70714169484176
+        ],
+        "half_shift": 0.25812861826981504,
+        "ess": 10.387986698207884,
+        "tau_int_ns": 28.87951338503057,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.8368809523809523,
+        "sd": 0.03862975538809899,
+        "p05": 0.7857142857142857,
+        "p95": 0.9047619047619048,
+        "quarter_means": [
+          0.883904761904762,
+          0.8447619047619046,
+          0.8044761904761906,
+          0.8143809523809523
+        ],
+        "half_shift": -0.05490476190476168,
+        "ess": 3.8875382267759626,
+        "tau_int_ns": 77.1696594076226,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 24.912526936915704,
+        "sd": 2.123065363867759,
+        "p05": 21.709218627789937,
+        "p95": 28.526155790302802,
+        "quarter_means": [
+          26.171142574334024,
+          22.949500283208646,
+          24.444568779090023,
+          26.084896111030123
+        ],
+        "half_shift": 0.7044110162887378,
+        "ess": 9.732040504540057,
+        "tau_int_ns": 30.82601236138118,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 20.35680984177226,
+        "sd": 8.832207417486732,
+        "p05": 6.06532451895191,
+        "p95": 33.749336513395406,
+        "quarter_means": [
+          14.648268390357877,
+          25.824394622065252,
+          24.27586901806855,
+          16.67870733659737
+        ],
+        "half_shift": 0.24095667112139196,
+        "ess": 11.594258352369796,
+        "tau_int_ns": 25.874876320406987,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 4.856970780849263,
+        "sd": 0.5578149389658125,
+        "p05": 4.073652664446596,
+        "p95": 5.788427259864409,
+        "quarter_means": [
+          4.938179309022085,
+          4.845970912180585,
+          4.830794630309676,
+          4.812938271884707
+        ],
+        "half_shift": -0.07020865950414379,
+        "ess": 163.03579426196816,
+        "tau_int_ns": 1.840086726061947,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "design": "2hb_1xT",
+    "created": "2026-08-28T20:52:25.655920-06:00",
+    "status": "completed",
+    "parent": "8c116f8db22b",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_500ns_k0.dcd",
+        "bytes": 18805100276,
+        "mtime_ns": 1788551122294014317,
+        "frames": 25000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 5000,
+        "stride": 10,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 500.00000149070286
+      }
+    ],
+    "config": {
+      "timestep": "4",
+      "structure": "2hb_1xT_hmr.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": null,
+    "psf_sha256": "cadaea3d2a3d35ccb2f7e33165efbaa7d029f5cf154acfac4cddc1c7433257e1",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 2500,
+    "sample_dt_ns": 0.2000000005962761,
+    "max_sample_gap_ns": 0.20000000059638978,
+    "max_dna_bond_A": 1.7362946928586334,
+    "chirality_failures": null,
+    "first_last_ns": [
+      0.020000000059628115,
+      499.8200014901662
+    ],
+    "late_window_start_ns": 125.02000037273535,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 9.233705384871383,
+        "sd": 1.2652575199224199,
+        "p05": 7.146745532727228,
+        "p95": 11.388086782154208,
+        "quarter_means": [
+          8.556868982422163,
+          8.942866516955169,
+          9.92574875993392,
+          9.509926237215522
+        ],
+        "half_shift": 0.9679837875200796,
+        "ess": 24.183551720327838,
+        "tau_int_ns": 7.753203612412439,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 4.764093591713314,
+        "sd": 0.6323086051356335,
+        "p05": 3.815060679497672,
+        "p95": 5.663711568140848,
+        "quarter_means": [
+          4.188076005061164,
+          4.280598811374572,
+          5.4446046066112395,
+          5.1439047757551934
+        ],
+        "half_shift": 1.06084789546962,
+        "ess": 3.5110455232581397,
+        "tau_int_ns": 53.40289646401814,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.811554843916998,
+        "sd": 0.6335221211544457,
+        "p05": 26.780599242512334,
+        "p95": 28.858320663300308,
+        "quarter_means": [
+          27.491162775909338,
+          27.47546949700324,
+          28.04059085172922,
+          28.23990958736617
+        ],
+        "half_shift": 0.6565181190230085,
+        "ess": 6.983727857123216,
+        "tau_int_ns": 26.848125298548663,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.7590222222222224,
+        "sd": 0.06306970956489556,
+        "p05": 0.6904761904761905,
+        "p95": 0.8809523809523809,
+        "quarter_means": [
+          0.8382576911361561,
+          0.7890648796832167,
+          0.7040816326530611,
+          0.7045685795685794
+        ],
+        "half_shift": -0.10943187705321566,
+        "ess": 2.722776348628764,
+        "tau_int_ns": 68.86353359630033,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 24.928716403162152,
+        "sd": 1.5621774624545381,
+        "p05": 22.916532073186207,
+        "p95": 28.171370147282698,
+        "quarter_means": [
+          26.134579343549067,
+          24.95606210940152,
+          24.217842448904484,
+          24.40526561102353
+        ],
+        "half_shift": -1.2320494059059683,
+        "ess": 22.844257009617607,
+        "tau_int_ns": 8.207752192600088,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 13.289766785409606,
+        "sd": 6.150293822190631,
+        "p05": 4.383549261613841,
+        "p95": 25.17426385583664,
+        "quarter_means": [
+          9.214107651238233,
+          12.482318727058802,
+          14.888840714947271,
+          16.580817213485968
+        ],
+        "half_shift": 4.88226956617059,
+        "ess": 9.963563993881346,
+        "tau_int_ns": 18.81856739959247,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 11.136395544286845,
+        "sd": 3.046507418529444,
+        "p05": 4.3196120841737855,
+        "p95": 14.823389856867042,
+        "quarter_means": [
+          10.575300238004022,
+          11.569395132337009,
+          13.410116419635674,
+          8.986185718031532
+        ],
+        "half_shift": 0.13860908941052585,
+        "ess": 9.304167803624598,
+        "tau_int_ns": 20.152259129071705,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "design": "2hb_1xT",
+    "created": "2026-08-29T00:12:46.045661-06:00",
+    "status": "completed",
+    "parent": "8c116f8db22b",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/07d7cd2766e3/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_500ns_k0.dcd",
+        "bytes": 18805100276,
+        "mtime_ns": 1788551112743052511,
+        "frames": 25000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 5000,
+        "stride": 10,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 500.00000149070286
+      }
+    ],
+    "config": {
+      "timestep": "4",
+      "structure": "2hb_1xT_hmr.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": null,
+    "psf_sha256": "cadaea3d2a3d35ccb2f7e33165efbaa7d029f5cf154acfac4cddc1c7433257e1",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/07d7cd2766e3/package/2hb_1xT_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 2500,
+    "sample_dt_ns": 0.2000000005962761,
+    "max_sample_gap_ns": 0.20000000059638978,
+    "max_dna_bond_A": 1.7286460791709732,
+    "chirality_failures": null,
+    "first_last_ns": [
+      0.020000000059628115,
+      499.8200014901662
+    ],
+    "late_window_start_ns": 125.02000037273535,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 11.861813104866725,
+        "sd": 1.8622222868615381,
+        "p05": 8.751394074700057,
+        "p95": 14.824076224689808,
+        "quarter_means": [
+          11.04149578490625,
+          13.070326958043868,
+          11.998941224144714,
+          11.335365963798372
+        ],
+        "half_shift": -0.38232430047777477,
+        "ess": 12.43941497897637,
+        "tau_int_ns": 15.073056158661737,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 5.204536134606818,
+        "sd": 0.5731877124699877,
+        "p05": 3.5633637281657404,
+        "p95": 5.837727013731075,
+        "quarter_means": [
+          4.751216199117218,
+          5.327644797983061,
+          5.412454139301569,
+          5.327090712425892
+        ],
+        "half_shift": 0.33105166057160673,
+        "ess": 13.236504402660131,
+        "tau_int_ns": 14.16537137413161,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.61296208802925,
+        "sd": 0.6253408983991278,
+        "p05": 26.512519782717597,
+        "p95": 28.615561028940427,
+        "quarter_means": [
+          27.307640231620244,
+          27.545138409600646,
+          27.677853314801844,
+          27.921875059145684
+        ],
+        "half_shift": 0.3731790473711847,
+        "ess": 27.94216094211474,
+        "tau_int_ns": 6.710289907335217,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9033142857142857,
+        "sd": 0.04439411671209052,
+        "p05": 0.8333333333333334,
+        "p95": 0.9761904761904762,
+        "quarter_means": [
+          0.9539547162148442,
+          0.9176058483094731,
+          0.8817646461569705,
+          0.8598392348392349
+        ],
+        "half_shift": -0.06506514104710037,
+        "ess": 3.6682371774678972,
+        "tau_int_ns": 51.1144703812298,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 25.387863093760092,
+        "sd": 1.4308585892602177,
+        "p05": 23.099493274529813,
+        "p95": 27.71111054344149,
+        "quarter_means": [
+          26.045313603375504,
+          24.39420441162639,
+          25.655906272878195,
+          25.456173738855586
+        ],
+        "half_shift": 0.33301510937581114,
+        "ess": 17.660713814913226,
+        "tau_int_ns": 10.616784945616317,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 27.04351148077078,
+        "sd": 10.352479216536624,
+        "p05": 10.632971252198086,
+        "p95": 45.27686670003599,
+        "quarter_means": [
+          25.684920018665558,
+          34.99420969385448,
+          26.648551440645896,
+          20.833123003441
+        ],
+        "half_shift": -6.557986883295044,
+        "ess": 9.850656304297098,
+        "tau_int_ns": 19.03426480093684,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 5.2548241291757805,
+        "sd": 1.4503257874973101,
+        "p05": 3.884174023135031,
+        "p95": 8.498592852917508,
+        "quarter_means": [
+          6.038564470673752,
+          5.066604055702354,
+          4.608345070982661,
+          5.3058918056481374
+        ],
+        "half_shift": -0.5987229643079113,
+        "ess": 33.46199113482113,
+        "tau_int_ns": 5.603372489208899,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "e345c67349bf",
+    "design": "2hb_1xT_CPD_cis-anti-I",
+    "created": "2026-10-18T14:45:56.307843-06:00",
+    "status": "completed",
+    "parent": "935bbecba8cf",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd",
+        "bytes": 5671568276,
+        "mtime_ns": 1792410061096314732,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_cis-anti-I.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "a0750522a3a138881a014d505b1ff9f3fd33c3ef4a9dabb3945f91e145a3d2e5",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.7161952101512508,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 6.203440470815586,
+        "sd": 0.981252191022737,
+        "p05": 4.075679147026537,
+        "p95": 7.511941669885109,
+        "quarter_means": [
+          5.332952472358019,
+          6.299093392786172,
+          6.4456531662261485,
+          6.757004340445707
+        ],
+        "half_shift": 0.7979626605091292,
+        "ess": 8.666919897786707,
+        "tau_int_ns": 0.8653593330516239,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 2.3998036021139546,
+        "sd": 0.46559433451818266,
+        "p05": 1.4459517931835022,
+        "p95": 2.935628650492135,
+        "quarter_means": [
+          1.7172468734856008,
+          2.6973991039146905,
+          2.7218067341828105,
+          2.4731660543545444
+        ],
+        "half_shift": 0.4034512816034179,
+        "ess": 4.391725786150301,
+        "tau_int_ns": 1.707756901856776,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.485145581841472,
+        "sd": 0.3930289184565668,
+        "p05": 26.91202812499604,
+        "p95": 28.15743899160748,
+        "quarter_means": [
+          27.728889720783165,
+          27.55882623799087,
+          27.286987810630514,
+          27.357299509445358
+        ],
+        "half_shift": -0.3160810711416211,
+        "ess": 9.28056888051524,
+        "tau_int_ns": 0.8081401171545605,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9584126984126984,
+        "sd": 0.03183486027760402,
+        "p05": 0.9047619047619048,
+        "p95": 1.0,
+        "quarter_means": [
+          0.9605263157894735,
+          0.9617794486215536,
+          0.9671814671814671,
+          0.9440154440154439
+        ],
+        "half_shift": -0.005079365079364684,
+        "ess": 66.83839419936216,
+        "tau_int_ns": 0.11221095467958035,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 28.80841514510227,
+        "sd": 1.0905631622729541,
+        "p05": 27.130922614019923,
+        "p95": 30.315702704192912,
+        "quarter_means": [
+          29.01275473626466,
+          28.82715833078103,
+          28.378244832314227,
+          29.00947341681019
+        ],
+        "half_shift": -0.20097233627899058,
+        "ess": 23.3119287138638,
+        "tau_int_ns": 0.32172370267674333,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 12.817772297489503,
+        "sd": 5.4132017537606725,
+        "p05": 5.180295806309633,
+        "p95": 22.060667829821224,
+        "quarter_means": [
+          10.442217501919178,
+          10.727814145368948,
+          11.07843510746121,
+          19.14331197433546
+        ],
+        "half_shift": 4.604907847710415,
+        "ess": 8.604142998460004,
+        "tau_int_ns": 0.8716731025626755,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5402559269956582,
+        "sd": 0.02369404557603261,
+        "p05": 1.5008542425560114,
+        "p95": 1.582294060876164,
+        "quarter_means": [
+          1.535784330109647,
+          1.5432839463898809,
+          1.5419416798154353,
+          1.540052767275556
+        ],
+        "half_shift": 0.000388149535532456,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5537363604583658,
+        "sd": 0.0323620631632658,
+        "p05": 1.4978753177084703,
+        "p95": 1.6081211467313996,
+        "quarter_means": [
+          1.54890866676121,
+          1.5563445274401924,
+          1.5539485868260141,
+          1.5558036480145687
+        ],
+        "half_shift": 0.00077681229376525,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.552986764886903,
+        "sd": 0.030676437291289688,
+        "p05": 1.5070888286149053,
+        "p95": 1.6065122119635398,
+        "quarter_means": [
+          1.5533260507475106,
+          1.5522346008010002,
+          1.5553883429088635,
+          1.5510092239611912
+        ],
+        "half_shift": -0.0006809640192413369,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "edb512c46112",
+    "design": "2hb_1xT_CPD_cis-syn-I",
+    "created": "2026-10-18T14:49:40.238822-06:00",
+    "status": "completed",
+    "parent": "6d6c46163a00",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd",
+        "bytes": 5671568276,
+        "mtime_ns": 1792415272242677375,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_cis-syn-I.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "edb4b4208182a173c07b0f2dbb6c786f17f53c6014cfcc94f2844cb996452986",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.720949887449443,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 6.407748433406464,
+        "sd": 1.7036981843811105,
+        "p05": 4.074860247160594,
+        "p95": 9.238592986362102,
+        "quarter_means": [
+          4.789925898100196,
+          5.0874429989687995,
+          7.415934185996405,
+          8.417099514607589
+        ],
+        "half_shift": 2.971965033323767,
+        "ess": 2.7956435473473227,
+        "tau_int_ns": 2.6827454556847963,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 2.035071998787958,
+        "sd": 0.25826886078828015,
+        "p05": 1.6288619335361278,
+        "p95": 2.516779718342462,
+        "quarter_means": [
+          1.9376992233186774,
+          1.8599754941695958,
+          2.0895125629276046,
+          2.260464749332917
+        ],
+        "half_shift": 0.27570634395911053,
+        "ess": 6.500996737345499,
+        "tau_int_ns": 1.153669248790143,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.767478972524042,
+        "sd": 0.4237600764068704,
+        "p05": 27.105182473931098,
+        "p95": 28.482779081338077,
+        "quarter_means": [
+          27.679077544199266,
+          27.908514587665547,
+          27.406260278788363,
+          28.074640933853345
+        ],
+        "half_shift": -0.049000663182919624,
+        "ess": 13.350073314124684,
+        "tau_int_ns": 0.5617946692791104,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9377777777777777,
+        "sd": 0.031060565989392174,
+        "p05": 0.8809523809523809,
+        "p95": 0.9761904761904762,
+        "quarter_means": [
+          0.9398496240601503,
+          0.9461152882205511,
+          0.938223938223938,
+          0.9266409266409266
+        ],
+        "half_shift": -0.012063492063492331,
+        "ess": 39.99972006697201,
+        "tau_int_ns": 0.1875013127542696,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 28.86983408385798,
+        "sd": 1.7836005414775362,
+        "p05": 25.99332450114211,
+        "p95": 31.835046333386646,
+        "quarter_means": [
+          26.923134967310865,
+          28.38186254741915,
+          29.014419181011146,
+          31.22572154923092
+        ],
+        "half_shift": 2.485437910030388,
+        "ess": 3.574026333264605,
+        "tau_int_ns": 2.098473632540325,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 10.283898837477095,
+        "sd": 4.41146728888384,
+        "p05": 3.8914571916241973,
+        "p95": 17.704213510356198,
+        "quarter_means": [
+          12.358846094112772,
+          8.246825661679631,
+          8.819380594845208,
+          11.709519375464332
+        ],
+        "half_shift": -0.044699022833684765,
+        "ess": 11.912398081360495,
+        "tau_int_ns": 0.6295961544549047,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5542126007455548,
+        "sd": 0.02395968285168825,
+        "p05": 1.511946810506402,
+        "p95": 1.5923984011197194,
+        "quarter_means": [
+          1.5467405499033973,
+          1.5613057713575917,
+          1.5558576538820585,
+          1.5529566678453905
+        ],
+        "half_shift": 0.0013890210712936835,
+        "ess": 109.09108693029413,
+        "tau_int_ns": 0.06874988812929167,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5617741152320295,
+        "sd": 0.03185159299534908,
+        "p05": 1.5081489629830764,
+        "p95": 1.6151804020610454,
+        "quarter_means": [
+          1.5554870740574418,
+          1.5683123784415318,
+          1.561236411482768,
+          1.5620538071616483
+        ],
+        "half_shift": 0.000876030116771398,
+        "ess": 140.3269502591203,
+        "tau_int_ns": 0.05344661170581595,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.556482847394688,
+        "sd": 0.029642727564310373,
+        "p05": 1.5087253364591502,
+        "p95": 1.5984607289114092,
+        "quarter_means": [
+          1.5551103483307187,
+          1.5614022588996912,
+          1.560107392758434,
+          1.5492155270915002
+        ],
+        "half_shift": -0.002963710337128722,
+        "ess": 101.41818074036988,
+        "tau_int_ns": 0.07395123800889825,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "9b08bed08561",
+    "design": "2hb_1xT_CPD_trans-syn-II",
+    "created": "2026-10-19T10:21:27.906299-06:00",
+    "status": "completed",
+    "parent": "974191dc2e63",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd",
+        "bytes": 5671712276,
+        "mtime_ns": 1792519017247410041,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_trans-syn-II.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "0292494498cf8c82a03530b02eb07ef0b86f74cc970d72bfaa5509a6c23618d3",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.6969319514977854,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 4.45351354030645,
+        "sd": 0.7206640428403261,
+        "p05": 3.3181124063186163,
+        "p95": 5.694213270668476,
+        "quarter_means": [
+          3.8825578864839274,
+          4.132502117589903,
+          4.557480023869132,
+          5.265621351567679
+        ],
+        "half_shift": 0.8877775513657564,
+        "ess": 5.511433636376733,
+        "tau_int_ns": 1.36080746266431,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 2.1704111312328154,
+        "sd": 0.27969793759320705,
+        "p05": 1.7780967712083775,
+        "p95": 2.6790403039349795,
+        "quarter_means": [
+          1.9921310843175446,
+          1.992126447253775,
+          2.2703700912203075,
+          2.436653786758402
+        ],
+        "half_shift": 0.35253822561690384,
+        "ess": 4.762185680802725,
+        "tau_int_ns": 1.5749070962508829,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.31360763804086,
+        "sd": 0.2731792717620323,
+        "p05": 26.921725037465706,
+        "p95": 27.759704233936485,
+        "quarter_means": [
+          27.172178591207135,
+          27.159773758245137,
+          27.391858709870775,
+          27.538599571938473
+        ],
+        "half_shift": 0.2885267296778018,
+        "ess": 6.66631495604061,
+        "tau_int_ns": 1.1250593576537375,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9622222222222223,
+        "sd": 0.029861503739959418,
+        "p05": 0.9047619047619048,
+        "p95": 1.0,
+        "quarter_means": [
+          0.9611528822055139,
+          0.969924812030075,
+          0.9555984555984554,
+          0.9620334620334619
+        ],
+        "half_shift": -0.006349206349206438,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 26.995847473553134,
+        "sd": 1.1158983244697702,
+        "p05": 25.604259753629112,
+        "p95": 29.269308110492556,
+        "quarter_means": [
+          26.66606712141846,
+          26.267031516236127,
+          26.712678342359006,
+          28.366223625265228
+        ],
+        "half_shift": 1.0565814993612612,
+        "ess": 8.170955863971065,
+        "tau_int_ns": 0.9178852691434772,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 17.957621140285966,
+        "sd": 4.01984690023101,
+        "p05": 12.111239187699322,
+        "p95": 23.99114947548485,
+        "quarter_means": [
+          14.63168539247428,
+          19.656327944951215,
+          19.138210216528016,
+          18.44824016781592
+        ],
+        "half_shift": 1.6131024057676484,
+        "ess": 21.460093250770587,
+        "tau_int_ns": 0.349485900863513,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5356278243787354,
+        "sd": 0.02642744539737702,
+        "p05": 1.4952657826620077,
+        "p95": 1.5798077225728482,
+        "quarter_means": [
+          1.5313408743838683,
+          1.5347555946813534,
+          1.544536136322323,
+          1.5320181294163768
+        ],
+        "half_shift": 0.005466754685347297,
+        "ess": 118.13065632789394,
+        "tau_int_ns": 0.06348902355661927,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5523256928196796,
+        "sd": 0.032479997142982324,
+        "p05": 1.5005222508061506,
+        "p95": 1.599994703689095,
+        "quarter_means": [
+          1.5439530643656807,
+          1.555524514637102,
+          1.5631700160474606,
+          1.546795008840275
+        ],
+        "half_shift": 0.00597353371178122,
+        "ess": 88.44161071003698,
+        "tau_int_ns": 0.08480171225001673,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.5333216702890484,
+        "sd": 0.035939304353476996,
+        "p05": 1.4766092516626452,
+        "p95": 1.5882367728735354,
+        "quarter_means": [
+          1.5336627662529234,
+          1.5295883577166554,
+          1.5398757731539232,
+          1.5302514655626518
+        ],
+        "half_shift": 0.003096364320414491,
+        "ess": 132.02430768942125,
+        "tau_int_ns": 0.056807720893366276,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "37d39cc6b88f",
+    "design": "2hb_1xT_CPD_trans-syn-I",
+    "created": "2026-10-19T10:23:35.550632-06:00",
+    "status": "completed",
+    "parent": "b2b43076da96",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd",
+        "bytes": 5671532276,
+        "mtime_ns": 1792518021769776761,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_trans-syn-I.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "0bf54f50cfdcea4bdecd7d4ec805a49bf394bf2765b02f447aeaac83df39dabe",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.7123912209296954,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 6.698476911904816,
+        "sd": 2.5091147440760335,
+        "p05": 3.364671967763285,
+        "p95": 10.275231914772299,
+        "quarter_means": [
+          3.9271244713244897,
+          5.209240485479842,
+          7.844571680045803,
+          9.928122061228732
+        ],
+        "half_shift": 4.327709641011782,
+        "ess": 2.4401947406533813,
+        "tau_int_ns": 3.0735251975636873,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 3.416650046517296,
+        "sd": 1.887182980773407,
+        "p05": 0.9388237579117432,
+        "p95": 5.9548111289643115,
+        "quarter_means": [
+          1.2500241289090779,
+          2.1706801774893107,
+          4.569099178032681,
+          5.7690290201958465
+        ],
+        "half_shift": 3.4514539792403576,
+        "ess": 2.3571263383405823,
+        "tau_int_ns": 3.1818404895685632,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.693010503824606,
+        "sd": 0.7759055057661481,
+        "p05": 26.676739982159646,
+        "p95": 29.010018222313203,
+        "quarter_means": [
+          26.966535518054744,
+          27.203115044647294,
+          28.588158623018046,
+          28.04710770646881
+        ],
+        "half_shift": 1.232776711305835,
+        "ess": 3.5753114265190735,
+        "tau_int_ns": 2.0977193669706584,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9484126984126984,
+        "sd": 0.03150207209932717,
+        "p05": 0.9047619047619048,
+        "p95": 1.0,
+        "quarter_means": [
+          0.9661654135338344,
+          0.9511278195488723,
+          0.9407979407979404,
+          0.9350064350064348
+        ],
+        "half_shift": -0.020000000000000018,
+        "ess": 17.35446460188153,
+        "tau_int_ns": 0.4321654510475317,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 26.005130532986335,
+        "sd": 1.0052569079025795,
+        "p05": 24.546769670437747,
+        "p95": 27.72671373677046,
+        "quarter_means": [
+          25.969581485255738,
+          26.27188919249971,
+          25.625585719956312,
+          26.14721682580702
+        ],
+        "half_shift": -0.22241328561890228,
+        "ess": 14.69802633886109,
+        "tau_int_ns": 0.5102725937108171,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 17.838904779117403,
+        "sd": 8.988146857020485,
+        "p05": 3.1197805996240056,
+        "p95": 30.834962174208517,
+        "quarter_means": [
+          6.520626514391824,
+          17.74415123082568,
+          24.85987848044701,
+          22.539423210075842
+        ],
+        "half_shift": 11.884751829024959,
+        "ess": 3.3048792353120677,
+        "tau_int_ns": 2.2693718857331726,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5378539727184026,
+        "sd": 0.02466333122486696,
+        "p05": 1.4952405577716839,
+        "p95": 1.573387196116575,
+        "quarter_means": [
+          1.532897581903383,
+          1.5427177310157991,
+          1.5323063794058338,
+          1.543496702130152
+        ],
+        "half_shift": 0.0011472416047115797,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5526134784735017,
+        "sd": 0.0350938564164943,
+        "p05": 1.4930183154223031,
+        "p95": 1.6070251194686471,
+        "quarter_means": [
+          1.548300996819412,
+          1.5571981590327562,
+          1.547193810380202,
+          1.5577535909344704
+        ],
+        "half_shift": 0.0003735082481572949,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.5308440379652195,
+        "sd": 0.03157920740782857,
+        "p05": 1.4802259614537232,
+        "p95": 1.5816485186463003,
+        "quarter_means": [
+          1.5250811645722644,
+          1.5368302123449105,
+          1.5290844348126602,
+          1.5323743049692402
+        ],
+        "half_shift": 0.0010466685578296442,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "972af34aa9c5",
+    "design": "2hb_1xT_CPD_cis-anti-I",
+    "created": "2026-10-19T15:11:27.275156-06:00",
+    "status": "completed",
+    "parent": "935bbecba8cf",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd",
+        "bytes": 5671568276,
+        "mtime_ns": 1792518029911711961,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_cis-anti-I.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "a0750522a3a138881a014d505b1ff9f3fd33c3ef4a9dabb3945f91e145a3d2e5",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.722322560530782,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 5.223346612502421,
+        "sd": 0.6105794058387856,
+        "p05": 4.289353639202961,
+        "p95": 6.228732606234045,
+        "quarter_means": [
+          5.376221857279326,
+          5.160427253540517,
+          4.864880920554858,
+          5.489425178477817
+        ],
+        "half_shift": -0.08281933456545687,
+        "ess": 13.540549018277726,
+        "tau_int_ns": 0.553891870428346,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 2.3663913699334813,
+        "sd": 0.739860143335862,
+        "p05": 1.3993155971668014,
+        "p95": 3.3671569611092527,
+        "quarter_means": [
+          1.6342263872880347,
+          1.7302122659790988,
+          2.9714489967749684,
+          3.16666010230263
+        ],
+        "half_shift": 1.3974837478350493,
+        "ess": 2.5763492363557456,
+        "tau_int_ns": 2.9110960255409037,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.66409712399533,
+        "sd": 0.5001137886191438,
+        "p05": 26.867018383740117,
+        "p95": 28.636283556535986,
+        "quarter_means": [
+          27.095961317217842,
+          27.6602644512953,
+          27.770142204105824,
+          28.145479130915817
+        ],
+        "half_shift": 0.5861107811019046,
+        "ess": 5.01859609696208,
+        "tau_int_ns": 1.4944418473725247,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9582539682539682,
+        "sd": 0.031804968196309735,
+        "p05": 0.9047619047619048,
+        "p95": 1.0,
+        "quarter_means": [
+          0.971177944862155,
+          0.9642857142857142,
+          0.9549549549549549,
+          0.9420849420849418
+        ],
+        "half_shift": -0.018095238095238164,
+        "ess": 33.92895475920226,
+        "tau_int_ns": 0.22105013477688676,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 27.966049183874723,
+        "sd": 2.017354508053752,
+        "p05": 25.210414589359463,
+        "p95": 31.422079884474748,
+        "quarter_means": [
+          25.800572646114592,
+          27.436712825572553,
+          28.62302522602363,
+          30.07671881876279
+        ],
+        "half_shift": 2.7651289937229215,
+        "ess": 3.5811383261477028,
+        "tau_int_ns": 2.094306150532991,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 7.574156034002197,
+        "sd": 3.5660998534504107,
+        "p05": 2.6066214865998116,
+        "p95": 14.462958289853184,
+        "quarter_means": [
+          7.596882368869471,
+          9.749217017115402,
+          8.459877803449059,
+          4.431247289332139
+        ],
+        "half_shift": -2.0488285901624836,
+        "ess": 8.951822577900455,
+        "tau_int_ns": 0.8378182160218361,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.545608194377137,
+        "sd": 0.026304481938993672,
+        "p05": 1.4986163818240779,
+        "p95": 1.5870194147791745,
+        "quarter_means": [
+          1.5422062645027224,
+          1.5449537873810157,
+          1.54922332612446,
+          1.5461590302265802
+        ],
+        "half_shift": 0.003923997846137839,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5581819326595068,
+        "sd": 0.030449672412272602,
+        "p05": 1.5117109106160027,
+        "p95": 1.6094194937962207,
+        "quarter_means": [
+          1.5573740789485635,
+          1.5557047694715778,
+          1.5593971949248011,
+          1.560340471533595
+        ],
+        "half_shift": 0.0035236845239356995,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.5582051976522788,
+        "sd": 0.03460953456611045,
+        "p05": 1.4996713660256489,
+        "p95": 1.6126868305725546,
+        "quarter_means": [
+          1.5608786954579998,
+          1.5626167246184295,
+          1.5617680696465386,
+          1.5473658137301505
+        ],
+        "half_shift": -0.00800728974831566,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "d6bcdef3d59f",
+    "design": "2hb_1xT_CPD_cis-syn-I",
+    "created": "2026-10-19T15:30:53.974781-06:00",
+    "status": "completed",
+    "parent": "6d6c46163a00",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd",
+        "bytes": 5671568276,
+        "mtime_ns": 1792519016282043875,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_cis-syn-I.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "edb4b4208182a173c07b0f2dbb6c786f17f53c6014cfcc94f2844cb996452986",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.7187573305598174,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 11.276104141501365,
+        "sd": 2.096481546104309,
+        "p05": 7.836775665298445,
+        "p95": 14.045421307584231,
+        "quarter_means": [
+          8.404809139081868,
+          10.856547014842766,
+          13.19647587462906,
+          12.735526486886313
+        ],
+        "half_shift": 3.393238619295241,
+        "ess": 3.078600760579595,
+        "tau_int_ns": 2.4361716915020057,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 2.3913602640563276,
+        "sd": 0.1959309687826711,
+        "p05": 2.0933399981763565,
+        "p95": 2.7212733538001554,
+        "quarter_means": [
+          2.3769262587333015,
+          2.403683159468275,
+          2.3285426608174427,
+          2.4563460342309167
+        ],
+        "half_shift": 0.0027214493161391573,
+        "ess": 35.41937307031846,
+        "tau_int_ns": 0.21174852551655063,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.66342984374459,
+        "sd": 0.3736286370800545,
+        "p05": 27.07657151873084,
+        "p95": 28.321262342155272,
+        "quarter_means": [
+          27.633954401246427,
+          27.997536876772536,
+          27.68531664969438,
+          27.328678161034492
+        ],
+        "half_shift": -0.3013759247155292,
+        "ess": 9.284445765468051,
+        "tau_int_ns": 0.8078026639194289,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9431746031746032,
+        "sd": 0.033985165178515915,
+        "p05": 0.8809523809523809,
+        "p95": 0.9761904761904762,
+        "quarter_means": [
+          0.9454887218045112,
+          0.9442355889724312,
+          0.9446589446589446,
+          0.9382239382239379
+        ],
+        "half_shift": -0.0038095238095242623,
+        "ess": 94.3113054294256,
+        "tau_int_ns": 0.07952387031661758,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 28.753147686606997,
+        "sd": 1.5949376973555882,
+        "p05": 25.744080020344956,
+        "p95": 31.193488332807615,
+        "quarter_means": [
+          28.889579669187523,
+          30.470561977425298,
+          28.640885587116337,
+          26.961459559363735
+        ],
+        "half_shift": -1.8978760680308149,
+        "ess": 6.051328633622645,
+        "tau_int_ns": 1.2393972425640114,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 38.92364186195174,
+        "sd": 15.115389969634103,
+        "p05": 17.442630584578517,
+        "p95": 57.7826719065089,
+        "quarter_means": [
+          18.539074846903457,
+          34.5970410615033,
+          52.32318367037982,
+          50.903137269439185
+        ],
+        "half_shift": 25.422100739643547,
+        "ess": 2.8476221138290563,
+        "tau_int_ns": 2.6337764361141565,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5545715425161466,
+        "sd": 0.023868333593833068,
+        "p05": 1.5138938416463994,
+        "p95": 1.589673615326959,
+        "quarter_means": [
+          1.554021235324931,
+          1.550127504115182,
+          1.5567099827480255,
+          1.55756243018975
+        ],
+        "half_shift": 0.005249728471025783,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5597048149958845,
+        "sd": 0.03363289031153993,
+        "p05": 1.504235002087358,
+        "p95": 1.6057238421399664,
+        "quarter_means": [
+          1.5622042015443416,
+          1.5567331947748189,
+          1.5573794429555876,
+          1.5625151837810232
+        ],
+        "half_shift": 0.0007919895533690102,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.557723560330093,
+        "sd": 0.03195810784033923,
+        "p05": 1.5032194818151443,
+        "p95": 1.6081933943812672,
+        "quarter_means": [
+          1.5542182503807698,
+          1.5510496281265345,
+          1.5659501206202642,
+          1.5599513568455838
+        ],
+        "half_shift": 0.010192014038767239,
+        "ess": 133.41453357074292,
+        "tau_int_ns": 0.05621576466692579,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "395337bdb061",
+    "design": "2hb_1xT_CPD_trans-syn-II",
+    "created": "2026-10-20T14:34:50.133292-06:00",
+    "status": "completed",
+    "parent": "974191dc2e63",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd",
+        "bytes": 5671712276,
+        "mtime_ns": 1792588082767724561,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_trans-syn-II.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "0292494498cf8c82a03530b02eb07ef0b86f74cc970d72bfaa5509a6c23618d3",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.7038457963076523,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 5.822871388858107,
+        "sd": 0.6940697480875605,
+        "p05": 4.428016306930708,
+        "p95": 6.59371450376912,
+        "quarter_means": [
+          4.833949939041512,
+          6.034603322751059,
+          6.190953908584494,
+          6.25298350710735
+        ],
+        "half_shift": 0.7834313925874499,
+        "ess": 5.500923786511487,
+        "tau_int_ns": 1.3634073681862109,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 2.1681127762166272,
+        "sd": 0.3673529000320173,
+        "p05": 1.4634575008584005,
+        "p95": 2.5114099726538193,
+        "quarter_means": [
+          1.6181522545541878,
+          2.3079896980666974,
+          2.370474994722379,
+          2.386917498058713
+        ],
+        "half_shift": 0.42614217111283637,
+        "ess": 5.335602959394047,
+        "tau_int_ns": 1.405651822191116,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 26.951817964986745,
+        "sd": 0.2830858976863223,
+        "p05": 26.48830681600868,
+        "p95": 27.46233830110624,
+        "quarter_means": [
+          27.05275186059971,
+          27.025630013960296,
+          26.84347046017771,
+          26.88069666184207
+        ],
+        "half_shift": -0.189277154364067,
+        "ess": 25.241171943561547,
+        "tau_int_ns": 0.297133589483496,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9530158730158731,
+        "sd": 0.03263276342851797,
+        "p05": 0.9047619047619048,
+        "p95": 1.0,
+        "quarter_means": [
+          0.9542606516290726,
+          0.9542606516290726,
+          0.9510939510939511,
+          0.9523809523809524
+        ],
+        "half_shift": -0.003809523809523707,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 25.32562044634377,
+        "sd": 0.7535981337755345,
+        "p05": 24.286800986118656,
+        "p95": 26.79362102321166,
+        "quarter_means": [
+          26.03860734424749,
+          25.1083766028724,
+          25.0207256415216,
+          25.121373735803
+        ],
+        "half_shift": -0.5178911362916239,
+        "ess": 11.320809490492532,
+        "tau_int_ns": 0.6624967965991496,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 12.518300759817427,
+        "sd": 5.0270820479146066,
+        "p05": 4.421630113595683,
+        "p95": 20.83580137427067,
+        "quarter_means": [
+          17.271453146230407,
+          8.987086197625958,
+          13.952612543649796,
+          9.829025805162972
+        ],
+        "half_shift": -1.2116694174227405,
+        "ess": 9.421752344094823,
+        "tau_int_ns": 0.7960302657563751,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5362925654112998,
+        "sd": 0.02832069829360335,
+        "p05": 1.4918721662093142,
+        "p95": 1.5876583564421092,
+        "quarter_means": [
+          1.537651191725446,
+          1.5369383189921018,
+          1.5394075687749889,
+          1.53111900972307
+        ],
+        "half_shift": -0.002786407195971119,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.550182408016564,
+        "sd": 0.0352593281361502,
+        "p05": 1.4912021080668616,
+        "p95": 1.6060977624435506,
+        "quarter_means": [
+          1.5546328019986588,
+          1.5500395951439223,
+          1.5505121433260343,
+          1.5454286704865743
+        ],
+        "half_shift": -0.005113216282832234,
+        "ess": 109.81622736421296,
+        "tau_int_ns": 0.06829591766512152,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.539289608045974,
+        "sd": 0.03415010214104888,
+        "p05": 1.488297815635383,
+        "p95": 1.5995849717030854,
+        "quarter_means": [
+          1.5393014446525983,
+          1.5387575314857433,
+          1.5439799615632486,
+          1.5351335550215914
+        ],
+        "half_shift": -4.730553663634396e-05,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "ffef0085e16d",
+    "design": "2hb_1xT_CPD_trans-syn-I",
+    "created": "2026-10-20T16:56:17.407933-06:00",
+    "status": "completed",
+    "parent": "b2b43076da96",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd",
+        "bytes": 5671532276,
+        "mtime_ns": 1792597305277574679,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_trans-syn-I.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "0bf54f50cfdcea4bdecd7d4ec805a49bf394bf2765b02f447aeaac83df39dabe",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.7112968650333729,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 5.691577318914324,
+        "sd": 0.7485840623823992,
+        "p05": 4.455461112705649,
+        "p95": 6.790565905995421,
+        "quarter_means": [
+          6.22102008825063,
+          5.063357799693577,
+          5.367546933798288,
+          6.11705409580357
+        ],
+        "half_shift": 0.08436095774985564,
+        "ess": 6.879023257448217,
+        "tau_int_ns": 1.090271066352331,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 3.471695614689647,
+        "sd": 1.2522790298831115,
+        "p05": 1.296854988529415,
+        "p95": 4.518696542460296,
+        "quarter_means": [
+          1.4621971496922377,
+          3.7192401423346935,
+          4.330874775363609,
+          4.422090768053247
+        ],
+        "half_shift": 1.8059865165738702,
+        "ess": 3.033947794418718,
+        "tau_int_ns": 2.472026722462935,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.528040704889367,
+        "sd": 0.49250478109320545,
+        "p05": 26.52866294999273,
+        "p95": 28.21224470691261,
+        "quarter_means": [
+          26.926326073093573,
+          27.705248473244637,
+          27.683320640800588,
+          27.808740790890017
+        ],
+        "half_shift": 0.439964501033387,
+        "ess": 6.564276498258202,
+        "tau_int_ns": 1.142547853423091,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9287301587301589,
+        "sd": 0.03163223986493538,
+        "p05": 0.8809523809523809,
+        "p95": 0.9761904761904762,
+        "quarter_means": [
+          0.9517543859649122,
+          0.9273182957393482,
+          0.9202059202059203,
+          0.915057915057915
+        ],
+        "half_shift": -0.021269841269841328,
+        "ess": 20.442653111834026,
+        "tau_int_ns": 0.3668799730314304,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 23.853150272617686,
+        "sd": 1.0071816274104832,
+        "p05": 22.337624876811475,
+        "p95": 25.559329614703923,
+        "quarter_means": [
+          23.642910734875045,
+          24.681430773266413,
+          23.750595090489846,
+          23.320960682031185
+        ],
+        "half_shift": -0.6041340716022319,
+        "ess": 8.755795529968294,
+        "tau_int_ns": 0.8565755100939083,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 14.592602174998529,
+        "sd": 5.196289705266241,
+        "p05": 6.361753185002533,
+        "p95": 22.502034743612338,
+        "quarter_means": [
+          16.402511487544633,
+          9.404450829004366,
+          13.525568735885537,
+          19.12918148630142
+        ],
+        "half_shift": 3.2087206220927627,
+        "ess": 5.9648849454396355,
+        "tau_int_ns": 1.2573587069930943,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5357932852843454,
+        "sd": 0.02394459539020916,
+        "p05": 1.4962007441877498,
+        "p95": 1.5728096579524975,
+        "quarter_means": [
+          1.5316620641630052,
+          1.533839009176084,
+          1.5403900071784247,
+          1.537446533517965
+        ],
+        "half_shift": 0.007181191319614699,
+        "ess": 116.86119287804,
+        "tau_int_ns": 0.06417870498881342,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5513412320032538,
+        "sd": 0.03615664129902207,
+        "p05": 1.49413715385862,
+        "p95": 1.606393228913776,
+        "quarter_means": [
+          1.5444377629423085,
+          1.5472860281394816,
+          1.5591030478588077,
+          1.554834269421733
+        ],
+        "half_shift": 0.012284373138340854,
+        "ess": 94.43867151136502,
+        "tau_int_ns": 0.07941661929729689,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.5359134513823236,
+        "sd": 0.03133034373933075,
+        "p05": 1.482324118161219,
+        "p95": 1.5858694056048208,
+        "quarter_means": [
+          1.5246564350808924,
+          1.539191786961064,
+          1.5411776728259234,
+          1.5388435506809477
+        ],
+        "half_shift": 0.008724090137451013,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "35254aa13b01",
+    "design": "2hb_1xT_CPD_trans-syn-I",
+    "created": "2026-10-22T09:27:06.352989-06:00",
+    "status": "completed",
+    "parent": "b2b43076da96",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd",
+        "bytes": 5671532276,
+        "mtime_ns": 1792740683307739463,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_trans-syn-I.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "0bf54f50cfdcea4bdecd7d4ec805a49bf394bf2765b02f447aeaac83df39dabe",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.7150269970995111,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 5.8324298731619475,
+        "sd": 1.1695043778154568,
+        "p05": 4.227938879376761,
+        "p95": 7.565375846102203,
+        "quarter_means": [
+          4.711211009711116,
+          4.904391331154807,
+          6.912479083611206,
+          6.857023403453305
+        ],
+        "half_shift": 2.070447930610973,
+        "ess": 2.937325012377696,
+        "tau_int_ns": 2.553343600301649,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 1.9098989831821147,
+        "sd": 0.48830992453376415,
+        "p05": 1.132427064203192,
+        "p95": 2.8477994392059474,
+        "quarter_means": [
+          1.7975375793828208,
+          1.830870626363458,
+          1.7042554888137205,
+          2.3121049344013764
+        ],
+        "half_shift": 0.19791554060701144,
+        "ess": 8.456997994299403,
+        "tau_int_ns": 0.8868395176889091,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.038977754243327,
+        "sd": 0.39034260877967586,
+        "p05": 26.427829188536826,
+        "p95": 27.726145368116494,
+        "quarter_means": [
+          26.895077394259687,
+          27.30439201979376,
+          26.913033131567335,
+          27.040124311742627
+        ],
+        "half_shift": -0.09645701265958095,
+        "ess": 13.95941779779248,
+        "tau_int_ns": 0.5372716922009879,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9644444444444443,
+        "sd": 0.025243893438814564,
+        "p05": 0.9285714285714286,
+        "p95": 1.0,
+        "quarter_means": [
+          0.9680451127819547,
+          0.9586466165413533,
+          0.9691119691119688,
+          0.9620334620334616
+        ],
+        "half_shift": 0.0025396825396827305,
+        "ess": 126.74041469227745,
+        "tau_int_ns": 0.05917607292488639,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 26.204120924449246,
+        "sd": 1.0550232978875171,
+        "p05": 24.706907057827657,
+        "p95": 27.98097858947799,
+        "quarter_means": [
+          25.317944378987054,
+          26.79401481941045,
+          26.39971878720389,
+          26.312813351398326
+        ],
+        "half_shift": 0.33730035570459904,
+        "ess": 10.604572471861314,
+        "tau_int_ns": 0.7072420922447762,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 14.873891906594338,
+        "sd": 7.27206537719914,
+        "p05": 5.016450575194879,
+        "p95": 24.933086137892815,
+        "quarter_means": [
+          8.288692889820018,
+          8.399713874445982,
+          21.29890959449256,
+          21.861207404076172
+        ],
+        "half_shift": 13.206228314234156,
+        "ess": 3.051897123040901,
+        "tau_int_ns": 2.457487824782107,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.537587909466162,
+        "sd": 0.025436962213205162,
+        "p05": 1.4923672166922068,
+        "p95": 1.581211379197876,
+        "quarter_means": [
+          1.5392394876968345,
+          1.5377946398051006,
+          1.5362455993587294,
+          1.5370216864480475
+        ],
+        "half_shift": -0.002160206100089823,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5436391532419826,
+        "sd": 0.030606247004683926,
+        "p05": 1.4939851242364344,
+        "p95": 1.5931468408262368,
+        "quarter_means": [
+          1.5480773562248102,
+          1.5352868785049798,
+          1.5411070947832335,
+          1.5501910691779925
+        ],
+        "half_shift": 0.0035105773710517596,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.5425978945152956,
+        "sd": 0.03302309590917827,
+        "p05": 1.4900916331195526,
+        "p95": 1.6031497408045354,
+        "quarter_means": [
+          1.5396744325108904,
+          1.551841235208423,
+          1.53807901303585,
+          1.540626089773893
+        ],
+        "half_shift": -0.0063370587335052075,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "577c8d057768",
+    "design": "2hb_1xT_CPD_cis-anti-I",
+    "created": "2026-10-22T09:31:09.230496-06:00",
+    "status": "completed",
+    "parent": "935bbecba8cf",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd",
+        "bytes": 5671568276,
+        "mtime_ns": 1792741754684301721,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_cis-anti-I.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "a0750522a3a138881a014d505b1ff9f3fd33c3ef4a9dabb3945f91e145a3d2e5",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.7088050330312687,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 4.989189081344546,
+        "sd": 0.5110617187038228,
+        "p05": 4.233493819668728,
+        "p95": 6.016618203906522,
+        "quarter_means": [
+          5.174953445866334,
+          4.880099952201337,
+          4.650735767479291,
+          5.248894856172341
+        ],
+        "half_shift": -0.08595251287232308,
+        "ess": 16.42789737141879,
+        "tau_int_ns": 0.4565404721488602,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 3.0268899638335838,
+        "sd": 0.28543836144572293,
+        "p05": 2.541795690073368,
+        "p95": 3.4935053346305294,
+        "quarter_means": [
+          2.8077185009074914,
+          3.315513618922728,
+          3.0597744164796024,
+          2.9226762327498372
+        ],
+        "half_shift": -0.061909921799394585,
+        "ess": 11.02609362960331,
+        "tau_int_ns": 0.6802046376809503,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 26.708929053998368,
+        "sd": 0.4484627991859994,
+        "p05": 26.070024240372987,
+        "p95": 27.47503483748772,
+        "quarter_means": [
+          26.97389893766768,
+          26.745532299308017,
+          26.50638021039373,
+          26.601754143516516
+        ],
+        "half_shift": -0.3088133608465107,
+        "ess": 13.215133119653075,
+        "tau_int_ns": 0.5675311746354503,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9268253968253968,
+        "sd": 0.032882476496574414,
+        "p05": 0.8571428571428571,
+        "p95": 0.9761904761904762,
+        "quarter_means": [
+          0.9053884711779446,
+          0.9229323308270676,
+          0.9362934362934364,
+          0.9433719433719432
+        ],
+        "half_shift": 0.02571428571428569,
+        "ess": 14.508626240789253,
+        "tau_int_ns": 0.5169338501032722,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 23.618020989211704,
+        "sd": 0.9440893651583538,
+        "p05": 22.377157974705217,
+        "p95": 25.379335731495683,
+        "quarter_means": [
+          24.50969130009996,
+          23.736059175547723,
+          22.71272132419132,
+          23.486322738163903
+        ],
+        "half_shift": -1.0637563374966916,
+        "ess": 4.577907945863679,
+        "tau_int_ns": 1.6383029346706504,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 10.999724907548913,
+        "sd": 2.8394641400836615,
+        "p05": 7.141121715571147,
+        "p95": 15.995126371164055,
+        "quarter_means": [
+          11.455698378935278,
+          9.92557734950944,
+          11.365769954168627,
+          11.26856135532969
+        ],
+        "half_shift": 0.6286121934971156,
+        "ess": 22.203672545019046,
+        "tau_int_ns": 0.33778195959042057,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.55016042000585,
+        "sd": 0.024812905380762574,
+        "p05": 1.502569958171511,
+        "p95": 1.5885108060325217,
+        "quarter_means": [
+          1.5519324391927007,
+          1.5476697019081018,
+          1.5516405482115876,
+          1.5494184150058992
+        ],
+        "half_shift": -0.000731101511247223,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5609517545267897,
+        "sd": 0.03399637336244403,
+        "p05": 1.5071217775728591,
+        "p95": 1.6167585333140637,
+        "quarter_means": [
+          1.5594872135326647,
+          1.557624983334495,
+          1.5607020504864966,
+          1.5661222656774576
+        ],
+        "half_shift": 0.003019530888481725,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.560013935998252,
+        "sd": 0.031062513989587953,
+        "p05": 1.5085255776937594,
+        "p95": 1.6162880449520596,
+        "quarter_means": [
+          1.5667657791497411,
+          1.5546108242541745,
+          1.562982309909431,
+          1.5556603784794618
+        ],
+        "half_shift": -0.0021971857608877876,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "94d5148b6911",
+    "design": "2hb_1xT_CPD_trans-syn-II",
+    "created": "2026-10-22T09:32:53.208539-06:00",
+    "status": "completed",
+    "parent": "974191dc2e63",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd",
+        "bytes": 5671712276,
+        "mtime_ns": 1792746482443606669,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_trans-syn-II.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "0292494498cf8c82a03530b02eb07ef0b86f74cc970d72bfaa5509a6c23618d3",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.70384378620105,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 10.387362727724797,
+        "sd": 1.5735225431799407,
+        "p05": 7.699555893322712,
+        "p95": 12.496665715943212,
+        "quarter_means": [
+          8.831620537630684,
+          11.831419661340178,
+          9.637240692039935,
+          11.252188540333758
+        ],
+        "half_shift": 0.14178736699835248,
+        "ess": 6.554224649301535,
+        "tau_int_ns": 1.1443001153705965,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 1.7468862014883924,
+        "sd": 0.1274893389548661,
+        "p05": 1.5277456236751046,
+        "p95": 1.932032172161741,
+        "quarter_means": [
+          1.6821518480167363,
+          1.7615272795357335,
+          1.768615246596513,
+          1.7766043041133508
+        ],
+        "half_shift": 0.04978924297487741,
+        "ess": 20.75326363526343,
+        "tau_int_ns": 0.3613889436462774,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.46403458155683,
+        "sd": 0.4001984937628843,
+        "p05": 26.78115135912957,
+        "p95": 28.1025774819556,
+        "quarter_means": [
+          27.654215555115677,
+          27.135075630931894,
+          27.542949495925438,
+          27.52764840039125
+        ],
+        "half_shift": 0.13847971432587514,
+        "ess": 14.29772028577148,
+        "tau_int_ns": 0.5245591515609838,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9226984126984125,
+        "sd": 0.03477640007682053,
+        "p05": 0.8571428571428571,
+        "p95": 0.9761904761904762,
+        "quarter_means": [
+          0.9404761904761904,
+          0.920426065162907,
+          0.931145431145431,
+          0.8983268983268984
+        ],
+        "half_shift": -0.01492063492063489,
+        "ess": 20.818144021853065,
+        "tau_int_ns": 0.3602626638804934,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 22.507939948787655,
+        "sd": 1.6811066853224792,
+        "p05": 19.485581088584453,
+        "p95": 24.925884602381295,
+        "quarter_means": [
+          21.938160042238618,
+          20.743365494988772,
+          23.79314310676497,
+          23.620181809546047
+        ],
+        "half_shift": 2.338723934232558,
+        "ess": 4.847980844906493,
+        "tau_int_ns": 1.5470358201271341,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 40.92768339619014,
+        "sd": 8.25771700838674,
+        "p05": 26.72133207229318,
+        "p95": 52.72985856163217,
+        "quarter_means": [
+          32.99049405261415,
+          48.070036766523636,
+          36.95418428600355,
+          45.71750053295007
+        ],
+        "half_shift": 0.97857139210344,
+        "ess": 6.919904631986672,
+        "tau_int_ns": 1.083829968940965,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.538699967571239,
+        "sd": 0.024905595969008112,
+        "p05": 1.502755313577574,
+        "p95": 1.5788764265770188,
+        "quarter_means": [
+          1.5399983032042526,
+          1.5413029343104032,
+          1.5311616370455632,
+          1.5422315551200843
+        ],
+        "half_shift": -0.003338532421786944,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5534765239187487,
+        "sd": 0.03219564164686639,
+        "p05": 1.504846381624954,
+        "p95": 1.6091796396990974,
+        "quarter_means": [
+          1.552503466305149,
+          1.558054671573875,
+          1.546916973088215,
+          1.5563335498417692
+        ],
+        "half_shift": -0.002669660804146101,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.5409523281977966,
+        "sd": 0.029888977424807065,
+        "p05": 1.496877422636565,
+        "p95": 1.5944571062318316,
+        "quarter_means": [
+          1.5445120095126175,
+          1.5437448688207658,
+          1.530571928534064,
+          1.5448088242497449
+        ],
+        "half_shift": -0.00611880794791686,
+        "ess": 143.50921652221876,
+        "tau_int_ns": 0.05226145194095857,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "770c4764d1a3",
+    "design": "2hb_1xT_CPD_cis-syn-I",
+    "created": "2026-10-22T09:34:51.151661-06:00",
+    "status": "completed",
+    "parent": "6d6c46163a00",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd",
+        "bytes": 5671568276,
+        "mtime_ns": 1792770768910696704,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT_CPD_cis-syn-I.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "edb4b4208182a173c07b0f2dbb6c786f17f53c6014cfcc94f2844cb996452986",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.7013916123214252,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 4.817270341315347,
+        "sd": 0.7857585256750845,
+        "p05": 3.6237722156965693,
+        "p95": 6.199794988004644,
+        "quarter_means": [
+          4.179520145960744,
+          5.7654004673666925,
+          4.500809180991849,
+          4.814962924166519
+        ],
+        "half_shift": -0.3100342713556339,
+        "ess": 7.963125355701676,
+        "tau_int_ns": 0.9418412604782719,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 1.6322440850315785,
+        "sd": 0.15649010693326337,
+        "p05": 1.4213096738334365,
+        "p95": 1.8895497070560032,
+        "quarter_means": [
+          1.6137946046602973,
+          1.6722868380825766,
+          1.5837133508225745,
+          1.6585979445965484
+        ],
+        "half_shift": -0.02213571102129963,
+        "ess": 62.40109850547085,
+        "tau_int_ns": 0.12019019219193731,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.408705521841863,
+        "sd": 0.37552488897603636,
+        "p05": 26.867551809362297,
+        "p95": 28.004063142590326,
+        "quarter_means": [
+          27.65550444313704,
+          27.664186593653707,
+          27.189599724963056,
+          27.111956190664802
+        ],
+        "half_shift": -0.509872869014341,
+        "ess": 5.408909447153885,
+        "tau_int_ns": 1.3866011431023273,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9442857142857143,
+        "sd": 0.03203065653229871,
+        "p05": 0.8916666666666666,
+        "p95": 0.9761904761904762,
+        "quarter_means": [
+          0.9667919799498745,
+          0.9216791979949873,
+          0.942084942084942,
+          0.9465894465894464
+        ],
+        "half_shift": 0.0003174603174602719,
+        "ess": 19.138483065662477,
+        "tau_int_ns": 0.3918805893146653,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 27.906970061317782,
+        "sd": 1.0163243488115252,
+        "p05": 26.48815578255544,
+        "p95": 29.66672589701129,
+        "quarter_means": [
+          28.265512693410273,
+          27.909320958168134,
+          27.68231423280212,
+          27.760978481729975
+        ],
+        "half_shift": -0.3266989334732777,
+        "ess": 15.781652013001292,
+        "tau_int_ns": 0.47523541997896535,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 8.691334927342378,
+        "sd": 3.066779882098402,
+        "p05": 4.054446303284072,
+        "p95": 13.379411050848935,
+        "quarter_means": [
+          8.851491754533399,
+          9.505373686541414,
+          8.787273582492748,
+          7.594871075358981
+        ],
+        "half_shift": -0.8911316695560192,
+        "ess": 22.00270468640283,
+        "tau_int_ns": 0.34086718561447504,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5584111039024242,
+        "sd": 0.026097501767456985,
+        "p05": 1.5178286011981275,
+        "p95": 1.602652815503253,
+        "quarter_means": [
+          1.553760453442907,
+          1.5598608225937267,
+          1.5636856139909259,
+          1.556424037251548
+        ],
+        "half_shift": 0.004192156968158445,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.5688685553485626,
+        "sd": 0.03460588475352798,
+        "p05": 1.5113529040500397,
+        "p95": 1.6215996152123564,
+        "quarter_means": [
+          1.5615766437600893,
+          1.5717615346397513,
+          1.572679624517253,
+          1.5695753085392448
+        ],
+        "half_shift": 0.005924383539321232,
+        "ess": 150.0,
+        "tau_int_ns": 0.050000000149070356,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.5545177212140064,
+        "sd": 0.03111072327905149,
+        "p05": 1.505171650089574,
+        "p95": 1.60155784598875,
+        "quarter_means": [
+          1.5525389556932871,
+          1.557726053977187,
+          1.5601216554850985,
+          1.5476509881533609
+        ],
+        "half_shift": -0.0009373407764621255,
+        "ess": 135.543837347637,
+        "tau_int_ns": 0.0553326522925928,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "be74a1436d66",
+    "design": "2hb_1xT",
+    "created": "2026-10-25T19:59:48.010237-06:00",
+    "status": "completed",
+    "parent": "e00227c3d4e0",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/nadoc_jobs/be74a1436d66/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_20ns_k0.dcd",
+        "bytes": 5671640276,
+        "mtime_ns": 1793036234557046111,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": null,
+    "psf_sha256": "e0c47614decf7d37c1dbe9754e2393220d6bfe154d84de9eb1324d95f95adb64",
+    "wc_plan": "/media/jojo/Archive/nadoc_jobs/be74a1436d66/package/2hb_1xT_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.697946524455426,
+    "chirality_failures": null,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 5.61173779058152,
+        "sd": 0.6287483816318015,
+        "p05": 4.514785673803985,
+        "p95": 6.726528497144043,
+        "quarter_means": [
+          4.938900574936622,
+          5.663801615132205,
+          6.298475022388769,
+          5.562551609087247
+        ],
+        "half_shift": 0.6510170097366581,
+        "ess": 5.953774613023655,
+        "tau_int_ns": 1.2597050627268604,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 1.8072039273500824,
+        "sd": 0.3412612795045425,
+        "p05": 1.310359910490733,
+        "p95": 2.3209861329611203,
+        "quarter_means": [
+          2.042111710543386,
+          1.9442873263224631,
+          1.8169488786662704,
+          1.4154139781340025
+        ],
+        "half_shift": -0.3646234964046564,
+        "ess": 5.456893453440805,
+        "tau_int_ns": 1.3744083673892298,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.06467719605392,
+        "sd": 0.3972730584365167,
+        "p05": 26.499926954105135,
+        "p95": 27.75610718780803,
+        "quarter_means": [
+          26.957059683189485,
+          27.33814976776675,
+          27.140026464413555,
+          26.818990299687826
+        ],
+        "half_shift": -0.15978329166474836,
+        "ess": 11.864236456750419,
+        "tau_int_ns": 0.6321519340667948,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9423809523809524,
+        "sd": 0.029228359106544404,
+        "p05": 0.8809523809523809,
+        "p95": 0.9761904761904762,
+        "quarter_means": [
+          0.93796992481203,
+          0.9536340852130325,
+          0.9446589446589446,
+          0.9330759330759327
+        ],
+        "half_shift": -0.00793650793650802,
+        "ess": 56.84126827790404,
+        "tau_int_ns": 0.1319463877141537,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 25.988506919904516,
+        "sd": 0.8815652863544541,
+        "p05": 24.754423123461617,
+        "p95": 27.550952935717234,
+        "quarter_means": [
+          25.731458384977163,
+          26.776545100260833,
+          26.223303403292547,
+          25.20836971958945
+        ],
+        "half_shift": -0.5344945705530968,
+        "ess": 8.965681208750944,
+        "tau_int_ns": 0.8365231651377685,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 7.578752678555273,
+        "sd": 3.3370620471623327,
+        "p05": 2.4625097243033687,
+        "p95": 14.193218705395381,
+        "quarter_means": [
+          5.039873307047211,
+          7.608821433857339,
+          10.599027243404915,
+          7.135094422241512
+        ],
+        "half_shift": 2.6398385382407348,
+        "ess": 9.449918890077777,
+        "tau_int_ns": 0.7936576080282977,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 10.590524821469138,
+        "sd": 0.8786419415937223,
+        "p05": 9.342218150161886,
+        "p95": 12.094789915535742,
+        "quarter_means": [
+          10.024704893155507,
+          10.414658189544474,
+          11.02597863683475,
+          10.916803149050969
+        ],
+        "half_shift": 0.7636204321602094,
+        "ess": 11.581454511466138,
+        "tau_int_ns": 0.6475870552299999,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "design": "2hb_1xT",
+    "created": "2026-10-25T20:05:12.675241-06:00",
+    "status": "completed",
+    "parent": "e00227c3d4e0",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/nadoc_jobs/be5dc708adb2/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_20ns_k0.dcd",
+        "bytes": 5671640276,
+        "mtime_ns": 1793037055514904623,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": null,
+    "psf_sha256": "e0c47614decf7d37c1dbe9754e2393220d6bfe154d84de9eb1324d95f95adb64",
+    "wc_plan": "/media/jojo/Archive/nadoc_jobs/be5dc708adb2/package/2hb_1xT_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.701473361207617,
+    "chirality_failures": null,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 5.065192601144813,
+        "sd": 0.6837337467473776,
+        "p05": 4.183455973823591,
+        "p95": 6.494929925271672,
+        "quarter_means": [
+          4.794322479077906,
+          4.62628695273251,
+          5.140027450058514,
+          5.719316651642188
+        ],
+        "half_shift": 0.7324724466359038,
+        "ess": 8.666822294415981,
+        "tau_int_ns": 0.8653690784906009,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 2.490632529157584,
+        "sd": 0.20711747945417572,
+        "p05": 2.128233936979013,
+        "p95": 2.794018197486078,
+        "quarter_means": [
+          2.566090271083161,
+          2.6140343784090647,
+          2.5102329685893086,
+          2.2667979150034774
+        ],
+        "half_shift": -0.20020917287573026,
+        "ess": 6.501442956022445,
+        "tau_int_ns": 1.1535900680960556,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.180709906416983,
+        "sd": 0.4983534511346788,
+        "p05": 26.275245239205177,
+        "p95": 28.01684956184315,
+        "quarter_means": [
+          26.530658966991265,
+          27.59110440025898,
+          27.332256985060614,
+          27.275296474589062
+        ],
+        "half_shift": 0.2517615753904323,
+        "ess": 5.359428256043385,
+        "tau_int_ns": 1.3994030079427637,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9336507936507936,
+        "sd": 0.03212040889196483,
+        "p05": 0.8809523809523809,
+        "p95": 0.9761904761904762,
+        "quarter_means": [
+          0.9373433583959898,
+          0.9335839598997493,
+          0.938867438867439,
+          0.9247104247104245
+        ],
+        "half_shift": -0.0031746031746034964,
+        "ess": 81.14006686496276,
+        "tau_int_ns": 0.09243275624658305,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 25.54351972939417,
+        "sd": 1.1692360867551745,
+        "p05": 23.947550647332438,
+        "p95": 27.369596467813928,
+        "quarter_means": [
+          24.433206532484434,
+          25.92368499700725,
+          26.55291816553106,
+          25.284002950372756
+        ],
+        "half_shift": 0.7513738191291388,
+        "ess": 6.028765803973754,
+        "tau_int_ns": 1.2440357224387555,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 7.827498241673888,
+        "sd": 4.298720777723429,
+        "p05": 2.6001631289117046,
+        "p95": 17.392162827905292,
+        "quarter_means": [
+          6.373940405981665,
+          6.777753630800079,
+          5.7826027159345355,
+          12.44335303685944
+        ],
+        "half_shift": 2.608059918120812,
+        "ess": 9.351725882138602,
+        "tau_int_ns": 0.8019910032526973,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 7.921629672366459,
+        "sd": 0.967847515479636,
+        "p05": 6.945073883365286,
+        "p95": 10.015521325434769,
+        "quarter_means": [
+          7.386771082273491,
+          7.748025087414203,
+          7.584109217886382,
+          8.986760955271363
+        ],
+        "half_shift": 0.703722790449584,
+        "ess": 9.40357978174486,
+        "tau_int_ns": 0.7975686064705145,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "a9261569b8c7",
+    "design": "2hb_1xT",
+    "created": "2026-10-25T20:11:07.677257-06:00",
+    "status": "completed",
+    "parent": "e00227c3d4e0",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/nadoc_jobs/a9261569b8c7/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_20ns_k0.dcd",
+        "bytes": 5671640276,
+        "mtime_ns": 1793067091784665129,
+        "frames": 1000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 20.000000059628114
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": null,
+    "psf_sha256": "e0c47614decf7d37c1dbe9754e2393220d6bfe154d84de9eb1324d95f95adb64",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 200,
+    "sample_dt_ns": 0.10000000029814071,
+    "max_sample_gap_ns": 0.10000000029814515,
+    "max_dna_bond_A": 1.7341421182471841,
+    "chirality_failures": null,
+    "first_last_ns": [
+      0.020000000059628115,
+      19.9200000593896
+    ],
+    "late_window_start_ns": 5.020000014966657,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 5.161748247126803,
+        "sd": 0.5897360037718068,
+        "p05": 4.323438603883132,
+        "p95": 6.207037105872545,
+        "quarter_means": [
+          4.7907776111387905,
+          5.381276897599866,
+          4.825225747544433,
+          5.6538057588596615
+        ],
+        "half_shift": 0.16081185453357527,
+        "ess": 9.933390820896577,
+        "tau_int_ns": 0.7550291896884825,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 3.272286919143031,
+        "sd": 0.34154646167982455,
+        "p05": 2.6748445637553915,
+        "p95": 3.766363603027503,
+        "quarter_means": [
+          3.226494428040125,
+          3.0312697004973432,
+          3.2981531764467245,
+          3.5409819853649167
+        ],
+        "half_shift": 0.2881051008978117,
+        "ess": 10.15629121895883,
+        "tau_int_ns": 0.7384585436424119,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.26238241632674,
+        "sd": 0.5822585862513269,
+        "p05": 26.26314555837752,
+        "p95": 28.079786373059278,
+        "quarter_means": [
+          26.498148712290956,
+          27.24857373590647,
+          27.82372674288066,
+          27.500108646781733
+        ],
+        "half_shift": 0.7937640609650067,
+        "ess": 3.5282844373082214,
+        "tau_int_ns": 2.1256789682416906,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9709523809523809,
+        "sd": 0.018270750642118277,
+        "p05": 0.9392857142857143,
+        "p95": 1.0,
+        "quarter_means": [
+          0.9818295739348367,
+          0.9649122807017542,
+          0.9665379665379663,
+          0.97039897039897
+        ],
+        "half_shift": -0.005396825396825289,
+        "ess": 21.48807444209297,
+        "tau_int_ns": 0.34903080974388334,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 26.56463022261046,
+        "sd": 1.5153033969510568,
+        "p05": 24.060735539505856,
+        "p95": 28.69047594160395,
+        "quarter_means": [
+          24.82048435748274,
+          26.08338451103591,
+          27.583599708136727,
+          27.831198032075697
+        ],
+        "half_shift": 2.26865723573669,
+        "ess": 3.351024996347422,
+        "tau_int_ns": 2.238121180992522,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 8.71164356217959,
+        "sd": 5.453975830083116,
+        "p05": 2.3733202837924914,
+        "p95": 20.7056314928612,
+        "quarter_means": [
+          15.80806088968273,
+          6.974801942717164,
+          6.602948040371679,
+          5.315909978432177
+        ],
+        "half_shift": -5.537625055901602,
+        "ess": 6.208244774386953,
+        "tau_int_ns": 1.2080709274387715,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 12.021143250314378,
+        "sd": 0.9601870224820431,
+        "p05": 10.235034208401732,
+        "p95": 13.548247554559298,
+        "quarter_means": [
+          12.207805965816965,
+          11.349846808256203,
+          12.441902577868172,
+          12.098115858142
+        ],
+        "half_shift": 0.49115868083703873,
+        "ess": 14.846335412002826,
+        "tau_int_ns": 0.5051751704529741,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "949886d10003",
+    "design": "2hb_1xT_CPD_cis-anti-I",
+    "created": "2026-11-04T07:57:08.386522-07:00",
+    "status": "completed",
+    "parent": "935bbecba8cf",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_100ns_k0.dcd",
+        "bytes": 6692450516,
+        "mtime_ns": 1793916682799553972,
+        "frames": 1180,
+        "dt_ns": 0.04000000011925623,
+        "istart": 10000,
+        "stride": 2,
+        "first_ns": 0.04000000011925623,
+        "last_ns": 47.200000140722345
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_100ns_k0.cont1.dcd",
+        "bytes": 7486470036,
+        "mtime_ns": 1794106160227472080,
+        "frames": 1320,
+        "dt_ns": 0.04000000011925623,
+        "istart": 11810000,
+        "stride": 2,
+        "first_ns": 47.24000014084161,
+        "last_ns": 100.00000029814058
+      }
+    ],
+    "config": {
+      "timestep": "4",
+      "structure": "2hb_1xT_CPD_cis-anti-I_hmr.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "01949d4cdf2a1c6b59fcf7e425736565a69d6e0ff431e32221e538935af8728e",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 1250,
+    "sample_dt_ns": 0.08000000023851328,
+    "max_sample_gap_ns": 0.08000000023852749,
+    "max_dna_bond_A": 1.7238115260739508,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.04000000011925623,
+      99.96000029802131
+    ],
+    "late_window_start_ns": 25.080000074773658,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 9.670351842902544,
+        "sd": 1.4145830322918083,
+        "p05": 7.339226250769233,
+        "p95": 11.71947348838341,
+        "quarter_means": [
+          7.917017673002537,
+          10.643277786319956,
+          10.303864601085062,
+          9.82474019227057
+        ],
+        "half_shift": 0.79037364254207,
+        "ess": 6.50779525950876,
+        "tau_int_ns": 5.7592469672398146,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 4.036249609057677,
+        "sd": 0.5670941905420892,
+        "p05": 3.1428571404033954,
+        "p95": 4.994698128127188,
+        "quarter_means": [
+          3.9218398744147414,
+          3.814109376554764,
+          3.7702347063494934,
+          4.639303409401635
+        ],
+        "half_shift": 0.3339699993185854,
+        "ess": 10.466501730172828,
+        "tau_int_ns": 3.580948159946904,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 28.226748117076756,
+        "sd": 0.6228711570392909,
+        "p05": 27.121182980678086,
+        "p95": 29.215915922540628,
+        "quarter_means": [
+          28.648851650227957,
+          27.850685961743086,
+          27.80811398061607,
+          28.59753701446713
+        ],
+        "half_shift": -0.050383392472340915,
+        "ess": 8.970577679995005,
+        "tau_int_ns": 4.178103289303921,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.8719571072826143,
+        "sd": 0.036271750462380806,
+        "p05": 0.8095238095238095,
+        "p95": 0.9285714285714286,
+        "quarter_means": [
+          0.889260385005066,
+          0.8861416361416363,
+          0.8650793650793651,
+          0.8472730972730974
+        ],
+        "half_shift": -0.031489703931068536,
+        "ess": 12.301304918078731,
+        "tau_int_ns": 3.046831239559035,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 25.070182321090957,
+        "sd": 1.8093857298202245,
+        "p05": 22.056608103157952,
+        "p95": 28.106953333537437,
+        "quarter_means": [
+          26.6773750556411,
+          24.16788869741375,
+          24.47426570743711,
+          24.95433147885242
+        ],
+        "half_shift": -0.7155225005214518,
+        "ess": 9.377401420020513,
+        "tau_int_ns": 3.9968428814111148,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 31.30972858901802,
+        "sd": 10.466317208855994,
+        "p05": 9.618320355192946,
+        "p95": 44.11024082519251,
+        "quarter_means": [
+          18.403397057029093,
+          38.73010224605535,
+          37.228247733598444,
+          30.932322582346412
+        ],
+        "half_shift": 5.561017769424133,
+        "ess": 6.101004718613884,
+        "tau_int_ns": 6.143250471089413,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5440498503531708,
+        "sd": 0.02655844307769807,
+        "p05": 1.5018922479798178,
+        "p95": 1.5876276160987661,
+        "quarter_means": [
+          1.5448391321643444,
+          1.5441173822313663,
+          1.5408355832408733,
+          1.5464039307769064
+        ],
+        "half_shift": -0.0006969988484817335,
+        "ess": 826.0059084705041,
+        "tau_int_ns": 0.045374978226420094,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.547432178435688,
+        "sd": 0.03627700302465973,
+        "p05": 1.4887086155710358,
+        "p95": 1.6053438315908304,
+        "quarter_means": [
+          1.547842379491591,
+          1.54657888541663,
+          1.5447878647074205,
+          1.5505178311311445
+        ],
+        "half_shift": 0.0005969138315708999,
+        "ess": 879.9893266197065,
+        "tau_int_ns": 0.04259142580253216,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.5579569197604948,
+        "sd": 0.03462920718950034,
+        "p05": 1.4999780746856808,
+        "p95": 1.615535827930058,
+        "quarter_means": [
+          1.5583512055653588,
+          1.5601470539289979,
+          1.5523682259010707,
+          1.5609595086644794
+        ],
+        "half_shift": -0.002313462875844552,
+        "ess": 826.6868764215021,
+        "tau_int_ns": 0.04533760143137143,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  },
+  {
+    "job_id": "6613064f8c3f",
+    "design": "2hb_1xT_CPD_cis-syn-I",
+    "created": "2026-11-07T21:10:23.212723-07:00",
+    "status": "stopped",
+    "parent": "edb512c46112",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_80ns_k0.dcd",
+        "bytes": 8025268996,
+        "mtime_ns": 1794247943486963806,
+        "frames": 1415,
+        "dt_ns": 0.04000000011925623,
+        "istart": 10000,
+        "stride": 2,
+        "first_ns": 0.04000000011925623,
+        "last_ns": 56.60000016874756
+      }
+    ],
+    "config": {
+      "timestep": "4",
+      "structure": "2hb_1xT_CPD_cis-syn-I_hmr.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": 2.0,
+    "psf_sha256": "931523c38b9bcfeae16b28f7e84ae8260cdc18ef48992ecb0eab75faaa53edb3",
+    "wc_plan": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 708,
+    "sample_dt_ns": 0.08000000023851328,
+    "max_sample_gap_ns": 0.08000000023851683,
+    "max_dna_bond_A": 1.7285765861750164,
+    "chirality_failures": 0,
+    "first_last_ns": [
+      0.04000000011925623,
+      56.60000016874756
+    ],
+    "late_window_start_ns": 14.200000042335962,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 7.65158518987182,
+        "sd": 0.5947213676404088,
+        "p05": 6.659101748862179,
+        "p95": 8.561100858780133,
+        "quarter_means": [
+          7.714812296626908,
+          7.6191167041463785,
+          7.4756289982838195,
+          7.797882742025315
+        ],
+        "half_shift": -0.03660721182135873,
+        "ess": 38.277101632897924,
+        "tau_int_ns": 0.5549009501040744,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 2.8517379749075573,
+        "sd": 0.23139515927742407,
+        "p05": 2.4412674220828015,
+        "p95": 3.17669299874446,
+        "quarter_means": [
+          2.772072260166611,
+          2.95991427440446,
+          2.980496005809956,
+          2.693277930342698
+        ],
+        "half_shift": -0.0267906136944025,
+        "ess": 8.911432568941688,
+        "tau_int_ns": 2.3834551739022714,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.68150304568728,
+        "sd": 0.4223960771334295,
+        "p05": 26.944916444239148,
+        "p95": 28.33369380798294,
+        "quarter_means": [
+          27.89276437750587,
+          27.421300263558894,
+          27.425483421277548,
+          27.98877443157892
+        ],
+        "half_shift": 0.04560638923106808,
+        "ess": 8.238196189103782,
+        "tau_int_ns": 2.578234309522548,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.8892924401398979,
+        "sd": 0.031823854743634285,
+        "p05": 0.8333333333333334,
+        "p95": 0.9285714285714286,
+        "quarter_means": [
+          0.8786251342642318,
+          0.8938417472252058,
+          0.8959899749373434,
+          0.8887085137085137
+        ],
+        "half_shift": 0.006246073404535535,
+        "ess": 108.898734763326,
+        "tau_int_ns": 0.1950435889772918,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 26.399081093423664,
+        "sd": 1.7488400318303976,
+        "p05": 24.022962041286895,
+        "p95": 29.503965072458733,
+        "quarter_means": [
+          26.92960761059259,
+          25.592031420932543,
+          25.02807368347171,
+          28.059092950858982
+        ],
+        "half_shift": 0.26796410045007235,
+        "ess": 6.859444876821345,
+        "tau_int_ns": 3.096460492757521,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 21.392135121182857,
+        "sd": 6.700945686863542,
+        "p05": 10.490911036282874,
+        "p95": 33.172157581203976,
+        "quarter_means": [
+          25.437616903129115,
+          19.83744081797204,
+          15.630943420651676,
+          24.687315132537655
+        ],
+        "half_shift": -2.5016507953554594,
+        "ess": 11.475916135975828,
+        "tau_int_ns": 1.8508326317181807,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 1.5318100332172528,
+        "sd": 0.026506370041645706,
+        "p05": 1.4888909161507664,
+        "p95": 1.5743343727328656,
+        "quarter_means": [
+          1.5300091090955217,
+          1.5332165796460455,
+          1.531757302015887,
+          1.5322605293001506
+        ],
+        "half_shift": 0.00015652782349206973,
+        "ess": 531.0,
+        "tau_int_ns": 0.04000000011925664,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink1_A": {
+        "mean": 1.558823422996887,
+        "sd": 0.033699001210739425,
+        "p05": 1.5042395523448868,
+        "p95": 1.6138569350967196,
+        "quarter_means": [
+          1.5581264595237336,
+          1.5531106370801582,
+          1.5589784225518386,
+          1.5651255573002634
+        ],
+        "half_shift": 0.006093323516584537,
+        "ess": 440.82611108813035,
+        "tau_int_ns": 0.04818226400177769,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "crosslink2_A": {
+        "mean": 1.560427949196412,
+        "sd": 0.03292553899459777,
+        "p05": 1.5045135359285522,
+        "p95": 1.6107773968386137,
+        "quarter_means": [
+          1.5621383104121802,
+          1.5600037105790465,
+          1.5562277149083465,
+          1.563364137489784
+        ],
+        "half_shift": -0.0014575454072995875,
+        "ess": 531.0,
+        "tau_int_ns": 0.04000000011925664,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  }
+]

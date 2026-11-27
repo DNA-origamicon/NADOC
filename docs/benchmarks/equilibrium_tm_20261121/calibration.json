@@ -1,0 +1,30 @@
+{
+  "results": [
+    {
+      "persistence": 0.0,
+      "trials": 200,
+      "available_intervals": 200,
+      "intervals_covering_true_tm": 197,
+      "target_accepted": 189,
+      "median_halfwidth": 0.3862737962206495
+    },
+    {
+      "persistence": 0.95,
+      "trials": 200,
+      "available_intervals": 28,
+      "intervals_covering_true_tm": 27,
+      "target_accepted": 0,
+      "median_halfwidth": 1.801744477099568
+    },
+    {
+      "persistence": 0.999,
+      "trials": 200,
+      "available_intervals": 0,
+      "intervals_covering_true_tm": 0,
+      "target_accepted": 0,
+      "median_halfwidth": null
+    }
+  ],
+  "elapsed_seconds": 21.306269349996,
+  "qualification": "Synthetic two-state coverage stress test, 200 trials per condition. Too small to validate 95% coverage; cannot represent hidden molecular states."
+}

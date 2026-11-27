@@ -1,0 +1,14 @@
+{
+  "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121",
+  "retained": "/home/jojo/Work/NADOC/docs/benchmarks/equilibrium_tm_20261121",
+  "raw_files": 9158,
+  "raw_logical_bytes": 550640103,
+  "copied_files_verified": 93,
+  "statistical_replays_verified": 7,
+  "active_references": [],
+  "pruned": true,
+  "qualification": "Original raw paths in manifests are historical after pruning. Existing source exports, managed jobs, prior experiments and installed engines are outside ownership boundary.",
+  "retained_files": 131,
+  "retained_logical_bytes": 15872804,
+  "retention_seconds": 3.1421545029152185
+}

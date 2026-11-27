@@ -324,7 +324,7 @@ export function initMdSubmitReview({
       ...s.notes,
     ].join('\n')
     const clearance = mountImageClearanceReview(box.querySelector('#mr-image-clearance'), rec.image_clearance, box.querySelector('#mr-go'))
-    if (clearance.canSubmit()) {
+    if (clearance.canSubmit() && rec.image_clearance?.status !== 'verify_on_resume') {
       const passed = box.querySelector('#mr-image-clearance')
       box.querySelector('#mr-details-help').title += `\n${passed.textContent}`
       passed.hidden = true

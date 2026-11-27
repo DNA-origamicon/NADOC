@@ -277,5 +277,7 @@ if __name__ == '__main__':
     from backend.core.cluster_ssh import ClusterConnection
     from backend.core import alpine_operations
     os.umask(0o077)
-    alpine_operations.configure(Path(os.environ.get('NADOC_WORKSPACE', str(ROOT / 'workspace'))))
+    from backend.core.workspace_location import default_workspace
+
+    alpine_operations.configure(default_workspace())
     asyncio.run(Worker(Path(sys.argv[1]), ClusterConnection()).serve())

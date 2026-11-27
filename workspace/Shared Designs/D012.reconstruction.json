@@ -1,0 +1,1686 @@
+{
+  "status": "complete",
+  "omissions": [],
+  "insertion_representation": {
+    "duplex_insertions": [],
+    "scaffold_loops": [
+      {
+        "source_helix": 19,
+        "source_bp": 22,
+        "helix": 19,
+        "bp_index": 22,
+        "direction": "REVERSE",
+        "length": 71,
+        "basis": "Multi-base insertion supported by source annotation and sequence; no staple occupies its anchor"
+      }
+    ],
+    "method": "strand-loop-set for multi-base scaffold-only insertions; legacy loop-skip for paired or single-base insertions",
+    "limitation": "Strand-owned loops support native NADOC persistence and display; simulation and cadnano/scadnano export are not yet supported."
+  },
+  "base_conflicts": [],
+  "scaffold_sequence_assigned": "TAGTTATTAATAGTAATCAATTACGGGGTCATTAGTTCATAGCCCATATATGGAGTTCCGCGTTACATAACTTACGGTAAATGGCCCGCCTGGCTGACCGCCCAACGACCCCCGCCCATTGACGTCAATAATGACGTATGTTCCCATAGTAACGCCAATAGGGACTTTCCATTGACGTCAATGGGTGGAGTATTTACGGTAAACTGCCCACTTGGCAGTACATCAAGTGTATCATATGCCAAGTACGCCCCCTATTGACGTCAATGACGGTAAATGGCCCGCCTGGCATTATGCCCAGTACATGACCTTATGGGACTTTCCTACTTGGCAGTACATCTACGTATTAGTCATCGCTATTACCATGGTGATGCGGTTTTGGCAGTACATCAATGGGCGTGGATAGCGGTTTGACTCACGGGGATTTCCAAGTCTCCACCCCATTGACGTCAATGGGAGTTTGTTTTGGCACCAAAATCAACGGGACTTTCCAAAATGTCGTAACAACTCCGCCCCATTGACGCAAATGGGCGGTAGGCGTGTACGGTGGGAGGTCTATATAAGCAGAGCTGGTTTAGTGAACCGTCAGATCCGCTAGCGCTACCGGACTCAGATCTCGAGCTCAAGCTTCGAATTCTGCAGTCGACGGTACCGCGGGCCCGGGATCCACCGGTCGCCACCATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAAGCTGCCCGTGCCCTGGCCCACCCTCGTGACCACCCTGACCTACGGCGTGCAGTGCTTCAGCCGCTACCCCGACCACATGAAGCAGCACGACTTCTTCAAGTCCGCCATGCCCGAAGGCTACGTCCAGGAGCGCACCATCTTCTTCAAGGACGACGGCAACTACAAGACCCGCGCCGAGGTGAAGTTCGAGGGCGACACCCTGGTGAACCGCATCGAGCTGAAGGGCATCGACTTCAAGGAGGACGGCAACATCCTGGGGCACAAGCTGGAGTACAACTACAACAGCCACAACGTCTATATCATGGCCGACAAGCAGAAGAACGGCATCAAGGTGAACTTCAAGATCCGCCACAACATCGAGGACGGCAGCGTGCAGCTCGCCGACCACTACCAGCAGAACACCCCCATCGGCGACGGCCCCGTGCTGCTGCCCGACAACCACTACCTGAGCACCCAGTCCGCCCTGAGCAAAGACCCCAACGAGAAGCGCGATCACATGGTCCTGCTGGAGTTCGTGACCGCCGCCGGGATCACTCTCGGCATGGACGAGCTGTACAAGTAAAGCGGCCGCGACTCTAGATCATAATCAGCCATACCACATTTGTAGAGGTTTTACTTGCTTTAAAAAACCTCCCACACCTCCCCCTGAACCTGAAACATAAAATGAATGCAATTGTTGTTGTTAACTTGTTTATTGCAGCTTATAATGGTTACAAATAAAGCAATAGCATCACAAATTTCACAAATAAAGCATTTTTTTCACTGCATTCTAGTTGTGGTTTGTCCAAACTCATCAATGTATCTTAAGGCGTAAATTGTAAGCGTTAATATTTTGTTAAAATTCGCGTTAAATTTTTGTTAAATCAGCTCATTTTTTAACCAATAGGCCGAAATCGGCAAAATCCCTTATAAATCAAAAGAATAGACCGAGATAGGGTTGAGTGTTGTTCCAGTTTGGAACAAGAGTCCACTATTAAAGAACGTGGACTCCAACGTCAAAGGGCGAAAAACCGTCTATCAGGGCGATGGCCCACTACGTGAACCATCACCCTAATCAAGTTTTTTGGGGTCGAGGTGCCGTAAAGCACTAAATCGGAACCCTAAAGGGAGCCCCCGATTTAGAGCTTGACGGGGAAAGCCGGCGAACGTGGCGAGAAAGGAAGGGAAGAAAGCGAAAGGAGCGGGCGCTAGGGCGCTGGCAAGTGTAGCGGTCACGCTGCGCGTAACCACCACACCCGCCGCGCTTAATGCGCCGCTACAGGGCGCGTCAGGTGGCACTTTTCGGGGAAATGTGCGCGGAACCCCTATTTGTTTATTTTTCTAAATACATTCAAATATGTATCCGCTCATGAGACAATAACCCTGATAAATGCTTCAATAATATTGAAAAAGGAAGAGTCCTGAGGCGGAAAGAACCAGCTGTGGAATGTGTGTCAGTTAGGGTGTGGAAAGTCCCCAGGCTCCCCAGCAGGCAGAAGTATGCAAAGCATGCATCTCAATTAGTCAGCAACCAGGTGTGGAAAGTCCCCAGGCTCCCCAGCAGGCAGAAGTATGCAAAGCATGCATCTCAATTAGTCAGCAACCATAGTCCCGCCCCTAACTCCGCCCATCCCGCCCCTAACTCCGCCCAGTTCCGCCCATTCTCCGCCCCATGGCTGACTAATTTTTTTTATTTATGCAGAGGCCGAGGCCGCCTCGGCCTCTGAGCTATTCCAGAAGTAGTGAGGAGGCTTTTTTGGAGGCCTAGGCTTTTGCAAAGATCGATCAAGAGACAGGATGAGGATCGTTTCGCATGATTGAACAAGATGGATTGCACGCAGGTTCTCCGGCCGCTTGGGTGGAGAGGCTATTCGGCTATGACTGGGCACAACAGACAATCGGCTGCTCTGATGCCGCCGTGTTCCGGCTGTCAGCGCAGGGGCGCCCGGTTCTTTTTGTCAAGACCGACCTGTCCGGTGCCCTGAATGAACTGCAAGACGAGGCAGCGCGGCTATCGTGGCTGGCCACGACGGGCGTTCCTTGCGCAGCTGTGCTCGACGTTGTCACTGAAGCGGGAAGGGACTGGCTGCTATTGGGCGAAGTGCCGGGGCAGGATCTCCTGTCATCTCACCTTGCTCCTGCCGAGAAAGTATCCATCATGGCTGATGCAATGCGGCGGCTGCATACGCTTGATCCGGCTACCTGCCCATTCGACCACCAAGCGAAACATCGCATCGAGCGAGCACGTACTCGGATGGAAGCCGGTCTTGTCGATCAGGATGATCTGGACGAAGAGCATCAGGGGCTCGCGCCAGCCGAACTGTTCGCCAGGCTCAAGGCGAGCATGCCCGACGGCGAGGATCTCGTCGTGACCCATGGCGATGCCTGCTTGCCGAATATCATGGTGGAAAATGGCCGCTTTTCTGGATTCATCGACTGTGGCCGGCTGGGTGTGGCGGACCGCTATCAGGACATAGCGTTGGCTACCCGTGATATTGCTGAAGAGCTTGGCGGCGAATGGGCTGACCGCTTCCTCGTGCTTTACGGTATCGCCGCTCCCGATTCGCAGCGCATCGCCTTCTATCGCCTTCTTGACGAGTTCTTCTGAGCGGGACTCTGGGGTTCGAAATGACCGACCAAGCGACGCCCAACCTGCCATCACGAGATTTCGATTCCACCGCCGCCTTCTATGAAAGGTTGGGCTTCGGAATCGTTTTCCGGGACGCCGGCTGGATGATCCTCCAGCGCGGGGATCTCATGCTGGAGTTCTTCGCCCACCCTAGGGGGAGGCTAACTGAAACACGGAAGGAGACAATACCGGAAGGAACCCGCGCTATGACGGCAATAAAAAGACAGAATAAAACGCACGGTGTTGGGTCGTTTGTTCATAAACGCGGGGTTCGGTCCCAGGGCTGGCACTCTGTCGATACCCCACCGAGACCCCATTGGGGCCAATACGCCCGCGTTTCTTCCTTTTCCCCACCCCACCCCCCAAGTTCGGGTGAAGGCCCAGGGCTCGCAGCCAACGTCGGGGCGGCAGGCCCTGCCATAGCCTCAGGTTACTCATATATACTTTAGATTGATTTAAAACTTCATTTTTAATTTAAAAGGATCTAGGTGAAGATCCTTTTTGATAATCTCATGACCAAAATCCCTTAACGTGAGTTTTCGTTCCACTGAGCGTCAGACCCCGTAGAAAAGATCAAAGGATCTTCTTGAGATCCTTTTTTTCTGCGCGTAATCTGCTGCTTGCAAACAAAAAAACCACCGCTACCAGCGGTGGTTTGTTTGCCGGATCAAGAGCTACCAACTCTTTTTCCGAAGGTAACTGGCTTCAGCAGAGCGCAGATACCAAATACTGTTCTTCTAGTGTAGCCGTAGTTAGGCCACCACTTCAAGAACTCTGTAGCACCGCCTACATACCTCGCTCTGCTAATCCTGTTACCAGTGGCTGCTGCCAGTGGCGATAAGTCGTGTCTTACCGGGTTGGACTCAAGACGATAGTTACCGGATAAGGCGCAGCGGTCGGGCTGAACGGGGGGTTCGTGCACACAGCCCAGCTTGGAGCGAACGACCTACACCGAACTGAGATACCTACAGCGTGAGCTATGAGAAAGCGCCACGCTTCCCGAAGGGAGAAAGGCGGACAGGTATCCGGTAAGCGGCAGGGTCGGAACAGGAGAGCGCACGAGGGAGCTTCCAGGGGGAAACGCCTGGTATCTTTATAGTCCTGTCGGGTTTCGCCACCTCTGACTTGAGCGTCGATTTTTGTGATGCTCGTCAGGGGGGCGGAGCCTATGGAAAAACGCCAGCAACGCGGCCTTTTTACGGTTCCTGGCCTTTTGCTGGCCTTTTGCTCACATGTTCTTTCCTGCGTTATCCCCTGATTCTGTGGATAACCGTATTACCGCCATGCAT",
+  "appearance": {
+    "helix_order": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53
+    ],
+    "staple_colors": [
+      {
+        "color": "#fa5b07",
+        "basis": "source PDF route stroke",
+        "image_color": "#fa5b07",
+        "table_color": "#f74308"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#fa5b07",
+        "basis": "source PDF route stroke",
+        "image_color": "#fa5b07",
+        "table_color": "#f74308"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#f9a425",
+        "basis": "source PDF route stroke",
+        "image_color": "#f9a425",
+        "table_color": "#f7931e"
+      },
+      {
+        "color": "#b8b600",
+        "basis": "source PDF route stroke",
+        "image_color": "#b8b600",
+        "table_color": "#aaaa00"
+      },
+      {
+        "color": "#fa5b07",
+        "basis": "source PDF route stroke",
+        "image_color": "#fa5b07",
+        "table_color": "#f74308"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#b8b600",
+        "basis": "source PDF route stroke",
+        "image_color": "#b8b600",
+        "table_color": "#aaaa00"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#b8b600",
+        "basis": "source PDF route stroke",
+        "image_color": "#b8b600",
+        "table_color": "#aaaa00"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#f9a425",
+        "basis": "source PDF route stroke",
+        "image_color": "#f9a425",
+        "table_color": "#f7931e"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#fa5b07",
+        "basis": "source PDF route stroke",
+        "image_color": "#fa5b07",
+        "table_color": "#f74308"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#b8b600",
+        "basis": "source PDF route stroke",
+        "image_color": "#b8b600",
+        "table_color": "#aaaa00"
+      },
+      {
+        "color": "#b8b600",
+        "basis": "source PDF route stroke",
+        "image_color": "#b8b600",
+        "table_color": "#aaaa00"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#f9a425",
+        "basis": "source PDF route stroke",
+        "image_color": "#f9a425",
+        "table_color": "#f7931e"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#fa5b07",
+        "basis": "source PDF route stroke",
+        "image_color": "#fa5b07",
+        "table_color": "#f74308"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#fa5b07",
+        "basis": "source PDF route stroke",
+        "image_color": "#fa5b07",
+        "table_color": "#f74308"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#f9a425",
+        "basis": "source PDF route stroke",
+        "image_color": "#f9a425",
+        "table_color": "#f7931e"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#fa5b07",
+        "basis": "source PDF route stroke",
+        "image_color": "#fa5b07",
+        "table_color": "#f74308"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#fa5b07",
+        "basis": "source PDF route stroke",
+        "image_color": "#fa5b07",
+        "table_color": "#f74308"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#b8b600",
+        "basis": "source PDF route stroke",
+        "image_color": "#b8b600",
+        "table_color": "#aaaa00"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#fa5b07",
+        "basis": "source PDF route stroke",
+        "image_color": "#fa5b07",
+        "table_color": "#f74308"
+      },
+      {
+        "color": "#c7277f",
+        "basis": "source PDF route stroke",
+        "image_color": "#c7277f",
+        "table_color": "#b8056c"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#d81f00",
+        "basis": "source PDF route stroke",
+        "image_color": "#d81f00",
+        "table_color": "#cc0000"
+      },
+      {
+        "color": "#008200",
+        "basis": "source PDF route stroke",
+        "image_color": "#008200",
+        "table_color": "#007200"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#882fe5",
+        "basis": "source PDF route stroke",
+        "image_color": "#882fe5",
+        "table_color": "#7300de"
+      },
+      {
+        "color": "#222be5",
+        "basis": "source PDF route stroke",
+        "image_color": "#222be5",
+        "table_color": "#1700de"
+      },
+      {
+        "color": "#00c1b1",
+        "basis": "source PDF route stroke",
+        "image_color": "#00c1b1",
+        "table_color": "#03b6a2"
+      },
+      {
+        "color": "#424242",
+        "basis": "source PDF route stroke",
+        "image_color": "#424242",
+        "table_color": "#333333"
+      },
+      {
+        "color": "#65c300",
+        "basis": "source PDF route stroke",
+        "image_color": "#65c300",
+        "table_color": "#57bb00"
+      }
+    ]
+  },
+  "included_staples": 121,
+  "table_staples": 121,
+  "limitation": "Unrelaxed source reconstruction; omitted or ambiguous routes are not filled with guessed strands.",
+  "verification": {
+    "publication": {
+      "status": "verified",
+      "commands": 1197,
+      "physical_reference_checked": true,
+      "recovery_snapshots_used": false,
+      "bond_review": {
+        "schema": "nadoc-design-bond-report-v1",
+        "design_sha256": "9bdcb0fb8e539a6b133d7f5a4a334e1c3dee91544d32d6b2c5235cb928fc9f01",
+        "report_sha256": "f6e5b3cd2d13f9d771cb19061845a602fef68051b4c24b3ad4b7787a8c56d596",
+        "report": {
+          "schema_version": 1,
+          "review_required": false,
+          "reason_codes": [],
+          "threshold_fraction": 0.2,
+          "counts": {
+            "backbone_bonds": 8586,
+            "interhelix_bonds": 449,
+            "matched_forced_bonds": 0,
+            "matched_forced_interhelix_bonds": 0,
+            "unmatched_forced_records": 0,
+            "matched_forced_records": 0,
+            "nucleotides": 8708
+          },
+          "ratios": {
+            "forced_all": 0.0,
+            "forced_interhelix": 0.0
+          },
+          "geometry": {
+            "requested": true,
+            "complete": true,
+            "status": "complete",
+            "threshold_nm": 1.2,
+            "long_all": 0,
+            "long_interhelix": 0,
+            "fraction_all": 0.0,
+            "fraction_interhelix": 0.0,
+            "measured_bonds": 8586,
+            "missing_bonds": 0,
+            "worst_edges": [
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 27,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 26,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769954
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 25,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 24,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769952
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 35,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 34,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 29,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 28,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 15,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 16,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 3,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 12,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 41,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 40,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 21,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 22,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769948
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 19,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 20,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769948
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 1,
+                  "bp": 128,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 18,
+                  "bp": 128,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769945
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 13,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 14,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676994
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 23,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 22,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769928
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 3,
+                  "bp": 79,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 4,
+                  "bp": 79,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769923
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 7,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 6,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769923
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 11,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 10,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769919
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 17,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 16,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769916
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 9,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 8,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769916
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 21,
+                  "bp": 51,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 30,
+                  "bp": 51,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769914
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 1,
+                  "bp": 79,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 2,
+                  "bp": 79,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769914
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 45,
+                  "bp": 79,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 46,
+                  "bp": 79,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769914
+              }
+            ],
+            "missing_edge_examples": []
+          }
+        },
+        "review_status": "not_required"
+      },
+      "path": "workspace/Shared Designs/D012.nadoc",
+      "sha256": "f3ba247b28b62d4e781e7a07e971f4499d3fb16429280a091fecae9e83952e76"
+    },
+    "reopened": {
+      "status": "verified",
+      "commands": 1197,
+      "physical_reference_checked": true,
+      "recovery_snapshots_used": false,
+      "bond_review": {
+        "schema": "nadoc-design-bond-report-v1",
+        "design_sha256": "9bdcb0fb8e539a6b133d7f5a4a334e1c3dee91544d32d6b2c5235cb928fc9f01",
+        "report_sha256": "f6e5b3cd2d13f9d771cb19061845a602fef68051b4c24b3ad4b7787a8c56d596",
+        "report": {
+          "schema_version": 1,
+          "review_required": false,
+          "reason_codes": [],
+          "threshold_fraction": 0.2,
+          "counts": {
+            "backbone_bonds": 8586,
+            "interhelix_bonds": 449,
+            "matched_forced_bonds": 0,
+            "matched_forced_interhelix_bonds": 0,
+            "unmatched_forced_records": 0,
+            "matched_forced_records": 0,
+            "nucleotides": 8708
+          },
+          "ratios": {
+            "forced_all": 0.0,
+            "forced_interhelix": 0.0
+          },
+          "geometry": {
+            "requested": true,
+            "complete": true,
+            "status": "complete",
+            "threshold_nm": 1.2,
+            "long_all": 0,
+            "long_interhelix": 0,
+            "fraction_all": 0.0,
+            "fraction_interhelix": 0.0,
+            "measured_bonds": 8586,
+            "missing_bonds": 0,
+            "worst_edges": [
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 27,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 26,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769954
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 25,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 24,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769952
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 35,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 34,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 29,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 28,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 15,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 16,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 3,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 12,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 41,
+                  "bp": 65,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 40,
+                  "bp": 65,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676995
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 21,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 22,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769948
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 19,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 20,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769948
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 1,
+                  "bp": 128,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 18,
+                  "bp": 128,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769945
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 13,
+                  "bp": 86,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 14,
+                  "bp": 86,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.085322045676994
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 23,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 22,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769928
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 3,
+                  "bp": 79,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 4,
+                  "bp": 79,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769923
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 7,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 6,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769923
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 11,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 10,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769919
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 17,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 16,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769916
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 9,
+                  "bp": 58,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 8,
+                  "bp": 58,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769916
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 21,
+                  "bp": 51,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 30,
+                  "bp": 51,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769914
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 1,
+                  "bp": 79,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 2,
+                  "bp": 79,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769914
+              },
+              {
+                "from": {
+                  "kind": "nucleotide",
+                  "helix_label": 45,
+                  "bp": 79,
+                  "direction": "REVERSE",
+                  "copy_index": 0
+                },
+                "to": {
+                  "kind": "nucleotide",
+                  "helix_label": 46,
+                  "bp": 79,
+                  "direction": "FORWARD",
+                  "copy_index": 0
+                },
+                "interhelix": true,
+                "forced_ligation": false,
+                "distance_nm": 1.0853220456769914
+              }
+            ],
+            "missing_edge_examples": []
+          }
+        },
+        "review_status": "not_required"
+      }
+    },
+    "comparison": {
+      "routes": 122,
+      "insertions": 1,
+      "strand_owned_loops": 1,
+      "published_staples": 121,
+      "derived_staples": 0,
+      "scaffold_sequence_matches": true,
+      "source_scaffold_bases": 4733,
+      "native_helices": 54,
+      "native_reference_consulted": false
+    },
+    "source_sha256": "7c48c56b081a51493c6d148fac3bab19c4801a4adb120e6d59a71ad611ee5d88",
+    "design_sha256": "f3ba247b28b62d4e781e7a07e971f4499d3fb16429280a091fecae9e83952e76"
+  },
+  "classification": {
+    "schema_version": 1,
+    "output": "complete",
+    "native_file": "D012.nadoc",
+    "issues": []
+  }
+}

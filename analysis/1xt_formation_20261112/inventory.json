@@ -1,0 +1,34 @@
+[
+  {
+    "job_id": "c30001fb925c",
+    "created": "2026-11-11T00:02:52.938246-07:00",
+    "parent": null,
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/nadoc_jobs/c30001fb925c",
+    "package": "/media/jojo/Archive/nadoc_jobs/c30001fb925c/package/2hb_1xT_namd_solvated",
+    "production": false,
+    "files": [
+      "/media/jojo/Archive/nadoc_jobs/c30001fb925c/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+      "/media/jojo/Archive/nadoc_jobs/c30001fb925c/package/2hb_1xT_namd_solvated/output/2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+      "/media/jojo/Archive/nadoc_jobs/c30001fb925c/package/2hb_1xT_namd_solvated/output/2hb_1xT_02_300K_NPT_ENM_k0p1_p25.dcd",
+      "/media/jojo/Archive/nadoc_jobs/c30001fb925c/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+      "/media/jojo/Archive/nadoc_jobs/c30001fb925c/package/2hb_1xT_namd_solvated/output/2hb_1xT_03_300K_NPT_ENM_k0p01_p25.dcd",
+      "/media/jojo/Archive/nadoc_jobs/c30001fb925c/package/2hb_1xT_namd_solvated/output/2hb_1xT_04_300K_NPT_MGHH_only_p10.dcd",
+      "/media/jojo/Archive/nadoc_jobs/c30001fb925c/package/2hb_1xT_namd_solvated/output/2hb_1xT_0S_300K_NPT_settle_fixed_dna_p100.dcd"
+    ],
+    "design_sha256": "a910134f6dde0e886e840fa6f2cae18c58506656208fe45e23ee95e396968a5c"
+  },
+  {
+    "job_id": "2bc15e9e2531",
+    "created": "2026-11-11T09:56:14.531464-07:00",
+    "parent": "c30001fb925c",
+    "status": "completed",
+    "job_dir": "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531",
+    "package": "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated",
+    "production": true,
+    "files": [
+      "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd"
+    ],
+    "design_sha256": "a910134f6dde0e886e840fa6f2cae18c58506656208fe45e23ee95e396968a5c"
+  }
+]

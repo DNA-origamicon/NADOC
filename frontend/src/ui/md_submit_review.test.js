@@ -305,6 +305,17 @@ describe('submit guard (double-submit prevention)', () => {
     release()
   })
 
+  it('offers Resume verification without forcing an override', async () => {
+    const { card, api } = mount({ getMdRemoteRecommendation: async () => ({ ...rec,
+      image_clearance: { status: 'verify_on_resume', requires_override: false,
+        detail: 'Resume verifies the selected checkpoint before submission.' } }) })
+    await card.open('j1', { mode: 'resume' })
+    expect(document.querySelector('#mr-go').disabled).toBe(false)
+    expect(document.querySelector('#mr-image-clearance').hidden).toBe(false)
+    expect(document.querySelector('#mr-allow-small-image-gap')).toBeNull()
+    card.dispose()
+  })
+
   it('resets acknowledgment when reopening and treats missing diagnostics as unknown', async () => {
     const { card } = mount({ getMdRemoteRecommendation: async () => ({ ...rec, image_clearance: null }) })
     await card.open('j1')

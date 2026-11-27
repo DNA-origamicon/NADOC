@@ -1,0 +1,29 @@
+{
+  "all_source_size_mtime_unchanged": true,
+  "classifier_planar_audit": true,
+  "extraction_firstframe_MDA_comparison": true,
+  "extraction_periodic_image_comparison": true,
+  "summary_descriptor_recomputation_and_rigid_transform": true,
+  "code_sha256": {
+    "shapes.py": "8a47bfae2b5c6bce5da8bd77fff77176ad1021a97fa131c0dfb6db8b431c83b7",
+    "checks.py": "4410feb7f68ddb9fa6e9d2cdcd726fe610f43c891bd306bc71836b049b40b6fe",
+    "thermal.py": "359a140f58518b457f6045ef09cdab5f0bbd8e276b1bf8c56dca568224c4e308",
+    "summarize.py": "453e088c1ad6ac98b5cdde934d31bf3fc4e4d21d07789a33ec328d5d4c3c824c",
+    "report.py": "75e323de0ce43bc5d4b531a33f95461fee31c7de915c28b4c8d42569e831b683",
+    "extract.py": "d470059b907c626f67fd6b9fee63c4a68995c16afb2745a93a599c54c85f546f",
+    "convergence.py": "ad414c825c38e9972d9dcf621aba814b84941c410881db073133e512039b54ac",
+    "additional_shape.py": "7ad426b275198bdbe2cede7346cf047fd61f5b3c2a6a1ee3bac8e726490cc423",
+    "parameter_identity.py": "220bbaa9e4bd8ce5a3246d56dfe344a9b6c678bf1e09876420584310ad5825e8"
+  },
+  "all_configs_and_parameters_unchanged": true,
+  "production_unique_frames": 114426,
+  "production_jobs": 9,
+  "preparation_jobs": 4,
+  "ring_piercing_spot_checks": 30,
+  "ring_piercing_hits": 0,
+  "shape_jobs": 9,
+  "report_sha256": {
+    "review.md": "d79e274d2c1c156d498c42532c65f3526837f6d22e0181752257e01e8837e20a",
+    "technical_report.md": "c4e323a531ee8384fb6c34fefdd32691b6f6e9383ab4cba4a814dc6b1ed0da7e"
+  }
+}

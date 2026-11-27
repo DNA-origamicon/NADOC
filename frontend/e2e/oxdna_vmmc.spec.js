@@ -27,6 +27,7 @@ test('VMMC wizard create, edit, view and export',async({page},info)=>{
  await dialog.locator('[data-thermal-field="enabled"]').check()
  await dialog.locator('[data-vmmc-field="enabled"]:visible').check()
  await expect(dialog.locator('[data-thermal-field="enabled"]')).not.toBeChecked()
+ await expect(dialog.locator('[data-vmmc-field="production_steps"]')).toHaveValue('2000000000')
  for(const [key,value]of Object.entries({tuning_rounds:2,tuning_steps:10000,equil_steps:10000,production_steps:20000,replicas:3})){
   const input=dialog.locator(`[data-vmmc-field="${key}"]`);await input.fill(String(value));await input.blur()
  }

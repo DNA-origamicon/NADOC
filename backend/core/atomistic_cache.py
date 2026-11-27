@@ -72,7 +72,7 @@ def build_atomistic_model_cached(
     design: "Design",
     *,
     fingerprint: str | None = None,
-    fast_bridges: bool = False,
+    fast_bridges: bool = True,
     measured_positioning: bool = True,
     strand_loop_display: bool = False,
 ):
@@ -83,6 +83,9 @@ def build_atomistic_model_cached(
     """
     from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
     from backend.core.native_full_placement import SOURCE, require_native_full_option
+    from backend.core.terminal_t_motifs import VERSION as TERMINAL_T_VERSION
+    from backend.core.forced_tt_motifs import VERSION as FORCED_TT_VERSION
+    from backend.core.extension_plane_motifs import VERSION as EXTENSION_PLANE_VERSION
     require_native_full_option(measured_positioning)
 
     from backend.core.strand_loop_atoms import VERSION as LOOP_ATOMS_VERSION
@@ -91,8 +94,9 @@ def build_atomistic_model_cached(
     # models in distinct cache entries. The placement authority version prevents
     # reusing a cache entry produced before the single-source contract.
     key = (
-        f"{base_key}:fast_bridges={int(fast_bridges)}"
-        f":placement={SOURCE}:loop_display={int(strand_loop_display)}:{LOOP_ATOMS_VERSION}"
+        f"{base_key}:native_seed=shared-v1:fast_bridges={int(fast_bridges)}"
+        f":placement={SOURCE}:terminal_t={TERMINAL_T_VERSION}:forced_tt={FORCED_TT_VERSION}"
+        f":extension_plane={EXTENSION_PLANE_VERSION}:loop_display={int(strand_loop_display)}:{LOOP_ATOMS_VERSION}"
     )
 
     # Fast path: already built.

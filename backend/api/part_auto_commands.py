@@ -84,8 +84,15 @@ def _crossovers(design, *, frame_scoped=True):
 
 def build(kind, design, params):
     if kind in SCAFFOLD_KINDS:
-        return scaffold(kind, design, history_seed=params.get("history_seed"),
-                        inherit_scaffold_end_deformations=params.get("inherit_scaffold_end_deformations", 0))[0]
+        updated, _ = scaffold(
+            kind, design, history_seed=params.get("history_seed"),
+            inherit_scaffold_end_deformations=params.get("inherit_scaffold_end_deformations", 0),
+        )
+        if "flexible_choices" in params:
+            from backend.core.part_flexible_choices import apply_flexible_choices
+
+            updated = apply_flexible_choices(updated, params["flexible_choices"])
+        return updated
     if kind == "auto-crossover":
         return crossovers(design, history_seed=params.get("history_seed"),
                           frame_scoped=params.get("frame_scoped_crossovers", False))[0]

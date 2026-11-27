@@ -368,6 +368,12 @@ test.describe('Teardown gate', () => {
     // skip `_resetForNewDesign`). loadScaffoldedPart goes through File>New in a
     // pinned doc, so `currentDesign` is set and the full teardown runs.
     await loadScaffoldedPart(page, { doc: 'smoke-close', name: 'close' })
+    // Geometry reads intentionally suppress the modal while sequence writes run.
+    // Finish fixture preparation before asserting the held read's busy overlay.
+    await page.waitForFunction(async () => {
+      const { sequenceActivity } = await import('/src/ui/sequence_activity.js')
+      return sequenceActivity.pending === 0
+    })
 
     // Hold a display read past the working-popup threshold. Close must cancel it.
     let releaseGeometry

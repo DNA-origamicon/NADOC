@@ -435,6 +435,10 @@ class MdJob:
         if self.archived and not jd.is_dir():
             raise FileNotFoundError(f"Storage drive disconnected: {jd}")
         jd.mkdir(parents=True, exist_ok=True)
+        if self.execution_target == "alpine":
+            from backend.core.alpine_submission import newer, read
+            if newer(read(self, workspace_dir), self):
+                return  # a stale poll/download may not roll back allocation identity
         data = asdict(self)
         data["status"] = self.status.value
         # Atomic write (temp + rename): background preparation writes job.json
@@ -458,6 +462,9 @@ class MdJob:
         path = resolve_job_json(workspace_dir, "md_jobs", job_id)
         data = json.loads(path.read_text())
         job = cls.from_metadata(data)
+        if job.execution_target == "alpine":
+            from backend.core.alpine_submission import apply_submission
+            apply_submission(job, workspace_dir)
         if job.restart_events:
             from backend.core.alpine_restart import apply_acknowledgments
             apply_acknowledgments(job, workspace_dir)

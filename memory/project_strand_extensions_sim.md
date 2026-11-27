@@ -19,6 +19,145 @@ removes the specimen/workspace afterward; compact evidence goes under
 `.development-artifacts/extension-slabs/app/`. This verifies display alignment,
 not general long-tail stereochemistry (ISSUE-164).
 
+**November 22 — real Alpine startup confirmed:**
+Gerling WITH_EXTRA_T native job `3ec95fb07c6b`, Slurm `36129263`, node
+`c3gpu-e7-u13`, RTX Pro 6000 MIG `2g.48gb`, 16 CPUs/48 GiB RAM/4 h.
+Prepared 7,561,135 atoms with the literature 2 fs relaxation preset; zero seed
+piercings without override and neutral final charge. Desktop RAM admission refused;
+the unchanged API preparation operation ran on an Alpine CPU node instead, then
+all 46 input hashes/source/request were verified before adoption into the native
+job. GPU wait was 28 s. Actual log reached step 559 of initial minimization with
+finite decreasing energy and no fatal engine error. Conjugate-gradient restarts
+are present: startup is confirmed, not convergence or later dynamics. Run left
+active; no automatic resubmission/production. The 6 nm bbox passed fixed-pose
+clearance but needs separate review for long freely rotating production.
+Evidence: `.development-artifacts/gerling_alpine_relax_20261122/findings.txt`.
+
+**November 22 — shared native viewport/export/NAMD starting geometry:**
+User explicitly authorized removing the implicit slower NAMD rebuild. Native
+`build_atomistic_model` and its cache now default to the same interpolation used
+by the viewport. Physical overrides retain the old reconstruction defaults;
+explicit `fast_bridges=False` remains a historical diagnostic option. Multi-base
+extension linkers retain their existing physical solver in both native display
+and preparation (interpolation compressed their O3'-P bonds below 1 Å); this is
+not a new long-extension conformer or polymerization implementation.
+Fresh Gerling default rebuild: 45/45 approved plane placements, zero physical
+and display piercings. Actual default CHARMM/psfgen preparation preserves all
+349,181 common heavy atoms exactly at PDB precision; rounded physical geometry
+also has zero piercings. Source unchanged. Existing contacts/angle strain remain;
+no production MD readiness claim. Evidence and replay:
+`.development-artifacts/shared_native_seed_20261122/check.py` and `result.json`.
+This supersedes the normal-NAMD mode limitation in the historical entry below.
+
+**November 22 — approved plane placements implemented in normal NADOC rebuilds:**
+User authorized promotion and a Gerling rebuild. `extension_plane_motifs.py` now
+runs after forced-TT placement and before manual poses. A packaged 45-context
+geometry/connectivity lookup (no design IDs) transfers the reviewed final poses;
+no online search/minimization. The cache includes `terminal-plane-v1`.
+Fresh workspace Gerling display/export (`fast_bridges=True`) rebuild: all 45
+placements match the reviewed candidate within 4.5e-16 nm; both physical and raw
+native-display ring detectors report ZERO piercings. 14 selected contacts and 11
+ordinary severe overlaps remain; roots/planes/chirality pass, known angle strain
+remains. Workspace source/history unchanged; no authored document produced.
+Important mode boundary: the slower bridge-minimization path changes attachment
+anchors. It does not match this reviewed bank and still has 20 piercings. A probe
+reusing only approved poses cannot satisfy the plane at site029 in that mode;
+no root stretching, new conformer or unrelated host-atom changes were introduced.
+Thus zero piercings is confirmed for normal display/PDB export, NOT all NAMD
+preparation paths. Existing physical overrides and unsupported motifs bypass this
+placement. 12 focused tests, 10 geometry locks, FAST 21,046 pass / 90 skip; FULL
+suite deferred under the session guard. Evidence:
+`.development-artifacts/extension_plane_default_20261122/findings.txt`.
+The experiment below records the pre-promotion state and persistent chemistry
+limitations; it is superseded only for the explicitly supported rebuild mode.
+
+**November 21 — isolated extension/midpoint-plane experiment (not promoted):**
+User constrained every extension atom, including sugar/phosphate/H, to its own
+side of the midpoint plane across the nick. Tested 41 defect extensions + 4 nick
+partners. Eight phase/end families; canonical correction of inherited 5′ O3′
+geometry repairs 21 wrong C3 centers, then rigid donor search, joint adjustment,
+three constrained native pilots and a finite bank. Final: whole piercings 20→0,
+severe nonbonded overlaps 66→11 (all 55 extension overlaps removed), selected
+<2 Å contacts 944→14 at 9/45 extensions, including four new 1.948–1.996 Å contacts.
+All 135 sugar centers correct, exact 1.600 Å roots, all mobile atoms behind planes,
+all outside-selection coordinates fixed. 36/45 extensions completely clear.
+Not accepted geometry: worst fixed-host OP2–P–extension O3′ angle is 30.5° vs
+111.6° at published_131_five_prime (H14 BP146); root length alone is insufficient.
+Pair073 native donor passed Reference-force comparison and exact replay; site099
+passed/replayed but rejected for 2.089 Å P–O5′ stretching; pair029 failed force
+parity and was excluded. Geometric search/transfer/joint/audit independently replay.
+32 selected finite templates; no online minimization or production/default changes.
+Next question: attachment-angle constraints/local host phosphate accommodation.
+Evidence: `.development-artifacts/gerling_extension_plane_ab_20261121/findings.txt`.
+
+**November 21 — refined source O3′/TT bank promoted for manual evaluation:**
+User explicitly requested implementation of the refined positions. Native atomistic
+rebuilds now apply `forced_tt_motifs.py` after terminal-T placement, before manual
+residue poses; packaged bank `forced-tt-o3-v1` participates in the cache key.
+Matches reverse forced TT topology, phase and two-helix separation, excluding
+extension anchors and loops/skips within ±2 bp. Source O3′ and both Ts move;
+paired sugars/bases and neighboring phosphates remain fixed. Physical coordinate
+overrides bypass the placement. Five stored templates are ranked by contacts,
+penetration and bond strain; no runtime minimization (~0.8–0.9 s Gerling pass).
+Exact and display builds reproduce the approved combined candidate within
+3.6e-15 nm at all 75 sites, with identical template selections. All 75 are
+piercing-free; 64 completely clear; 11 O3′–OP1 contacts remain, and the whole
+design retains 20 other piercings. Bond/angle strain still prevents claiming
+NAMD readiness. This supersedes the non-promotion status below, not its scientific
+limitations. No authored design files changed. Reload/reopen the design to refresh
+in-memory atomistic display caches. Evidence, native rebuild audit and same-frame
+views: `.development-artifacts/forced_tt_default_20261121/findings.txt`.
+
+**November 21 — source O3′ refinement (experiment before promotion above):** source O3′ plus
+both Ts mobile (65 atoms), all paired sugars/bases and neighbor phosphates fixed.
+Five local candidates and a finite template bank improve the expanded O3′+TT
+selection from 241 contacts <2 Å to 11; 64/75 motifs completely clear, all 75
+remain piercing-free, whole Gerling remains at 20 other piercings. O3′ moves
+~1.49–1.58 Å; C3′–O3′ held at 1.433 Å and both O3′–P attachments at 1.600 Å.
+All 525 checked chiral centers and outside-selection coordinates preserved.
+The 11 remaining NEW O3′/OP1 contacts (1.896–1.993 Å) involve exit phosphates of
+adjacent FORWARD forced TT crossovers. Next coupled target is those phosphate
+atoms, not further movement of paired sugars/bases. Residual bond error ~0.235 Å
+and source C3′–O3′–P angles ~159–160° mean this is not simulation-ready.
+Native/shell/seed/minimization/transfer replay succeeded. One intermediate CUDA
+force-parity check failed narrowly; final donor0173 uses independently replayed
+Reference minimization and finite-difference validation; tolerances unchanged.
+Evidence: `.development-artifacts/gerling_source_o3_ab_20261121/findings.txt`.
+
+**November 21 follow-up — isolated reverse forced TT experiment:** three 64-atom
+(two inserted T) minimizations with every neighbor fixed independently replayed
+exactly. All three two-anchor/frame transfers remove all 58 piercings across 75
+no-near-extension reverse forced sites (55/71 directly 31/32-bp); whole Gerling
+78→20, no new piercings. Best by contact count/bond error: donor003, contacts <2 Å
+3,557→91 (16 new), overlaps <0.8 Å 29→0. Residual P–O5′ up to 1.903 Å versus
+1.600 Å and donor phosphate-angle error 59.2° prevent production acceptance.
+All fixed source O3′/C4′ distances are only 0.385–0.471 Å; at 32/75 sites this
+mathematically forces incoming P/C4′ <2 Å with a 1.60 Å root bond. Standard reverse
+Gerling sites also have folded source attachments (0.421–0.464 Å), despite no
+piercing; forward sites are 2.357–2.426 Å. Next diagnostic target: source attachment
+O3′ and exit phosphate closure, keeping paired sugars/bases fixed initially.
+No production change or crossover-length cap; TT-only evidence cannot justify a
+cap. Evidence: `.development-artifacts/gerling_forced_tt_ab_20261121/findings.txt`.
+
+**November 21, 2026 — approved native atomistic default:** `terminal_t_motifs.py`
+now transfers the demonstrated single-T/TT-junction templates in a proper two-helix
+frame, after deformation and before manual residue poses. Matches topology, phase
+and axis separation, not design IDs; three phase families, 29 stored conformers.
+No runtime minimization. Physical coordinate overrides and legacy TT audit mode
+bypass it; long tails, other insert sequences/phases and nearby loops stay outside
+its scope. Atomistic cache identity includes the template version.
+Gerling: 58 matching motifs / 116 extensions clear of <2 Å nonbonded contacts and
+ring piercings; whole-design piercings remain 78. This is clearance acceptance,
+not NAMD readiness: accepted templates retain internal bond strain (worst reported
+C4′–C3′ 2.742 Å). Coarse-grained extension geometry is a separate path.
+TT without extension anchors within ±2 bp: Gerling 58/382 pierced, existing 21-bp
+6hb 0/60 and 24hb 0/338. All 58 are reverse forced junctions near 0° source radial
+phase: destination P–O5′ threads the last inserted T sugar. Standard Gerling
+31/32-bp sites are clear. Spacing, phase and junction kind are confounded; this is
+an observational comparison, not a spacing-only intervention. Evidence and replay:
+`.development-artifacts/extension_default_20261121/`. Source designs unchanged;
+legacy source construction history is not certified by diagnostic replay.
+
 **November 2, 2026 scope correction:** polymerization strands must not be converted
 to these ordinary extensions (ISSUE-163). Long-extension molecular geometry was
 not fully developed and belongs to separate follow-on work after the feature-log/

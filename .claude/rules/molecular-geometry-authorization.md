@@ -23,7 +23,12 @@ simulation. The user requires inspectable evidence before authorizing such a cha
 
 ## Hard stop
 
-- Diagnosis, measurements, and an isolated candidate provider are allowed.
+- Read-only diagnosis and measurements are allowed. Generating experimental A/B
+  geometry under the diagnostic provenance exception requires a direct, scoped
+  **“A/B testing authorized”** user grant in the active session; follow
+  `memory/feedback_session_authorized_ab_testing.md`. An isolated provider alone
+  does not supply authorization. Native authored candidates retain their ordinary
+  construction/provenance requirements.
 - Do not change the production placement, ring-piercing gate, detector thresholds, locked phases, or
   production call sites until the user explicitly authorizes a candidate they have seen in an A/B
   artifact.

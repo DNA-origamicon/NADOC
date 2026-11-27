@@ -1,0 +1,140 @@
+diff --git a/src/Backends/MDBackend.cpp b/src/Backends/MDBackend.cpp
+--- a/src/Backends/MDBackend.cpp
++++ b/src/Backends/MDBackend.cpp
+@@ -99,11 +99,14 @@
+ 	SimBackend::init();
+ 
+ 	if(_refresh_velocities) _generate_vel();
+-	else {
+-		for(auto p: _particles) {
+-			if(p->L.module() < 1.e-10) {
+-				throw oxDNAException("Particle %i has 0 angular momentum in initial configuration.\n\tset \"refresh_vel = true\" in input file. Aborting now.", p->index);
+-			}
++	for(auto p: _particles) {
++		if(!p->is_rigid_body()) {
++			// Point particles have no physical rotational momentum. Discard
++			// legacy checkpoint values before either CPU or CUDA thermostat init.
++			p->L = LR_vector(0., 0., 0.);
++		}
++		else if(!_refresh_velocities && p->L.module() < 1.e-10) {
++			throw oxDNAException("Particle %i has 0 angular momentum in initial configuration.\n\tset \"refresh_vel = true\" in input file. Aborting now.", p->index);
+ 		}
+ 	}
+ 
+@@ -154,6 +157,8 @@
+ 		p->L.x = Utils::gaussian() * rescale_factor;
+ 		p->L.y = Utils::gaussian() * rescale_factor;
+ 		p->L.z = Utils::gaussian() * rescale_factor;
++		// Keep RNG draw order, but do not create fictitious protein rotations.
++		if(!p->is_rigid_body()) p->L = LR_vector(0., 0., 0.);
+ 
+ 		if(_lees_edwards) {
+ 			number Ly = this->_box->box_sides().y;
+diff --git a/src/Backends/Thermostats/BussiThermostat.h b/src/Backends/Thermostats/BussiThermostat.h
+--- a/src/Backends/Thermostats/BussiThermostat.h
++++ b/src/Backends/Thermostats/BussiThermostat.h
+@@ -43,6 +43,9 @@
+ 	/// stored value for the stochastic dynamic of the kinetic energy associated to rotations
+ 	number _K_r;
+ 
++	/// Point-like protein beads do not contribute rotational degrees of freedom.
++	int _rotational_degrees_of_freedom;
++
+ 	void _update_K(number &K, int degrees_of_freedom);
+ 
+ 	// Bussi's methods
+diff --git a/src/Backends/Thermostats/BussiThermostat.cpp b/src/Backends/Thermostats/BussiThermostat.cpp
+--- a/src/Backends/Thermostats/BussiThermostat.cpp
++++ b/src/Backends/Thermostats/BussiThermostat.cpp
+@@ -17,6 +17,7 @@
+ 	_exp_dt_tau = 1;
+ 	_K_t = 0.;
+ 	_K_r = 0.;
++	_rotational_degrees_of_freedom = 0;
+ 	_supports_shear = true;
+ }
+ 
+@@ -36,6 +37,12 @@
+ void BussiThermostat::init() {
+ 	BaseThermostat::init();
+ 
++	_rotational_degrees_of_freedom = 0;
++	for(auto p: CONFIG_INFO->particles()) {
++		if(p->is_rigid_body()) _rotational_degrees_of_freedom += 3;
++	}
++	OX_LOG(Logger::LOG_INFO, "Bussi rigid-body DOF fix v1: %d rotational degrees of freedom", _rotational_degrees_of_freedom);
++
+ 	_K_t = 0.5 * _current_translational_degrees_of_freedom() * _T;
+ 	_K_r = 0.5 * _current_rotational_degrees_of_freedom() * _T;
+ 
+@@ -43,6 +50,10 @@
+ }
+ 
+ void BussiThermostat::_update_K(number &K, int degrees_of_freedom) {
++	if(degrees_of_freedom == 0) {
++		K = 0.;
++		return;
++	}
+ 	// dynamics for the kinetic energy
+ 	number K_target = 0.5 * degrees_of_freedom * _T;
+ 
+@@ -74,14 +85,14 @@
+ 		else {
+ 			K_now_t += 0.5 * (v_rel * v_rel);
+ 		}
+-		K_now_r += 0.5 * (p->L * p->L);
++		if(p->is_rigid_body()) K_now_r += 0.5 * (p->L * p->L);
+ 	}
+ 
+ 	_update_K(_K_t, _current_translational_degrees_of_freedom());
+ 	_update_K(_K_r, _current_rotational_degrees_of_freedom());
+ 
+ 	number rescale_factor_t = std::sqrt(_K_t / K_now_t);
+-	number rescale_factor_r = std::sqrt(_K_r / K_now_r);
++	number rescale_factor_r = (_current_rotational_degrees_of_freedom() > 0) ? std::sqrt(_K_r / K_now_r) : 0.;
+ 
+ 	for(auto p: particles) {
+ 		if(_lees_edwards) {
+@@ -154,5 +165,5 @@
+ }
+ 
+ int BussiThermostat::_current_rotational_degrees_of_freedom() {
+-	return 3. * CONFIG_INFO->N();
++	return _rotational_degrees_of_freedom;
+ }
+diff --git a/src/CUDA/Thermostats/CUDABussiThermostat.cu b/src/CUDA/Thermostats/CUDABussiThermostat.cu
+--- a/src/CUDA/Thermostats/CUDABussiThermostat.cu
++++ b/src/CUDA/Thermostats/CUDABussiThermostat.cu
+@@ -114,7 +114,7 @@
+ 	_update_K(_K_r, _current_rotational_degrees_of_freedom());
+ 
+ 	c_number rescale_factor_t = std::sqrt(_K_t / K_now_t.w);
+-	c_number rescale_factor_r = std::sqrt(_K_r / K_now_r.w);
++	c_number rescale_factor_r = (_current_rotational_degrees_of_freedom() > 0) ? std::sqrt(_K_r / K_now_r.w) : 0.;
+ 
+ 	bussi_thermostat
+ 		<<<_launch_cfg.blocks, _launch_cfg.threads_per_block>>>
+diff --git a/src/CUDA/Backends/CUDA_MD.cuh b/src/CUDA/Backends/CUDA_MD.cuh
+--- a/src/CUDA/Backends/CUDA_MD.cuh
++++ b/src/CUDA/Backends/CUDA_MD.cuh
+@@ -10,6 +10,8 @@
+ // Conversion of the R matrix in _get_updated_orientation above into a quaternion simplifies into the qR quaternion used in _get_updated_orientation. This is then multiplied by the original orientation quaternion to produce the updated quaternion. Quaternion multiplication is the cross_product - dot_product and is therefore non-commutative
+ __device__ GPU_quat _get_updated_orientation(c_number4 &L, GPU_quat &old_o) {
+ 	c_number norm = _module(L);
++	// Point particles have zero angular momentum; their orientation is unchanged.
++	if(norm == 0.) return old_o;
+ 	L.x /= norm;
+ 	L.y /= norm;
+ 	L.z /= norm;
+diff --git a/src/CUDA/Backends/CUDA_mixed.cuh b/src/CUDA/Backends/CUDA_mixed.cuh
+--- a/src/CUDA/Backends/CUDA_mixed.cuh
++++ b/src/CUDA/Backends/CUDA_mixed.cuh
+@@ -7,6 +7,8 @@
+ // this function modifies L
+ __device__ GPU_quat_double _get_updated_orientation(LR_double4 &L, GPU_quat_double &old_o) {
+ 	double norm = sqrt(CUDA_DOT(L, L));
++	// Point particles have zero angular momentum; their orientation is unchanged.
++	if(norm == 0.) return old_o;
+ 	L.x /= norm;
+ 	L.y /= norm;
+ 	L.z /= norm;

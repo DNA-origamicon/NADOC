@@ -9,6 +9,10 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+VMMC_ENGINE_REVISION = 'periodic-image-v1'
+VMMC_ENGINE_SIGNATURE = b'NADOC VMMC periodic-image guard v1'
+
+
 class VmmcMelting(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
     temperature_c: float = Field(70, gt=0, le=150)
@@ -18,7 +22,7 @@ class VmmcMelting(BaseModel):
     tuning_rounds: int = Field(4, ge=1, le=20)
     tuning_steps: int = Field(200000, ge=1000, le=100000000)
     equil_steps: int = Field(200000, ge=1000, le=100000000)
-    production_steps: int = Field(2000000, ge=1000, le=1000000000)
+    production_steps: int = Field(2000000000, ge=1000, le=10000000000)
     replicas: int = Field(5, ge=3, le=20)
 
     @model_validator(mode='after')
@@ -83,8 +87,8 @@ def configure(child, stage, config):
     specs = [replace(stage, name=f'{j+1}_vmmc_{kind}_{i+1}', sim_type='VMMC', backend='CPU',
               kind='production', steps=steps, dt=1, temperature=f'{cfg.temperature_c+273.15:.10g}K',
               sequence_dependent=True, external_forces=False, forces_file=None, thermal_ramp=None,
-              print_energy_every_override=max(1,min(1000,steps//100)),
-              print_conf_interval_override=max(1,min(10000,steps//100)),
+              print_energy_every_override=max(1,min(100000,steps//100)),
+              print_conf_interval_override=max(1,min(1000000,steps//100)),
               min_bp_retained=0, seed=(child.random_seed-1+j) % 2147483646+1)
              for j,(kind,i,steps) in enumerate(tasks)]
     child.backend='CPU'
@@ -114,10 +118,13 @@ T = {cfg.temperature_c}C
 salt_concentration = {spec.salt_concentration}
 use_average_seq = false
 seq_dep_file = {root/'oxDNA2_sequence_dependent_parameters.txt'}
-delta_translation = 0.22
-delta_rotation = 0.22
+delta_translation = 0.1
+delta_rotation = 0.2
 verlet_skin = 1.0
 small_system = 1
+maxclust = 12
+preserve_topology = false
+check_energy_every = 10
 umbrella_sampling = 1
 safe_weights = 1
 op_file = {root/'vmmc_op.txt'}
@@ -189,11 +196,23 @@ def analyse(root, specs, cfg, n_pairs):
             raise ValueError('Invalid native VMMC energy/order-parameter data.')
         states=energy[:,-2]>0
         transitions=int(np.count_nonzero(states[1:] != states[:-1]))
-        replicas.append({'stage':spec.name,'seed':spec.seed,'tm_c':melting_point(cfg.temperatures(),yields),
+        try:
+            receipt=json.loads((directory/'vmmc_complete.json').read_text())
+        except (OSError,ValueError):
+            receipt={}
+        replicas.append({'engine_revision':receipt.get('engine_revision'),'stage':spec.name,'seed':spec.seed,'tm_c':melting_point(cfg.temperatures(),yields),
           'yields':yields,'observed_bound_unbound_transitions':transitions,
-          'visited_pair_counts':int(np.count_nonzero(data[:,1]))})
+          'visited_pair_counts':int(np.count_nonzero(data[:,1])),
+          'pair_counts':data[:,0].astype(int).tolist(),
+          'biased_counts':data[:,1].tolist(),
+          'biased_occupancy':(data[:,1]/data[:,1].sum()).tolist(),
+          'unbiased_probability':(data[:,2]/data[:,2].sum()).tolist(),
+          'recorded_samples':len(energy),
+          'recording_interval_steps':int(np.median(np.diff(energy[:,0]))) if len(energy)>1 else None})
     mean=np.mean([r['yields'] for r in replicas],axis=0).tolist()
     reasons=[]
+    if any(r['engine_revision'] != VMMC_ENGINE_REVISION for r in replicas):
+        reasons.append('One or more replicas lack a periodic-image-safe engine receipt.')
     if any(r['observed_bound_unbound_transitions'] < 20 for r in replicas):
         reasons.append('Fewer than 20 recorded bound/unbound transitions in one or more replicas.')
     if any(r['visited_pair_counts'] < n_pairs+1 for r in replicas):
@@ -209,6 +228,7 @@ def analyse(root, specs, cfg, n_pairs):
       'box_conditions':box_conditions, 'salt_concentration_M':specs[0].salt_concentration,
       'sampling_temperature_c':cfg.temperature_c, 'interaction':'sequence-dependent oxDNA2',
       'protocol':cfg.model_dump(),
+      'engine_revision':VMMC_ENGINE_REVISION if all(r['engine_revision']==VMMC_ENGINE_REVISION for r in replicas) else None,
       'qualification':'Sampling checks are diagnostics, not proof of convergence; replicas share frozen tuned weights.'}
     (root/'vmmc_result.json').write_text(json.dumps(result,indent=2)+'\n')
     lines=['temperature_C,duplex_yield']+[f'{t},{y:.10g}' for t,y in zip(cfg.temperatures(),mean)]

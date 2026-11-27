@@ -177,7 +177,9 @@ def owned_job(folder, job_id, workspace_dir=None):
 
 
 def job_path(folder, job_id, workspace_dir=None):
-    default = Path(os.environ.get('NADOC_WORKSPACE', Path(__file__).resolve().parents[2] / 'workspace'))
+    from backend.core.workspace_location import default_workspace
+
+    default = default_workspace()
     root = Path(workspace_dir) if workspace_dir is not None else workspace(default)
     # Jobs created on a selected storage drive live outside the workspace too.
     # Ownership, start reservations and stop mailboxes must use their real directory.

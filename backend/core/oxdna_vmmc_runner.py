@@ -6,7 +6,7 @@ import time
 import numpy as np
 
 from backend.core.oxdna_job import OxdnaStatus
-from backend.core.oxdna_vmmc import VmmcMelting, write_order_parameters, render_input, histogram, tune_weights, analyse
+from backend.core.oxdna_vmmc import VmmcMelting, write_order_parameters, render_input, histogram, tune_weights, analyse, VMMC_ENGINE_REVISION, VMMC_ENGINE_SIGNATURE
 
 
 def save_weights(path, weights):
@@ -20,6 +20,29 @@ async def run(job, workspace, specs):
     binary=runner.find_oxdna()
     if not binary:
         raise ValueError('CPU oxDNA executable is unavailable.')
+    if not runner._oxdna_contains_signature(binary, VMMC_ENGINE_SIGNATURE):
+        raise ValueError('VMMC requires the periodic-image-safe oxDNA backend. Rebuild with scripts/build-oxdna.sh.')
+    # A completed stage from an older sampler cannot certify this protocol.
+    # Rewind its entire suffix, preserving every previous attempt in stage archives.
+    for index,spec in enumerate(specs):
+        if job.stages[index].status != 'done': continue
+        try:
+            receipt=json.loads((root/spec.name/'vmmc_complete.json').read_text())
+        except (OSError,ValueError):
+            receipt={}
+        if receipt.get('engine_revision') != VMMC_ENGINE_REVISION or receipt.get('steps') != spec.steps or receipt.get('seed') != spec.seed:
+            for stage in job.stages[index:]:
+                stage.status='pending';stage.completed_steps=0
+            job.run_config.pop('vmmc_result',None)
+            previous_results=[root/name for name in ('vmmc_result.json','vmmc_melting.csv') if (root/name).exists()]
+            if previous_results:
+                archive=root/f'interrupted_analysis_{time.time_ns()}';archive.mkdir()
+                for path in previous_results: path.rename(archive/path.name)
+            job.run_config.setdefault('vmmc_restarts',[]).append({
+                'time':time.time(),'from_stage':spec.name,
+                'reason':'Completed stage lacks a matching periodic-image-safe engine receipt.'})
+            break
+    job.run_config['vmmc_engine_revision']=VMMC_ENGINE_REVISION
     n_pairs=write_order_parameters(root)
     job.backend='CPU';job.status=OxdnaStatus.running;job.error=None
     job.save(workspace)
@@ -54,7 +77,15 @@ async def run(job, workspace, specs):
                 (root/runner._STOP_MARKER).unlink(missing_ok=True)
                 stage.status='stopped';job.status=OxdnaStatus.stopped;job.save(workspace);return
             if rc:
-                raise ValueError(f'VMMC failed in {spec.name} (exit {rc}); see its oxDNA log.')
+                log_path=directory/'oxdna.log'
+                # Surface the native reason in the job card, not only a generic exit code.
+                errors=[]
+                if log_path.exists():
+                    with log_path.open() as log:
+                        log.seek(max(0, log_path.stat().st_size-8192))
+                        errors=[line.strip() for line in log if line.startswith('ERROR:')]
+                detail=errors[-1] if errors else 'See its oxDNA log.'
+                raise ValueError(f'VMMC failed in {spec.name} (exit {rc}): {detail}')
             if not runner.conf_is_restartable(directory/'last_conf.dat',job.n_nucleotides):
                 raise ValueError(f'Invalid VMMC checkpoint in {spec.name}.')
             data=histogram(directory/'last_hist.dat',n_pairs,len(cfg.temperatures()))
@@ -62,7 +93,7 @@ async def run(job, workspace, specs):
                 save_weights(directory/'next_weights.txt',tune_weights(weights,data[:,1]))
                 if index == cfg.tuning_rounds-1:
                     shutil.copy2(directory/'next_weights.txt',root/'vmmc_frozen_weights.txt')
-            (directory/'vmmc_complete.json').write_text(json.dumps({'steps':spec.steps,'seed':spec.seed,'role':spec.name.split('_')[2]}))
+            (directory/'vmmc_complete.json').write_text(json.dumps({'steps':spec.steps,'seed':spec.seed,'role':spec.name.split('_')[2],'engine_revision':VMMC_ENGINE_REVISION}))
             stage.status='done';job.current_stage_idx=index+1;job.save(workspace)
         job.run_config['vmmc_result']=analyse(root,specs,cfg,n_pairs)
         job.status=OxdnaStatus.completed;job.current_stage_idx=len(specs);job.error=None;job.save(workspace)

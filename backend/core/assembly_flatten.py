@@ -43,11 +43,12 @@ from backend.core.models import (
 )
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.sequences import domain_bp_range
+from backend.core.workspace_location import default_workspace
 
 # Project root — two levels above this file: core/ → backend/ → root
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _LIBRARY_DIR = _PROJECT_ROOT / "parts-library"
-_WORKSPACE_DIR = _PROJECT_ROOT / "workspace"
+_WORKSPACE_DIR = default_workspace()
 
 
 def _load_design(source) -> Design:

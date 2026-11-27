@@ -344,12 +344,11 @@ export function initRunpodStatus({
       }
     } finally {
       _busy = false
-      // The leak check rides the pre-flight rather than owning a poller: a pod is only
-      // ever created by a launch from this app, so re-checking when the user asks about
-      // RunPod is often enough — and it costs one request, not a standing timer.
+      // Also refresh immediately when pre-flight is requested.
       await _refreshPods()
       await _refreshBalance()
       _render()
+      syncBillingTimer()
       onChange(_preflight)
     }
     return _preflight
@@ -357,12 +356,36 @@ export function initRunpodStatus({
 
   _render()
 
+  // Pod lifetime is independent of job selection: stopping/deleting the last job
+  // stops the job poller, but must not freeze this account-level billing warning.
+  let billingRefresh = null
+  function refreshBilling() {
+    if (!billingRefresh) {
+      billingRefresh = Promise.all([_refreshPods(), _refreshBalance()])
+        .then(() => _render())
+        .finally(() => { billingRefresh = null })
+    }
+    return billingRefresh
+  }
+  let billingTimer = null
+  function syncBillingTimer() {
+    if (!runpodConnected(_preflight)) {
+      clearInterval(billingTimer)
+      billingTimer = null
+    } else if (billingTimer === null) {
+      billingTimer = setInterval(() => {
+        if (mount?.isConnected) void refreshBilling()
+      }, 15000)
+    }
+  }
+
   return {
     refresh,
     refreshSession,
     get sessionState() { return _sessionState },
     setJob(job) { _job = job || null; _render() },
-    async refreshBilling() { await Promise.all([_refreshPods(), _refreshBalance()]); _render() },
+    refreshBilling,
+    dispose() { clearInterval(billingTimer); billingTimer = null },
     get preflight() {
       return _preflight
     },

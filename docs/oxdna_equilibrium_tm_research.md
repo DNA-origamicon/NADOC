@@ -1,5 +1,13 @@
 # Equilibrium Tm research status and next session
 
+The subsequent dedicated CPU-method investigation is recorded in
+[the 2026-11-21 equilibrium benchmark](oxdna_equilibrium_tm_benchmark_20261121.md),
+with isolated tools under `tools/oxdna_tm_research/`. Six fresh CPU campaigns
+failed the sub-hour ±1°C target. The 26.33-minute independent q+distance follow-up
+gave a provisional any-interstrand Tm of 70.07°C, but replicas spanned
+66.69–74.14°C and long-batch uncertainty remained unresolved. The historical hybrid
+closeout and original session prompt below remain preserved.
+
 The hybrid attempt is closed as inconclusive research. No hybrid workflow is
 integrated into the wizard, managed jobs, or production engine. A functioning
 experimental CLI was built and tested locally; calling the whole attempt

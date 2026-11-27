@@ -1,0 +1,44 @@
+[
+  {
+    "campaign": "distance",
+    "verified": true,
+    "tm_c": 71.61863528650707,
+    "ci95_c": null
+  },
+  {
+    "campaign": "distance_confirmation",
+    "verified": true,
+    "tm_c": 69.84682597288491,
+    "ci95_c": null
+  },
+  {
+    "campaign": "distance_smoke",
+    "verified": true,
+    "tm_c": 67.89202712508998,
+    "ci95_c": null
+  },
+  {
+    "campaign": "large",
+    "verified": true,
+    "tm_c": null,
+    "ci95_c": null
+  },
+  {
+    "campaign": "medium",
+    "verified": true,
+    "tm_c": 76.90122772819969,
+    "ci95_c": null
+  },
+  {
+    "campaign": "multistart_q",
+    "verified": true,
+    "tm_c": 63.10929394024871,
+    "ci95_c": null
+  },
+  {
+    "campaign": "small",
+    "verified": true,
+    "tm_c": null,
+    "ci95_c": null
+  }
+]

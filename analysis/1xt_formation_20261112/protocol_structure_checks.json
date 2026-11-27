@@ -1,0 +1,198 @@
+[
+  {
+    "job_id": "2bc15e9e2531",
+    "config": {
+      "structure": "2hb_1xT.psf",
+      "coordinates": "2hb_1xT.pdb",
+      "seed": "2023714887",
+      "paratypecharmm": "on",
+      "parameters": [
+        "forcefield/par_all36_na.prm",
+        "forcefield/par_all36m_prot.prm",
+        "forcefield/par_np_thiol.prm",
+        "forcefield/toppar_water_ions_cufix.str",
+        "forcefield/par_stub_ions_nbfix.str"
+      ],
+      "extrabonds": "on",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "cellbasisvector1": "90.930",
+      "cellbasisvector2": "0.000",
+      "cellbasisvector3": "0.000",
+      "cellorigin": "45.465",
+      "wrapall": "off",
+      "wrapwater": "on",
+      "exclude": "scaled1-4",
+      "onefourscaling": "1.0",
+      "switching": "on",
+      "switchdist": "8.0",
+      "cutoff": "10.0",
+      "pairlistdist": "12.0",
+      "pme": "yes",
+      "pmegridspacing": "1.5",
+      "rigidbonds": "all",
+      "rigidtolerance": "1.0e-8",
+      "timestep": "2",
+      "nonbondedfreq": "1",
+      "fullelectfrequency": "1",
+      "stepspercycle": "10",
+      "gpuresident": "on",
+      "langevin": "on",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "langevinhydrogen": "off",
+      "margin": "3",
+      "usegrouppressure": "yes",
+      "useflexiblecell": "no",
+      "useconstantarea": "no",
+      "langevinpiston": "on",
+      "langevinpistontarget": "1.01325",
+      "langevinpistonperiod": "200.0",
+      "langevinpistondecay": "100.0",
+      "langevinpistontemp": "300",
+      "outputenergies": "250000",
+      "xstfreq": "5000",
+      "restartfreq": "5000",
+      "binaryrestart": "yes",
+      "constraints": "off",
+      "outputname": "output/2hb_1xT_01_production_200ns_k0",
+      "dcdfile": "output/2hb_1xT_01_production_200ns_k0.dcd",
+      "dcdfreq": "10000",
+      "xstfile": "output/2hb_1xT_01_production_200ns_k0.xst",
+      "bincoordinates": "output/2hb_1xT_00_reseed.coor",
+      "binvelocities": "output/2hb_1xT_00_reseed.vel",
+      "extendedsystem": "output/2hb_1xT_00_reseed.xsc",
+      "run": "100000000"
+    },
+    "parameter_hashes": {
+      "forcefield/par_all36_na.prm": "1ada57015c112529aa985ee60163f11a94e991a334cc9928e030d2236899df05",
+      "forcefield/par_all36m_prot.prm": "b1d1c70b5f350a2d5758bf3ce7ec86e50cdc3f69d8cc3097f98f279cdaeb5aaa",
+      "forcefield/par_np_thiol.prm": "4b5dd4823bbab28db0252e7745f9c82060f5bfc4e3aa16c5842a9acbb0850796",
+      "forcefield/toppar_water_ions_cufix.str": "45bbca02dabdffa30559c3b29c3954f710cbf9da4a679de9452a72784a909e9d",
+      "forcefield/par_stub_ions_nbfix.str": "bfc8c05c4a615936c7a20d656754c17c6634c24693efb138a41f72cb8616edc0"
+    },
+    "topology_sha256": "2e7c5e443da7a27edfdf964e06079c34318f580f9e9339e427d9d5b0087e816d",
+    "ions": {
+      "CLA": 39,
+      "MGH": 66,
+      "TIP3": 51022
+    },
+    "extra_base_masses": [
+      {
+        "site": [
+          "D000",
+          8
+        ],
+        "masses": {
+          "P": 30.974,
+          "O1P": 15.9994,
+          "O2P": 15.9994,
+          "O5'": 15.9994,
+          "C5'": 12.011,
+          "H5'": 1.008,
+          "H5''": 1.008,
+          "C4'": 12.011,
+          "H4'": 1.008,
+          "O4'": 15.9994,
+          "C1'": 12.011,
+          "H1'": 1.008,
+          "N1": 14.007,
+          "C6": 12.011,
+          "H6": 1.008,
+          "C2": 12.011,
+          "O2": 15.9994,
+          "N3": 14.007,
+          "H3": 1.008,
+          "C4": 12.011,
+          "O4": 15.9994,
+          "C5": 12.011,
+          "C5M": 12.011,
+          "H51": 1.008,
+          "H52": 1.008,
+          "H53": 1.008,
+          "C2'": 12.011,
+          "H2''": 1.008,
+          "H2'": 1.008,
+          "C3'": 12.011,
+          "H3'": 1.008,
+          "O3'": 15.9994
+        }
+      },
+      {
+        "site": [
+          "D001",
+          15
+        ],
+        "masses": {
+          "P": 30.974,
+          "O1P": 15.9994,
+          "O2P": 15.9994,
+          "O5'": 15.9994,
+          "C5'": 12.011,
+          "H5'": 1.008,
+          "H5''": 1.008,
+          "C4'": 12.011,
+          "H4'": 1.008,
+          "O4'": 15.9994,
+          "C1'": 12.011,
+          "H1'": 1.008,
+          "N1": 14.007,
+          "C6": 12.011,
+          "H6": 1.008,
+          "C2": 12.011,
+          "O2": 15.9994,
+          "N3": 14.007,
+          "H3": 1.008,
+          "C4": 12.011,
+          "O4": 15.9994,
+          "C5": 12.011,
+          "C5M": 12.011,
+          "H51": 1.008,
+          "H52": 1.008,
+          "H53": 1.008,
+          "C2'": 12.011,
+          "H2''": 1.008,
+          "H2'": 1.008,
+          "C3'": 12.011,
+          "H3'": 1.008,
+          "O3'": 15.9994
+        }
+      }
+    ],
+    "dna_extrabonds": [],
+    "structure_spot_checks": [
+      {
+        "file": "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd",
+        "frame": 0,
+        "time_ns": 0.020000000059628115,
+        "box_A": [
+          89.39269256591797,
+          111.5201644897461,
+          155.635498046875
+        ],
+        "ring_piercings": []
+      },
+      {
+        "file": "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd",
+        "frame": 5000,
+        "time_ns": 100.0200002982002,
+        "box_A": [
+          89.33158111572266,
+          111.44392395019531,
+          155.5290985107422
+        ],
+        "ring_piercings": []
+      },
+      {
+        "file": "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd",
+        "frame": 9999,
+        "time_ns": 200.00000059628115,
+        "box_A": [
+          89.30897521972656,
+          111.41571807861328,
+          155.48974609375
+        ],
+        "ring_piercings": []
+      }
+    ]
+  }
+]

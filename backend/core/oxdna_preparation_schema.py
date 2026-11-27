@@ -33,7 +33,8 @@ _fields = {
         length_bp bp_start loop_skips label lattice_frame_id grid_pos direction""",
     m.LoopSkip: "bp_index delta",
     m.Domain: "helix_id start_bp end_bp direction overhang_id binds_overhang_id",
-    m.Strand: "id domains strand_type sequence custom_scaffold_length color name notes routing_seed is_reference",
+    m.StrandLoop: "helix_id bp_index direction length aspect_ratio rotation_deg",
+    m.Strand: "id loops domains strand_type sequence custom_scaffold_length color name notes routing_seed is_reference",
     m.SubDomain: """id name color start_bp_offset length_bp sequence_override rotation_theta_deg
         rotation_phi_deg notes tm_celsius gc_percent hairpin_warning dimer_warning""",
     m.OverhangSpec: """id helix_id strand_id sequence label rotation pivot translation sub_domains

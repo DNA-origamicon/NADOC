@@ -10,6 +10,27 @@ metadata:
 
 # VoltronCoreArm visualization remediation
 
+## VR load recovery — November 23, 2026
+
+VoltronCoreArmV2's native startup failed before scene publication: extension-slab
+projection requested an atomistic build reservation of 3,796 MiB with only 2,044
+MiB available after reservations and the system reserve. The viewer and SteamVR
+were running; the startup `.loading` file carried the explicit memory error.
+GNOME System Monitor had accumulated 10.4 GiB RSS. Closing that process recovered
+about 10 GiB; retrying the same document/launch settings through the normal VR
+stop/launch endpoints succeeded without code, geometry or memory-limit changes.
+Full view legitimately uses atomistic extension ring measurements; do not bypass
+that calculation to avoid admission failures.
+
+The retry reached first frame in 22.3 seconds, with tracked/focused eyes, clear
+placement integrity, and visible design pixels in both submitted eyes (9,040 left,
+8,149 right in the sampled frame). The left-eye image independently showed the
+core/arm design. Runtime evidence was captured under
+`/media/jojo/Archive/.nadoc-vr-capture/v-8ozs207i/capture-1391120-1554215015676594-2/`.
+This is application-eye evidence, not through-lens confirmation. The separate
+final compositor recorder remained unavailable; no SteamVR restart was needed
+for scene loading. These process identities/paths are historical diagnostics.
+
 ## Topic navigation and current boundaries
 
 Reorganized October 17, 2026. Read the retained contracts here, then only the

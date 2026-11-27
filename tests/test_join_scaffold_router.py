@@ -119,7 +119,9 @@ def test_routing_failure_is_atomic(joined, monkeypatch):
 
 
 def test_autoscaffold_api_is_one_undoable_operation(joined, monkeypatch):
+    from backend.api import part_auto_commands
     from backend.api.main import app
+    from backend.api.part_proof_commands import execute
 
     monkeypatch.setattr(state, "_sessions", {})
     state.set_design(joined.model_copy(deep=True))
@@ -131,6 +133,18 @@ def test_autoscaffold_api_is_one_undoable_operation(joined, monkeypatch):
     assert_routed(joined, after)
     assert state.undo_depth() == depth + 1
     assert after.feature_log[-1].op_kind == "auto-scaffold-seamed"
+    command = after.feature_log[-1]
+    run_router = part_auto_commands.scaffold
+
+    def scaffold_with_reversed_connection_order(*args, **kwargs):
+        result, report = run_router(*args, **kwargs)
+        return result.copy_with(flexible_connections=result.flexible_connections[::-1]), report
+
+    with monkeypatch.context() as replay:
+        replay.setattr(part_auto_commands, "scaffold", scaffold_with_reversed_connection_order)
+        replayed = execute(command.op_kind, joined, command.params)
+    assert replayed.crossovers == after.crossovers
+    assert replayed.flexible_connections == after.flexible_connections
     assert client.post("/api/design/undo").status_code == 200
     assert state.get_or_404().strands == joined.strands
     assert state.get_or_404().forced_ligations == joined.forced_ligations

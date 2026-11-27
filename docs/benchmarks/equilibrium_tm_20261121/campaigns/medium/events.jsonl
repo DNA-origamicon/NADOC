@@ -1,0 +1,4 @@
+{"event": "tuning_complete", "elapsed_seconds": 229.1594310561195, "weights": [0.06428134649795705, 1.0, 0.11164406190942319, 0.024157756097454013, 0.008550346511210389, 0.011237728627593906, 0.0016709425367213853, 0.0007139258387447237, 0.00030205727729321595]}
+{"event": "equilibration_complete", "elapsed_seconds": 265.87759513407946}
+{"event": "precision_checkpoint", "elapsed_seconds": 410.65600740606897, "tm_c": 76.57617152182951, "ci95_c": null, "status": "inconclusive", "reasons": ["Melting is not bracketed in every replica.", "Fewer than twenty recorded binding/unbinding transitions in a replica."], "completed_blocks": 1}
+{"event": "finished", "elapsed_seconds": 410.6754131161142, "outcome": "budget_exhausted", "completed_blocks_per_replica": [1, 1, 1, 1]}

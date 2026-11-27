@@ -13,7 +13,8 @@ import numpy as np
 from scipy.optimize import Bounds, LinearConstraint, milp
 from scipy.sparse import coo_matrix
 
-from backend.core.models import Crossover, Direction, Domain, HalfCrossover
+from backend.core.models import Direction, Domain, HalfCrossover
+from backend.core.routing_identity import crossover
 from backend.core.sequences import domain_bp_range
 from backend.core.topology_integrity import forced_edge, slot
 from backend.core.scaffold_safety import RoutingIntegrityError
@@ -150,7 +151,7 @@ def _route_component(design, result_type, *, seams=True):
             )
             if not clear and not seams:
                 continue
-            xo = Crossover(
+            xo = crossover(
                 half_a=HalfCrossover(helix_id=a[0], index=a[1], strand=a[2]),
                 half_b=HalfCrossover(helix_id=b[0], index=b[1], strand=b[2]),
                 process_id="auto_scaffold_join",

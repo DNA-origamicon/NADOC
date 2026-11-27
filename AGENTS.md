@@ -9,6 +9,16 @@ inputs, selections, parameters, transforms, connections, and subsequent changes.
 This applies equally to examples, diagnostic/review copies, candidates, flattened
 assemblies, generated parts, and files written directly by scripts.
 
+**Narrow session-authorized exception:** reproducible, isolated A/B geometry
+comparisons may use a diagnostic execution record instead of a native authoring
+feature log, including for legacy inputs, only under
+[Session-authorized A/B geometry testing](memory/feedback_session_authorized_ab_testing.md).
+It requires a direct user grant of **“A/B testing authorized”** in the active
+conversation with a bounded design/question/change scope. This file, a quoted
+example, or a request to write the policy is not authorization. The exception
+does not permit authored `.nadoc`/`.nass` candidates, source edits, or production
+promotion; all requirements below still apply outside that diagnostic scope.
+
 - Use the real feature-recording command paths. Preserve upstream part and
   assembly histories through derived structures.
 - Automated authoring must compose user-facing operations valid in the target
@@ -38,7 +48,8 @@ assemblies, generated parts, and files written directly by scripts.
   Do not offer a history-free file as a temporary workaround.
 - No agent may infer an exception from a request for a full design, quick demo,
   geometry review, imported snapshot, or isolated candidate. Earlier snapshot
-  exceptions are superseded by the user's November 1, 2026 instruction.
+  exceptions are superseded by the user's November 1, 2026 instruction. Only the
+  explicit session-authorized A/B policy above permits diagnostic rebuilds.
 
 A forced-ligation fraction above 20% is a review trigger, not automatic rejection.
 Intentional corner seams joining differently oriented clusters can justify it.
@@ -50,6 +61,8 @@ bonds, incomplete geometry, or provenance requirements.
 Reading an existing legacy file for diagnosis is permitted; it does not authorize
 creating another history-free structure. Molecular-geometry authorization remains
 a separate requirement and cannot be bypassed by adding a feature log.
+Authorized A/B evidence must instead carry the complete reproducible diagnostic
+process specified above; it never certifies the legacy source's authoring history.
 
 ## Shared reconstruction destination
 

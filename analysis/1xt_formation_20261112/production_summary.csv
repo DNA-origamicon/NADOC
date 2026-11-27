@@ -1,0 +1,2 @@
+job_id,label,frames,sampled_exposure_ns,dt_ns,midpoint_mean_A,wc_mean,local_wc_mean,primary_any_frames,distance_only_frames
+2bc15e9e2531,2026-11-11T09:56 2bc1,10000,200.0000005962832,0.02000000005962832,12.655092239379883,0.9182928571428572,0.92135,0,0

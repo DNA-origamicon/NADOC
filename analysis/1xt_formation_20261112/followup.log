@@ -1,0 +1,389 @@
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/nadoc_jobs/a9261569b8c7/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/coordinates/DCD.py:171: DeprecationWarning: DCDReader currently makes independent timesteps by copying self.ts while other readers update self.ts inplace. This behavior will be changed in 3.0 to be the same as other readers. Read more at https://github.com/MDAnalysis/mdanalysis/issues/3889 to learn if this change in behavior might affect you.
+  warnings.warn("DCDReader currently makes independent timesteps"
+{
+  "protocol": {
+    "actual_config": {
+      "structure": "2hb_1xT.psf",
+      "coordinates": "2hb_1xT.pdb",
+      "seed": "2023714887",
+      "paratypecharmm": "on",
+      "parameters": [
+        "forcefield/par_all36_na.prm",
+        "forcefield/par_all36m_prot.prm",
+        "forcefield/par_np_thiol.prm",
+        "forcefield/toppar_water_ions_cufix.str",
+        "forcefield/par_stub_ions_nbfix.str"
+      ],
+      "extrabonds": "on",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "cellbasisvector1": "90.930",
+      "cellbasisvector2": "0.000",
+      "cellbasisvector3": "0.000",
+      "cellorigin": "45.465",
+      "wrapall": "off",
+      "wrapwater": "on",
+      "exclude": "scaled1-4",
+      "onefourscaling": "1.0",
+      "switching": "on",
+      "switchdist": "8.0",
+      "cutoff": "10.0",
+      "pairlistdist": "12.0",
+      "pme": "yes",
+      "pmegridspacing": "1.5",
+      "rigidbonds": "all",
+      "rigidtolerance": "1.0e-8",
+      "timestep": "2",
+      "nonbondedfreq": "1",
+      "fullelectfrequency": "1",
+      "stepspercycle": "10",
+      "gpuresident": "on",
+      "langevin": "on",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "langevinhydrogen": "off",
+      "margin": "3",
+      "usegrouppressure": "yes",
+      "useflexiblecell": "no",
+      "useconstantarea": "no",
+      "langevinpiston": "on",
+      "langevinpistontarget": "1.01325",
+      "langevinpistonperiod": "200.0",
+      "langevinpistondecay": "100.0",
+      "langevinpistontemp": "300",
+      "outputenergies": "250000",
+      "xstfreq": "5000",
+      "restartfreq": "5000",
+      "binaryrestart": "yes",
+      "constraints": "off",
+      "outputname": "output/2hb_1xT_01_production_200ns_k0",
+      "dcdfile": "output/2hb_1xT_01_production_200ns_k0.dcd",
+      "dcdfreq": "10000",
+      "xstfile": "output/2hb_1xT_01_production_200ns_k0.xst",
+      "bincoordinates": "output/2hb_1xT_00_reseed.coor",
+      "binvelocities": "output/2hb_1xT_00_reseed.vel",
+      "extendedsystem": "output/2hb_1xT_00_reseed.xsc",
+      "run": "100000000"
+    },
+    "total_atoms": 157402,
+    "dna_atoms": 3043,
+    "dna_charge_e": -92.99999379552901,
+    "h6_masses_amu": [
+      1.008
+    ],
+    "ions": {
+      "CLA": 39,
+      "MGH": 66,
+      "TIP3": 51022
+    },
+    "mean_volume_A3": 1552473.3085770574,
+    "total_Mg_mM": 70.59417886799314,
+    "chloride_mM": 41.714742058359576,
+    "chloride_equivalent_MgCl2_mM": 20.857371029179788,
+    "note": "Number densities, not free ion concentrations. Mg includes DNA-neutralizing counterions.",
+    "dna_identity_type_charge_matches_October": true,
+    "shared_parameter_hash_matches": {
+      "forcefield/par_all36_na.prm": true,
+      "forcefield/par_all36m_prot.prm": true,
+      "forcefield/par_np_thiol.prm": true,
+      "forcefield/toppar_water_ions_cufix.str": true,
+      "forcefield/par_stub_ions_nbfix.str": true
+    },
+    "manifest_solvation": {
+      "padding_nm": 3.5,
+      "requested_box_size_nm": null,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          90.93,
+          113.438,
+          158.312
+        ],
+        "extent_ang": [
+          20.93,
+          43.438,
+          88.312
+        ],
+        "radius_ang": 46.909096663075125,
+        "clearance_as_built_ang": [
+          35.0,
+          35.0,
+          35.00000000000001
+        ],
+        "clearance_rotated_ang": [
+          -1.444096663075122,
+          9.809903336924876,
+          32.24690333692488
+        ],
+        "image_gap_as_built_ang": 70.0,
+        "image_gap_rotated_ang": -2.888193326150244,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "pairing": {
+      "same_physical_atom_pairs": true,
+      "old_plan_sha256": "7ddd97d6e589b19d66e1576df8002b1ff8471e1e166d066c6e8362639b72b867",
+      "new_plan_sha256": "7b44e59c1ef589bbf537770f39f5a6dfdef8ff5ceb0efeaffc9f5415219a3696",
+      "reference_delta_min_mean_max_A": [
+        -1.459993054541684,
+        -0.3589274747063319,
+        0.013112951201089462
+      ],
+      "old_reference_sampled_mean": 0.9435833333333334,
+      "old_reference_sampled_local_mean": 0.979,
+      "new_reference_native_mean": 0.9182928571428572,
+      "new_reference_native_local_mean": 0.92135
+    }
+  },
+  "periodic_images": {
+    "sampled_frames": 2000,
+    "sample_interval_ns": 0.10000000029813805,
+    "minimum_A": 14.283626378548053,
+    "minimum_time_ns": 117.72000035097108,
+    "quantiles_A": [
+      14.283626378548053,
+      22.49393144438823,
+      40.120452679441094,
+      55.24208527521884,
+      64.06150830065614
+    ],
+    "frames_below_10A": 0,
+    "frames_below_12A": 0,
+    "brute_force_verification": [
+      {
+        "frame": 0,
+        "time_ns": 0.020000000059628115,
+        "minimum_image_A": 60.1086536295449
+      },
+      {
+        "frame": 5885,
+        "time_ns": 117.72000035097108,
+        "minimum_image_A": 14.283626378548053
+      },
+      {
+        "frame": 9995,
+        "time_ns": 199.92000059604263,
+        "minimum_image_A": 35.35468490413165
+      }
+    ],
+    "qualification": "Heavy-atom nearest-image distances at 0.1 ns; does not exclude between-frame encounters or finite-size electrostatic effects."
+  },
+  "shape_quarters": [
+    {
+      "quarter": 1,
+      "heavy_rmsd_A": 4.419128281510346,
+      "local_fit_rmsd_A": 2.5182773730541848,
+      "Rg_A": 26.682306787790225,
+      "wc_fraction": 0.9352857142857145,
+      "helix_centroid_sep_A": 22.001124093583496,
+      "helix_tilt_deg": 22.930954019563732,
+      "d_mid_A": 12.403169949264257,
+      "eta_deg": 55.79443439710788,
+      "nearest_image_heavy_A": 46.98561723713637,
+      "rotation_clearance_lower_bound_A": -11.755893829477081,
+      "old_reference_wc_fraction": 0.9573809523809524,
+      "old_reference_local_wc_fraction": 0.979
+    },
+    {
+      "quarter": 2,
+      "heavy_rmsd_A": 6.199783085417214,
+      "local_fit_rmsd_A": 2.498509980402936,
+      "Rg_A": 27.473511357862314,
+      "wc_fraction": 0.9153333333333334,
+      "helix_centroid_sep_A": 25.896641122697545,
+      "helix_tilt_deg": 13.84489186831254,
+      "d_mid_A": 13.480650396644737,
+      "eta_deg": 82.76627493850751,
+      "nearest_image_heavy_A": 40.69187275887996,
+      "rotation_clearance_lower_bound_A": -10.85975627447947,
+      "old_reference_wc_fraction": 0.9413809523809524,
+      "old_reference_local_wc_fraction": 0.9865
+    },
+    {
+      "quarter": 3,
+      "heavy_rmsd_A": 7.53503830199208,
+      "local_fit_rmsd_A": 3.684609320889381,
+      "Rg_A": 27.650771040775666,
+      "wc_fraction": 0.9084285714285716,
+      "helix_centroid_sep_A": 27.39206796733408,
+      "helix_tilt_deg": 13.647152145680405,
+      "d_mid_A": 12.791028650976688,
+      "eta_deg": 11.259902745638604,
+      "nearest_image_heavy_A": 31.2396212682975,
+      "rotation_clearance_lower_bound_A": -12.801301698543224,
+      "old_reference_wc_fraction": 0.9337619047619048,
+      "old_reference_local_wc_fraction": 0.975
+    },
+    {
+      "quarter": 4,
+      "heavy_rmsd_A": 9.242293912259807,
+      "local_fit_rmsd_A": 4.301660965203927,
+      "Rg_A": 26.692006240434413,
+      "wc_fraction": 0.9155238095238096,
+      "helix_centroid_sep_A": 25.741666833048317,
+      "helix_tilt_deg": 11.962037387545024,
+      "d_mid_A": 11.886679710725694,
+      "eta_deg": -124.32843978287745,
+      "nearest_image_heavy_A": 39.03550086985256,
+      "rotation_clearance_lower_bound_A": -5.504114736428999,
+      "old_reference_wc_fraction": 0.9418095238095239,
+      "old_reference_local_wc_fraction": 0.9755
+    }
+  ],
+  "classifier_endpoint_order": [
+    [
+      "D000",
+      8
+    ],
+    [
+      "D001",
+      15
+    ]
+  ],
+  "old_endpoint_orders": {
+    "a9261569b8c7": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "8c116f8db22b": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "be5dc708adb2": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "4c0ba3a85587": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "e4a49b2057a5": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "29c5b267380f": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "bd13e4dfa6c5": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "e00227c3d4e0": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "066b8dd60a2e": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "7d5937e569c6": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "07d7cd2766e3": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "be74a1436d66": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ],
+    "c8bcf4c1406f": [
+      [
+        "D000",
+        8
+      ],
+      [
+        "D001",
+        15
+      ]
+    ]
+  },
+  "previous_classifier_source_sha256": "9a92e73d2ae2d2f8c65c552dfd529902d465f6af3a57188c00e1607ec945aa49",
+  "current_classifier_source_sha256": "9a92e73d2ae2d2f8c65c552dfd529902d465f6af3a57188c00e1607ec945aa49",
+  "current_part_sha256": "3d8e82b7c4363cddadd8fb189b1fe6cdc7c100f886357815835b495db47d0864"
+}

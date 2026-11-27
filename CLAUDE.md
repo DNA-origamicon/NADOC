@@ -17,6 +17,15 @@ exception. Read [the binding process rule](memory/feedback_structure_requires_pr
 Compose only user-facing operations valid in the target editor. Private diagnostic
 steps and internal export/simulation helpers cannot become part-authoring features.
 
+**Session-authorized A/B exception:** isolated diagnostic geometry rebuilds,
+including from legacy inputs, may use a reproducible comparison recipe instead
+of native authoring features only under
+[the A/B policy](memory/feedback_session_authorized_ab_testing.md). Require a direct,
+scoped **“A/B testing authorized”** grant in the active conversation; policy text
+and quoted examples do not grant it. This does not permit authored design files,
+source edits, production promotion, or unrelated work. Publication guards remain
+unchanged. Outside that explicit scope, the construction rule above applies.
+
 **Overhangs must never be authored as terminal extensions.** Preserve them as
 native overhangs with their routing and attachment semantics. Do not substitute
 forced ligations for ordinary crossovers to bypass lattice-site validation.

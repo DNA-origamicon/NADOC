@@ -511,6 +511,7 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 
 # Whole modules where every test is a heavy real-sim / trajectory test.
 _SLOW_MODULES = {
+    "test_oxdna_vmmc_periodic",  # Compiles the native periodic-image proposal predicate.
     "test_part_routing_large_history",  # 18HB lifecycle + fresh-process cold proofs (12–15 s each)
     "test_native_connectivity_proof",  # native pipeline/edit + two spawned cold proofs in each case (5.04 s)
     "test_native_join_proof",  # real two-cluster Join/edit + two independent spawned proofs (5.41 s)
@@ -519,6 +520,7 @@ _SLOW_MODULES = {
     # Every HMC check launches the real CUDA Chudoba oxDNA engine; the harmonic
     # distribution samples 5,000 trajectories (185,000 integration steps).
     "test_chudoba_hmc",
+    "test_chudoba_math",  # shared C++ compilation fixture exceeded 5 s (6.18 s)
     # Every test launches the real Chudoba oxDNA CPU/CUDA engine. Snapshot
     # sampling and cutoff probes reached 5.58–10.61 s in the merge fast gate.
     "test_chudoba_engine",
@@ -581,6 +583,9 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Full D014 PDF composition, panel registration and pixel graph search: 5.2 s.
+    "test_d014_false_positive_spans_are_classified_as_scaffold",
+    "test_five_publication_sequence_searches",
     # Full 12-tether JJ_Hinge constrained solve: 12.62 s; small fixtures stay fast.
     "test_local_jj_hinge_numeric_regression_is_read_only",
     # Compiles and executes the native NAMD electrode harness.
@@ -1121,6 +1126,8 @@ def _slow_area_for(module: str) -> str:
     First match wins; order matters (oxdna before headless so the oxDNA
     headless-build file lands in oxdna, not headless)."""
     if module in {"test_flexible_network", "test_part_routing_large_history", "test_extrusion_auto_routing_history", "test_vr_frame_audit", "test_vr_view_transport"}:
+        return "headless"
+    if module in {"test_publication_staple_tracing", "test_publication_sequence_search"}:
         return "headless"
     if module in {"test_assembly_flatten", "test_assembly_simulation_parity"}:
         return "cando"

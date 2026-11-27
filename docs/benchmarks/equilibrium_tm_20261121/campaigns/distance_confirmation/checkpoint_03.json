@@ -1,0 +1,136 @@
+{
+  "tm_c": 68.99530332809732,
+  "ci95_c": null,
+  "stopping_ci_c": null,
+  "halfwidth_c": null,
+  "replica_tm_c": [
+    69.41090915517255,
+    64.69712997770813,
+    72.62558041890786,
+    70.54014425009369
+  ],
+  "target_halfwidth_c": 1.0,
+  "nominal_target_met": false,
+  "early_stop_target_met": false,
+  "status": "inconclusive",
+  "reasons": [
+    "Too few long time batches, or bootstrap curves do not bracket melting."
+  ],
+  "temperatures_c": [
+    64.0,
+    64.5,
+    65.0,
+    65.5,
+    66.0,
+    66.5,
+    67.0,
+    67.5,
+    68.0,
+    68.5,
+    69.0,
+    69.5,
+    70.0,
+    70.5,
+    71.0,
+    71.5,
+    72.0,
+    72.5,
+    73.0,
+    73.5,
+    74.0,
+    74.5,
+    75.0,
+    75.5,
+    76.0,
+    76.5,
+    77.0,
+    77.5,
+    78.0
+  ],
+  "duplex_yield": [
+    0.7100323426319133,
+    0.6923798265732631,
+    0.6739157280228749,
+    0.6546474858122731,
+    0.6345901091965351,
+    0.6137685383105257,
+    0.5922165682525451,
+    0.569978995119774,
+    0.5471124444560602,
+    0.5236844767019349,
+    0.4997754139535407,
+    0.4754774576507398,
+    0.4508942201768795,
+    0.4261402023564825,
+    0.40133899988491056,
+    0.37662117275452217,
+    0.35212322107095523,
+    0.3279828876025922,
+    0.30433731653020174,
+    0.2813189518437499,
+    0.25905282395624984,
+    0.2376523316885911,
+    0.21721669736341173,
+    0.19782842295446323,
+    0.17955183056495197,
+    0.1624315376090935,
+    0.14649249103193282,
+    0.13174091960839185,
+    0.11816534700505284
+  ],
+  "qualification": "Sampling uncertainty only; no CPD/force-field uncertainty included.",
+  "between_replica_ci95_c": [
+    63.97777547535686,
+    74.65910642558427
+  ],
+  "replica_tm_sem_c": 1.6781635769460672,
+  "inefficiencies": [
+    217.49879785293518,
+    191.37440658781466,
+    78.00370847251756,
+    158.0454136391408
+  ],
+  "batch_length_histograms": 1088,
+  "effective_histogram_blocks": [
+    13.793179684737805,
+    15.676077347486956,
+    38.45970991311223,
+    18.981885844848293
+  ],
+  "batch_checks": [
+    null,
+    null
+  ],
+  "recorded_transitions": [
+    69,
+    94,
+    24,
+    44
+  ],
+  "histogram_interval_steps": 1000,
+  "elapsed_seconds": 717.4576170891523,
+  "completed_blocks": 3,
+  "production_steps_per_replica": 3000000,
+  "production_directories": [
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_01",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_02"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_01",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_02"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_01",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_02"
+    ],
+    [
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_00",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_01",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_02"
+    ]
+  ]
+}

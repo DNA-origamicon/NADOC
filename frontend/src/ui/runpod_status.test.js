@@ -219,6 +219,36 @@ describe('initRunpodStatus — live pods and terminate', () => {
     return { ok: true, json: async () => GREEN }
   })
 
+  it('clears a terminated pod without a selected job or another pre-flight', async () => {
+    vi.useFakeTimers()
+    const el = mount()
+    document.body.append(el)
+    let pods = [POD]
+    const fetchImpl = vi.fn(async url => ({
+      ok: true,
+      json: async () => String(url).includes('/pods') ? { pods } : GREEN,
+    }))
+    const panel = initRunpodStatus({ mount: el, fetchImpl })
+    try {
+      await panel.refresh()
+      expect(el.textContent).toContain('1 pod billing')
+      panel.setJob(null)
+      pods = []
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(panel.pods).toEqual([])
+      expect(el.textContent).not.toContain('pod billing')
+      expect(fetchImpl.mock.calls.filter(([url]) => url.includes('/preflight'))).toHaveLength(1)
+      panel.dispose()
+      fetchImpl.mockClear()
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(fetchImpl).not.toHaveBeenCalled()
+    } finally {
+      panel.dispose()
+      el.remove()
+      vi.useRealTimers()
+    }
+  })
+
   it('lists a billing pod after a refresh, with its rate and a Terminate button', async () => {
     const el = mount()
     const panel = initRunpodStatus({ mount: el, fetchImpl: routed() })

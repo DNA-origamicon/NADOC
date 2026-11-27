@@ -980,7 +980,7 @@ def _make_resumable_job(tmp_path, alpine):
     return job
 
 
-def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
+def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine, verified_resume):
     job = _make_resumable_job(tmp_path, alpine)
     job.live_metrics = {"segment": "stale"}
     job.live_frame = {"segment": "stale"}
@@ -1033,7 +1033,7 @@ def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
     assert "--source 6hb_demo_01_p50.resume --total" in sbatch
 
 
-def test_resume_job_applies_resource_override(tmp_path, alpine):
+def test_resume_job_applies_resource_override(tmp_path, alpine, verified_resume):
     """Reviewed/edited resources (e.g. a longer walltime) are used for the resumed run."""
     job = _make_resumable_job(tmp_path, alpine)
     override = dict(job.resources)
@@ -1084,7 +1084,7 @@ def test_remote_recommendation_current_seeds_from_job_resources(tmp_path, monkey
     assert {q["name"] for q in out["available_qos"]} == {"cpu-normal", "cpu-long"}
 
 
-def test_resume_job_no_checkpoint_reruns_fresh(tmp_path, alpine):
+def test_resume_job_no_checkpoint_reruns_fresh(tmp_path, alpine, verified_resume):
     """Timed out before the first restart write → no usable checkpoint → the segment
     just re-runs fresh (idempotent sbatch), no resume conf uploaded."""
     job = _make_resumable_job(tmp_path, alpine)
@@ -1951,3 +1951,41 @@ def test_legacy_continuation_collector_uses_real_checkpoint(tmp_path, alpine):
     assert job.live_metrics['step'] == 144000
     assert job.live_metrics['retrieved_at'] > 0
     assert name in ex.parse_progress_listing(name + '.resume.log')[1]
+
+
+@pytest.fixture
+def verified_resume(monkeypatch):
+    # Transport orchestration fixture; real clearance and immutable input coverage
+    # lives in test_md_remote_clearance.py with actual binary coordinates.
+    from backend.core import md_remote_clearance
+    async def verify(job, workspace, conn, name, text, **kwargs):
+        return text
+    monkeypatch.setattr(md_remote_clearance, "verify_resume_inputs", verify)
+
+
+def test_remote_resume_selects_minimization_before_relaxation(tmp_path, alpine, verified_resume):
+    job = _make_resumable_job(tmp_path, alpine)
+    name = "6hb_demo_00_min"
+    job.minimization = MdSegmentStatus(name=name, stage="minimization", percent=0, steps=756120)
+    pkg = job.package_dir(tmp_path)
+    from backend.core.md_protocols import _min_conf
+    (pkg / f"{name}.conf").write_text(_min_conf(
+        name, "6hb_demo", (100., 100., 100.), False, 756120, .5, n_atoms=7561135))
+    manifest = json.loads((pkg / "manifest.json").read_text())
+    manifest["minimization"]["steps"] = 756120
+    (pkg / "manifest.json").write_text(json.dumps(manifest))
+    conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 88", "")},
+                    get_contents={name + ".restart.xsc": "86400 100 0 0 0 100 0 0 0 100 0 0 0\n"})
+    _run(ex.resume_job(job, tmp_path, profile=alpine, conn=conn))
+    text = next(v for k, v in conn.put_contents.items() if k.endswith(name + ".resume.conf"))
+    assert "set nadoc_min_max 669720" in text
+    assert "run                " not in text
+    assert not any(k.endswith("01_p50.resume.conf") for k in conn.put_contents)
+
+
+def test_remote_resume_refuses_seed_fallback_for_started_stage(tmp_path, alpine, verified_resume):
+    job = _make_resumable_job(tmp_path, alpine)
+    conn = FakeConn(canned={"ls -1 output": RunResult(0, "6hb_demo_01_p50.log\n", "")})
+    with pytest.raises(ValueError, match="refusing to restart"):
+        _run(ex.resume_job(job, tmp_path, profile=alpine, conn=conn))
+    assert not any("sbatch" in cmd for cmd in conn.runs)

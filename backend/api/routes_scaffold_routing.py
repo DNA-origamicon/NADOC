@@ -61,6 +61,10 @@ def _run_auto_scaffold_with_feature_log(
             from backend.api.part_auto_commands import scaffold
             updated, result = scaffold(op_kind, d, history_seed=params["history_seed"],
                                        inherit_scaffold_end_deformations=params.get("inherit_scaffold_end_deformations", 0))
+            if updated.flexible_connections:
+                from backend.core.part_flexible_choices import capture_flexible_choices
+
+                params["flexible_choices"] = capture_flexible_choices(updated)
         except HTTPException:
             raise
         except Exception as exc:

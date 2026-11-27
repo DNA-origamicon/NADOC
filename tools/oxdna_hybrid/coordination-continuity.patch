@@ -1,0 +1,98 @@
+--- a/src/Forces/Metadynamics/meta_utils.cpp
++++ b/src/Forces/Metadynamics/meta_utils.cpp
+@@ -221,25 +221,30 @@
+ 
+ // here we got ridden of the smoothing function that is present in the original oxDNA code
+ number _f1(number r) {
+-    static number shift = HYDR_EPS_OXDNA2 * SQR(1.0 - exp(-(HYDR_RC - HYDR_R0) * HYDR_A));
+-
+-	number val = 0.0;
+-	if(r < HYDR_RCHIGH) {
+-        number tmp = 1.0 - exp(-(r - HYDR_R0) * HYDR_A);
+-        val = HYDR_EPS_OXDNA2 * SQR(tmp) - shift;
+-	}
+-
+-	return val;
++    number val = 0.0;
++    if(r < HYDR_RCHIGH) {
++        if(r > HYDR_RHIGH) val = HYDR_EPS_OXDNA2 * HYDR_BHIGH * SQR(r-HYDR_RCHIGH);
++        else if(r > HYDR_RLOW) {
++            number tmp = 1.0 - exp(-(r-HYDR_R0)*HYDR_A);
++            number shift = HYDR_EPS_OXDNA2 * SQR(1.0-exp(-(HYDR_RC-HYDR_R0)*HYDR_A));
++            val = HYDR_EPS_OXDNA2 * SQR(tmp)-shift;
++        }
++        else if(r > HYDR_RCLOW) val = HYDR_EPS_OXDNA2 * HYDR_BLOW * SQR(r-HYDR_RCLOW);
++    }
++    return val;
+ }
+ 
+ number _f1D(number r) {
+-	number val = 0.0;
+-	if(r < HYDR_RCHIGH) {
+-        number tmp = exp(-(r - HYDR_R0) * HYDR_A);
+-        val = 2.0 * HYDR_EPS_OXDNA2 * (1 - tmp) * tmp * HYDR_A;
+-	}
+-
+-	return val;
++    number val = 0.0;
++    if(r < HYDR_RCHIGH) {
++        if(r > HYDR_RHIGH) val = 2.0*HYDR_BHIGH*(r-HYDR_RCHIGH);
++        else if(r > HYDR_RLOW) {
++            number tmp = exp(-(r-HYDR_R0)*HYDR_A);
++            val = 2.0*(1.0-tmp)*tmp*HYDR_A;
++        }
++        else if(r > HYDR_RCLOW) val = 2.0*HYDR_BLOW*(r-HYDR_RCLOW);
++    }
++    return HYDR_EPS_OXDNA2 * val;
+ }
+ 
+ number _f4(number t, number t0, number a) {
+--- a/src/CUDA/Forces/metad_forces.cuh
++++ b/src/CUDA/Forces/metad_forces.cuh
+@@ -142,25 +142,30 @@
+ namespace cuda_meta {
+ 
+ __device__ inline c_number _f1(c_number r) {
+-    // this should be pre-computed
+-	c_number shift = HYDR_EPS_OXDNA2 * SQR(1.0 - exp(-(HYDR_RC - HYDR_R0) * HYDR_A));
+-	
+-	c_number val = 0.0f;
+-	if(r < HYDR_RCHIGH) {
+-		c_number tmp = 1.0f - expf(-(r - HYDR_R0) * HYDR_A);
+-		val = HYDR_EPS_OXDNA2 * SQR(tmp) - shift;
+-	}
+-	return val;
++    c_number val = 0.0;
++    if(r < HYDR_RCHIGH) {
++        if(r > HYDR_RHIGH) val = HYDR_EPS_OXDNA2 * HYDR_BHIGH * SQR(r-HYDR_RCHIGH);
++        else if(r > HYDR_RLOW) {
++            c_number tmp = 1.0 - exp(-(r-HYDR_R0)*HYDR_A);
++            c_number shift = HYDR_EPS_OXDNA2 * SQR(1.0-exp(-(HYDR_RC-HYDR_R0)*HYDR_A));
++            val = HYDR_EPS_OXDNA2 * SQR(tmp)-shift;
++        }
++        else if(r > HYDR_RCLOW) val = HYDR_EPS_OXDNA2 * HYDR_BLOW * SQR(r-HYDR_RCLOW);
++    }
++    return val;
+ }
+ 
+ __device__ inline c_number _f1D(c_number r) {
+-	c_number val = 0.0f;
+-	if(r < HYDR_RCHIGH) {
+-		c_number tmp = expf(-(r - HYDR_R0) * HYDR_A);
+-		val = 2.0f * HYDR_EPS_OXDNA2 * (1.0f - tmp) * tmp * HYDR_A;
+-	}
+-
+-	return val;
++    c_number val = 0.0;
++    if(r < HYDR_RCHIGH) {
++        if(r > HYDR_RHIGH) val = 2.0*HYDR_BHIGH*(r-HYDR_RCHIGH);
++        else if(r > HYDR_RLOW) {
++            c_number tmp = exp(-(r-HYDR_R0)*HYDR_A);
++            val = 2.0*(1.0-tmp)*tmp*HYDR_A;
++        }
++        else if(r > HYDR_RCLOW) val = 2.0*HYDR_BLOW*(r-HYDR_RCLOW);
++    }
++    return HYDR_EPS_OXDNA2 * val;
+ }
+ 
+ __device__ inline c_number _f4(c_number t, c_number t0, c_number a) {

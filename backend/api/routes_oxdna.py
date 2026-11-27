@@ -1516,7 +1516,7 @@ async def copy_oxdna_job(job_id: str, body: Optional[OxdnaRunLocation] = None) -
         from backend.core.oxdna_torsion import SETUP_FILE
 
         files.add(SETUP_FILE)
-    if (copied_config or {}).get("vmmc_melting"):
+    if (copied_config or {}).get("vmmc_melting") or any(s.sequence_dependent for s in copied_specs):
         files.add("oxDNA2_sequence_dependent_parameters.txt")
     files.update(spec.forces_file for spec in copied_specs if spec.forces_file)
     files.update(spec.parfile for spec in copied_specs if spec.parfile)

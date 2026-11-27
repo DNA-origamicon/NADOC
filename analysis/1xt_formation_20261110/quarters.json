@@ -1,0 +1,650 @@
+[
+  {
+    "job_id": "e4a49b2057a5",
+    "quarter": 1,
+    "frames": 50,
+    "midpoint_mean_A": 10.577686309814453,
+    "wc_mean": 0.9942857142857143,
+    "local_wc_mean": 0.985,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "e4a49b2057a5",
+    "quarter": 2,
+    "frames": 50,
+    "midpoint_mean_A": 11.910909652709961,
+    "wc_mean": 0.9923809523809524,
+    "local_wc_mean": 0.98,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "e4a49b2057a5",
+    "quarter": 3,
+    "frames": 50,
+    "midpoint_mean_A": 10.22211742401123,
+    "wc_mean": 0.9885714285714287,
+    "local_wc_mean": 0.99,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "e4a49b2057a5",
+    "quarter": 4,
+    "frames": 50,
+    "midpoint_mean_A": 9.711172103881836,
+    "wc_mean": 0.9828571428571428,
+    "local_wc_mean": 0.99,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "29c5b267380f",
+    "quarter": 1,
+    "frames": 5000,
+    "midpoint_mean_A": 11.941957473754883,
+    "wc_mean": 0.9876428571428573,
+    "local_wc_mean": 0.97235,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "29c5b267380f",
+    "quarter": 2,
+    "frames": 5000,
+    "midpoint_mean_A": 11.016474723815918,
+    "wc_mean": 0.9713619047619048,
+    "local_wc_mean": 0.98075,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "29c5b267380f",
+    "quarter": 3,
+    "frames": 5000,
+    "midpoint_mean_A": 10.869518280029297,
+    "wc_mean": 0.9389428571428571,
+    "local_wc_mean": 0.96945,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "29c5b267380f",
+    "quarter": 4,
+    "frames": 5000,
+    "midpoint_mean_A": 11.794711112976074,
+    "wc_mean": 0.8694380952380952,
+    "local_wc_mean": 0.79085,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "7d5937e569c6",
+    "quarter": 1,
+    "frames": 307,
+    "midpoint_mean_A": 8.450898170471191,
+    "wc_mean": 0.9206607724523033,
+    "local_wc_mean": 0.9828990228013029,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "7d5937e569c6",
+    "quarter": 2,
+    "frames": 307,
+    "midpoint_mean_A": 8.074751853942871,
+    "wc_mean": 0.9174034434620757,
+    "local_wc_mean": 0.9788273615635179,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "7d5937e569c6",
+    "quarter": 3,
+    "frames": 306,
+    "midpoint_mean_A": 8.425915718078613,
+    "wc_mean": 0.9203236850295673,
+    "local_wc_mean": 0.9754901960784313,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "7d5937e569c6",
+    "quarter": 4,
+    "frames": 306,
+    "midpoint_mean_A": 8.354279518127441,
+    "wc_mean": 0.9172113289760351,
+    "local_wc_mean": 0.9852941176470589,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "quarter": 1,
+    "frames": 10000,
+    "midpoint_mean_A": 6.062343597412109,
+    "wc_mean": 0.8692785714285713,
+    "local_wc_mean": 0.814025,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      106,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "quarter": 2,
+    "frames": 10000,
+    "midpoint_mean_A": 4.9033708572387695,
+    "wc_mean": 0.8787047619047619,
+    "local_wc_mean": 0.8073,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      23,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "quarter": 3,
+    "frames": 10000,
+    "midpoint_mean_A": 4.87938928604126,
+    "wc_mean": 0.8159214285714285,
+    "local_wc_mean": 0.9893,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      3,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "quarter": 4,
+    "frames": 10000,
+    "midpoint_mean_A": 4.817972660064697,
+    "wc_mean": 0.8156476190476191,
+    "local_wc_mean": 0.983125,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      3,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "quarter": 1,
+    "frames": 6250,
+    "midpoint_mean_A": 10.478580474853516,
+    "wc_mean": 0.8901942857142858,
+    "local_wc_mean": 0.79232,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "quarter": 2,
+    "frames": 6250,
+    "midpoint_mean_A": 10.845832824707031,
+    "wc_mean": 0.83072,
+    "local_wc_mean": 0.74212,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "quarter": 3,
+    "frames": 6250,
+    "midpoint_mean_A": 12.489859580993652,
+    "wc_mean": 0.7465180952380953,
+    "local_wc_mean": 0.71988,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "quarter": 4,
+    "frames": 6250,
+    "midpoint_mean_A": 10.04990005493164,
+    "wc_mean": 0.7001485714285715,
+    "local_wc_mean": 0.63848,
+    "primary_counts": [
+      0,
+      195,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "quarter": 1,
+    "frames": 6250,
+    "midpoint_mean_A": 10.579907417297363,
+    "wc_mean": 0.9535885714285715,
+    "local_wc_mean": 0.93452,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "quarter": 2,
+    "frames": 6250,
+    "midpoint_mean_A": 5.9152398109436035,
+    "wc_mean": 0.9479542857142856,
+    "local_wc_mean": 0.89,
+    "primary_counts": [
+      0,
+      170,
+      4,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "quarter": 3,
+    "frames": 6250,
+    "midpoint_mean_A": 4.719233989715576,
+    "wc_mean": 0.8958247619047621,
+    "local_wc_mean": 0.75628,
+    "primary_counts": [
+      0,
+      492,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "quarter": 4,
+    "frames": 6250,
+    "midpoint_mean_A": 5.136318683624268,
+    "wc_mean": 0.8664609523809523,
+    "local_wc_mean": 0.75056,
+    "primary_counts": [
+      0,
+      554,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "be74a1436d66",
+    "quarter": 1,
+    "frames": 250,
+    "midpoint_mean_A": 10.672118186950684,
+    "wc_mean": 0.9522857142857143,
+    "local_wc_mean": 0.941,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "be74a1436d66",
+    "quarter": 2,
+    "frames": 250,
+    "midpoint_mean_A": 10.13398265838623,
+    "wc_mean": 0.9428571428571428,
+    "local_wc_mean": 0.942,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "be74a1436d66",
+    "quarter": 3,
+    "frames": 250,
+    "midpoint_mean_A": 10.84225082397461,
+    "wc_mean": 0.946952380952381,
+    "local_wc_mean": 0.934,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "be74a1436d66",
+    "quarter": 4,
+    "frames": 250,
+    "midpoint_mean_A": 10.802332878112793,
+    "wc_mean": 0.9381904761904762,
+    "local_wc_mean": 0.915,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "quarter": 1,
+    "frames": 250,
+    "midpoint_mean_A": 9.269486427307129,
+    "wc_mean": 0.9433333333333332,
+    "local_wc_mean": 0.769,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "quarter": 2,
+    "frames": 250,
+    "midpoint_mean_A": 7.441617012023926,
+    "wc_mean": 0.9371428571428574,
+    "local_wc_mean": 0.747,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "quarter": 3,
+    "frames": 250,
+    "midpoint_mean_A": 7.7765069007873535,
+    "wc_mean": 0.940952380952381,
+    "local_wc_mean": 0.698,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "quarter": 4,
+    "frames": 250,
+    "midpoint_mean_A": 8.694026947021484,
+    "wc_mean": 0.9286666666666668,
+    "local_wc_mean": 0.714,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "a9261569b8c7",
+    "quarter": 1,
+    "frames": 250,
+    "midpoint_mean_A": 11.356398582458496,
+    "wc_mean": 0.9877142857142858,
+    "local_wc_mean": 0.989,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "a9261569b8c7",
+    "quarter": 2,
+    "frames": 250,
+    "midpoint_mean_A": 11.815685272216797,
+    "wc_mean": 0.9772380952380954,
+    "local_wc_mean": 0.989,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "a9261569b8c7",
+    "quarter": 3,
+    "frames": 250,
+    "midpoint_mean_A": 12.121315002441406,
+    "wc_mean": 0.9646666666666668,
+    "local_wc_mean": 0.972,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "job_id": "a9261569b8c7",
+    "quarter": 4,
+    "frames": 250,
+    "midpoint_mean_A": 11.960559844970703,
+    "wc_mean": 0.9667619047619048,
+    "local_wc_mean": 0.984,
+    "primary_counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

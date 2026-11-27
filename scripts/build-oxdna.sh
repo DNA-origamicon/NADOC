@@ -14,7 +14,7 @@ BUILD_FLAVOR="upstream"
 if [ "${NADOC_OXDNA_ADAPTIVE_MEMORY:-0}" = "1" ]; then
   BUILD_FLAVOR="adaptive-memory"
 fi
-INSTALL_DIR="$ENGINE_ROOT/$OXDNA_REV-$BUILD_FLAVOR-physics-v3"
+INSTALL_DIR="$ENGINE_ROOT/$OXDNA_REV-$BUILD_FLAVOR-physics-v3-vmmc-v1-umbrella-v1"
 CURRENT="$ENGINE_ROOT/current"
 BUILD_DIR="$SOURCE_DIR/build-nadoc-$BUILD_FLAVOR"
 JOBS="${NADOC_BUILD_JOBS:-$(nproc)}"
@@ -106,6 +106,19 @@ if [ "$BUILD_FLAVOR" = "upstream" ]; then
   echo "==> adapted rigid masks to upstream packed particle IDs"
 fi
 
+GPU_UMBRELLA_PATCH="$PROJECT_ROOT/tools/oxdna_umbrella/gpu-com-periodic.patch"
+if ! git -C "$SOURCE_DIR" apply --reverse --check "$GPU_UMBRELLA_PATCH" >/dev/null 2>&1; then
+  git -C "$SOURCE_DIR" apply --check "$GPU_UMBRELLA_PATCH"
+  git -C "$SOURCE_DIR" apply "$GPU_UMBRELLA_PATCH"
+fi
+
+VMMC_PATCH="$PROJECT_ROOT/tools/oxdna_vmmc/periodic-clusters.patch"
+if ! git -C "$SOURCE_DIR" apply --reverse --check "$VMMC_PATCH" >/dev/null 2>&1; then
+  git -C "$SOURCE_DIR" apply --check "$VMMC_PATCH"
+  git -C "$SOURCE_DIR" apply "$VMMC_PATCH"
+fi
+install -m 0644 "$PROJECT_ROOT/tools/oxdna_vmmc/periodic_geometry.h" "$SOURCE_DIR/src/Utilities/NadocVMMCPeriodic.h"
+
 if [ ! -x "$OXPY_PYTHON" ]; then
   echo "ERROR: NADOC Python not found at $OXPY_PYTHON" >&2
   echo "Run 'uv sync', or set NADOC_OXPY_PYTHON to the backend interpreter." >&2
@@ -142,6 +155,16 @@ printf '%s\n' "$BUILD_FLAVOR" > "$INSTALL_DIR/build-flavor"
 printf '%s\n' v1 > "$INSTALL_DIR/bussi-rigid-dofs"
 printf '%s\n' v1 > "$INSTALL_DIR/bussi-cuda-rng"
 printf '%s\n' v3 > "$INSTALL_DIR/physics-corrections"
+printf '%s\n' v1 > "$INSTALL_DIR/vmmc-periodic-clusters"
+"$OXPY_PYTHON" - "$INSTALL_DIR" "$GPU_UMBRELLA_PATCH" <<'PY_RECEIPT'
+from pathlib import Path
+import hashlib, json, sys
+root, patch = map(Path, sys.argv[1:])
+sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+(root / 'gpu-umbrella-build.json').write_text(json.dumps({
+    'patch_sha256': sha(patch), 'library_sha256': sha(root / 'lib/liboxdna_common.so'),
+}, indent=2) + '\n')
+PY_RECEIPT
 ln -sfn "$INSTALL_DIR" "$CURRENT"
 
 # Build the permanent cis-syn CPD interaction against this exact installed ABI.

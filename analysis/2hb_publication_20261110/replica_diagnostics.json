@@ -1,0 +1,427 @@
+{
+  "2hb_1xT": {
+    "replicas": 3,
+    "metrics": {
+      "Rg_A": {
+        "replica_means": [
+          27.06467719605392,
+          27.180709906416983,
+          27.26238241632674
+        ],
+        "replica_sds": [
+          0.3972730584365167,
+          0.4983534511346788,
+          0.5822585862513269
+        ],
+        "mean_of_replica_means": 27.16925650626588,
+        "between_replica_sd": 0.09934900005559671,
+        "split_Rhat": 1.1866175625902293,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_centroid_sep_A": {
+        "replica_means": [
+          25.988506919904516,
+          25.54351972939417,
+          26.56463022261046
+        ],
+        "replica_sds": [
+          0.8815652863544541,
+          1.1692360867551745,
+          1.5153033969510568
+        ],
+        "mean_of_replica_means": 26.032218957303048,
+        "between_replica_sd": 0.5119567525672968,
+        "split_Rhat": 1.3451842677466985,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_tilt_deg": {
+        "replica_means": [
+          7.578752678555273,
+          7.827498241673888,
+          8.71164356217959
+        ],
+        "replica_sds": [
+          3.3370620471623327,
+          4.298720777723429,
+          5.453975830083116
+        ],
+        "mean_of_replica_means": 8.039298160802916,
+        "between_replica_sd": 0.5954030927506752,
+        "split_Rhat": 1.1309528118245415,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "wc_fraction": {
+        "replica_means": [
+          0.9423809523809524,
+          0.9336507936507936,
+          0.9709523809523809
+        ],
+        "replica_sds": [
+          0.029228359106544404,
+          0.03212040889196483,
+          0.018270750642118277
+        ],
+        "mean_of_replica_means": 0.948994708994709,
+        "between_replica_sd": 0.01951046991269023,
+        "split_Rhat": 1.189171111500366,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "d_mid_A": {
+        "replica_means": [
+          10.590524821469138,
+          7.921629672366459,
+          12.021143250314378
+        ],
+        "replica_sds": [
+          0.8786419415937223,
+          0.967847515479636,
+          0.9601870224820431
+        ],
+        "mean_of_replica_means": 10.177765914716657,
+        "between_replica_sd": 2.080692271882717,
+        "split_Rhat": 2.3764842160751014,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      }
+    }
+  },
+  "2hb_1xT_CPD_cis-anti-I": {
+    "replicas": 3,
+    "metrics": {
+      "Rg_A": {
+        "replica_means": [
+          27.485145581841472,
+          27.66409712399533,
+          26.708929053998368
+        ],
+        "replica_sds": [
+          0.3930289184565668,
+          0.5001137886191438,
+          0.4484627991859994
+        ],
+        "mean_of_replica_means": 27.286057253278386,
+        "between_replica_sd": 0.5077535154117218,
+        "split_Rhat": 1.6234466342697598,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_centroid_sep_A": {
+        "replica_means": [
+          28.80841514510227,
+          27.966049183874723,
+          23.618020989211704
+        ],
+        "replica_sds": [
+          1.0905631622729541,
+          2.017354508053752,
+          0.9440893651583538
+        ],
+        "mean_of_replica_means": 26.797495106062897,
+        "between_replica_sd": 2.7855316993266683,
+        "split_Rhat": 2.5219888044158068,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_tilt_deg": {
+        "replica_means": [
+          12.817772297489503,
+          7.574156034002197,
+          10.999724907548913
+        ],
+        "replica_sds": [
+          5.4132017537606725,
+          3.5660998534504107,
+          2.8394641400836615
+        ],
+        "mean_of_replica_means": 10.463884413013536,
+        "between_replica_sd": 2.6625592305834402,
+        "split_Rhat": 1.2452842267865418,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "wc_fraction": {
+        "replica_means": [
+          0.9584126984126984,
+          0.9582539682539682,
+          0.9268253968253968
+        ],
+        "replica_sds": [
+          0.03183486027760402,
+          0.031804968196309735,
+          0.032882476496574414
+        ],
+        "mean_of_replica_means": 0.9478306878306878,
+        "between_replica_sd": 0.018191288752546993,
+        "split_Rhat": 1.1702175280137885,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "d_mid_A": {
+        "replica_means": [
+          1.5402559269956582,
+          1.545608194377137,
+          1.55016042000585
+        ],
+        "replica_sds": [
+          0.02369404557603261,
+          0.026304481938993672,
+          0.024812905380762574
+        ],
+        "mean_of_replica_means": 1.5453415137928819,
+        "between_replica_sd": 0.004957628903795559,
+        "split_Rhat": 1.0102738978779566,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      }
+    }
+  },
+  "2hb_1xT_CPD_cis-syn-I": {
+    "replicas": 3,
+    "metrics": {
+      "Rg_A": {
+        "replica_means": [
+          27.767478972524042,
+          27.66342984374459,
+          27.408705521841863
+        ],
+        "replica_sds": [
+          0.4237600764068704,
+          0.3736286370800545,
+          0.37552488897603636
+        ],
+        "mean_of_replica_means": 27.613204779370164,
+        "between_replica_sd": 0.18458470967867535,
+        "split_Rhat": 1.2201975432144099,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_centroid_sep_A": {
+        "replica_means": [
+          28.86983408385798,
+          28.753147686606997,
+          27.906970061317782
+        ],
+        "replica_sds": [
+          1.7836005414775362,
+          1.5949376973555882,
+          1.0163243488115252
+        ],
+        "mean_of_replica_means": 28.509983943927583,
+        "between_replica_sd": 0.52547429603261,
+        "split_Rhat": 1.3530554803965096,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_tilt_deg": {
+        "replica_means": [
+          10.283898837477095,
+          38.92364186195174,
+          8.691334927342378
+        ],
+        "replica_sds": [
+          4.41146728888384,
+          15.115389969634103,
+          3.066779882098402
+        ],
+        "mean_of_replica_means": 19.29962520892374,
+        "between_replica_sd": 17.013541287771517,
+        "split_Rhat": 3.2141187742605277,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "wc_fraction": {
+        "replica_means": [
+          0.9377777777777777,
+          0.9431746031746032,
+          0.9442857142857143
+        ],
+        "replica_sds": [
+          0.031060565989392174,
+          0.033985165178515915,
+          0.03203065653229871
+        ],
+        "mean_of_replica_means": 0.9417460317460318,
+        "between_replica_sd": 0.0034812241586447,
+        "split_Rhat": 1.0056523041744825,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "d_mid_A": {
+        "replica_means": [
+          1.5542126007455548,
+          1.5545715425161466,
+          1.5584111039024242
+        ],
+        "replica_sds": [
+          0.02395968285168825,
+          0.023868333593833068,
+          0.026097501767456985
+        ],
+        "mean_of_replica_means": 1.5557317490547085,
+        "between_replica_sd": 0.00232731961678065,
+        "split_Rhat": 1.0007617197418472,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      }
+    }
+  },
+  "2hb_1xT_CPD_trans-syn-I": {
+    "replicas": 3,
+    "metrics": {
+      "Rg_A": {
+        "replica_means": [
+          27.693010503824606,
+          27.528040704889367,
+          27.038977754243327
+        ],
+        "replica_sds": [
+          0.7759055057661481,
+          0.49250478109320545,
+          0.39034260877967586
+        ],
+        "mean_of_replica_means": 27.420009654319102,
+        "between_replica_sd": 0.3401363554468986,
+        "split_Rhat": 1.5450756718891896,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_centroid_sep_A": {
+        "replica_means": [
+          26.005130532986335,
+          23.853150272617686,
+          26.204120924449246
+        ],
+        "replica_sds": [
+          1.0052569079025795,
+          1.0071816274104832,
+          1.0550232978875171
+        ],
+        "mean_of_replica_means": 25.354133910017755,
+        "between_replica_sd": 1.3036921430233053,
+        "split_Rhat": 1.5450963111368756,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_tilt_deg": {
+        "replica_means": [
+          17.838904779117403,
+          14.592602174998529,
+          14.873891906594338
+        ],
+        "replica_sds": [
+          8.988146857020485,
+          5.196289705266241,
+          7.27206537719914
+        ],
+        "mean_of_replica_means": 15.768466286903424,
+        "between_replica_sd": 1.798559879683266,
+        "split_Rhat": 1.5231116813846584,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "wc_fraction": {
+        "replica_means": [
+          0.9484126984126984,
+          0.9287301587301589,
+          0.9644444444444443
+        ],
+        "replica_sds": [
+          0.03150207209932717,
+          0.03163223986493538,
+          0.025243893438814564
+        ],
+        "mean_of_replica_means": 0.9471957671957671,
+        "between_replica_sd": 0.017888215176770993,
+        "split_Rhat": 1.1868733731107437,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "d_mid_A": {
+        "replica_means": [
+          1.5378539727184026,
+          1.5357932852843454,
+          1.537587909466162
+        ],
+        "replica_sds": [
+          0.02466333122486696,
+          0.02394459539020916,
+          0.025436962213205162
+        ],
+        "mean_of_replica_means": 1.5370783891563036,
+        "between_replica_sd": 0.0011208552024410277,
+        "split_Rhat": 0.9988847287188857,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      }
+    }
+  },
+  "2hb_1xT_CPD_trans-syn-II": {
+    "replicas": 3,
+    "metrics": {
+      "Rg_A": {
+        "replica_means": [
+          27.31360763804086,
+          26.951817964986745,
+          27.46403458155683
+        ],
+        "replica_sds": [
+          0.2731792717620323,
+          0.2830858976863223,
+          0.4001984937628843
+        ],
+        "mean_of_replica_means": 27.24315339486148,
+        "between_replica_sd": 0.26327612094360403,
+        "split_Rhat": 1.3128571204609245,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_centroid_sep_A": {
+        "replica_means": [
+          26.995847473553134,
+          25.32562044634377,
+          22.507939948787655
+        ],
+        "replica_sds": [
+          1.1158983244697702,
+          0.7535981337755345,
+          1.6811066853224792
+        ],
+        "mean_of_replica_means": 24.943135956228186,
+        "between_replica_sd": 2.2682701066221997,
+        "split_Rhat": 2.4282310254347443,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "helix_tilt_deg": {
+        "replica_means": [
+          17.957621140285966,
+          12.518300759817427,
+          40.92768339619014
+        ],
+        "replica_sds": [
+          4.01984690023101,
+          5.0270820479146066,
+          8.25771700838674
+        ],
+        "mean_of_replica_means": 23.801201765431177,
+        "between_replica_sd": 15.079251683584575,
+        "split_Rhat": 2.4501227256558433,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "wc_fraction": {
+        "replica_means": [
+          0.9622222222222223,
+          0.9530158730158731,
+          0.9226984126984125
+        ],
+        "replica_sds": [
+          0.029861503739959418,
+          0.03263276342851797,
+          0.03477640007682053
+        ],
+        "mean_of_replica_means": 0.945978835978836,
+        "between_replica_sd": 0.02068025138904445,
+        "split_Rhat": 1.1587298708735727,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      },
+      "d_mid_A": {
+        "replica_means": [
+          1.5356278243787354,
+          1.5362925654112998,
+          1.538699967571239
+        ],
+        "replica_sds": [
+          0.02642744539737702,
+          0.02832069829360335,
+          0.024905595969008112
+        ],
+        "mean_of_replica_means": 1.536873452453758,
+        "between_replica_sd": 0.001616350291825218,
+        "split_Rhat": 0.9982567995134832,
+        "qualification": "Classical split Rhat on final 75%; three replicas share initial geometry. Not rank normalized."
+      }
+    }
+  }
+}

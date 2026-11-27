@@ -1,0 +1,175 @@
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/coordinates/DCD.py:171: DeprecationWarning: DCDReader currently makes independent timesteps by copying self.ts while other readers update self.ts inplace. This behavior will be changed in 3.0 to be the same as other readers. Read more at https://github.com/MDAnalysis/mdanalysis/issues/3889 to learn if this change in behavior might affect you.
+  warnings.warn("DCDReader currently makes independent timesteps"
+{
+  "intended": {
+    "rank": 20,
+    "id": "D000:8~D001:15",
+    "label": "D000:THY8~D001:THY15",
+    "site_a": {
+      "site_id": "D000:8",
+      "label": "D000:THY8",
+      "segid": "D000",
+      "resid": 8,
+      "resname": "THY",
+      "resindex": 7,
+      "c5_serial": 241,
+      "c6_serial": 233,
+      "design_identity": {
+        "strand_id": "stpl_XY_0_1",
+        "kind": "crossover_insert",
+        "crossover_id": "54c5689d-127b-4693-bc11-f51121719fad",
+        "extra_base_k": 0,
+        "design_base": "T",
+        "from_helix": "h_XY_0_1",
+        "from_bp": 13,
+        "to_helix": "h_XY_1_1",
+        "to_bp": 13
+      }
+    },
+    "site_b": {
+      "site_id": "D001:15",
+      "label": "D001:THY15",
+      "segid": "D001",
+      "resid": 15,
+      "resname": "THY",
+      "resindex": 29,
+      "c5_serial": 948,
+      "c6_serial": 940,
+      "design_identity": {
+        "strand_id": "stpl_XY_1_1",
+        "kind": "crossover_insert",
+        "crossover_id": "4a12dd44-bce2-46be-8296-093ce52d2ec9",
+        "extra_base_k": 0,
+        "design_base": "T",
+        "from_helix": "h_XY_1_1",
+        "from_bp": 14,
+        "to_helix": "h_XY_0_1",
+        "to_bp": 14
+      }
+    },
+    "same_strand": false,
+    "sequence_separation": null,
+    "intended_weld": true,
+    "intended_weld_identity": {
+      "id": "54c5689d-127b-4693-bc11-f51121719fad:0~4a12dd44-bce2-46be-8296-093ce52d2ec9:0",
+      "label": "54c5689d[k=0]~4a12dd44[k=0]",
+      "crossover_a": "54c5689d-127b-4693-bc11-f51121719fad",
+      "extra_base_k_a": 0,
+      "crossover_b": "4a12dd44-bce2-46be-8296-093ce52d2ec9",
+      "extra_base_k_b": 0,
+      "segid_a": "D000",
+      "resid_a": 8,
+      "segid_b": "D001",
+      "resid_b": 15
+    },
+    "n_frames": 10000,
+    "d_mid_mean_nm": 1.2655093099016266,
+    "d_mid_min_nm": 0.6203935347116841,
+    "d_mid_p05_nm": 0.9229582399314025,
+    "eta_circular_mean_deg": 132.5700538597182,
+    "eta_resultant": 0.3034972880950482,
+    "periodic_propensity_mean": 0.016229227283002804,
+    "periodic_propensity_max": 0.19811257785982517,
+    "upstream_propensity_mean": 0.016219519867960802,
+    "upstream_propensity_max": 0.19811257785982517,
+    "primary_propensity_mean": 0.016219519867960802,
+    "primary_propensity_max": 0.19811257785982517,
+    "pct_primary_ge_0_1": 1.79,
+    "pct_primary_ge_0_5": 0.0,
+    "pct_d_mid_lt_0_4_nm": 0.0,
+    "pct_d_mid_below_screen_cutoff": 0.0,
+    "reactive_frames": 0,
+    "pct_reactive_corner": 0.0,
+    "representative_max_propensity": {
+      "series_index": 248,
+      "frame": 248,
+      "time_ps": 4980.0000148474,
+      "trajectory_index": 0,
+      "trajectory": "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd",
+      "trajectory_frame": 248,
+      "d_mid_nm": 0.9179678384506156,
+      "eta_deg": 13.933406034698463,
+      "periodic_propensity": 0.19811257785982517,
+      "upstream_propensity": 0.19811257785982517
+    }
+  },
+  "top_cross_strand": {
+    "rank": 1,
+    "id": "D000:4~D002:46",
+    "label": "D000:THY4~D002:THY46",
+    "site_a": {
+      "site_id": "D000:4",
+      "label": "D000:THY4",
+      "segid": "D000",
+      "resid": 4,
+      "resname": "THY",
+      "resindex": 3,
+      "c5_serial": 114,
+      "c6_serial": 106,
+      "design_identity": {
+        "strand_id": "stpl_XY_0_1",
+        "helix_id": "h_XY_0_1",
+        "bp_index": 10,
+        "direction": "FORWARD",
+        "kind": "base"
+      }
+    },
+    "site_b": {
+      "site_id": "D002:46",
+      "label": "D002:THY46",
+      "segid": "D002",
+      "resid": 46,
+      "resname": "THY",
+      "resindex": 89,
+      "c5_serial": 2840,
+      "c6_serial": 2832,
+      "design_identity": {
+        "strand_id": "scaf_XY_1_1",
+        "helix_id": "h_XY_0_1",
+        "bp_index": 11,
+        "direction": "REVERSE",
+        "kind": "base"
+      }
+    },
+    "same_strand": false,
+    "sequence_separation": null,
+    "intended_weld": false,
+    "intended_weld_identity": null,
+    "n_frames": 10000,
+    "d_mid_mean_nm": 0.8169154814277554,
+    "d_mid_min_nm": 0.4631479234206416,
+    "d_mid_p05_nm": 0.672380776847381,
+    "eta_circular_mean_deg": 34.90353975238338,
+    "eta_resultant": 0.9485492504772176,
+    "periodic_propensity_mean": 0.14860304277857822,
+    "periodic_propensity_max": 0.3477663614563349,
+    "upstream_propensity_mean": 0.14860304277857822,
+    "upstream_propensity_max": 0.3477663614563349,
+    "primary_propensity_mean": 0.14860304277857822,
+    "primary_propensity_max": 0.3477663614563349,
+    "pct_primary_ge_0_1": 79.3,
+    "pct_primary_ge_0_5": 0.0,
+    "pct_d_mid_lt_0_4_nm": 0.0,
+    "pct_d_mid_below_screen_cutoff": 1.28,
+    "reactive_frames": 0,
+    "pct_reactive_corner": 0.0,
+    "representative_max_propensity": {
+      "series_index": 9105,
+      "frame": 9105,
+      "time_ps": 182120.0005429736,
+      "trajectory_index": 0,
+      "trajectory": "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd",
+      "trajectory_frame": 9105,
+      "d_mid_nm": 0.6503429416473941,
+      "eta_deg": 18.791611984357104,
+      "periodic_propensity": 0.3477663614563349,
+      "upstream_propensity": 0.3477663614563349
+    }
+  },
+  "corner_pairs": [
+    {
+      "id": "D001:28~D002:30",
+      "frames": 1
+    }
+  ]
+}

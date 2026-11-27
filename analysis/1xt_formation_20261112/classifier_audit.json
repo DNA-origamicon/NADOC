@@ -1,0 +1,671 @@
+{
+  "audit": {
+    "passed": true,
+    "family_pass": {
+      "syn": true,
+      "anti": true
+    },
+    "cases": [
+      {
+        "family": "syn",
+        "face_rotations": [
+          -1,
+          -1
+        ],
+        "matched_products": [
+          "tt-cpd-cis-syn-ii"
+        ],
+        "unique": true,
+        "methyl_relationship": "cis",
+        "relationship_passed": true
+      },
+      {
+        "family": "syn",
+        "face_rotations": [
+          -1,
+          1
+        ],
+        "matched_products": [
+          "tt-cpd-trans-syn-i"
+        ],
+        "unique": true,
+        "methyl_relationship": "trans",
+        "relationship_passed": true
+      },
+      {
+        "family": "syn",
+        "face_rotations": [
+          1,
+          -1
+        ],
+        "matched_products": [
+          "tt-cpd-trans-syn-ii"
+        ],
+        "unique": true,
+        "methyl_relationship": "trans",
+        "relationship_passed": true
+      },
+      {
+        "family": "syn",
+        "face_rotations": [
+          1,
+          1
+        ],
+        "matched_products": [
+          "tt-cpd-cis-syn"
+        ],
+        "unique": true,
+        "methyl_relationship": "cis",
+        "relationship_passed": true
+      },
+      {
+        "family": "anti",
+        "face_rotations": [
+          -1,
+          -1
+        ],
+        "matched_products": [
+          "tt-cpd-trans-anti-i"
+        ],
+        "unique": true,
+        "methyl_relationship": "trans",
+        "relationship_passed": true
+      },
+      {
+        "family": "anti",
+        "face_rotations": [
+          -1,
+          1
+        ],
+        "matched_products": [
+          "tt-cpd-cis-anti-ii"
+        ],
+        "unique": true,
+        "methyl_relationship": "cis",
+        "relationship_passed": true
+      },
+      {
+        "family": "anti",
+        "face_rotations": [
+          1,
+          -1
+        ],
+        "matched_products": [
+          "tt-cpd-cis-anti-i"
+        ],
+        "unique": true,
+        "methyl_relationship": "cis",
+        "relationship_passed": true
+      },
+      {
+        "family": "anti",
+        "face_rotations": [
+          1,
+          1
+        ],
+        "matched_products": [
+          "tt-cpd-trans-anti-ii"
+        ],
+        "unique": true,
+        "methyl_relationship": "trans",
+        "relationship_passed": true
+      }
+    ]
+  },
+  "products": [
+    {
+      "id": "tt-cpd-cis-syn",
+      "label": "cis-syn-I TT-CPD",
+      "family": "syn",
+      "relationship": "cis",
+      "centers": [
+        {
+          "center": 1,
+          "neighbors": [
+            0,
+            2,
+            3
+          ],
+          "partner": 7,
+          "expected_sign": 1
+        },
+        {
+          "center": 2,
+          "neighbors": [
+            5,
+            1,
+            4
+          ],
+          "partner": 8,
+          "expected_sign": -1
+        },
+        {
+          "center": 7,
+          "neighbors": [
+            6,
+            8,
+            9
+          ],
+          "partner": 1,
+          "expected_sign": -1
+        },
+        {
+          "center": 8,
+          "neighbors": [
+            11,
+            7,
+            10
+          ],
+          "partner": 2,
+          "expected_sign": 1
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/chemical_definition.json",
+        "sha256": "b583ce20398dff5bb6e1fa167f99842ed3e3947973f8d79ea41238f04ef14c55"
+      }
+    },
+    {
+      "id": "tt-cpd-cis-syn-ii",
+      "label": "cis-syn-II TT-CPD",
+      "family": "syn",
+      "relationship": "cis",
+      "centers": [
+        {
+          "center": 1,
+          "neighbors": [
+            0,
+            2,
+            3
+          ],
+          "partner": 7,
+          "expected_sign": -1
+        },
+        {
+          "center": 2,
+          "neighbors": [
+            5,
+            1,
+            4
+          ],
+          "partner": 8,
+          "expected_sign": 1
+        },
+        {
+          "center": 7,
+          "neighbors": [
+            6,
+            8,
+            9
+          ],
+          "partner": 1,
+          "expected_sign": 1
+        },
+        {
+          "center": 8,
+          "neighbors": [
+            11,
+            7,
+            10
+          ],
+          "partner": 2,
+          "expected_sign": -1
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn-ii/chemical_definition.json",
+        "sha256": "cdcf91558952d1b0a6dd3c0df8ddd9ff5a8b5418a97cb4108b5d0765adc27a37"
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-i",
+      "label": "trans-syn-I TT-CPD",
+      "family": "syn",
+      "relationship": "trans",
+      "centers": [
+        {
+          "center": 1,
+          "neighbors": [
+            0,
+            2,
+            3
+          ],
+          "partner": 7,
+          "expected_sign": -1
+        },
+        {
+          "center": 2,
+          "neighbors": [
+            5,
+            1,
+            4
+          ],
+          "partner": 8,
+          "expected_sign": 1
+        },
+        {
+          "center": 7,
+          "neighbors": [
+            6,
+            8,
+            9
+          ],
+          "partner": 1,
+          "expected_sign": -1
+        },
+        {
+          "center": 8,
+          "neighbors": [
+            11,
+            7,
+            10
+          ],
+          "partner": 2,
+          "expected_sign": 1
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-i/chemical_definition.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b"
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-ii",
+      "label": "trans-syn-II TT-CPD",
+      "family": "syn",
+      "relationship": "trans",
+      "centers": [
+        {
+          "center": 1,
+          "neighbors": [
+            0,
+            2,
+            3
+          ],
+          "partner": 7,
+          "expected_sign": 1
+        },
+        {
+          "center": 2,
+          "neighbors": [
+            5,
+            1,
+            4
+          ],
+          "partner": 8,
+          "expected_sign": -1
+        },
+        {
+          "center": 7,
+          "neighbors": [
+            6,
+            8,
+            9
+          ],
+          "partner": 1,
+          "expected_sign": 1
+        },
+        {
+          "center": 8,
+          "neighbors": [
+            11,
+            7,
+            10
+          ],
+          "partner": 2,
+          "expected_sign": -1
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-ii/chemical_definition.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29"
+      }
+    },
+    {
+      "id": "tt-cpd-cis-anti-i",
+      "label": "cis-anti-I TT-CPD",
+      "family": "anti",
+      "relationship": "cis",
+      "centers": [
+        {
+          "center": 1,
+          "neighbors": [
+            0,
+            2,
+            3
+          ],
+          "partner": 8,
+          "expected_sign": 1
+        },
+        {
+          "center": 2,
+          "neighbors": [
+            5,
+            1,
+            4
+          ],
+          "partner": 7,
+          "expected_sign": -1
+        },
+        {
+          "center": 7,
+          "neighbors": [
+            6,
+            8,
+            9
+          ],
+          "partner": 2,
+          "expected_sign": 1
+        },
+        {
+          "center": 8,
+          "neighbors": [
+            11,
+            7,
+            10
+          ],
+          "partner": 1,
+          "expected_sign": -1
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63"
+      }
+    },
+    {
+      "id": "tt-cpd-cis-anti-ii",
+      "label": "cis-anti-II TT-CPD",
+      "family": "anti",
+      "relationship": "cis",
+      "centers": [
+        {
+          "center": 1,
+          "neighbors": [
+            0,
+            2,
+            3
+          ],
+          "partner": 8,
+          "expected_sign": -1
+        },
+        {
+          "center": 2,
+          "neighbors": [
+            5,
+            1,
+            4
+          ],
+          "partner": 7,
+          "expected_sign": 1
+        },
+        {
+          "center": 7,
+          "neighbors": [
+            6,
+            8,
+            9
+          ],
+          "partner": 2,
+          "expected_sign": -1
+        },
+        {
+          "center": 8,
+          "neighbors": [
+            11,
+            7,
+            10
+          ],
+          "partner": 1,
+          "expected_sign": 1
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+        "sha256": "c2d7fc2b0b0ec3d46ab58553d3826bf4b6e4164a9b9c64f36c3d996d66f16520"
+      }
+    },
+    {
+      "id": "tt-cpd-trans-anti-i",
+      "label": "trans-anti-I TT-CPD",
+      "family": "anti",
+      "relationship": "trans",
+      "centers": [
+        {
+          "center": 1,
+          "neighbors": [
+            0,
+            2,
+            3
+          ],
+          "partner": 8,
+          "expected_sign": -1
+        },
+        {
+          "center": 2,
+          "neighbors": [
+            5,
+            1,
+            4
+          ],
+          "partner": 7,
+          "expected_sign": 1
+        },
+        {
+          "center": 7,
+          "neighbors": [
+            6,
+            8,
+            9
+          ],
+          "partner": 2,
+          "expected_sign": 1
+        },
+        {
+          "center": 8,
+          "neighbors": [
+            11,
+            7,
+            10
+          ],
+          "partner": 1,
+          "expected_sign": -1
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-i/chemical_definition.json",
+        "sha256": "a1db9e139fbdb6ef7e7d7659249fb355f4d9be9932d22c7583961bd0e0beee46"
+      }
+    },
+    {
+      "id": "tt-cpd-trans-anti-ii",
+      "label": "trans-anti-II TT-CPD",
+      "family": "anti",
+      "relationship": "trans",
+      "centers": [
+        {
+          "center": 1,
+          "neighbors": [
+            0,
+            2,
+            3
+          ],
+          "partner": 8,
+          "expected_sign": 1
+        },
+        {
+          "center": 2,
+          "neighbors": [
+            5,
+            1,
+            4
+          ],
+          "partner": 7,
+          "expected_sign": -1
+        },
+        {
+          "center": 7,
+          "neighbors": [
+            6,
+            8,
+            9
+          ],
+          "partner": 2,
+          "expected_sign": -1
+        },
+        {
+          "center": 8,
+          "neighbors": [
+            11,
+            7,
+            10
+          ],
+          "partner": 1,
+          "expected_sign": 1
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json",
+        "sha256": "862116a0883d908876df182013f196862e10e8ac338e64f9d6d4a286d67a48c7"
+      }
+    }
+  ],
+  "grid": [
+    [
+      3.6,
+      30.0,
+      0.1
+    ],
+    [
+      3.6,
+      30.0,
+      0.25
+    ],
+    [
+      3.6,
+      30.0,
+      0.5
+    ],
+    [
+      3.6,
+      45.0,
+      0.1
+    ],
+    [
+      3.6,
+      45.0,
+      0.25
+    ],
+    [
+      3.6,
+      45.0,
+      0.5
+    ],
+    [
+      3.6,
+      60.0,
+      0.1
+    ],
+    [
+      3.6,
+      60.0,
+      0.25
+    ],
+    [
+      3.6,
+      60.0,
+      0.5
+    ],
+    [
+      4.0,
+      30.0,
+      0.1
+    ],
+    [
+      4.0,
+      30.0,
+      0.25
+    ],
+    [
+      4.0,
+      30.0,
+      0.5
+    ],
+    [
+      4.0,
+      45.0,
+      0.1
+    ],
+    [
+      4.0,
+      45.0,
+      0.25
+    ],
+    [
+      4.0,
+      45.0,
+      0.5
+    ],
+    [
+      4.0,
+      60.0,
+      0.1
+    ],
+    [
+      4.0,
+      60.0,
+      0.25
+    ],
+    [
+      4.0,
+      60.0,
+      0.5
+    ],
+    [
+      4.5,
+      30.0,
+      0.1
+    ],
+    [
+      4.5,
+      30.0,
+      0.25
+    ],
+    [
+      4.5,
+      30.0,
+      0.5
+    ],
+    [
+      4.5,
+      45.0,
+      0.1
+    ],
+    [
+      4.5,
+      45.0,
+      0.25
+    ],
+    [
+      4.5,
+      45.0,
+      0.5
+    ],
+    [
+      4.5,
+      60.0,
+      0.1
+    ],
+    [
+      4.5,
+      60.0,
+      0.25
+    ],
+    [
+      4.5,
+      60.0,
+      0.5
+    ]
+  ],
+  "source_sha256": "9a92e73d2ae2d2f8c65c552dfd529902d465f6af3a57188c00e1607ec945aa49"
+}

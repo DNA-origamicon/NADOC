@@ -54,6 +54,7 @@ from backend.core.md_preparation_ownership import own_native_preparation
 from backend.core import md_plan
 from backend.core.md_image_clearance import (
     job_image_clearance,
+    resume_clearance_preview,
     ensemble_image_clearance,
     require_image_clearance,
     record_clearance_review,
@@ -7404,7 +7405,8 @@ def md_job_remote_recommendation(
         "available_partitions": available,
         "available_qos": available_qos,
         "image_clearance": (ensemble_image_clearance(job, _workspace()) if ensemble
-                            else job_image_clearance(job, _workspace(), resume=resume)),
+                            else resume_clearance_preview() if resume
+                            else job_image_clearance(job, _workspace())),
         **sizing,
     }
 
@@ -7507,6 +7509,17 @@ class ResumeRemoteRequest(BaseModel):
 
 @router.post("/md/jobs/{job_id}/resume-remote")
 async def resume_md_job_remote(job_id: str, body: ResumeRemoteRequest) -> dict:
+    # Share the supervisor's lock: a late poll of the old allocation must not
+    # overwrite the newly submitted Slurm ID with the preceding TIMEOUT record.
+    from backend.core import md_executor
+    job = _load_job(job_id)
+    key = str(job.job_dir(_workspace()).resolve())
+    lock = md_executor._REMOTE_RECONCILE_LOCKS.setdefault(key, asyncio.Lock())
+    async with lock:
+        return await _resume_md_job_remote_locked(job_id, body)
+
+
+async def _resume_md_job_remote_locked(job_id: str, body: ResumeRemoteRequest) -> dict:
     """Resume a timed-out remote job from its latest checkpoint (needs a live session).
 
     One-click Resume: the user reconnects (Duo) and clicks Resume on a job that hit a
@@ -7534,11 +7547,6 @@ async def resume_md_job_remote(job_id: str, body: ResumeRemoteRequest) -> dict:
     if profile is None:
         raise HTTPException(404, f"Unknown cluster profile {body.cluster_name!r}.")
 
-    review = await run_in_threadpool(
-        require_image_clearance, job, _workspace(),
-        allow=body.allow_small_image_gap, resume=True,
-    )
-    record_clearance_review(job, _workspace(), review, allow=body.allow_small_image_gap)
     try:
         job = await md_executor.resume_job(
             job,
@@ -7546,6 +7554,7 @@ async def resume_md_job_remote(job_id: str, body: ResumeRemoteRequest) -> dict:
             profile=profile,
             resources=body.resources,
             conn=mgr,
+            allow_small_image_gap=body.allow_small_image_gap,
         )
     except cluster_ssh.ClusterSSHError as exc:
         raise HTTPException(502, f"Cluster transport error: {exc}") from exc

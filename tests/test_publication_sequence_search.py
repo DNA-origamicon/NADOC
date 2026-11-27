@@ -68,7 +68,7 @@ def test_insertion_partner_order_is_antiparallel():
 
 def test_explicit_unknown_scaffold_does_not_fall_back_to_length_match():
     c,i=fixture()
-    assert search_declared_scaffold(c,i,{'context':'pEGFP scaffold'})['status']=='unsupported_scaffold'
+    assert search_declared_scaffold(c,i,{'context':'pUnavailable scaffold'})['status']=='unsupported_scaffold'
     assert search_declared_scaffold(c,i,{'context':'(p9999)'})['status']=='unsupported_scaffold'
 
 
@@ -153,7 +153,7 @@ def test_d005_virtual_nick_rotation_and_staple_reordering():
 def test_equally_supported_library_sequences_remain_ambiguous(monkeypatch):
     import backend.core.sequences as library
     seq='ACGTTAGCATGCCGAT'
-    monkeypatch.setattr(library,'SCAFFOLD_LIBRARY',[('variantA',16,seq),('variantB',16,seq)])
+    monkeypatch.setattr(library,'PUBLICATION_SCAFFOLDS',{'variantA':seq,'variantB':seq})
     c,i=fixture();r=search_declared_scaffold(c,i,{'context':'unlabelled diagram'})
     assert not r['resolved'] and r['best_ties']==2
     assert r['candidates_tested']==64 and r['runner_up_mismatches']==0

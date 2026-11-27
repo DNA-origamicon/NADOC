@@ -12,7 +12,7 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 
 ## Read first when relevant
 
-- **[Structure requires process](feedback_structure_requires_process.md)** — mandatory for every agent-created structure: full truthful feature log and independent replay; no history-free review/candidate/captured-root exception.
+- **[Structure requires process](feedback_structure_requires_process.md)** — full truthful feature log and independent replay for authored structures; no captured-root workaround. Only the explicit [session-authorized A/B policy](feedback_session_authorized_ab_testing.md) permits reproducible diagnostic rebuilds with a scoped user grant; no authored documents or production promotion.
 - [Semantic document provenance](feedback_document_operation_provenance.md) — record meaningful document actions; no autosave feature rows; defer the visibility toggle and annotation/view-volume animation.
 - [Polymerization and extension scope](feedback_polymerization_extension_scope.md) — no implicit strand-to-extension conversion; correct Full attachment at ›1; defer long-tail molecular geometry beyond the feature-log/dependency overhaul.
 
@@ -72,6 +72,8 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 **[RUNPOD_RUNBOOK](REFERENCE_RUNPOD_RUNBOOK.md)** — READ + run `preflight.py` BEFORE renting GPU
 
 ## User feedback
+
+**New UI:** [NADOC style review](feedback_ui_style_review.md) — review colors, fonts, spacing, visibility and consistency; reuse shared tokens/components and inspect each host before delivery.
 
 Files are `feedback_<name>.md`. Match the name against what you're editing; each is short.
 

@@ -1,0 +1,79 @@
+{
+  "replicas": [
+    {
+      "replica": 0,
+      "frames": 8000,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.32818076588317807,
+      "maximum": 5.148324105142836,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_00/trajectory.dat": "f795a36802bd6a491127112b7a05ff96d6602b8986c3ebc39e5910c68e6850ea",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_01/trajectory.dat": "765bafcc86bd5cf84efc9fcbc0c41420cefd455e616cafd48cd37c5e8fd08537",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_02/trajectory.dat": "b0e61b0c9faa9d0c43fcef5e9f19390ef03785c54f183ca4d60f4f63d54c159b",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_03/trajectory.dat": "23d49a10d6ede47738195ec5ff55b4aac8eec15599513e524533070edbbd6d87",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_04/trajectory.dat": "349aefa8083eb740f1b8a6bbad4be302b7212001881fcf86c27067d0822d4f5b",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_05/trajectory.dat": "194a8a248877a51fc1cfcd53abce0768c26cda9445886af4704310b2125a7697",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_06/trajectory.dat": "75d4da2e9d206b827155178152ae42796016c2274f4cc02388be14de51476bba",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_0_block_07/trajectory.dat": "f797c73fb706e614a088331225058e4f6e04cd6289a93abe75c2798d9f41eeea"
+      }
+    },
+    {
+      "replica": 1,
+      "frames": 8000,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.32987669293820765,
+      "maximum": 5.049534391586866,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_00/trajectory.dat": "82704e3be9805658c79a2e901c0f04ea99661870eb35f5b0b7f893e1135cee71",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_01/trajectory.dat": "80b94ca758bc5679c48f19e9cc8c2748eaee9578d5fdfde9ac20dd5b8544a572",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_02/trajectory.dat": "d8de2e9d06b63b54ad4699086f64db60ddec28af3d640d1bb32d24932715f8fb",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_03/trajectory.dat": "d155502929dc67e7fb08e3c9b1041c84de236acd6c2eb18d5ad24ddfdadb83dc",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_04/trajectory.dat": "0ade77037d0ab272934d13f778ccdfe66b7b0a41c2533eee2786580de8f0f245",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_05/trajectory.dat": "30f8d4a3ac29825a7f013bbbb2f8de0da2ef3fbb4a6f2d86c1d75da395a6fe1b",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_06/trajectory.dat": "914b491ed62fcccd34ed2435e894638bf7b923261a9323c22b269d12e73282e9",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_1_block_07/trajectory.dat": "16c6ce91c2edb7f701ea83c5c0a81e006473a1ca37fcb3eece21a92071bfc5da"
+      }
+    },
+    {
+      "replica": 2,
+      "frames": 8000,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.328328762198912,
+      "maximum": 5.135139809410041,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_00/trajectory.dat": "8d04e3afeaab1941488c7af6b3db2c827e55b433820f27328da129ad6472bba5",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_01/trajectory.dat": "4b280b54ff304df63d5f0185a94982b644c98e370e0f0b6ea55cbe8ff63f6de1",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_02/trajectory.dat": "ab670c246b5ba94311a5491f6783564966afd394c6347bc255284ae1c83bac40",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_03/trajectory.dat": "4add51c7885f2652cabf48e4971a23b592de5492b373384a352a8291997a48a2",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_04/trajectory.dat": "b4e9572d704434152987ed472f5396bf40396ed656b1cc2f7466f28d94a97a9f",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_05/trajectory.dat": "e03df4a2331f61a423cf2d68ee06ce68f0611a3b5edf7feab24cb349b1dae03d",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_06/trajectory.dat": "8b552bf094eb40b3b819845184faede1649190bb19112ef219c8c35d46e19095",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_2_block_07/trajectory.dat": "9a55daa05e4a7a07cfd892315d9093e6e05005d12c128c5bde180cb588f8467a"
+      }
+    },
+    {
+      "replica": 3,
+      "frames": 8000,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.32793719642195357,
+      "maximum": 5.379769196112651,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_00/trajectory.dat": "2172c42c112b02ab0deafe0ace63f4af47066ab047c6f4dd8cd7a63c9b2b76e4",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_01/trajectory.dat": "aec0ec19840a42d6a9070e3bb529a1d0df691b222199b81e49bbfdc9429a3c72",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_02/trajectory.dat": "2227add5e93d8633b562d5fcd3cf76f8b7130018a191c6de5e0922ef13463e19",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_03/trajectory.dat": "bd2d41b8fa69ddd605f65bc2c3b4687dd274b7c91a5279e3dc1a5f2db24c535f",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_04/trajectory.dat": "17a66914165a3bd3e2aa224dde31459c19ffe0636aec3c685d1b8c8593ffc6c3",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_05/trajectory.dat": "9c1ad29c6537013f202f09009426e376583c6e0f6e5ca0bac40dab0b6ee6040d",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_06/trajectory.dat": "dc43ca5c21fb8137415117df20f6a945b2722aca22d7d20f0cfaf4f51ebaaa54",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_confirmation/replica_3_block_07/trajectory.dat": "b7e29ca3853600613fd3c9a530d77ba2e15cc9e217acd29d58530a1046a9a0dd"
+      }
+    }
+  ],
+  "split": 1.0,
+  "base_offset": 0.4,
+  "qualification": "Independent recorded-bin check, not an equilibrium test."
+}

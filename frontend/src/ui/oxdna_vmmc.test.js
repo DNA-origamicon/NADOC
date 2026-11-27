@@ -3,6 +3,8 @@ import {VMMC_DEFAULTS,vmmcError,vmmcStages,vmmcConfig} from './oxdna_vmmc.js'
 describe('CPU VMMC protocol',()=>{
  it('validates ranges and independent replica counts',()=>{
   expect(vmmcError(VMMC_DEFAULTS)).toBeNull()
+  expect(VMMC_DEFAULTS.production_steps).toBe(2000000000)
+  expect(vmmcStages(VMMC_DEFAULTS).find(s=>s.name.includes('_sample_')).print_conf_interval).toBe(1000000)
   for(const bad of [{replicas:1},{end_c:50},{temperature_c:90},{step_c:.001},{tuning_steps:NaN}])expect(vmmcError({...VMMC_DEFAULTS,...bad})).toBeTruthy()
  })
  it('separates tuning and equilibration from production on CPU',()=>{

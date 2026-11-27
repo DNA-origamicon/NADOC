@@ -1,12 +1,14 @@
 {
-  "backend/core/publication_authoring.py": "71dcb0b4b3701ebcdad65debcc71aad9aff6528bb27a03840532080514f3714a",
+  "backend/core/publication_authoring.py": "e8d0025163b2bb42af1b5711e6f994ee8093054f7fb8afe07eec3f60101b3810",
+  "backend/core/publication_insertion_loops.py": "06cfcd27a14c42bf31a581a280d661500daceaf6f48faf5a7451fc76c4c5f9fb",
+  "backend/core/strand_loops.py": "45b2473eb1a04edda187a2dddae224071f6b515d825f1e5cd552b865f0707268",
   "backend/core/publication_routing.py": "a3b3ac37cbeed9e2b7af14dc24e709ae1bc3d201c3e61b3f413f260bca0ed5df",
   "backend/core/publication_sequence_search.py": "f8fedadbd1c3c7ad15e5b54bd91241c80a4800125a8fed10f407b1d6418980e6",
   "backend/core/publication_unpaired_scaffold.py": "366ba484f6c2bb9aa2b6100787d9d318b194457e1cc1034fa9e3553864f460d5",
   "backend/core/publication_auxiliary_placement.py": "bd742882603ab6fad75253b702394e20b6f12cc7fde70d89a9a7c5fb2cf3b806",
   "backend/core/publication_ligation_placement.py": "faaeba4d7bacd4891db1805ab73208e56e4921a80b615ddc2e9cddc0aafdc515",
   "backend/core/publication_native_tracks.py": "5678928a5ab1deb3a3bcb4191c35a258fed84bd87ca2a2a434adcc52ebaa025f",
-  "tools/design_archive/recorded_authoring.py": "b88ca7a9e0727bb44dfb12c0cf1f1e1b729c3d3c2994df3173ba8c9fbb8af22a",
+  "tools/design_archive/recorded_authoring.py": "3df2fa84a1105b85aacffc22c2e74eaaf492a65ad17db7adb9406108f0ab3207",
   "backend/core/publication_precursors.py": "3de8599372025fb98b5e84f3c15a15eb337e3e61b60a0fd733ba3ab7febd2a1c",
   "backend/core/publication_missing_staples.py": "a850d7c52751c7f29108e4f4af2978556caf6a23036f8d08ef63f4ace10103c7",
   "backend/core/publication_lattice_insets.py": "2f091affe7f4322e760b3d2a337765d0c8491565ab6693e363c2295ec556dfcb",
@@ -17,5 +19,5 @@
   "backend/core/publication_appearance.py": "df75398a4a5bab7a946dcfbfe3c9afd4cb3df43be0f9653c3db8e6a578e871e5",
   "backend/core/scaffold_gap_overhangs.py": "b96e33ebd2b5e72f0c1aa83f38c73b3c3a720a432075c03ae8e680c62d7b9cd5",
   "backend/api/part_strand_patch.py": "1642abbdfe94af97107c68592051b9b68ba0f88d1722d321742771c8a604f2e9",
-  "backend/core/lattice.py": "5f436c64d2528bed14f27dff818c95706f940c220092e26bf478211b67ea46e1"
+  "backend/core/lattice.py": "48800e13bd01fd51221ef43aff3b425cb83341eb08e4538b1174ee53b03a4138"
 }

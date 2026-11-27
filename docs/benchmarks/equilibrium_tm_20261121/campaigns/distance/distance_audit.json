@@ -1,0 +1,51 @@
+{
+  "replicas": [
+    {
+      "replica": 0,
+      "frames": 1000,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.3319840437206224,
+      "maximum": 0.4430395088991733,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/replica_0_block_00/trajectory.dat": "14d547a378a0283462d0e62289e118bb7cc31457d617e11208acfbe1478338ec"
+      }
+    },
+    {
+      "replica": 1,
+      "frames": 1000,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.3319567252287851,
+      "maximum": 5.088876827474516,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/replica_1_block_00/trajectory.dat": "d154e54ff44ec7ad75169b74bbe8215265dc6aab5b18663c57e3726b72b2adae"
+      }
+    },
+    {
+      "replica": 2,
+      "frames": 1000,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.3326132460829046,
+      "maximum": 4.307355521138009,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/replica_2_block_00/trajectory.dat": "0c399ecb773c693a2ad9affa33a608e6e0f4a6cf010a3bce62598afbb12f16ee"
+      }
+    },
+    {
+      "replica": 3,
+      "frames": 1000,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.33062447143218954,
+      "maximum": 5.075491816169703,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance/replica_3_block_00/trajectory.dat": "7399a3ca98553869dd339a89a4b4234d2883f14637481327eef24b954b113d18"
+      }
+    }
+  ],
+  "split": 1.0,
+  "base_offset": 0.4,
+  "qualification": "Independent recorded-bin check, not an equilibrium test."
+}

@@ -1176,6 +1176,15 @@ def build_remote_resume_conf(
     overwrites them, so there is no read/write aliasing).  Port of the local runner's
     ``_write_resume_conf`` — kept pure (no file IO) since remote resume ships text.
     """
+    if "# NADOC_ADAPTIVE_MIN_BEGIN" in conf_text:
+        from backend.core.remote_resume_conf import build_resume_conf
+
+        text = build_resume_conf(conf_text, segment_name, restart_step, total_steps)
+        return text.replace(
+            f"output/{segment_name}.dcd", f"output/{segment_name}.cont{cont_index}.dcd"
+        ).replace(
+            f"output/{segment_name}.xst", f"output/{segment_name}.cont{cont_index}.xst"
+        )
     remaining = int(total_steps) - int(restart_step)
     if remaining <= 0:
         raise ValueError(

@@ -1,0 +1,57 @@
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+1024 / 10000 minimum all-atom image gap 42.63668908449334
+2048 / 10000 minimum all-atom image gap 32.083004633252244
+3072 / 10000 minimum all-atom image gap 32.083004633252244
+4096 / 10000 minimum all-atom image gap 29.357193815227255
+5120 / 10000 minimum all-atom image gap 19.8208504232743
+6144 / 10000 minimum all-atom image gap 13.812162344747954
+7168 / 10000 minimum all-atom image gap 13.812162344747954
+8192 / 10000 minimum all-atom image gap 13.812162344747954
+9216 / 10000 minimum all-atom image gap 13.812162344747954
+10000 / 10000 minimum all-atom image gap 13.812162344747954
+{
+  "frames": 10000,
+  "dna_atoms": 3043,
+  "includes_hydrogens": true,
+  "time_step_ns": 0.020000000059628115,
+  "minimum_A": 13.812162344747954,
+  "minimum_frame": 5874,
+  "minimum_time_ns": 117.50000035031518,
+  "minimum_atom_pair": {
+    "atom": [
+      "D002",
+      32,
+      "O1P"
+    ],
+    "image_atom": [
+      "D000",
+      14,
+      "O1P"
+    ],
+    "image_translation": [
+      -1,
+      0,
+      0
+    ]
+  },
+  "brute_force_minimum_A": 13.812162344747943,
+  "frames_below_10A": 0,
+  "frames_below_12A": 0,
+  "quantiles_A": [
+    13.812162344747954,
+    17.702522090601214,
+    22.229769346110118,
+    39.934184751092914,
+    55.08303075799577,
+    64.2938172912761
+  ],
+  "min_gap_by_50ns_block_A": [
+    32.083004633252244,
+    26.85098642252969,
+    13.812162344747954,
+    28.595351559901278
+  ],
+  "source_size_mtime_unchanged": true,
+  "scope": "Actual all-atom DNA image clearance at every saved 20 ps frame, not every integration step; does not measure long-range finite-size bias or guarantee future conformations."
+}

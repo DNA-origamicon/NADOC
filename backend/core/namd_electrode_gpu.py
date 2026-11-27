@@ -9,9 +9,10 @@ from pathlib import Path
 
 import numpy as np
 from backend.core.md_charge import parse_psf_atoms
+from backend.core.workspace_location import default_workspace
 
 SOURCE = Path(__file__).parent / "native/electrode_gpu.cu"
-REGISTRY = Path(__file__).resolve().parents[2] / "workspace/runtime/electrode_gpu"
+REGISTRY = default_workspace() / "runtime/electrode_gpu"
 CLIENT = "gpuGlobalCreateClient {./electrode_gpu.so} electrode {electrode_gpu.params}"
 
 

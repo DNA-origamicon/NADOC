@@ -1,0 +1,610 @@
+{
+  "head": "52dd637534e4ddd9d7393d6b8afb9946378935d8",
+  "scope": "Final retained research artifacts; per-campaign driver snapshots preserve actual executed versions. File hashes exclude this manifest itself.",
+  "files": {
+    "docs/benchmarks/equilibrium_tm_20261121/README.md": {
+      "bytes": 3575,
+      "sha256": "b60345197e7945a9727ae50d910286d9ac325a5159580da9bcccb9c543eb5bae"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/calibration.json": {
+      "bytes": 836,
+      "sha256": "b02ac5e9bbb4d2c7d7a2a0566608064f962874fc2c30718b55ad261771733812"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/checkpoint_01.json": {
+      "bytes": 2376,
+      "sha256": "40ce8fee580e7d39f0b67886ab23d6084037a4acc461d99cc80275ccc7af2cac"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/distance_audit.json": {
+      "bytes": 1990,
+      "sha256": "513d69fe489cbc76520d088e6b5d31ddfae559c40700361182f399277bd0c588"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/distance_samples.npz": {
+      "bytes": 48761,
+      "sha256": "e244596146628ffb516c5c7198f4486871737dae7c693338ee3d5e642fdf3f55"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/driver_source.py": {
+      "bytes": 17686,
+      "sha256": "764b73fdc66b11fd5a4c3d3cae61f8c56a9333fd20a8c2bd4736ec92898bcaea"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/events.jsonl": {
+      "bytes": 4632,
+      "sha256": "32b57ce67f860174f2ab9b80482da485ab322b6931e41e253ad2d72372ab4dc4"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/frozen_weights.txt": {
+      "bytes": 275,
+      "sha256": "3556bcb9ea515c1fda45702a6c3ca7ab50128606326de0ac706138d491b215dd"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/full_analysis.json": {
+      "bytes": 10688,
+      "sha256": "d80075d926b58b1cc4e1ab51696cb6067b8d411ccb3ea1621b00f4cf04d5a573"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/manifest.json": {
+      "bytes": 2420,
+      "sha256": "dfac82b7af578162ce3ecece6b46846966914c0d0a0c728c3702ba04367ffa28"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/pairing_audit/pairing_states.npz": {
+      "bytes": 14945,
+      "sha256": "8d82b9fd164e2917c36ff2924d625d332cef4d6987b8f08d2bfe125000f2761d"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/pairing_audit/summary.json": {
+      "bytes": 1457,
+      "sha256": "d84ada584740fa7e730e7cc4b7ed52c17dd0b8310f0096cc2befb0e6bc5183e4"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/result.json": {
+      "bytes": 2376,
+      "sha256": "40ce8fee580e7d39f0b67886ab23d6084037a4acc461d99cc80275ccc7af2cac"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/stages.json": {
+      "bytes": 106797,
+      "sha256": "0d5b1c441995067f088ad7352dff1f9d3d73ed22a76b0c2569aff5847c4a5180"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance/sufficient_statistics.npz": {
+      "bytes": 1237877,
+      "sha256": "e5fbcb015555e99568efb79d1f414064b07b1c8fa9c7a89fcb1d6c6d1588eb35"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/binding_definition.json": {
+      "bytes": 4656,
+      "sha256": "ffe853fd08e799c51401037dd793b5f844d4c9e2cb413bfc6db26e8a04868c37"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/checkpoint_01.json": {
+      "bytes": 2422,
+      "sha256": "751e109abf9382e95c40009b155e1d76fed35fb8fb2f8e22652223ee74ff8597"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/checkpoint_02.json": {
+      "bytes": 3493,
+      "sha256": "2c60105aa87f9b81424708e74e7f39c73b981fefa9e4c6dd8523310811c5bee1"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/checkpoint_03.json": {
+      "bytes": 3969,
+      "sha256": "a4d2c6714693cb760fd560246c5bceb5889f6b08bb57e7d4e99a800f7591f87c"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/checkpoint_04.json": {
+      "bytes": 4023,
+      "sha256": "e15929efed70c7c68b794308601c1d379719a49e563c9eb20eeb71529a5bc3fe"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/checkpoint_05.json": {
+      "bytes": 4577,
+      "sha256": "df4f150e168f6050068d2c56f8d4f9ef9be76b6fa3bd0d2b753eac4657bb12fe"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/checkpoint_06.json": {
+      "bytes": 5127,
+      "sha256": "8b91eefb8ef90114f87ee7a8c4f415db2e7ac98f2754f778d5a7d40628494d85"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/checkpoint_07.json": {
+      "bytes": 6178,
+      "sha256": "7e9c8844d08ec2d1e4961d3e89a7ab1ddb701a99e613df65a4067e6ff31e3494"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/checkpoint_08.json": {
+      "bytes": 6722,
+      "sha256": "8e42f242a7fa5ea718a8cbbeee190c84ca62d802510e0db629ecf8daf4ea7c3f"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/distance_audit.json": {
+      "bytes": 8286,
+      "sha256": "33b2d546a4feff57244ea48fe7dd3b9a90b8065b0f6783d4dfc718ee82f2bafe"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/distance_samples.npz": {
+      "bytes": 378105,
+      "sha256": "0875e8231324cab0bd3a50fe2d116b70ef130abd9cbd7f80050b68fec22727b8"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/driver_source.py": {
+      "bytes": 17799,
+      "sha256": "50966bdf441954855393b8effc731107e7b4efa236e6d2b424a67b7433c2945b"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/events.jsonl": {
+      "bytes": 6439,
+      "sha256": "0ade7a02b369f4e25904d8ee8e659db6e4e9c5bc335d65e797e862c808ca9ebd"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/frozen_weights.txt": {
+      "bytes": 274,
+      "sha256": "d2d5acbb35cf4f38943a73cf7de72cafdf6b0e50d7e45ee40459739c3eb7a71c"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/full_analysis.json": {
+      "bytes": 16997,
+      "sha256": "02c7678a1d153c6bf533a5cc91b6139c9a40b2c447eceecce697c47944c14b4d"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/manifest.json": {
+      "bytes": 2421,
+      "sha256": "709ad2a6c15536578ae6033a761b94d3255be6ca9ad57d4100e709cf2c194f17"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/pairing_audit/pairing_states.npz": {
+      "bytes": 107863,
+      "sha256": "e44712eaf16c6ef5199321b3fad30daeb3560b47135b15eb099b385afe270af1"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/pairing_audit/summary.json": {
+      "bytes": 1478,
+      "sha256": "05ce12e6a449b710cf7a1b4fbde9a8bd2f8619f10108bd466e29fdf1369e64b2"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/result.json": {
+      "bytes": 6722,
+      "sha256": "8e42f242a7fa5ea718a8cbbeee190c84ca62d802510e0db629ecf8daf4ea7c3f"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/stages.json": {
+      "bytes": 189586,
+      "sha256": "1dc1f1d01a96b5704e33a8ca46c13cffcb3c8ef0c82e83aac18e13f767bf8980"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_confirmation/sufficient_statistics.npz": {
+      "bytes": 9872177,
+      "sha256": "280122828030f41cb9f14ee8ba115b43f6d4e6e378a4a44d9175e90bc5351cb4"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/checkpoint_01.json": {
+      "bytes": 2377,
+      "sha256": "d05a8dd5ebd967b65e7a84f1b1ef5629db9308895ce8f956498c72dd86967c05"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/distance_audit.json": {
+      "bytes": 2008,
+      "sha256": "dbe558a275e27e13125ec43c3bc5f3cb29eb13c79b402539fe3475eec6c4f00a"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/distance_samples.npz": {
+      "bytes": 1323,
+      "sha256": "99ccfc226cc983a88382321568ae54f18ce6526248b9d49a23803deddfc0204b"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/driver_source.py": {
+      "bytes": 17686,
+      "sha256": "764b73fdc66b11fd5a4c3d3cae61f8c56a9333fd20a8c2bd4736ec92898bcaea"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/events.jsonl": {
+      "bytes": 683,
+      "sha256": "fdaf703106ef798977a447c6bfa5b752f5f1bc2bd42beb375c9a25609142eca5"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/frozen_weights.txt": {
+      "bytes": 108,
+      "sha256": "e14ad66754358c1682f64eb256488b07ea5a4f87e267528d7a9217532cd68e5b"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/full_analysis.json": {
+      "bytes": 10343,
+      "sha256": "8055ee7be1d686ac38109308e417a203fb4caff30a9550acc65cff38bde56f34"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/manifest.json": {
+      "bytes": 2414,
+      "sha256": "6985ce24d15220a7e6e6400e8a3000f066266e00cf40425f2473458f645e2966"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/pairing_audit/pairing_states.npz": {
+      "bytes": 990,
+      "sha256": "dcb5f22f093bd2e165de6ac2484e4f4ba4c6dc2b72ee0aa0785860821b6f0b29"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/pairing_audit/summary.json": {
+      "bytes": 1443,
+      "sha256": "71e42d93d7dee65e0cc9cef8a38237a4c5ff3a97df23057f8dd9c441f84241d3"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/result.json": {
+      "bytes": 2377,
+      "sha256": "d05a8dd5ebd967b65e7a84f1b1ef5629db9308895ce8f956498c72dd86967c05"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/stages.json": {
+      "bytes": 20649,
+      "sha256": "7209a3f9b1c681184165294be5033cc50b51d8374c31ba755d39e7aca6f90ad1"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/distance_smoke/sufficient_statistics.npz": {
+      "bytes": 13865,
+      "sha256": "1fc0f2220dc32fa9c50546ebe8e1d64edfe161638daa0ca87bd4a5458b4de501"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/checkpoint_01.json": {
+      "bytes": 2413,
+      "sha256": "a10237ba27b11900c70d2ca30de623c9c4cc3d069a4098bd4fb046911e95d967"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/driver_source.py": {
+      "bytes": 20584,
+      "sha256": "62124e58c85af536d2264bb84dc4f981819b166ad93bb998bf331095462356d4"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/events.jsonl": {
+      "bytes": 763,
+      "sha256": "639d62f626396b15896af2de907bc26b7a29984b82770f4b0614561c37e5179a"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/frozen_weights.txt": {
+      "bytes": 186,
+      "sha256": "1ca10dcb7d5c1100f87e429c86916b832073c8a27551895bf1ca5c255e8db672"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/full_analysis.json": {
+      "bytes": 10518,
+      "sha256": "57e7b5ec4e22fd0dbf087ea123d740206ca3edbef62235c44db353920a08a276"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/manifest.json": {
+      "bytes": 2382,
+      "sha256": "ad1a0d21afea3102152d76cc2077e42cf240419db227a5098886ab617726b07d"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/pairing_audit/pairing_states.npz": {
+      "bytes": 2637,
+      "sha256": "46d978b870a39117ce97a8ff0d17b3f9133ecf3e0fa1072a89c29f16d33f77af"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/pairing_audit/summary.json": {
+      "bytes": 1447,
+      "sha256": "e434bb1edaea7a2060c29b1063d10384773c4c0c8364349e27e751c555ab476a"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/result.json": {
+      "bytes": 2413,
+      "sha256": "a10237ba27b11900c70d2ca30de623c9c4cc3d069a4098bd4fb046911e95d967"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/stages.json": {
+      "bytes": 40981,
+      "sha256": "44d30ebc8ef1e675aff0c1ea109d97bdfc64579e9e4ede43e572baf0a679876e"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/large/sufficient_statistics.npz": {
+      "bytes": 124694,
+      "sha256": "10db2d25051102281e99e00afc33df313aeea5d1d44cee4a46c140a4fbc921bf"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/checkpoint_01.json": {
+      "bytes": 2344,
+      "sha256": "0dd29f5b02c65bb4724dfd9dbbd42a6d18f1691b6ab2b3fb0382ae13394a5ae3"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/driver_source.py": {
+      "bytes": 18559,
+      "sha256": "e155be323e137c72c35b55cc9d790bb51c44f8d59d7a55a0d3bf8a77d3512045"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/events.jsonl": {
+      "bytes": 773,
+      "sha256": "36b802f1b04d002993685420714d528c944b8156aa662e66fa8038bf0ee7af8f"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/frozen_weights.txt": {
+      "bytes": 450,
+      "sha256": "e56bd0365e4fb06238c729c8fc1aa0a858840c1dae0986422ca2a99fb930fba0"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/full_analysis.json": {
+      "bytes": 10441,
+      "sha256": "c8817b176361a25a6056a5373c12e7734cad2a86c03582408ace4e0dec16fbb2"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/manifest.json": {
+      "bytes": 2269,
+      "sha256": "99b24567da0a338f74d15c89955df8933cd6e2292cfe3334cd7fe2a6f368da08"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/pairing_audit/summary.json": {
+      "bytes": 1451,
+      "sha256": "891d4d3ad5fbeacb71567c946a0e0524088c6d7fe5e58c1d38ba594e572df08a"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/result.json": {
+      "bytes": 2344,
+      "sha256": "0dd29f5b02c65bb4724dfd9dbbd42a6d18f1691b6ab2b3fb0382ae13394a5ae3"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/stages.json": {
+      "bytes": 41100,
+      "sha256": "39a5084d86a034242e5f785b020a30638e43af34b5f6cb582ef7925c072cd315"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/medium/sufficient_statistics.npz": {
+      "bytes": 123962,
+      "sha256": "a4d3c73a35b38065af42e49ee3bfa0ad4de36fb2cae7d12d4365d46ff764a677"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/checkpoint_01.json": {
+      "bytes": 2381,
+      "sha256": "76910681b43703959ab437268b3a4c1174dd0b23734ff814dda41f9246c6067b"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/driver_source.py": {
+      "bytes": 17799,
+      "sha256": "50966bdf441954855393b8effc731107e7b4efa236e6d2b424a67b7433c2945b"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/events.jsonl": {
+      "bytes": 3719,
+      "sha256": "16c1727f62c0cb0deb582a2bd8127f8e614bca67a747b5fae71652545e32de8a"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/frozen_weights.txt": {
+      "bytes": 182,
+      "sha256": "6407fb825e955e8bd0c6c8388ee2091c9a6daa3ca1779c1087ca2b09d1c33e70"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/full_analysis.json": {
+      "bytes": 10585,
+      "sha256": "4e0b1b840f2b0ecfb09b57dd942bcdf84abe559946abd9322fff269e847a00df"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/manifest.json": {
+      "bytes": 2418,
+      "sha256": "c0291dc48b776dd2eaadbd1927a28c59732b25fcf72c9a4e975d75aa502440d3"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/pairing_audit/pairing_states.npz": {
+      "bytes": 13626,
+      "sha256": "51a3c36ca242bc4ade8f9e8aecc7b955364ebce8674236d4e77b44f16d8d6f60"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/pairing_audit/summary.json": {
+      "bytes": 1460,
+      "sha256": "66b6f101ecfb12ce3cd42203788679ec8a119292b3785ba3b7fd2adb73a0e3ce"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/result.json": {
+      "bytes": 2381,
+      "sha256": "76910681b43703959ab437268b3a4c1174dd0b23734ff814dda41f9246c6067b"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/stages.json": {
+      "bytes": 103892,
+      "sha256": "4ce860b037cd5cd572dab4f415fb375e426ef2bd662a9f181f7aeeeb592da6ec"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/multistart_q/sufficient_statistics.npz": {
+      "bytes": 1212900,
+      "sha256": "846c8d829ade85a2cc82cbed1819f43fc098cb24adf29c9d4d4ac54be6bcdf5f"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/checkpoint_01.json": {
+      "bytes": 1883,
+      "sha256": "8df9da3b2fa814d275a7e9acc6f5c0dcc0fedb94949a29bf087cea9ec63f9040"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/driver_source.py": {
+      "bytes": 17410,
+      "sha256": "c950ac429e437f3bedaa44f9272793c9191613bc681e5e5c331475ae00d8fb4a"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/events.jsonl": {
+      "bytes": 758,
+      "sha256": "0a6e697e34e0dfdc14f068c5a6a21077d77ddf2e9b44c512d1fd92f81d31afa6"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/frozen_weights.txt": {
+      "bytes": 450,
+      "sha256": "9504b7a931d11986e11d453935a93e20fbf70bba2a0623eaaeae24828b875045"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/full_analysis.json": {
+      "bytes": 9798,
+      "sha256": "4c161df6c700e57a83ed47f8eca1f470dc27dc3cef8ff218acfdb5b57d159591"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/manifest.json": {
+      "bytes": 2224,
+      "sha256": "bcea82e69e16fbcfba81cf878b8746b4ee57da21e4326a57a68e8f7b1977edf5"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/pairing_audit/summary.json": {
+      "bytes": 1445,
+      "sha256": "a0f3e9818784f0f09c20dab8074c09e08855a70d1fd37316b5acab7521c08cb1"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/result.json": {
+      "bytes": 1883,
+      "sha256": "8df9da3b2fa814d275a7e9acc6f5c0dcc0fedb94949a29bf087cea9ec63f9040"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/stages.json": {
+      "bytes": 41048,
+      "sha256": "5517cf9d352a10dbc2aadd34ce80cac19710bbd157e0141c3d25edca0500b211"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/campaigns/small/sufficient_statistics.npz": {
+      "bytes": 126468,
+      "sha256": "0ecece726f8a48b136fd370f5030ab1aa175b4fd6af368c28fb2ca66cefe015a"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/checkout_revision.txt": {
+      "bytes": 41,
+      "sha256": "9ed68fd24e0ba54da9a5cba65a0d9d3a3b67764b98addcbfb4bbc019b5434a67"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/cleanup.json": {
+      "bytes": 654,
+      "sha256": "f0b30c42545422bf603a9d04cdf3cb9c88a15c8d9c1175302a075100f2f70a69"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/comparison.csv": {
+      "bytes": 1078,
+      "sha256": "6c5a837ff221a278e95bd6000d5cd38633c45ac60cdd654ae13bb87682515b45"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/comparison.json": {
+      "bytes": 21514,
+      "sha256": "c0c8e150d807c0f865453a7ff78bbe7af9042b6fdedb4cb22a2b9c36e8f37da1"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/confirmation_analysis_timing.json": {
+      "bytes": 88,
+      "sha256": "e509881a15a987213b6dcf6795a7bf1eee7290831345b0f89b3cbe230717c79b"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/confirmation_command.json": {
+      "bytes": 806,
+      "sha256": "950cebeb7154fb29c88566c46008fcfdaeed5d9b6e8e8b810d1568b47718df41"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/confirmation_traces.pdf": {
+      "bytes": 86841,
+      "sha256": "080e496ab35fddfb234f7b7df6d449815a7664c5c2d39e031baa3b0298c79212"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/confirmation_traces.png": {
+      "bytes": 205461,
+      "sha256": "4c74d10c31716e46245cbf5b0f56e752db0056918c04ff60d160a138109b5cf5"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/control_command.json": {
+      "bytes": 768,
+      "sha256": "1b90106c30f8eb6cd5817006341029f17ff17e266c9b1948bc3db29530c60062"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/dependencies/backend/core/oxdna_vmmc.py": {
+      "bytes": 11550,
+      "sha256": "b1f16480176a8ee3ae5b44bbbc31dc1c7843714fb8ae594a86dfb06b43e60e17"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/dependencies/backend/core/oxdna_vmmc_precision.py": {
+      "bytes": 10997,
+      "sha256": "671e6c97e514ba07ae8955ee0f7ebbc4c0def314848f18cc99ff33cc8423a4bb"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/dependencies/tools/oxdna_thermostat/physics-corrections.patch": {
+      "bytes": 7486,
+      "sha256": "be9089bfb345b167621fb7217e1b4e00ab047ab314ab0d4b8cddeaae12451702"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/dependencies/tools/oxdna_thermostat/rigid-body-bussi.patch": {
+      "bytes": 5479,
+      "sha256": "e4e76b095ac904e23ab1d0bb5262bd44a277dc0d093ced3b834f6a946f3d3556"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/dependencies/tools/oxdna_thermostat/upstream-particle-ids.patch": {
+      "bytes": 4168,
+      "sha256": "79a7095ede25f17ac46204a79ba7eb3ef72d9dcc29c11b85930ef60f59317004"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/dependencies/tools/oxdna_umbrella/native.py": {
+      "bytes": 5529,
+      "sha256": "3efc9b8933a118598536b2b357b393cdbd05b1e0a0f13acfa84faf26e2a4936c"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/dependencies/tools/oxdna_vmmc/periodic-clusters.patch": {
+      "bytes": 3111,
+      "sha256": "7dfa31bf5e8464ef2af4efb04fac1bcce33df6ae761517203cd8d3de9cc1f0b9"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/dependencies/tools/oxdna_vmmc/periodic_geometry.h": {
+      "bytes": 643,
+      "sha256": "82065c3e2130dbf71b9c80f33dcdab236556b74bd5c0916fa626d98c5105d696"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/dependencies.json": {
+      "bytes": 5135,
+      "sha256": "4ee5d74c78a3a14f4ad3584f7de78242796c251f244789d7dd7b932f531f2032"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/environment.json": {
+      "bytes": 221,
+      "sha256": "65db9d75f3919447824443eab7598c40b29ae25194e5ee541cd86ec9c19e80dd"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/historical_vmmc_roundtrips.json": {
+      "bytes": 1401,
+      "sha256": "54a2c6ef28d62437f809939927ed085292a9d72a868ab81cb7a2b2a4d35ba47d"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/inputs/conf.dat": {
+      "bytes": 4533,
+      "sha256": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/inputs/oxDNA2_sequence_dependent_parameters.txt": {
+      "bytes": 401,
+      "sha256": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/inputs/provenance.json": {
+      "bytes": 884,
+      "sha256": "2160b36c5da832f6400c333c31c3c37b0f69e8afacc21cde0f43d2f0f3ab4964"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/inputs/topology.top": {
+      "bytes": 148,
+      "sha256": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/inputs/unbound.dat": {
+      "bytes": 4512,
+      "sha256": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/inputs/vmmc_op.txt": {
+      "bytes": 151,
+      "sha256": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/native_build.json": {
+      "bytes": 329,
+      "sha256": "3804c303defb4ef101268d0d47e74ee6e7393fd599bec34fa98a62cbcad242c5"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/nearest_neighbor.json": {
+      "bytes": 519,
+      "sha256": "97d1b151921e2f0262216f54ddb633dd8b0d3ebda01f8a68c89a31ba947276f8"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/pairing_traces.pdf": {
+      "bytes": 114098,
+      "sha256": "318fe7484014f819fe696e6b285d48d041e990a34daf2caaae94c457484c50e8"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/pairing_traces.png": {
+      "bytes": 499991,
+      "sha256": "8d3825a936db21d6299fb41920fd11fd31c1314a3739c8933c56525b321df394"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/protocol.md": {
+      "bytes": 7388,
+      "sha256": "00d71ae83eb07fe6ebaa02751ce30b445dfeaacfa85a998f264c7d06f5f4fefe"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/raw_inventory.json.gz": {
+      "bytes": 393103,
+      "sha256": "0dcfcb8352281e0dcf286a2e913c59b8d48dc256e7dee83ed952a7a22bda9963"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/retained_replay.json": {
+      "bytes": 755,
+      "sha256": "9b40127de151b09d40f4d7eb6628416987a1d882ac186b6ce9ca1e43b1f6fb81"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/statistical_replay.json": {
+      "bytes": 755,
+      "sha256": "9b40127de151b09d40f4d7eb6628416987a1d882ac186b6ce9ca1e43b1f6fb81"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/traces/distance.npz": {
+      "bytes": 30161,
+      "sha256": "f6f6a74e5a1fb81b2647074ac4eaa2da43aaca595c7da27e06b12a42326c550a"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/traces/distance_confirmation.npz": {
+      "bytes": 231734,
+      "sha256": "0697726ed67666a3a52645f42ad3f6cd097cddb64bbaed11585b134f856d71db"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/traces/large.npz": {
+      "bytes": 4112,
+      "sha256": "e263c6e3359cbf8111ec604bb294db55f85e95a33e90849e6b34f4e2f82bc8f0"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/traces/medium.npz": {
+      "bytes": 3975,
+      "sha256": "97f7cd68110ef050d1992d49e8bc8b812c31921428ebc5192b668ca6a3942481"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/traces/multistart_q.npz": {
+      "bytes": 29171,
+      "sha256": "dddce7efee099c71b707119a56a03f182162948998dd94e3af700bc31c7435a3"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/traces/small.npz": {
+      "bytes": 4205,
+      "sha256": "81363244d59d23821ae145de5d860812ccd57abf2b8007aae461381bed431867"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/validation.json": {
+      "bytes": 1215,
+      "sha256": "86c62bc55aeba4b803a49cb7fcc51d7795e05f63de0a1e3df3e996728c84b53e"
+    },
+    "docs/benchmarks/equilibrium_tm_20261121/worktree-inventory.txt": {
+      "bytes": 2230,
+      "sha256": "b8c0bae39645314b5fce8ef067e794e947f570b0c43d3c60bfea80fbe3f8950b"
+    },
+    "docs/oxdna_equilibrium_tm_benchmark_20261121.md": {
+      "bytes": 15429,
+      "sha256": "dcd6a893df69d9ef671bf27ae98a003aa2c151640cd1e516c56a1360d9eabbe2"
+    },
+    "docs/oxdna_equilibrium_tm_research.md": {
+      "bytes": 8989,
+      "sha256": "3a68628033ec8697ff3f175b1b5d3f16d9aa560467916012c6f2a8cddfe95cfc"
+    },
+    "tests/test_oxdna_tm_research.py": {
+      "bytes": 2222,
+      "sha256": "d4dfeb0ba95c3de27a86fdfffd35fae88d251eb91f9398efa5c6f39c7294c689"
+    },
+    "tools/oxdna_tm_research/README.md": {
+      "bytes": 3628,
+      "sha256": "49bd27b8ef8e7f1f485f2f1d90024cbfeaf7b3033688ec0739a2cadd6a8e9681"
+    },
+    "tools/oxdna_tm_research/analyze.py": {
+      "bytes": 8652,
+      "sha256": "13910ee7369aae6380110785c537e27b3fc03d14acb09d349f0bd12f27deda7d"
+    },
+    "tools/oxdna_tm_research/binding_definition.py": {
+      "bytes": 2090,
+      "sha256": "93f3dd7e0e0a17cdbed7f536aec8a6354268ca612777d20d7ba5db3329a92081"
+    },
+    "tools/oxdna_tm_research/calibration.py": {
+      "bytes": 1850,
+      "sha256": "ae729b753c17d9bd9cc716a78a59dbdbe94180c35f6c6ad4e40e90577aeea169"
+    },
+    "tools/oxdna_tm_research/compare.py": {
+      "bytes": 933,
+      "sha256": "28106e3d876ffbb82707ab6e427af0176b8eae4065fbf665d1e27edf54a6ef2c"
+    },
+    "tools/oxdna_tm_research/distance.py": {
+      "bytes": 2844,
+      "sha256": "9e3c9f91012648d0a01d631fbb9f23329eb375b5e774248a5fd96b3bece49b8e"
+    },
+    "tools/oxdna_tm_research/distance_audit.py": {
+      "bytes": 2656,
+      "sha256": "27b0e09d390382c5a314be410df54e2bcc47ae97c5e3ebe75e4c7897297e958e"
+    },
+    "tools/oxdna_tm_research/distance_pilot.py": {
+      "bytes": 1210,
+      "sha256": "a2d5d99e2f174c398af41de7a65e6f9e05ba01b5b9c4c63e9306d2c026e98d30"
+    },
+    "tools/oxdna_tm_research/nearest_neighbor.py": {
+      "bytes": 1739,
+      "sha256": "2925e41a630e416b2a45e161be28208e907017799064dbab7b5fab11fb0ba5c9"
+    },
+    "tools/oxdna_tm_research/pairing.py": {
+      "bytes": 4538,
+      "sha256": "0479e497908ba74e719243efba34cc01eb9b43131b9136414ae411d0cba37526"
+    },
+    "tools/oxdna_tm_research/pilot_matrix.py": {
+      "bytes": 1040,
+      "sha256": "db3ce5cd6b27abbc37d3e205c3db95cf9ccc16154dd7148491a61f946ac85ee4"
+    },
+    "tools/oxdna_tm_research/proposals.py": {
+      "bytes": 18133,
+      "sha256": "adcd26deb951b580f544dd9784d1cacb84278cb910946d2cf8f889aa5c37959e"
+    },
+    "tools/oxdna_tm_research/replay.py": {
+      "bytes": 1345,
+      "sha256": "c586c552567a707d0ad330dab3e0921a7c7ff6769d802e4c5145af1824782b86"
+    },
+    "tools/oxdna_tm_research/report.py": {
+      "bytes": 5951,
+      "sha256": "b2dd3d023efe768cae1021a8fc22e5d037ed75888caadb3626bb9f452e82dbf1"
+    },
+    "tools/oxdna_tm_research/retain.py": {
+      "bytes": 5176,
+      "sha256": "045c2cef13d45251f88204d4d78654057bf8c75b15c90ca63bce128c4a7823a8"
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "October_2fs": {
+    "jobs": [
+      "be74a1436d66",
+      "be5dc708adb2",
+      "a9261569b8c7"
+    ],
+    "metrics": {
+      "midpoint_A": {
+        "replica_means": [
+          10.592856407165527,
+          7.970717430114746,
+          11.965853691101074
+        ],
+        "split_Rhat": 2.3102571964263916
+      },
+      "wc_fraction": {
+        "replica_means": [
+          0.9426666666666667,
+          0.9355873015873016,
+          0.9695555555555556
+        ],
+        "split_Rhat": 1.1613206538684435
+      },
+      "local_wc_fraction": {
+        "replica_means": [
+          0.9303333333333333,
+          0.7196666666666667,
+          0.9816666666666667
+        ],
+        "split_Rhat": 1.4832997773156253
+      }
+    },
+    "qualification": "Classical split Rhat on final75%, not rank normalized. Shared preparation, no independent conformational initialization. Unequal 800 ns run deliberately excluded from equal-length pair comparison."
+  },
+  "August_4fs_500ns": {
+    "jobs": [
+      "bd13e4dfa6c5",
+      "07d7cd2766e3"
+    ],
+    "metrics": {
+      "midpoint_A": {
+        "replica_means": [
+          11.128531455993652,
+          5.256930828094482
+        ],
+        "split_Rhat": 1.744773030281067
+      },
+      "wc_fraction": {
+        "replica_means": [
+          0.759128888888889,
+          0.9034133333333333
+        ],
+        "split_Rhat": 3.3283855680021617
+      },
+      "local_wc_fraction": {
+        "replica_means": [
+          0.70016,
+          0.7989466666666667
+        ],
+        "split_Rhat": 1.2113464520063446
+      }
+    },
+    "qualification": "Classical split Rhat on final75%, not rank normalized. Shared preparation, no independent conformational initialization. Unequal 800 ns run deliberately excluded from equal-length pair comparison."
+  }
+}

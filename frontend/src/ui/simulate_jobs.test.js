@@ -794,6 +794,19 @@ describe('unified list + master card', () => {
     expect(oxdnaPanel.copyJob).toHaveBeenCalledWith('ox1')
   })
 
+  it('offers View results for VMMC in the unified job list', async () => {
+    mount()
+    const { sim } = make([oxNode({run_config:{vmmc_melting:{}}})])
+    await sim.refresh()
+    document.querySelector('[data-job-id="ox1"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles:true,cancelable:true,clientX:20,clientY:30,
+    }))
+    const item=[...document.querySelectorAll('.context-menu__item')].find(el=>el.textContent==='View results')
+    expect(item).toBeTruthy()
+    item.click()
+    expect(document.querySelector('.oxdna-umbrella-results').textContent).toContain('Results will appear')
+  })
+
   it('transfers a remote oxDNA job from its context menu with detailed progress', async () => {
     mount()
     const remote = oxNode({

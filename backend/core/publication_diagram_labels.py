@@ -69,5 +69,6 @@ def numeric_labels(page):
             decoded.append(digit); scores.append(score)
         if len(decoded) == len(chars):
             output.append({'value':int(''.join(decoded)), 'x':chars[0][2][0],
-                           'y':chars[0][2][1], 'confidence':min(scores), 'raw':raw})
+                           'y':chars[0][2][1], 'confidence':min(scores), 'raw':raw,
+                           'direction':tuple(round(value) for value in span['dir'])})
     return output

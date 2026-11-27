@@ -1,0 +1,53 @@
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/NADOC_archive/bd13e4dfa6c5/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT 2026-08-07T21:14:14.272518-06:00 [69.81000020813192, 82.01000024450508] n 62 maxbond 1.703
+2hb_1xT 2026-08-13T01:10:37.132622-06:00 [0.020000000059628115, 799.8200023845878] n 4000 maxbond 1.755
+2hb_1xT 2026-08-28T20:52:25.655920-06:00 [0.020000000059628115, 499.8200014901662] n 2500 maxbond 1.736
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/NADOC_archive/07d7cd2766e3/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT 2026-08-29T00:12:46.045661-06:00 [0.020000000059628115, 499.8200014901662] n 2500 maxbond 1.729
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/2hb_1xT_CPD_cis-anti-I.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_cis-anti-I 2026-10-18T14:45:56.307843-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.716
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_cis-syn-I 2026-10-18T14:49:40.238822-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.721
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/2hb_1xT_CPD_trans-syn-II.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_trans-syn-II 2026-10-19T10:21:27.906299-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.697
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/2hb_1xT_CPD_trans-syn-I.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_trans-syn-I 2026-10-19T10:23:35.550632-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.712
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/2hb_1xT_CPD_cis-anti-I.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_cis-anti-I 2026-10-19T15:11:27.275156-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.722
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_cis-syn-I 2026-10-19T15:30:53.974781-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.719
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/2hb_1xT_CPD_trans-syn-II.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_trans-syn-II 2026-10-20T14:34:50.133292-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.704
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/2hb_1xT_CPD_trans-syn-I.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_trans-syn-I 2026-10-20T16:56:17.407933-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.711
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/2hb_1xT_CPD_trans-syn-I.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_trans-syn-I 2026-10-22T09:27:06.352989-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.715
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/2hb_1xT_CPD_cis-anti-I.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_cis-anti-I 2026-10-22T09:31:09.230496-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.709
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/2hb_1xT_CPD_trans-syn-II.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_trans-syn-II 2026-10-22T09:32:53.208539-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.704
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT_CPD_cis-syn-I 2026-10-22T09:34:51.151661-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.701
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/nadoc_jobs/be74a1436d66/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT 2026-10-25T19:59:48.010237-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.698
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/nadoc_jobs/be5dc708adb2/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+2hb_1xT 2026-10-25T20:05:12.675241-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.701
+2hb_1xT 2026-10-25T20:11:07.677257-06:00 [0.020000000059628115, 19.9200000593896] n 200 maxbond 1.734
+2hb_1xT_CPD_cis-anti-I 2026-11-04T07:57:08.386522-07:00 [0.04000000011925623, 99.96000029802131] n 1250 maxbond 1.724
+2hb_1xT_CPD_cis-syn-I 2026-11-07T21:10:23.212723-07:00 [0.04000000011925623, 56.60000016874756] n 708 maxbond 1.729

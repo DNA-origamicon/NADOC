@@ -1,10 +1,12 @@
-"""Two-channel lock on the atomistic display geometry.
+"""Two-channel historical lock on atomistic stamps and explicit solver bridges.
 
 ``build_atomistic_model`` places every heavy atom from LOCKED, calibrated templates +
 phase constants (CLAUDE.md: the ``_PHASE_*`` / atomistic frame constants must not drift
 without approval), then closes the backbone across crossover and skip steps with an
 L-BFGS-B bridge minimiser.  Those two halves need DIFFERENT oracles, which is why this
-file has two channels.
+file has two channels. Native display/export/NAMD now share interpolated bridges;
+this oracle explicitly retains the historical solver without regenerating goldens.
+See test_native_seed_geometry.py for the shared native contract.
 
 **Channel 1 — the stamp (byte-exact).**  Every atom except the solver-placed bridges
 comes straight out of the template stamp and IS bit-reproducible.  That is 98-99% of the
@@ -80,7 +82,9 @@ _BRIDGE_MEAN_TOL_A = 0.02  # measured 0.00441 -> ~4.5x headroom
 
 def _model(stem: str):
     design = Design.model_validate_json((_EXAMPLES / f"{stem}.nadoc").read_text())
-    return build_atomistic_model(design, close_backbone=True, relaxed_oxdna_phase=True)
+    # Preserve the historical solver oracle; native parity has separate coverage.
+    return build_atomistic_model(design, close_backbone=True, relaxed_oxdna_phase=True,
+                                 fast_bridges=False)
 
 
 def _junction_key(o3) -> str:

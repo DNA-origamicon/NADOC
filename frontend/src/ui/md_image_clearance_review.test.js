@@ -13,6 +13,15 @@ describe('image clearance review', () => {
     expect(container.textContent).toContain('2.40 / 3.00 / 4.00 nm')
     expect(container.textContent).toContain('equilibrated.coor')
   })
+  it('allows server verification without accepting a clearance override', () => {
+    const container = document.createElement('div'), button = document.createElement('button')
+    const view = mountImageClearanceReview(container, { status: 'verify_on_resume', requires_override: false,
+      detail: 'Resume checks the saved checkpoint before submission.' }, button)
+    expect(button.disabled).toBe(false)
+    expect(view.overridden()).toBe(false)
+    expect(container.querySelector('input')).toBeNull()
+    expect(container.textContent).toContain('checks the saved checkpoint')
+  })
   it('renders diagnostics as text and blocks unknown data', () => {
     const container = document.createElement('div'), button = document.createElement('button')
     const view = mountImageClearanceReview(container, { status: 'unknown', detail: '<img src=x onerror=alert(1)>' }, button)

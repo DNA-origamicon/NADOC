@@ -1,0 +1,30 @@
+2hb_1xT
+Rg_A means [27.065 27.181 27.262] Rhat 1.187
+helix_centroid_sep_A means [25.989 25.544 26.565] Rhat 1.345
+helix_tilt_deg means [7.579 7.827 8.712] Rhat 1.131
+wc_fraction means [0.942 0.934 0.971] Rhat 1.189
+d_mid_A means [10.591  7.922 12.021] Rhat 2.376
+2hb_1xT_CPD_cis-anti-I
+Rg_A means [27.485 27.664 26.709] Rhat 1.623
+helix_centroid_sep_A means [28.808 27.966 23.618] Rhat 2.522
+helix_tilt_deg means [12.818  7.574 11.   ] Rhat 1.245
+wc_fraction means [0.958 0.958 0.927] Rhat 1.17
+d_mid_A means [1.54  1.546 1.55 ] Rhat 1.01
+2hb_1xT_CPD_cis-syn-I
+Rg_A means [27.767 27.663 27.409] Rhat 1.22
+helix_centroid_sep_A means [28.87  28.753 27.907] Rhat 1.353
+helix_tilt_deg means [10.284 38.924  8.691] Rhat 3.214
+wc_fraction means [0.938 0.943 0.944] Rhat 1.006
+d_mid_A means [1.554 1.555 1.558] Rhat 1.001
+2hb_1xT_CPD_trans-syn-I
+Rg_A means [27.693 27.528 27.039] Rhat 1.545
+helix_centroid_sep_A means [26.005 23.853 26.204] Rhat 1.545
+helix_tilt_deg means [17.839 14.593 14.874] Rhat 1.523
+wc_fraction means [0.948 0.929 0.964] Rhat 1.187
+d_mid_A means [1.538 1.536 1.538] Rhat 0.999
+2hb_1xT_CPD_trans-syn-II
+Rg_A means [27.314 26.952 27.464] Rhat 1.313
+helix_centroid_sep_A means [26.996 25.326 22.508] Rhat 2.428
+helix_tilt_deg means [17.958 12.518 40.928] Rhat 2.45
+wc_fraction means [0.962 0.953 0.923] Rhat 1.159
+d_mid_A means [1.536 1.536 1.539] Rhat 0.998

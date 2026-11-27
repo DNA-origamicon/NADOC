@@ -13,6 +13,13 @@ log and reproducible process. The full-design snapshot exception below no longer
 authorizes history-free captures. See [structure requires process](feedback_structure_requires_process.md).
 Molecular approval remains separate; neither requirement waives the other.
 
+**November 21, 2026 scoped exception:** a direct **“A/B testing authorized”**
+session grant permits isolated, reproducible diagnostic geometry comparisons
+under [the A/B policy](feedback_session_authorized_ab_testing.md), including
+legacy inputs. It replaces native feature-history requirements only for those
+diagnostic states. It does not authorize authored candidate documents or change
+the production-promotion gate below. The policy itself is not an authorization.
+
 ## Root-bond priority — explicit user correction, 2026-10-30
 
 Automatic NADOC placement must keep overhang-root bond distances fixed and must

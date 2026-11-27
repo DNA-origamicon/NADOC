@@ -120,7 +120,9 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
             basis = 'Independent drawn loop; unique minimum forced-ligation-span cell at the source register; unrelaxed geometry'
         add('helix-add-at-cell',label,{'row':r,'col':c,'length_bp':extent,
             'populate_strands':False,'_helix_id':hid[h]},basis)
-    for h,bp,n in insertions['counts']:
+    from backend.core.publication_insertion_loops import insertion_plan
+    loop_plan = insertion_plan(insertions, classified, tracks['site_mapping'])
+    for h,bp,n in loop_plan['duplex_insertions']:
         native_h, native_bp = tracks['site_mapping'].get((h,bp), (h,bp))
         add('loop-skip-insert',f'Figure helix {h}[{bp}]: {n} inserted bases',
             {'helix_id':hid[native_h],'bp_index':native_bp,'delta':n},'Observed insertion annotation; oligo lengths and scaffold mass balance')
@@ -176,6 +178,12 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
                     {'_fl_id':identity(f'join:{number}:{i}'),'three_prime_strand_id':ids[0],
                      'five_prime_strand_id':ids[i+1]},path_basis+'; nonlocal connection, never substituted for a native crossover')
                 counters['forced_ligations']+=1
+        if number == 0:
+            for loop in loop_plan['scaffold_loops']:
+                add('strand-loop-set', f"Scaffold loop: {loop['length']} bases",
+                    {'strand_id': ids[0], 'helix_id': hid[loop['helix']],
+                     'bp_index': loop['bp_index'], 'direction': loop['direction'],
+                     'length': loop['length'], 'aspect_ratio': 3.0, 'rotation_deg': 0.0}, loop['basis'])
         add('strand-sequence',f'Assign {title}',{'strand_id':ids[0],'name':title,
             'sequence':scaffold_sequence if number==0 else selected_paths[number-1]['table_row']['sequence']},
             (path['table_row']['basis'] if number and path['table_row'].get('sequence_source') == 'derived_from_aligned_scaffold'
@@ -198,13 +206,14 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
               'normalization_rotation':graph.get('normalization_rotation',0),'lattice_translation_rows':shifts[0],
               'helix_ids':hid,'helix_sources':tracks['sources'],'auxiliary_placement':placement,
               'cells':cells,'insertions':insertions,'classified':classified,
-              'source_insertions':source_insertions,
+              'source_insertions':source_insertions, 'insertion_representation':loop_plan,
               'connections':counters,'operations':len(operations), 'staple_precursors': precursor_summary,
               'terminal_unpaired_scaffold_sites': sorted(terminal_sites),
               'derived_staples': derived_staples,
               'staple_overhangs':overhangs,
               'native_reference_consulted':False, 'route_search':route_search,
               'reconstruction_report':{'status':'partial' if omissions else 'complete', 'omissions':omissions,
+                  'insertion_representation':loop_plan,
                   'base_conflicts':overhangs['conflicts'], 'scaffold_sequence_assigned':scaffold_sequence,
                   'appearance':{'helix_order':row_order,'staple_colors':colors},
                   'included_staples':len(classified['stap']), 'table_staples':len(table['rows']),

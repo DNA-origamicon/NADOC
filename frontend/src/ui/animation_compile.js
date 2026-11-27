@@ -9,7 +9,7 @@ import { compilePresentation } from '../scene/compile_presentation.js'
 import { compilationEstimate, presentationHTML } from '../scene/compiled_presentation.js'
 import './animation_compile.css'
 
-export function initAnimationCompile({ anchor, player, renderer, scene, camera, getAnimation, beforeCompile, controls, captureCamera, getSource = () => null, getPlayOptions = () => ({}),
+export function initAnimationCompile({ anchor, player, renderer, scene, camera, getAnimation, beforeCompile, controls, captureCamera, getSource = () => null, getPlayOptions = () => ({}), getPhotoMode = () => null,
   onCompiledStatus = () => {}, compile = compilePresentation, library = createPresentationLibrary() }) {
   const root = document.createElement('div')
   root.className = 'animation-compile'
@@ -98,7 +98,7 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
     try {
       const inspection = { sourceId: source?.id, sourceHash: await presentationSourceHash(source), initialCamera }
       controller.signal.throwIfAborted()
-      const blob = await compile({ animation, keyframeId, player, renderer, scene, camera, resolution: resolution.value, playOptions: getPlayOptions(), inspection, onPrepared: data => { prepared = data }, signal: controller.signal, onProgress: progress })
+      const blob = await compile({ photoRenderer: getPhotoMode(), animation, keyframeId, player, renderer, scene, camera, resolution: resolution.value, playOptions: getPlayOptions(), inspection, onPrepared: data => { prepared = data }, signal: controller.signal, onProgress: progress })
       controller.signal.throwIfAborted()
       stage.textContent = 'Saving to the presentation library…'
       const saved = await library.save(blob, target?.name || (target ? `${animation.name || 'Presentation'} · trajectory keyframe` : animation.name || 'Presentation'), target ? 'keyframe' : 'presentation', controller.signal)

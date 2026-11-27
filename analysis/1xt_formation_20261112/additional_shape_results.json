@@ -1,0 +1,226 @@
+[
+  {
+    "job_id": "2bc15e9e2531",
+    "design": "2hb_1xT",
+    "created": "2026-11-11T09:56:14.531464-07:00",
+    "status": "completed",
+    "parent": "c30001fb925c",
+    "files": [
+      {
+        "path": "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd",
+        "bytes": 18889040276,
+        "mtime_ns": 1794537208206022398,
+        "frames": 10000,
+        "dt_ns": 0.020000000059628115,
+        "istart": 10000,
+        "stride": 5,
+        "first_ns": 0.020000000059628115,
+        "last_ns": 200.00000059628115
+      }
+    ],
+    "config": {
+      "timestep": "2",
+      "structure": "2hb_1xT.psf",
+      "langevintemp": "300",
+      "langevindamping": "1",
+      "rigidbonds": "all",
+      "wrapall": "off",
+      "constraints": "off",
+      "extrabondsfile": "mgh_extrabonds.txt",
+      "colvars": null
+    },
+    "manifest_timestep_fs": null,
+    "psf_sha256": "2e7c5e443da7a27edfdf964e06079c34318f580f9e9339e427d9d5b0087e816d",
+    "wc_plan": "/media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/nadoc_wc_plan.json",
+    "heavy_atoms": 1963,
+    "wc_pairs": 42,
+    "sampled_frames": 2000,
+    "sample_dt_ns": 0.10000000029813805,
+    "max_sample_gap_ns": 0.10000000029819489,
+    "max_dna_bond_A": 1.7227729397485105,
+    "chirality_failures": null,
+    "first_last_ns": [
+      0.020000000059628115,
+      199.92000059604263
+    ],
+    "late_window_start_ns": 50.02000014912991,
+    "statistics": {
+      "heavy_rmsd_A": {
+        "mean": 7.659038433223034,
+        "sd": 1.7738619120544477,
+        "p05": 5.169353498144699,
+        "p95": 10.68197974862199,
+        "quarter_means": [
+          6.04602393851476,
+          6.438675962709434,
+          8.874937799171455,
+          9.276516032496486
+        ],
+        "half_shift": 2.8333769652218743,
+        "ess": 3.472244258809049,
+        "tau_int_ns": 21.59986298006809,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "local_fit_rmsd_A": {
+        "mean": 3.494926755498748,
+        "sd": 0.8955860080978004,
+        "p05": 2.03642348900103,
+        "p95": 4.782571436406795,
+        "quarter_means": [
+          2.5768043202269144,
+          2.9927707849976377,
+          4.1586321405372955,
+          4.251499776233144
+        ],
+        "half_shift": 1.4202784057729443,
+        "ess": 2.901051539178502,
+        "tau_int_ns": 25.852694862788088,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "Rg_A": {
+        "mean": 27.272096213024128,
+        "sd": 0.6764942284804267,
+        "p05": 26.289445100374905,
+        "p95": 28.490261582888284,
+        "quarter_means": [
+          27.453185518078293,
+          27.910344084215893,
+          27.013328009787568,
+          26.71152724001476
+        ],
+        "half_shift": -0.8193371762459307,
+        "ess": 5.181668666872605,
+        "tau_int_ns": 14.474101885960563,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "wc_fraction": {
+        "mean": 0.9130952380952382,
+        "sd": 0.02989542463061961,
+        "p05": 0.8571428571428571,
+        "p95": 0.9523809523809523,
+        "quarter_means": [
+          0.9174603174603174,
+          0.904825396825397,
+          0.9152380952380953,
+          0.9148571428571429
+        ],
+        "half_shift": 0.0039047619047619664,
+        "ess": 229.666924226625,
+        "tau_int_ns": 0.32655986697325606,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_centroid_sep_A": {
+        "mean": 26.34345864102665,
+        "sd": 1.7651838749040971,
+        "p05": 23.445688053633546,
+        "p95": 29.35617696060409,
+        "quarter_means": [
+          26.15405408748889,
+          26.38412505558208,
+          27.240486775761646,
+          25.595168645273976
+        ],
+        "half_shift": 0.14873813898232413,
+        "ess": 14.34554122831024,
+        "tau_int_ns": 5.228105306727265,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "helix_tilt_deg": {
+        "mean": 13.151360467179325,
+        "sd": 6.259183636364123,
+        "p05": 4.240206786688711,
+        "p95": 23.757844572242462,
+        "quarter_means": [
+          15.046356506126093,
+          14.739785822350129,
+          10.548088360148903,
+          12.271211180092166
+        ],
+        "half_shift": -3.4834213941175776,
+        "ess": 25.459911442451812,
+        "tau_int_ns": 2.9458075843323113,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "d_mid_A": {
+        "mean": 12.719452919449042,
+        "sd": 1.9809834162987836,
+        "p05": 9.034140010021103,
+        "p95": 15.689936670663176,
+        "quarter_means": [
+          13.319008904887436,
+          13.282885755682369,
+          12.632384315209599,
+          11.643532702016758
+        ],
+        "half_shift": -1.162988821671723,
+        "ess": 21.189922806282738,
+        "tau_int_ns": 3.5394182843066466,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "nearest_image_heavy_A": {
+        "mean": 36.98899829901001,
+        "sd": 7.240260102843646,
+        "p05": 21.562065417768462,
+        "p95": 46.16274041881817,
+        "quarter_means": [
+          41.477609957055485,
+          28.980506654817884,
+          38.74466340946253,
+          38.75321317470412
+        ],
+        "half_shift": 3.5198799861466483,
+        "ess": 7.571974316708188,
+        "tau_int_ns": 9.904946462656355,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "rotation_clearance_lower_bound_A": {
+        "mean": -9.721724236483896,
+        "sd": 6.810329760744021,
+        "p05": -23.496035522759044,
+        "p95": -0.9134750260973284,
+        "quarter_means": [
+          -9.408876962245849,
+          -16.621830437130022,
+          -7.224570071273818,
+          -5.631619475285897
+        ],
+        "half_shift": 6.58725892640808,
+        "ess": 9.666982559966915,
+        "tau_int_ns": 7.7583671800748775,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "old_reference_wc_fraction": {
+        "mean": 0.938984126984127,
+        "sd": 0.017835123428970753,
+        "p05": 0.9047619047619048,
+        "p95": 0.9523809523809523,
+        "quarter_means": [
+          0.9429841269841269,
+          0.9311111111111111,
+          0.9404444444444446,
+          0.9413968253968253
+        ],
+        "half_shift": 0.003873015873015917,
+        "ess": 53.3592289455001,
+        "tau_int_ns": 1.4055675410940969,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      },
+      "old_reference_local_wc_fraction": {
+        "mean": 0.979,
+        "sd": 0.07173397969276282,
+        "p05": 0.75,
+        "p95": 1.0,
+        "quarter_means": [
+          0.982,
+          0.98,
+          0.98,
+          0.974
+        ],
+        "half_shift": -0.0040000000000000036,
+        "ess": 1057.3560400224094,
+        "tau_int_ns": 0.07093164211935084,
+        "acf_caution": "Stationarity assumed; single-run estimate, not a convergence certificate"
+      }
+    }
+  }
+]

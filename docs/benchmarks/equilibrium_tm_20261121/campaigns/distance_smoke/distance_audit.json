@@ -1,0 +1,51 @@
+{
+  "replicas": [
+    {
+      "replica": 0,
+      "frames": 10,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.33947667392822484,
+      "maximum": 0.3788426272029505,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_smoke/replica_0_block_00/trajectory.dat": "ca0ff132bcaa90db83fef267c98f7aa4c1e92176a9c179aa843bcff125b387c6"
+      }
+    },
+    {
+      "replica": 1,
+      "frames": 10,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 1.6820644149589679,
+      "maximum": 4.189876333235284,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_smoke/replica_1_block_00/trajectory.dat": "8d02ca79583b1f37f80cf01a231a2cef7b3c03476468e7fa146002b86dcb13bf"
+      }
+    },
+    {
+      "replica": 2,
+      "frames": 10,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.3596042500585567,
+      "maximum": 0.39251854822777454,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_smoke/replica_2_block_00/trajectory.dat": "b51e4db17710801e545d1776231fa7ae3b7a8462a30a4145052edf4d17685e77"
+      }
+    },
+    {
+      "replica": 3,
+      "frames": 10,
+      "near_boundary_frames": 0,
+      "distance_bin_mismatches_away_from_roundoff": 0,
+      "minimum": 0.8913830268915907,
+      "maximum": 4.180236280176855,
+      "trajectory_sha256": {
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/equilibrium-tm-20261121/distance_smoke/replica_3_block_00/trajectory.dat": "4889e679cb04445137d03defefa2642417f8a2005ffb7d6bc940aa6234e1f3b8"
+      }
+    }
+  ],
+  "split": 1.0,
+  "base_offset": 0.4,
+  "qualification": "Independent recorded-bin check, not an equilibrium test."
+}

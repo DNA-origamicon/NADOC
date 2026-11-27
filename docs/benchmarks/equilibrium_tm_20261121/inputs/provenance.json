@@ -1,0 +1,17 @@
+{
+  "source_job": "/media/jojo/Archive/NADOC/oxDNA_jobs/c795362c46bc",
+  "files": {
+    "topology.top": "f2014c934e05b11a9ec74460c842de9e259b6fe4f696a866df07e544654e02fe",
+    "oxDNA2_sequence_dependent_parameters.txt": "1fdf509ed1f55f8292b546c57ac80247d3d8e5d2226273875540f8b407bb195f",
+    "vmmc_op.txt": "a61a5b0f71168ef59bee7179ffe49a1d65e169d425801e6729d960c28b1af94c",
+    "conf.dat": "9552d95c86f528d5398c7ce2056a960c36592f330eb7adc347317668cdc3b405",
+    "unbound.dat": "3bd6d242b378ac162ce0ea89fa1a9d94b1442b384eab7ec4827a41acfd6c17f0"
+  },
+  "note": "Unmodified existing simulation exports; no molecular authoring.",
+  "boundary_frame": {
+    "source": "/media/jojo/Archive/NADOC/oxDNA_jobs/c795362c46bc/6_vmmc_sample_1/trajectory.dat",
+    "frame_index": 5,
+    "native_step": 6000000,
+    "sha256": "3283b7ebcfb7e32be125fcdd4ecf128d1f297cdfce6bf8c5447d0fe79b210b42"
+  }
+}

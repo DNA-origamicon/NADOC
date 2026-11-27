@@ -1,0 +1,29 @@
+{
+  "session_file": "/home/jojo/.codex/sessions/2026/11/10/rollout-2026-11-10T21-10-48-01a1c8cd-1df2-7be2-9e8b-6ec1fdf1d2cf.jsonl",
+  "previous_analysis": "analysis/1xt_formation_20261110",
+  "user_experimental_conditions": {
+    "MgCl2_mM": 20,
+    "irradiation_temperature_C_approx": 27,
+    "earlier_reported_temperature_C": 20,
+    "clarification": "Lamp heats samples to approximately 27 C; user confirms 300 K desired."
+  },
+  "agreed_pilot": {
+    "length_ns": 200,
+    "temperature_K": 293.15,
+    "timestep_fs": 2,
+    "ordinary_masses": true,
+    "box": "passes periodic-image clearance",
+    "trajectory_interval_steps": 10000
+  },
+  "scope": "Unwelded precursor geometry screening, local pairing and convergence; no new simulation or parameter fitting.",
+  "other_new_production": {
+    "created_local": "2026-11-11 09:34:10 MST",
+    "job_id": "ceda445f9f90",
+    "recorded_status": "running",
+    "local_dcd_bytes_at_inventory": 1889260,
+    "included": false,
+    "reason": "Not a completed replica; only one frame downloaded locally."
+  },
+  "current_user_clarification": "The 3.5 nm margins were intentional; assess whether the older 6 nm margins are necessary for this instance.",
+  "current_desired_temperature_K": 300
+}

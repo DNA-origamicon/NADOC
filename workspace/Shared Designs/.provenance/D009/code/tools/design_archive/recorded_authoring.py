@@ -65,6 +65,7 @@ BUILDERS = {
     **dict.fromkeys(('helix-add-at-cell', 'helix-extend', 'scaffold-domain-paint'), cell),
     **dict.fromkeys(('strand-add', 'strand-update', 'domain-add', 'helix-reorder', 'helix-update'), structural),
     'loop-skip-insert': build_loop,
+    'strand-loop-set': build_loop,
     'crossover-place': crossover,
     'strand-sequence': sequence,
     'nick': nick,

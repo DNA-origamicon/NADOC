@@ -1,5 +1,12 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-269 — Autoscaffold replay changes joined-cluster identities and tether order (2026-11-27, FIXED)
+
+- **Observed** — A wheel built with Sweep, Join Clusters and Autoscaffold replayed the same scaffold paths but failed publication verification on crossover IDs and flexible-connection ordering.
+- **Cause** — The joined-component router allocated crossover IDs outside the recorded routing namespace. It also rederived flexible connections with a process-dependent traversal order.
+- **Resolution** — The router uses the existing routing identity constructor. Autoscaffold records the native anchor selections and list order, then restores those choices after rederiving the connections on replay. Previously saved documents retain their histories.
+- **Validation** — The native API regression reverses the derived connector list during replay and compares the resulting crossover and flexible-connection records. Eight focused tests passed and two optional local-design tests were skipped. Four wheel layouts independently replayed after reopening.
+
 ## ISSUE-264 — Large-scene backbone rendering and native metadata assignment (2026-11-24)
 
 [x] Desktop enables fast CG backbone spheres independently of atomistic flags;
@@ -51,6 +58,18 @@ Existing Archive documents and jobs stay in place. Thirty-nine focused tests
 pass; the live Library browser shows the Pointer through the new layout.
 `main.js` task delta: 0 lines.
 
+## ISSUE-260 — Scaffold sequence target overflows its dialog (2026-11-23)
+
+[x] The shared Assign Scaffold Sequence target select sized itself from long
+imported strand identifiers, exceeding the small modal body. Scoped CSS now
+stacks the label and constrains the select to its container with ellipsis.
+The real Pointer browser flow reproduces overflow with the old layout as a
+negative control, then checks containment at 1280 px and 390 px and applies
+M13mp18 through the recorded endpoint. Screenshots visually inspected; no
+console errors. Sixteen focused frontend tests and two Pointer backend tests
+pass. Tests use complete-history copies in a disposable workspace, never save
+to the user's source path. `main.js` task delta: 0 lines.
+
 ## ISSUE-259 — NAMD runner scheduling fixture intermittently sees a busy lease (2026-11-22)
 
 [ ] Occupancy archive FAST validation failed in
@@ -61,6 +80,7 @@ budget directory; background activity sharing process state is a hypothesis, not
 an established cause. No runner or scheduling code changed for occupancy archival.
 Evidence: `.development-artifacts/occupancy-archive-backend.log` and
 `occupancy-archive-runner-retry.log`. Final FAST rerun passed all 21,110 tests. Investigate worker/background lease isolation.
+
 
 
 
@@ -82,6 +102,17 @@ and verified by the focused rerun. Lint passed. Smoke: 22 passed, 2 skipped,
 2 existing Create/Close Session failures. Temporary sessions/screenshots cleaned;
 Gerling source checksum unchanged. Feature `main.js` LOC Δ: 0.
 
+
+## ISSUE-234 — VR build test captures background trajectory subprocess (2026-11-20)
+
+[ ] During hybrid benchmark FAST validation, `test_automatic_build_is_serial_and_viewer_only`
+expected two mocked subprocess calls but captured a third from trajectory precompute.
+The test patches the shared subprocess module while background analysis can run.
+Isolated recheck passes (1 test); the broad-suite isolation defect remains open.
+Historical logs were removed in the user-requested 2026-11-21 experiment cleanup;
+the test counts and diagnosis remain in `docs/oxdna_hybrid_benchmark.md`.
+Investigate background-worker teardown or a module-local subprocess dependency;
+do not weaken the serial/viewer-only build assertion. No VR code changed here.
 
 ## ISSUE-257 — Attachment Apply leaves Move/Rotate open (2026-11-21)
 
@@ -1015,6 +1046,12 @@ files carry all the state a cold session needs.
   The 2-base workflow passed on the first run. Root cause of the broad-run
   failures remains unverified; no smoke thresholds were changed. Evidence:
   `.development-artifacts/two-base-browser.log` and `two-base-browser-retry.log`.
+
+- [x] November 16: await the matching creation request instead of a fixed 500 ms
+  delay. The next full smoke run passed Square creation (25.3 s including UI work).
+  The separate Close Session progress-overlay wait still failed; its fixture can
+  leave sequence writes pending, which intentionally suppress geometry busy UI.
+  The teardown test now awaits sequence completion before holding its display read.
 
 - November 17 flexible-network validation reproduces Square `lattice_type`
   undefined at `smoke.spec.js:200`: 23 passed, two skipped, one failed.
@@ -4860,6 +4897,27 @@ Evidence: `.development-artifacts/scaffold-sequence-scope-validation.json`.
 - Browser regressions verify independent lenses/limits, saved zoom, keyframe preview,
   fullscreen hit testing and rendered export pixels. Evidence and remaining broad
   validation debt: `.development-artifacts/zoom-volume-persistence/validation.json`.
+
+## ISSUE-265 — D014 length-only image screen includes scaffold strokes (2026-11-26)
+
+- **Status:** fixed for scaffold/staple screening and conservative connected tracing.
+  Full raster routing remains incomplete at ambiguous junctions and endpoints.
+- **Reproduction:** inspect the three image-span matches for core p49-r230 in
+  `.development-artifacts/d014-stable-anchors/image-mapping-report.json` against
+  source supplement page 45 (Figure 31).
+- **Observed:** all three are blue scaffold strokes, at visible helices 80, 89
+  and 0. They are not established placements of the cyl_lip/Pal staple core.
+- **Cause:** `publication_anchor_image_mapping.py` screens horizontal chromatic
+  spans by length without scaffold/staple lane classification or whole-strand
+  endpoint/crossover identity. Its machine-readable result says length-only;
+  the earlier narrative overstated these as plausible placement alternatives.
+- **Fix:** paired-lane/color-phase classification plus visible-composition pixel
+  tracing; only classified staple domains with supported color continuity reach
+  sequence matching. Distinct-color straight crossings can continue; same-color
+  junctions and gaps remain explicit. Tests reject all three measured source
+  false positives and retain blue staples. No topology is inferred from hue alone.
+- **Evidence:** `.development-artifacts/d014-alignment-review/alignment-issue.png`
+  and `review.json`. No native structure was generated.
 
 ## ISSUE-266 — Pattern browser checks click a cluster colour control (2026-11-27, FIXED)
 

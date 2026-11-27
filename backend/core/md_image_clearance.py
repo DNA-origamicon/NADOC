@@ -123,6 +123,16 @@ def _read_cell(path: Path) -> np.ndarray:
     return np.diag(matrix)
 
 
+def resume_clearance_preview() -> dict:
+    """The review button starts verification; this is not a measured pass."""
+    return {
+        "status": "verify_on_resume",
+        "requires_override": False,
+        "detail": "Resume will download and check the selected checkpoint's coordinates "
+                  "and cell before submitting to Alpine. Submission stops if clearance fails.",
+    }
+
+
 def job_image_clearance(job, workspace: Path, *, resume: bool = False) -> dict:
     """Inspect the actual initial config/checkpoint, never an ancestor's stale box.
 

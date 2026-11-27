@@ -1,0 +1,506 @@
+[
+  {
+    "job_id": "e4a49b2057a5",
+    "logs": [
+      {
+        "source": "/media/jojo/Archive/NADOC_archive/e4a49b2057a5/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_2ns_k0.log",
+        "trace": "e4a49b2057a5_2hb_1xT_01_production_2ns_k0_energy.csv",
+        "records": 195,
+        "first_step": 0.0,
+        "last_step": 242500.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 298.0760646153846,
+            "min": 292.2861,
+            "max": 302.6069,
+            "quarter_means": [
+              297.95847959183675,
+              298.2834244897959,
+              297.8364653061225,
+              298.22901041666665
+            ]
+          },
+          "VOLUME": {
+            "mean": 271724.5791415385,
+            "min": 224106.0816,
+            "max": 336662.7323,
+            "quarter_means": [
+              313345.95486938773,
+              280687.8159,
+              255428.4630755102,
+              236721.73904583332
+            ]
+          },
+          "POTENTIAL": {
+            "mean": -84530.60831794872,
+            "min": -85984.2221,
+            "max": -84085.938,
+            "quarter_means": [
+              -84359.3597489796,
+              -84501.62287959184,
+              -84578.77819795918,
+              -84685.84044791666
+            ]
+          },
+          "TOTAL": {
+            "mean": -71221.75037025641,
+            "min": -72555.4559,
+            "max": -70639.0529,
+            "quarter_means": [
+              -71055.75184693877,
+              -71183.50648163266,
+              -71280.61817755102,
+              -71370.1536125
+            ]
+          },
+          "TOTAL3": {
+            "mean": -71025.34813589744,
+            "min": -72377.1,
+            "max": -70431.1507,
+            "quarter_means": [
+              -70859.63727346939,
+              -70987.93644081632,
+              -71082.4722877551,
+              -71174.388175
+            ]
+          }
+        },
+        "normal_exit": true,
+        "errors": [
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "Possible solutions are to restart from a recent checkpoFATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "Possible solutions are to restart from a recent checkpoFATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!",
+          "FATAL ERROR: Periodic cell has become too small for original patch grid!"
+        ]
+      },
+      {
+        "source": "/media/jojo/Archive/NADOC_archive/e4a49b2057a5/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_2ns_k0.resume1.log",
+        "trace": "e4a49b2057a5_2hb_1xT_01_production_2ns_k0.resume1_energy.csv",
+        "records": 201,
+        "first_step": 250000.0,
+        "last_step": 500000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 297.9720990049751,
+            "min": 291.9608,
+            "max": 303.8092,
+            "quarter_means": [
+              297.9219333333333,
+              298.006358,
+              298.120172,
+              297.84093599999994
+            ]
+          },
+          "VOLUME": {
+            "mean": 206443.26854278607,
+            "min": 205217.7524,
+            "max": 212193.7653,
+            "quarter_means": [
+              206843.69001764705,
+              206307.977528,
+              206290.83789399997,
+              206322.560302
+            ]
+          },
+          "POTENTIAL": {
+            "mean": -84958.34660547262,
+            "min": -85385.378,
+            "max": -84616.2168,
+            "quarter_means": [
+              -84920.20344313726,
+              -84969.49726999999,
+              -84966.90588600001,
+              -84977.542686
+            ]
+          },
+          "TOTAL": {
+            "mean": -71654.13044328359,
+            "min": -72231.4611,
+            "max": -71267.2841,
+            "quarter_means": [
+              -71618.22698039215,
+              -71663.751798,
+              -71656.07815,
+              -71679.182914
+            ]
+          },
+          "TOTAL3": {
+            "mean": -71455.96376915423,
+            "min": -72021.9288,
+            "max": -71062.6303,
+            "quarter_means": [
+              -71420.9529980392,
+              -71464.06740599999,
+              -71457.74511799999,
+              -71481.78977
+            ]
+          }
+        },
+        "normal_exit": true,
+        "errors": []
+      }
+    ]
+  },
+  {
+    "job_id": "29c5b267380f",
+    "logs": [
+      {
+        "source": "/media/jojo/Archive/NADOC_archive/29c5b267380f/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_200ns_k0.log",
+        "trace": "29c5b267380f_2hb_1xT_01_production_200ns_k0_energy.csv",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 50000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 298.23638204488776,
+            "min": 292.9929,
+            "max": 304.0502,
+            "quarter_means": [
+              298.02788910891087,
+              298.27587500000004,
+              298.14993000000004,
+              298.493919
+            ]
+          },
+          "VOLUME": {
+            "mean": 206204.05268678302,
+            "min": 204307.5381,
+            "max": 208179.2802,
+            "quarter_means": [
+              206246.9309594059,
+              206227.38231099996,
+              206132.07234899997,
+              206209.39634500004
+            ]
+          },
+          "POTENTIAL": {
+            "mean": -84948.31191995011,
+            "min": -85318.5346,
+            "max": -84614.9776,
+            "quarter_means": [
+              -84933.06526039605,
+              -84953.971514,
+              -84958.32318600001,
+              -84948.04018599998
+            ]
+          },
+          "TOTAL": {
+            "mean": -71632.29562319203,
+            "min": -72062.8941,
+            "max": -71176.2082,
+            "quarter_means": [
+              -71626.35801683168,
+              -71636.19175900001,
+              -71646.16707799998,
+              -71620.52501499999
+            ]
+          },
+          "TOTAL3": {
+            "mean": -71433.9764553616,
+            "min": -71856.8822,
+            "max": -70971.4821,
+            "quarter_means": [
+              -71427.29683960397,
+              -71436.759321,
+              -71448.84217999999,
+              -71423.074277
+            ]
+          }
+        },
+        "normal_exit": true,
+        "errors": []
+      }
+    ]
+  },
+  {
+    "job_id": "7d5937e569c6",
+    "logs": []
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "logs": [
+      {
+        "source": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_800ns_k0.log",
+        "trace": "4c0ba3a85587_2hb_1xT_01_production_800ns_k0_energy.csv",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 200000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 297.3297017456359,
+            "min": 293.4688,
+            "max": 300.8816,
+            "quarter_means": [
+              297.32914455445547,
+              297.061467,
+              297.49138700000003,
+              297.436814
+            ]
+          },
+          "VOLUME": {
+            "mean": 614985.7433416458,
+            "min": 611370.1463,
+            "max": 618806.8518,
+            "quarter_means": [
+              614960.8261603961,
+              615080.36967,
+              615033.761606,
+              614868.265102
+            ]
+          },
+          "POTENTIAL": {
+            "mean": -237484.72709750623,
+            "min": -238115.4386,
+            "max": -236879.1277,
+            "quarter_means": [
+              -237511.07336633655,
+              -237467.27478200002,
+              -237488.9935,
+              -237471.30327899999
+            ]
+          },
+          "TOTAL": {
+            "mean": -199774.55463167082,
+            "min": -200622.5826,
+            "max": -198947.6452,
+            "quarter_means": [
+              -199800.9715217822,
+              -199791.12230699998,
+              -199758.314575,
+              -199747.54595400006
+            ]
+          },
+          "TOTAL3": {
+            "mean": -199364.3668453865,
+            "min": -200222.0856,
+            "max": -198529.0214,
+            "quarter_means": [
+              -199390.22302178215,
+              -199381.19203200002,
+              -199348.17465799995,
+              -199337.61910799998
+            ]
+          }
+        },
+        "normal_exit": true,
+        "errors": []
+      }
+    ]
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "logs": []
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "logs": []
+  },
+  {
+    "job_id": "be74a1436d66",
+    "logs": [
+      {
+        "source": "/media/jojo/Archive/nadoc_jobs/be74a1436d66/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_20ns_k0.log",
+        "trace": "be74a1436d66_2hb_1xT_01_production_20ns_k0_energy.csv",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.207721446384,
+            "min": 297.9133,
+            "max": 300.3671,
+            "quarter_means": [
+              299.2402554455446,
+              299.182043,
+              299.251211,
+              299.15705099999997
+            ]
+          },
+          "VOLUME": {
+            "mean": 4676839.661458854,
+            "min": 4668568.3975,
+            "max": 4685959.5448,
+            "quarter_means": [
+              4676787.807582178,
+              4676858.206458,
+              4677465.363613999,
+              4676247.78672
+            ]
+          },
+          "POTENTIAL": {
+            "mean": -1598954.9256566083,
+            "min": -1600420.9978,
+            "max": -1597055.9989,
+            "quarter_means": [
+              -1598929.4065217818,
+              -1598952.4841350005,
+              -1598881.418917,
+              -1599056.6482439998
+            ]
+          },
+          "TOTAL": {
+            "mean": -1317308.143713217,
+            "min": -1319354.4731,
+            "max": -1315409.2131,
+            "quarter_means": [
+              -1317251.9994247525,
+              -1317329.8748030001,
+              -1317193.69844,
+              -1317457.563628
+            ]
+          }
+        },
+        "normal_exit": true,
+        "errors": []
+      }
+    ]
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "logs": [
+      {
+        "source": "/media/jojo/Archive/nadoc_jobs/be5dc708adb2/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_20ns_k0.log",
+        "trace": "be5dc708adb2_2hb_1xT_01_production_20ns_k0_energy.csv",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.19514014962596,
+            "min": 297.887,
+            "max": 300.4196,
+            "quarter_means": [
+              299.1972930693069,
+              299.140125,
+              299.239057,
+              299.204064
+            ]
+          },
+          "VOLUME": {
+            "mean": 4676853.40081571,
+            "min": 4664329.6655,
+            "max": 4687265.2721,
+            "quarter_means": [
+              4677228.914841584,
+              4676853.681397,
+              4676528.224152,
+              4676799.027732
+            ]
+          },
+          "POTENTIAL": {
+            "mean": -1598930.2800905234,
+            "min": -1600481.8776,
+            "max": -1597162.4547,
+            "quarter_means": [
+              -1598872.9749990099,
+              -1598863.8289980001,
+              -1599095.7518460003,
+              -1598889.13757
+            ]
+          },
+          "TOTAL": {
+            "mean": -1317295.3425426434,
+            "min": -1319419.3619,
+            "max": -1315009.4118,
+            "quarter_means": [
+              -1317236.013128713,
+              -1317280.679482,
+              -1317419.472556,
+              -1317245.798298
+            ]
+          }
+        },
+        "normal_exit": true,
+        "errors": []
+      }
+    ]
+  },
+  {
+    "job_id": "a9261569b8c7",
+    "logs": [
+      {
+        "source": "/media/jojo/Archive/nadoc_jobs/a9261569b8c7/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_20ns_k0.log",
+        "trace": "a9261569b8c7_2hb_1xT_01_production_20ns_k0_energy.csv",
+        "records": 401,
+        "first_step": 0.0,
+        "last_step": 10000000.0,
+        "statistics": {
+          "TEMP": {
+            "mean": 299.23188827930176,
+            "min": 297.9962,
+            "max": 300.4436,
+            "quarter_means": [
+              299.20126831683166,
+              299.25034000000005,
+              299.24532300000004,
+              299.230928
+            ]
+          },
+          "VOLUME": {
+            "mean": 4676981.6849423945,
+            "min": 4668133.6575,
+            "max": 4688402.0361,
+            "quarter_means": [
+              4677350.737290099,
+              4676991.7436069995,
+              4676691.878869,
+              4676888.68948
+            ]
+          },
+          "POTENTIAL": {
+            "mean": -1598907.0420271822,
+            "min": -1600957.6001,
+            "max": -1597149.106,
+            "quarter_means": [
+              -1598948.3392663365,
+              -1598848.216564,
+              -1598885.487934,
+              -1598945.711372
+            ]
+          },
+          "TOTAL": {
+            "mean": -1317237.5101845386,
+            "min": -1319667.3821,
+            "max": -1314937.4726,
+            "quarter_means": [
+              -1317307.630729703,
+              -1317161.320877,
+              -1317203.3070249998,
+              -1317277.080901
+            ]
+          }
+        },
+        "normal_exit": true,
+        "errors": []
+      }
+    ]
+  }
+]

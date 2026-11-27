@@ -85,3 +85,37 @@ native reconstruction calls the real endpoint and re-extracts the uploaded PDF.
 Source colors and caDNAno row ordering are now preserved; see
 [publication appearance](publication_appearance.md). The additional recorded
 operation reorders display rows while retaining visible helix labels.
+
+
+## Strand-owned insertion loops — November 26, 2026
+
+The shared D009 was rebuilt from the supplement using the new native
+`strand-loop-set` feature for both 39-base scaffold insertions at visible helices
+30 and 42, base 119. The same 1,592-command process now records these loops after
+scaffold routing and before assigning its sequence. Source route/sequence and
+saved/reopened replay checks pass; staple colors, row order and the three omitted
+staples are unchanged. No helix-wide insertion marks remain.
+
+This is the general reconstruction preference for multi-base scaffold-only
+insertions. Paired and single-base insertions retain their previous semantics.
+Native NADOC persistence/display are supported; simulation and cadnano/scadnano
+export of these loops remain unavailable. The bond report still records six
+spans above 1.2 nm, including four loop-root spans of about 1.25–1.26 nm.
+
+Cold-open performance limitation observed in the real app: with the approved
+ring-priority loop geometry, the isolated welcome/open flow returned native
+geometry at about 239 seconds after navigation and completed autosave at about
+265 seconds. The 90-second check and then its 240-second autosave observation
+both expired; the second run nevertheless rendered all 14,873 nucleotides and
+successfully saved. The longer visual inspection is diagnostic, not a claim
+that normal interactive latency passed. No fit, geometry rule, or production
+request timeout was weakened. Evidence is local under
+`.development-artifacts/d009-strand-loops/`.
+
+The longer browser observation completed the 3D loop checks (39 rendered bases
+per loop), inspected close-ups, and verified caDNAno loop counts, all staple
+colors and row order with no app errors. Its inherited 360-second suite limit
+expired during teardown, so this is visual/behavioral evidence, not a clean
+Playwright runner pass. The actual browser-saved copy subsequently passed independent replay and source
+comparison. Cleanup verified removal of the temporary workspace, configuration
+and test script, with the shared file unchanged by the browser. No production timing limit was changed.

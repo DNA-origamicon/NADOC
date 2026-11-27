@@ -1,0 +1,38 @@
+--- a/src/CUDA/Forces/metad_forces.cuh
++++ b/src/CUDA/Forces/metad_forces.cuh
+@@ -90,8 +90,8 @@
+ 	c_number hb_energy_cutoff, hb_transition_width, d0, r0;
+ 	int n;
+ 
+-    int coord_min;
+-    int coord_max;
++    c_number coord_min;
++    c_number coord_max;
+ 	c_number d_coord;
+     int N_grid;
+     c_number *potential_grid;
+@@ -387,13 +387,13 @@
+ 			break;
+ 		}
+ 		case meta::CoordSettings::CoordMode::SWITCHING_FUNCTION: {
+-			c_number r_mod = _module(r);
++			c_number r_mod = _module(rhydro);
+ 
+ 			c_number x = (r_mod - coord->d0) / coord->r0;
+             c_number xn = ipowf(x, coord->n);
+             c_number dcoord_dr = (coord->n / coord->r0) * ipowf(x, coord->n - 1) / (SQR(1.f + xn));
+ 
+-            force = r / r_mod * dcoord_dr;
++            force = rhydro / r_mod * dcoord_dr;
+             torque = _cross(POS_BASE * a1, force);
+ 			break;
+ 		}
+@@ -410,7 +410,7 @@
+             c_number xn = ipowf(x, coord->n);
+             c_number dcoord_dr = (coord->n / coord->r0) * ipowf(x, coord->n - 1) / (SQR(1.f + xn));
+ 
+-            c_number4 switching_force_contribution = r / r_mod * dcoord_dr;
++            c_number4 switching_force_contribution = rhydro / r_mod * dcoord_dr;
+             c_number4 switching_torque_contribution = _cross(POS_BASE * a1, switching_force_contribution);
+ 
+ 			force = coord->mixed_weight * hb_force_contribution + (1.f - coord->mixed_weight) * switching_force_contribution;

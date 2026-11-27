@@ -5,7 +5,7 @@ import {vmmcResultView} from './oxdna_vmmc.js'
 export function openUmbrellaResults(job) {
   const modal = createModal({
     title: `Umbrella results · ${job.design_name || job.job_id}`,
-    className: 'oxdna-umbrella-results', size: 'lg',
+    className: 'oxdna-umbrella-results', size: 'xl',
     body: vmmcResultView(job),
   })
   modal.open()
@@ -14,7 +14,7 @@ export function openUmbrellaResults(job) {
 
 export function umbrellaResultActions(job) {
   return job?.run_config?.vmmc_melting
-    ? [{label: 'Show umbrella results', onClick: () => openUmbrellaResults(job)}]
+    ? [{label: 'View results', onClick: () => openUmbrellaResults(job)}]
     : []
 }
 

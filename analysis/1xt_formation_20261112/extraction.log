@@ -1,0 +1,12 @@
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/nadoc_jobs/c30001fb925c/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/core/universe.py:272: UserWarning: No coordinate reader found for /media/jojo/Archive/nadoc_jobs/2bc15e9e2531/package/2hb_1xT_namd_solvated/2hb_1xT.psf. Skipping this file.
+  warnings.warn(
+2026-11-11T00:02:52.938246-07:00 2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd 30 frames intended primary [0, 0, 0, 0, 0, 0, 0, 0]
+2026-11-11T00:02:52.938246-07:00 2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd 30 frames intended primary [0, 0, 0, 0, 0, 0, 0, 0]
+2026-11-11T00:02:52.938246-07:00 2hb_1xT_02_300K_NPT_ENM_k0p1_p25.dcd 30 frames intended primary [0, 0, 0, 0, 0, 0, 0, 0]
+2026-11-11T00:02:52.938246-07:00 2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd 30 frames intended primary [0, 0, 0, 0, 0, 0, 0, 0]
+2026-11-11T00:02:52.938246-07:00 2hb_1xT_03_300K_NPT_ENM_k0p01_p25.dcd 30 frames intended primary [0, 0, 0, 0, 0, 0, 0, 0]
+2026-11-11T00:02:52.938246-07:00 2hb_1xT_04_300K_NPT_MGHH_only_p10.dcd 30 frames intended primary [0, 0, 0, 0, 0, 0, 0, 0]
+2026-11-11T00:02:52.938246-07:00 2hb_1xT_0S_300K_NPT_settle_fixed_dna_p100.dcd 30 frames intended primary [0, 0, 0, 0, 0, 0, 0, 0]
+2026-11-11T09:56:14.531464-07:00 2hb_1xT_01_production_200ns_k0.dcd 10000 frames intended primary [0, 0, 0, 0, 0, 0, 0, 0]

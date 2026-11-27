@@ -1,0 +1,28 @@
+{
+  "temperature_K": 300,
+  "temperature_C": 26.85,
+  "irradiation_temperature_C_user_approx": 27,
+  "temperature_precedent": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4838381/",
+  "small_box": {
+    "volume_A3": 1552473.3085770574,
+    "Mg": 66,
+    "Cl": 39,
+    "neutralization_accounting_Mg": 47,
+    "neutralization_accounting_Cl": 1,
+    "added_MgCl2_units": 19,
+    "added_MgCl2_density_mM": 20.322566643816202
+  },
+  "large_box": {
+    "volume_A3": 4676839.661458854,
+    "Mg": 82,
+    "Cl": 71,
+    "neutralization_accounting_Mg": 47,
+    "neutralization_accounting_Cl": 1,
+    "added_MgCl2_units": 35
+  },
+  "same_small_volume_20_minus_12_5_mM": {
+    "Mg_difference_unrounded": 7.011909592795467,
+    "Cl_difference_unrounded": 14.023819185590934
+  },
+  "qualification": "Neutralization versus salt is counting bookkeeping, not distinct mobile ion species or free Mg concentration."
+}

@@ -1,0 +1,70 @@
+--- a/src/Backends/VMMC_CPUBackend.cpp
++++ b/src/Backends/VMMC_CPUBackend.cpp
+@@ -12,6 +12,7 @@
+ #include "../Interactions/DNA3Interaction.h"
+ 
+ #include <set>
++#include "../Utilities/NadocVMMCPeriodic.h"
+ #include <sstream>
+ #include <limits>
+ #include <iostream>
+@@ -95,6 +96,7 @@
+ }
+ 
+ void VMMC_CPUBackend::init() {
++    OX_LOG(Logger::LOG_INFO, "NADOC VMMC periodic-image guard v1");
+ 	MC_CPUBackend::init();
+ 
+ 	// fix maxclust if evidently wrong
+@@ -1420,6 +1422,42 @@
+ 
+ 		assert(nclust >= 1);
+ 
++        // VMMC reuses the internal energy of a rigid cluster. In a periodic
++        // box, rotating the chosen images need not rotate every minimum-image
++        // pair separation: even weak Debye-Huckel interactions can change.
++        // Reject such proposals before acceptance and use the ordinary rollback
++        // below. This geometric test is symmetric under the inverse rotation;
++        // it changes proposals, not the Hamiltonian, box, or umbrella weights.
++        // Single-particle moves are unaffected, preserving local ergodicity.
++        if (!_overlap && pprime > 0. && move.type == MC_MOVE_ROTATION) {
++            bool periodic_rigid = true;
++            for (int a = 0; a < nclust && periodic_rigid; ++a) {
++                BaseParticle *p = _particles[clust[a]];
++                BaseParticle *po = _particles_old[p->index];
++                for (int b = a + 1; b < nclust; ++b) {
++                    BaseParticle *q = _particles[clust[b]];
++                    BaseParticle *qo = _particles_old[q->index];
++                    const bool bonded = p->n3 == q || p->n5 == q;
++                    LR_vector old_r = bonded ? qo->pos - po->pos : _box->min_image(po->pos, qo->pos);
++                    LR_vector new_r = bonded ? q->pos - p->pos : _box->min_image(p->pos, q->pos);
++                    if (!nadoc_vmmc_periodic_pair_is_rigid(old_r, new_r, move.R, _vmmc_box_side)) {
++                        periodic_rigid = false;
++                        break;
++                    }
++                }
++            }
++            if (!periodic_rigid) {
++                // Diagnostic counter only; does not enter the Markov chain.
++                static unsigned long long rejected = 0;
++                ++rejected;
++                if ((rejected & (rejected - 1)) == 0)
++                    OX_LOG(Logger::LOG_INFO, "VMMC periodic-image cluster rotations rejected: %llu", rejected);
++                _overlap = true;
++                pprime = 0.;
++            }
++        }
++
++
+ 		number delta_E_ext = 0.;
+ 
+ 		// if we are not SURE to reject the move, we check the external
+@@ -1570,7 +1608,7 @@
+ 		number U_from_tally = _U;
+ 		_compute_energy();
+ 		//printf ("step %d checking en diff (%g %g)... \n", current_step(), U_from_tally, _U);
+-		if((_U - U_from_tally) > 1.e-4) {
++		if(fabs(_U - U_from_tally) > 1.e-4) {
+ 						throw oxDNAException("(VMMC_CPUBackend) Accumulated Energy (%g) and Energy computed from scratch (%g) don't match. Possibly percolating clusters. Your box is too small", U_from_tally, _U);
+ 				}
+ 		//printf ("all ok (%g %g)... \n", U_from_tally, _U);

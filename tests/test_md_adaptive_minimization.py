@@ -140,3 +140,20 @@ proc minimize {{steps}} {{
             assert "steps=19200" in report
         else:
             assert "steps=47280" in report
+
+
+def test_alpine_reviewed_resume_keeps_adaptive_min_before_dynamics():
+    conf = M._min_conf(
+        "demo_00_min", "demo", (100.0, 100.0, 100.0), False, 756120, 0.5,
+        n_atoms=7561135,
+    )
+    resumed = M.build_remote_resume_conf(
+        conf, segment_name="demo_00_min", restart_step=86400,
+        total_steps=756120, cont_index=2,
+    )
+    assert "set nadoc_min_max 669720" in resumed
+    assert "firsttimestep      86400" in resumed
+    assert "run                " not in resumed
+    assert "binVelocities" not in resumed
+    assert "output/demo_00_min.cont2.dcd" in resumed
+    assert resumed.index("binCoordinates") < resumed.index("# NADOC_ADAPTIVE_MIN_BEGIN")

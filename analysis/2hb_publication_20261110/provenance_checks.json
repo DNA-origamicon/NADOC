@@ -1,0 +1,716 @@
+[
+  {
+    "job_id": "7d5937e569c6",
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+    "config_sha256": "1b7d34440e1ea5e2980975a54fa17347d33d780c78785caa59439741285725ac",
+    "wc_plan_sha256": "7ddd97d6e589b19d66e1576df8002b1ff8471e1e166d066c6e8362639b72b867",
+    "assets": [],
+    "chemical_definition_semantic_match": null,
+    "chemical_definition_byte_match": null,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+    "config_sha256": "a6350f708eb0105475d09d04c85ff1777a67dde6b35fa1110aa066dbb1563e2d",
+    "wc_plan_sha256": "7ddd97d6e589b19d66e1576df8002b1ff8471e1e166d066c6e8362639b72b867",
+    "assets": [],
+    "chemical_definition_semantic_match": null,
+    "chemical_definition_byte_match": null,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+    "config_sha256": "b369d78d2a3a9bfec697d5ff690546d6d5e349b29abcb4a635b46596d6c26b57",
+    "wc_plan_sha256": "7ddd97d6e589b19d66e1576df8002b1ff8471e1e166d066c6e8362639b72b867",
+    "assets": [],
+    "chemical_definition_semantic_match": null,
+    "chemical_definition_byte_match": null,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+    "config_sha256": "8d1682005f783970e1f2112523b757c81243ecff38d62c6805f6cbf841f23cfe",
+    "wc_plan_sha256": "7ddd97d6e589b19d66e1576df8002b1ff8471e1e166d066c6e8362639b72b867",
+    "assets": [],
+    "chemical_definition_semantic_match": null,
+    "chemical_definition_byte_match": null,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "e345c67349bf",
+    "design_sha256": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+    "config_sha256": "f6194d6a4842495ce202403463c9a60610c6eb65cc45dbfc5fbecffc88591822",
+    "wc_plan_sha256": "951cbe22b2e1a3738b02caf5ad8d71ceb93a4e71ee00379421d7f2792c8ba176",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/patch.rtf",
+        "sha256": "b7c8232519f099f9274dbeb236ab219a383cf08029f3bdf3ae1cc1925f506976",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/overlay.prm",
+        "sha256": "8217b9408ad8a8d39946ae0ded6d58e56a7f6d94f5bcf479c8ad03babc1dbf6f",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/topology_audit.json",
+        "sha256": "824182b404e6a631335a2bdcd07af7c33b0ff4f9dd5664c5d3cca633a9bb91aa",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/qualification.json",
+        "sha256": "fca83f73ccdf270a70f34f534c11325f5cfe011159429a11a7268c92a3b9c722",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/e345c67349bf/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/transfer_records.json",
+        "sha256": "fe2da848b631871690037751660cf3bea85913784aa275353da1b3074ae55170",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "edb512c46112",
+    "design_sha256": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+    "config_sha256": "a98993bf5527d16257319f865a6bacd7b3b785bb1b3b1c85ed9364ed8648c34d",
+    "wc_plan_sha256": "eaafbffb84cf27b0a255b346378674fc267103f3468dcec278387ba2123ae1fe",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/topology_audit.json",
+        "sha256": "5dc7e5d7a994b5abcd31833aa969722dfbcbacd4b1c00f4e39dcbf7452cbf28b",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/qualification.json",
+        "sha256": "0bbf3b5fc67cc956b936ffbf489f6dda12a5ec32718d6d911b5fdbed9b8b9cee",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/chemical_definition.json",
+        "sha256": "8a33d8bba587a6c9baf9aa574959d3f29ead86fa16ec31c1d05b60c147b95ea0",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": false,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "9b08bed08561",
+    "design_sha256": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+    "config_sha256": "8ade9156cac4d1c22c2dd598592018c5f4dcb4db13e834e845c833d24bc42f57",
+    "wc_plan_sha256": "32c62e7644586d2a682fd36238b67020bdce9fb4e4abf11af542ddfd1b17e2f5",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/topology_audit.json",
+        "sha256": "93054371d3e2906b97eb36959587adbe7cd2dc3774846d83e3b1e20a04925a21",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/qualification.json",
+        "sha256": "c7c335bb64af45d16198ef0406626ddc2bd1369294ec4bc806af239e64007a89",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/chemical_definition.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "37d39cc6b88f",
+    "design_sha256": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+    "config_sha256": "4babb5e304fe4d72292738900e8a69c803e2bda9928f494dec573a5731eab5ac",
+    "wc_plan_sha256": "a6fba70de75ee079f576645d3b40b28a1a3a626f22d22211d06bb30068eee29a",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/topology_audit.json",
+        "sha256": "8d30345c0a07762755a81368ecff969db05e383dc74d9622aacb56685c1a4987",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/qualification.json",
+        "sha256": "a8d078855b7a5c34a4039c548a018b6cb839a0c8f0b687196cfc46bfe0a5932a",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/chemical_definition.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "972af34aa9c5",
+    "design_sha256": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+    "config_sha256": "54a007201ae7e25145285f28851004deb3e0de4adc08a0512e3937add9b98d41",
+    "wc_plan_sha256": "951cbe22b2e1a3738b02caf5ad8d71ceb93a4e71ee00379421d7f2792c8ba176",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/patch.rtf",
+        "sha256": "b7c8232519f099f9274dbeb236ab219a383cf08029f3bdf3ae1cc1925f506976",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/overlay.prm",
+        "sha256": "8217b9408ad8a8d39946ae0ded6d58e56a7f6d94f5bcf479c8ad03babc1dbf6f",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/topology_audit.json",
+        "sha256": "824182b404e6a631335a2bdcd07af7c33b0ff4f9dd5664c5d3cca633a9bb91aa",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/qualification.json",
+        "sha256": "fca83f73ccdf270a70f34f534c11325f5cfe011159429a11a7268c92a3b9c722",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/transfer_records.json",
+        "sha256": "fe2da848b631871690037751660cf3bea85913784aa275353da1b3074ae55170",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "d6bcdef3d59f",
+    "design_sha256": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+    "config_sha256": "696c07817d3bef2528db1e46eca76e5310330f97c36667457ffe6ec7300ccb64",
+    "wc_plan_sha256": "eaafbffb84cf27b0a255b346378674fc267103f3468dcec278387ba2123ae1fe",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/topology_audit.json",
+        "sha256": "5dc7e5d7a994b5abcd31833aa969722dfbcbacd4b1c00f4e39dcbf7452cbf28b",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/qualification.json",
+        "sha256": "0bbf3b5fc67cc956b936ffbf489f6dda12a5ec32718d6d911b5fdbed9b8b9cee",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/chemical_definition.json",
+        "sha256": "8a33d8bba587a6c9baf9aa574959d3f29ead86fa16ec31c1d05b60c147b95ea0",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": false,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "395337bdb061",
+    "design_sha256": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+    "config_sha256": "172647ca78d9c73b525b060665610c8a403f3b30c3b76d1322df994405f44851",
+    "wc_plan_sha256": "32c62e7644586d2a682fd36238b67020bdce9fb4e4abf11af542ddfd1b17e2f5",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/topology_audit.json",
+        "sha256": "93054371d3e2906b97eb36959587adbe7cd2dc3774846d83e3b1e20a04925a21",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/qualification.json",
+        "sha256": "c7c335bb64af45d16198ef0406626ddc2bd1369294ec4bc806af239e64007a89",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/chemical_definition.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/395337bdb061/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "ffef0085e16d",
+    "design_sha256": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+    "config_sha256": "78fbe0172908773d50a90a5d544209993ef673575e62cc18d1a4d4a0f9c2d875",
+    "wc_plan_sha256": "a6fba70de75ee079f576645d3b40b28a1a3a626f22d22211d06bb30068eee29a",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/topology_audit.json",
+        "sha256": "8d30345c0a07762755a81368ecff969db05e383dc74d9622aacb56685c1a4987",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/qualification.json",
+        "sha256": "a8d078855b7a5c34a4039c548a018b6cb839a0c8f0b687196cfc46bfe0a5932a",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/chemical_definition.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/ffef0085e16d/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "35254aa13b01",
+    "design_sha256": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+    "config_sha256": "28d5010a73c65d2250a4eb1c92016ccb0aa0544e849a5a48599e8ce782e00d36",
+    "wc_plan_sha256": "a6fba70de75ee079f576645d3b40b28a1a3a626f22d22211d06bb30068eee29a",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/topology_audit.json",
+        "sha256": "8d30345c0a07762755a81368ecff969db05e383dc74d9622aacb56685c1a4987",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/qualification.json",
+        "sha256": "a8d078855b7a5c34a4039c548a018b6cb839a0c8f0b687196cfc46bfe0a5932a",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/chemical_definition.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/35254aa13b01/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-i/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "577c8d057768",
+    "design_sha256": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+    "config_sha256": "ca6209c2f74150368d36814aeaf85e145d85494e1d6d4524bee738da8ab1758b",
+    "wc_plan_sha256": "951cbe22b2e1a3738b02caf5ad8d71ceb93a4e71ee00379421d7f2792c8ba176",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/patch.rtf",
+        "sha256": "b7c8232519f099f9274dbeb236ab219a383cf08029f3bdf3ae1cc1925f506976",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/overlay.prm",
+        "sha256": "8217b9408ad8a8d39946ae0ded6d58e56a7f6d94f5bcf479c8ad03babc1dbf6f",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/topology_audit.json",
+        "sha256": "824182b404e6a631335a2bdcd07af7c33b0ff4f9dd5664c5d3cca633a9bb91aa",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/qualification.json",
+        "sha256": "fca83f73ccdf270a70f34f534c11325f5cfe011159429a11a7268c92a3b9c722",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/577c8d057768/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/transfer_records.json",
+        "sha256": "fe2da848b631871690037751660cf3bea85913784aa275353da1b3074ae55170",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "94d5148b6911",
+    "design_sha256": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+    "config_sha256": "4dda655ada61cced6fd9a2f66f0707333aa1dfacb132c32f81cd083f371371bd",
+    "wc_plan_sha256": "32c62e7644586d2a682fd36238b67020bdce9fb4e4abf11af542ddfd1b17e2f5",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/topology_audit.json",
+        "sha256": "93054371d3e2906b97eb36959587adbe7cd2dc3774846d83e3b1e20a04925a21",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/qualification.json",
+        "sha256": "c7c335bb64af45d16198ef0406626ddc2bd1369294ec4bc806af239e64007a89",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/chemical_definition.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/94d5148b6911/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/forcefield/mvp_cpds/tt-cpd-trans-syn-ii/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "770c4764d1a3",
+    "design_sha256": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+    "config_sha256": "72542b3b08e79571e2da523471236c459137366bc4060146986c8141c38d73d0",
+    "wc_plan_sha256": "eaafbffb84cf27b0a255b346378674fc267103f3468dcec278387ba2123ae1fe",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/topology_audit.json",
+        "sha256": "5dc7e5d7a994b5abcd31833aa969722dfbcbacd4b1c00f4e39dcbf7452cbf28b",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/qualification.json",
+        "sha256": "0bbf3b5fc67cc956b936ffbf489f6dda12a5ec32718d6d911b5fdbed9b8b9cee",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/chemical_definition.json",
+        "sha256": "8a33d8bba587a6c9baf9aa574959d3f29ead86fa16ec31c1d05b60c147b95ea0",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/770c4764d1a3/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": false,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "be74a1436d66",
+    "design_sha256": "11f9c14979f15ab79136a37c7f5f9ddc88e1d70e7a1351dff43767f29e4d83d6",
+    "config_sha256": "3376b5d31ecc0c601dd43987e73966b0bed17e4dcea41f1a6ac346711788a2d3",
+    "wc_plan_sha256": "601045ca61569e3732a6951851d435b7b3feda2a964abbad39ed7ace60197465",
+    "assets": [],
+    "chemical_definition_semantic_match": null,
+    "chemical_definition_byte_match": null,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "design_sha256": "11f9c14979f15ab79136a37c7f5f9ddc88e1d70e7a1351dff43767f29e4d83d6",
+    "config_sha256": "960a1ee98ec1c71205c3561bb9787e8d9d49d213c997cf61a1bbde7a76ed57d9",
+    "wc_plan_sha256": "601045ca61569e3732a6951851d435b7b3feda2a964abbad39ed7ace60197465",
+    "assets": [],
+    "chemical_definition_semantic_match": null,
+    "chemical_definition_byte_match": null,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "a9261569b8c7",
+    "design_sha256": "11f9c14979f15ab79136a37c7f5f9ddc88e1d70e7a1351dff43767f29e4d83d6",
+    "config_sha256": "122114d0b9e23ae184f1df76b1335b134a481b66565922b3b5100d1e1e92fdcc",
+    "wc_plan_sha256": "7ddd97d6e589b19d66e1576df8002b1ff8471e1e166d066c6e8362639b72b867",
+    "assets": [],
+    "chemical_definition_semantic_match": null,
+    "chemical_definition_byte_match": null,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "949886d10003",
+    "design_sha256": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+    "config_sha256": "29ca18939457373335f03a493b3588660e987bdc2415eb48f7f6df6b823c9a70",
+    "wc_plan_sha256": "951cbe22b2e1a3738b02caf5ad8d71ceb93a4e71ee00379421d7f2792c8ba176",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/patch.rtf",
+        "sha256": "b7c8232519f099f9274dbeb236ab219a383cf08029f3bdf3ae1cc1925f506976",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/overlay.prm",
+        "sha256": "8217b9408ad8a8d39946ae0ded6d58e56a7f6d94f5bcf479c8ad03babc1dbf6f",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/topology_audit.json",
+        "sha256": "824182b404e6a631335a2bdcd07af7c33b0ff4f9dd5664c5d3cca633a9bb91aa",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/qualification.json",
+        "sha256": "fca83f73ccdf270a70f34f534c11325f5cfe011159429a11a7268c92a3b9c722",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/949886d10003/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-anti-i/transfer_records.json",
+        "sha256": "fe2da848b631871690037751660cf3bea85913784aa275353da1b3074ae55170",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": true,
+    "dcd_size_mtime_unchanged": true
+  },
+  {
+    "job_id": "6613064f8c3f",
+    "design_sha256": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+    "config_sha256": "3071cf138ed3aad0473b545953726f5835f4e0680437b5b843c8cdf8158f30eb",
+    "wc_plan_sha256": "eaafbffb84cf27b0a255b346378674fc267103f3468dcec278387ba2123ae1fe",
+    "assets": [
+      {
+        "path": "workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/00_par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+        "matches_current": null
+      },
+      {
+        "path": "workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/patch.rtf",
+        "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/overlay.prm",
+        "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/topology_audit.json",
+        "sha256": "5dc7e5d7a994b5abcd31833aa969722dfbcbacd4b1c00f4e39dcbf7452cbf28b",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/qualification.json",
+        "sha256": "0bbf3b5fc67cc956b936ffbf489f6dda12a5ec32718d6d911b5fdbed9b8b9cee",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/chemical_definition.json",
+        "sha256": "8a33d8bba587a6c9baf9aa574959d3f29ead86fa16ec31c1d05b60c147b95ea0",
+        "matches_current": true
+      },
+      {
+        "path": "workspace/md_jobs/6613064f8c3f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/forcefield/mvp_cpds/tt-cpd-cis-syn/transfer_records.json",
+        "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab",
+        "matches_current": true
+      }
+    ],
+    "chemical_definition_semantic_match": true,
+    "chemical_definition_byte_match": false,
+    "dcd_size_mtime_unchanged": true
+  }
+]

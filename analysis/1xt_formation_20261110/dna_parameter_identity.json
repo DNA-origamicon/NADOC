@@ -1,0 +1,65 @@
+[
+  {
+    "job_id": "a9261569b8c7",
+    "dna_atoms": 3043,
+    "charge": -93.0,
+    "identity_type_charge_sha256": "55c91d5bc39fa54822f63634000e75a64e8fc3c30d4b1316746c1f5b526cc4b1",
+    "mass_total": 29417.7768
+  },
+  {
+    "job_id": "be5dc708adb2",
+    "dna_atoms": 3043,
+    "charge": -93.0,
+    "identity_type_charge_sha256": "55c91d5bc39fa54822f63634000e75a64e8fc3c30d4b1316746c1f5b526cc4b1",
+    "mass_total": 29417.7768
+  },
+  {
+    "job_id": "4c0ba3a85587",
+    "dna_atoms": 3043,
+    "charge": -93.0,
+    "identity_type_charge_sha256": "55c91d5bc39fa54822f63634000e75a64e8fc3c30d4b1316746c1f5b526cc4b1",
+    "mass_total": 29417.7768
+  },
+  {
+    "job_id": "e4a49b2057a5",
+    "dna_atoms": 3043,
+    "charge": -93.0,
+    "identity_type_charge_sha256": "55c91d5bc39fa54822f63634000e75a64e8fc3c30d4b1316746c1f5b526cc4b1",
+    "mass_total": 29417.7768
+  },
+  {
+    "job_id": "29c5b267380f",
+    "dna_atoms": 3043,
+    "charge": -93.0,
+    "identity_type_charge_sha256": "55c91d5bc39fa54822f63634000e75a64e8fc3c30d4b1316746c1f5b526cc4b1",
+    "mass_total": 29417.7768
+  },
+  {
+    "job_id": "bd13e4dfa6c5",
+    "dna_atoms": 3043,
+    "charge": -93.0,
+    "identity_type_charge_sha256": "55c91d5bc39fa54822f63634000e75a64e8fc3c30d4b1316746c1f5b526cc4b1",
+    "mass_total": 29417.7768
+  },
+  {
+    "job_id": "7d5937e569c6",
+    "dna_atoms": 3043,
+    "charge": -93.0,
+    "identity_type_charge_sha256": "55c91d5bc39fa54822f63634000e75a64e8fc3c30d4b1316746c1f5b526cc4b1",
+    "mass_total": 29417.7768
+  },
+  {
+    "job_id": "07d7cd2766e3",
+    "dna_atoms": 3043,
+    "charge": -93.0,
+    "identity_type_charge_sha256": "55c91d5bc39fa54822f63634000e75a64e8fc3c30d4b1316746c1f5b526cc4b1",
+    "mass_total": 29417.7768
+  },
+  {
+    "job_id": "be74a1436d66",
+    "dna_atoms": 3043,
+    "charge": -93.0,
+    "identity_type_charge_sha256": "55c91d5bc39fa54822f63634000e75a64e8fc3c30d4b1316746c1f5b526cc4b1",
+    "mass_total": 29417.7768
+  }
+]

@@ -1,0 +1,355 @@
+{
+  "experimental_temperature_C": 20,
+  "experimental_temperature_K": 293.15,
+  "experimental_MgCl2_mM": 20,
+  "source": "User supplied experimental conditions in follow-up",
+  "packages": [
+    {
+      "job_id": "a9261569b8c7",
+      "created": "2026-10-25T20:11:07.677257-06:00",
+      "box_ang": [
+        140.93,
+        163.438,
+        208.142
+      ],
+      "solvation": {
+        "padding_nm": 6.0,
+        "requested_box_size_nm": null,
+        "carved": false,
+        "npt_allowed": true,
+        "sized_for_free_ns": 4.8,
+        "box_check": {
+          "box_ang": [
+            140.93,
+            163.438,
+            208.142
+          ],
+          "extent_ang": [
+            20.930000000000007,
+            43.438,
+            88.142
+          ],
+          "radius_ang": 46.908764123175295,
+          "clearance_as_built_ang": [
+            60.0,
+            59.99999999999999,
+            60.0
+          ],
+          "clearance_rotated_ang": [
+            23.556235876824708,
+            34.8102358768247,
+            57.1622358768247
+          ],
+          "image_gap_as_built_ang": 119.99999999999999,
+          "image_gap_rotated_ang": 47.112471753649416,
+          "fits_as_built": true,
+          "fits_rotated": false,
+          "image_clearance_ok": true,
+          "percentile": "max",
+          "measured": true
+        }
+      },
+      "allow_undersized_cell": false
+    },
+    {
+      "job_id": "be5dc708adb2",
+      "created": "2026-10-25T20:05:12.675241-06:00",
+      "box_ang": [
+        140.93,
+        163.438,
+        208.142
+      ],
+      "solvation": {
+        "padding_nm": 6.0,
+        "requested_box_size_nm": null,
+        "carved": false,
+        "npt_allowed": true,
+        "sized_for_free_ns": 4.8,
+        "box_check": {
+          "box_ang": [
+            140.93,
+            163.438,
+            208.142
+          ],
+          "extent_ang": [
+            20.930000000000007,
+            43.438,
+            88.142
+          ],
+          "radius_ang": 46.908764123175295,
+          "clearance_as_built_ang": [
+            60.0,
+            59.99999999999999,
+            60.0
+          ],
+          "clearance_rotated_ang": [
+            23.556235876824708,
+            34.8102358768247,
+            57.1622358768247
+          ],
+          "image_gap_as_built_ang": 119.99999999999999,
+          "image_gap_rotated_ang": 47.112471753649416,
+          "fits_as_built": true,
+          "fits_rotated": false,
+          "image_clearance_ok": true,
+          "percentile": "max",
+          "measured": true
+        }
+      },
+      "allow_undersized_cell": false
+    },
+    {
+      "job_id": "4c0ba3a85587",
+      "created": "2026-08-13T01:10:37.132622-06:00",
+      "box_ang": [
+        60.147,
+        82.635,
+        129.568
+      ],
+      "solvation": {
+        "padding_nm": 2.0,
+        "water_shell_nm": 0.0,
+        "carved": false,
+        "npt_allowed": true,
+        "box_check": {
+          "box_ang": [
+            60.14699999999999,
+            82.635,
+            129.568
+          ],
+          "extent_ang": [
+            20.147,
+            42.635,
+            89.568
+          ],
+          "radius_ang": 46.59518402995044,
+          "clearance_as_built_ang": [
+            19.999999999999996,
+            20.000000000000004,
+            20.000000000000007
+          ],
+          "clearance_rotated_ang": [
+            -16.521684029950443,
+            -5.277684029950436,
+            18.188815970049568
+          ],
+          "image_gap_as_built_ang": 39.99999999999999,
+          "image_gap_rotated_ang": -33.043368059900885,
+          "fits_as_built": true,
+          "fits_rotated": false,
+          "image_clearance_ok": false,
+          "percentile": "max",
+          "measured": true
+        }
+      },
+      "allow_undersized_cell": true
+    },
+    {
+      "job_id": "e4a49b2057a5",
+      "created": "2026-07-28T18:50:49.813139-06:00",
+      "box_ang": [
+        44.147,
+        66.635,
+        113.568
+      ],
+      "solvation": null,
+      "allow_undersized_cell": null
+    },
+    {
+      "job_id": "29c5b267380f",
+      "created": "2026-07-28T19:09:55.501707-06:00",
+      "box_ang": [
+        44.147,
+        66.635,
+        113.568
+      ],
+      "solvation": null,
+      "allow_undersized_cell": null
+    },
+    {
+      "job_id": "bd13e4dfa6c5",
+      "created": "2026-08-28T20:52:25.655920-06:00",
+      "box_ang": [
+        60.147,
+        82.635,
+        129.568
+      ],
+      "solvation": {
+        "padding_nm": 2.0,
+        "water_shell_nm": 0.0,
+        "carved": false,
+        "npt_allowed": true,
+        "box_check": {
+          "box_ang": [
+            60.14699999999999,
+            82.635,
+            129.568
+          ],
+          "extent_ang": [
+            20.147,
+            42.635,
+            89.568
+          ],
+          "radius_ang": 46.59518402995044,
+          "clearance_as_built_ang": [
+            19.999999999999996,
+            20.000000000000004,
+            20.000000000000007
+          ],
+          "clearance_rotated_ang": [
+            -16.521684029950443,
+            -5.277684029950436,
+            18.188815970049568
+          ],
+          "image_gap_as_built_ang": 39.99999999999999,
+          "image_gap_rotated_ang": -33.043368059900885,
+          "fits_as_built": true,
+          "fits_rotated": false,
+          "image_clearance_ok": false,
+          "percentile": "max",
+          "measured": true
+        }
+      },
+      "allow_undersized_cell": true
+    },
+    {
+      "job_id": "7d5937e569c6",
+      "created": "2026-08-07T21:14:14.272518-06:00",
+      "box_ang": [
+        60.147,
+        82.635,
+        129.568
+      ],
+      "solvation": {
+        "padding_nm": 2.0,
+        "water_shell_nm": 0.0,
+        "carved": false,
+        "npt_allowed": true,
+        "box_check": {
+          "box_ang": [
+            60.14699999999999,
+            82.635,
+            129.568
+          ],
+          "extent_ang": [
+            20.147,
+            42.635,
+            89.568
+          ],
+          "radius_ang": 46.59518402995044,
+          "clearance_as_built_ang": [
+            19.999999999999996,
+            20.000000000000004,
+            20.000000000000007
+          ],
+          "clearance_rotated_ang": [
+            -16.521684029950443,
+            -5.277684029950436,
+            18.188815970049568
+          ],
+          "image_gap_as_built_ang": 39.99999999999999,
+          "image_gap_rotated_ang": -33.043368059900885,
+          "fits_as_built": true,
+          "fits_rotated": false,
+          "image_clearance_ok": false,
+          "percentile": "max",
+          "measured": true
+        }
+      },
+      "allow_undersized_cell": true
+    },
+    {
+      "job_id": "07d7cd2766e3",
+      "created": "2026-08-29T00:12:46.045661-06:00",
+      "box_ang": [
+        60.147,
+        82.635,
+        129.568
+      ],
+      "solvation": {
+        "padding_nm": 2.0,
+        "water_shell_nm": 0.0,
+        "carved": false,
+        "npt_allowed": true,
+        "box_check": {
+          "box_ang": [
+            60.14699999999999,
+            82.635,
+            129.568
+          ],
+          "extent_ang": [
+            20.147,
+            42.635,
+            89.568
+          ],
+          "radius_ang": 46.59518402995044,
+          "clearance_as_built_ang": [
+            19.999999999999996,
+            20.000000000000004,
+            20.000000000000007
+          ],
+          "clearance_rotated_ang": [
+            -16.521684029950443,
+            -5.277684029950436,
+            18.188815970049568
+          ],
+          "image_gap_as_built_ang": 39.99999999999999,
+          "image_gap_rotated_ang": -33.043368059900885,
+          "fits_as_built": true,
+          "fits_rotated": false,
+          "image_clearance_ok": false,
+          "percentile": "max",
+          "measured": true
+        }
+      },
+      "allow_undersized_cell": true
+    },
+    {
+      "job_id": "be74a1436d66",
+      "created": "2026-10-25T19:59:48.010237-06:00",
+      "box_ang": [
+        140.93,
+        163.438,
+        208.142
+      ],
+      "solvation": {
+        "padding_nm": 6.0,
+        "requested_box_size_nm": null,
+        "carved": false,
+        "npt_allowed": true,
+        "sized_for_free_ns": 4.8,
+        "box_check": {
+          "box_ang": [
+            140.93,
+            163.438,
+            208.142
+          ],
+          "extent_ang": [
+            20.930000000000007,
+            43.438,
+            88.142
+          ],
+          "radius_ang": 46.908764123175295,
+          "clearance_as_built_ang": [
+            60.0,
+            59.99999999999999,
+            60.0
+          ],
+          "clearance_rotated_ang": [
+            23.556235876824708,
+            34.8102358768247,
+            57.1622358768247
+          ],
+          "image_gap_as_built_ang": 119.99999999999999,
+          "image_gap_rotated_ang": 47.112471753649416,
+          "fits_as_built": true,
+          "fits_rotated": false,
+          "image_clearance_ok": true,
+          "percentile": "max",
+          "measured": true
+        }
+      },
+      "allow_undersized_cell": false
+    }
+  ]
+}

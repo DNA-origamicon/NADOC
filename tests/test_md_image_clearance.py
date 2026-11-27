@@ -111,7 +111,7 @@ def test_resume_cannot_certify_remote_pose_from_old_local_inputs(tmp_path):
     assert job_image_clearance(job, tmp_path, resume=True)["requires_override"]
 
 
-@pytest.mark.parametrize("resume", [False, True])
+@pytest.mark.parametrize("resume", [False])
 def test_routes_block_before_executor_and_record_explicit_override(
     tmp_path, monkeypatch, resume
 ):
@@ -230,3 +230,12 @@ def test_ensemble_preview_exposes_other_replica_block(tmp_path, monkeypatch):
     assert result["requires_override"]
     assert result["review_job_id"] == "unsafe"
     assert result["checked_jobs"] == 2
+
+
+def test_resume_preview_is_not_a_measured_pass_and_keeps_real_gate(tmp_path):
+    from backend.core.md_image_clearance import resume_clearance_preview
+    preview = resume_clearance_preview()
+    assert preview["status"] == "verify_on_resume"
+    assert preview["requires_override"] is False
+    with pytest.raises(HTTPException):
+        require_image_clearance(package(tmp_path), tmp_path, allow=False, resume=True)
