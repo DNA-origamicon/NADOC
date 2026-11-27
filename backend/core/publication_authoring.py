@@ -6,10 +6,11 @@ import pymupdf
 from backend.core.publication_routing import (extract_publication_paths, staple_tables,
     pair_endpoint_table, classify_scaffold, resolve_insertions)
 from backend.core.publication_sequence_search import search_declared_scaffold
-from backend.core.sequences import SCAFFOLD_LIBRARY, P7704_SEQUENCE
+from backend.core.sequences import PUBLICATION_SCAFFOLDS
 from backend.core.publication_unpaired_scaffold import aligned_unpaired_scaffold
 from backend.core.publication_auxiliary_placement import infer_auxiliary_placement
 from backend.core.publication_native_tracks import prepare_native_tracks
+from backend.core.publication_reconstruction_report import ReconstructionBlocked
 
 
 def domains(sites):
@@ -19,7 +20,7 @@ def domains(sites):
             result.append([])
         result[-1].append(site)
     if any(len(d)<2 for d in result):
-        raise ValueError('Single-base domains need additional polarity evidence')
+        raise ReconstructionBlocked('sequence_alignment_unresolved', 'Single-base domains need additional polarity evidence')
     return result
 
 
@@ -29,8 +30,24 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
     from backend.core.lattice import _lattice_direction
     from backend.core.crossover_positions import crossover_neighbor
     with pymupdf.open(stream=pdf,filetype='pdf') as doc:
-        graph=extract_publication_paths(doc[diagram_page-1])
-        table=next(t for t in staple_tables(doc) if t['page']==table_page)
+        if not 1 <= diagram_page <= len(doc):
+            raise ReconstructionBlocked('diagram_page_out_of_range', 'Diagram page is outside this PDF.')
+        page = doc[diagram_page-1]
+        try:
+            graph = extract_publication_paths(page)
+        except ReconstructionBlocked as exc:
+            graph = None
+            route_error = exc
+        table=next((t for t in staple_tables(doc) if t['page']==table_page), None)
+        if table is None:
+            if graph is None:
+                raise route_error
+            raise ReconstructionBlocked('endpoint_table_unavailable', 'No readable endpoint table on the selected page.')
+        if graph is None:
+            from backend.core.publication_vector_panels import select_panel_graph
+            graph = select_panel_graph(page, table)
+            if graph is None:
+                raise route_error
     pairing=pair_endpoint_table(graph,table)
     classified=classify_scaffold(pairing)
     insertions=resolve_insertions(pairing,classified,table)
@@ -65,17 +82,18 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
     placement = infer_auxiliary_placement(graph['lattice'], classified, unpaired)
     if classified['unresolved'] or len(classified['scaf'])!=1 or len(classified['stap'])!=len(table['rows'])+len(derived_staples):
         if not allow_partial:
-            raise ValueError('Incomplete directed routing; native construction blocked')
+            raise ReconstructionBlocked('diagram_route_unresolved', 'Incomplete directed routing; native construction blocked')
         omissions.extend({'kind':'unclassified_path','path':p} for p in classified['unresolved'])
     if insertions['unresolved'] or not (sequence.get('alignment_resolved') if allow_partial else sequence.get('resolved')) or (sequence['length_discrepancy'] and not allow_partial):
-        raise ValueError('Unresolved insertions or sequence reconciliation; native construction blocked')
+        code = 'insertions_unresolved' if insertions['unresolved'] else 'sequence_alignment_unresolved'
+        raise ReconstructionBlocked(code, 'Unresolved insertions or sequence reconciliation; native construction blocked')
     if not overhangs['resolved']:
-        raise ValueError('Unresolved overhang sequence or polarity')
+        raise ReconstructionBlocked('overhangs_unresolved', 'Unresolved overhang sequence or polarity')
     if sequence['best']['reverse']:
-        raise ValueError('Reversed scaffold origin needs a native direction mapping')
+        raise ReconstructionBlocked('sequence_alignment_unresolved', 'Reversed scaffold origin needs a native direction mapping')
     if not unpaired['resolved']:
         if not allow_partial:
-            raise ValueError('Unexplained unpaired scaffold runs; complete native construction blocked')
+            raise ReconstructionBlocked('unpaired_scaffold_unresolved', 'Unexplained unpaired scaffold runs; complete native construction blocked')
         omissions.append({'kind':'unpaired_scaffold_review','detail':unpaired})
     tracks = prepare_native_tracks(classified, graph['lattice'], placement, unpaired)
     annotated = {(h,b) for h,b,_ in insertions['counts']}
@@ -83,10 +101,10 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
     terminal_sites = terminal_scaffold_sites(classified, graph['lattice'], unpaired)
     if not allow_partial and any(len(run['sites']) > 1 and not all(tuple(s) in annotated | tracks['auxiliary_sites'] | terminal_sites for s in run['sites'])
            for run in unpaired['runs']):
-        raise ValueError('AGENT_PROCESS_REQUIRED: supported unpaired scaffold requires a recorded loop representation; native construction blocked')
+        raise ReconstructionBlocked('process_required', 'AGENT_PROCESS_REQUIRED: supported unpaired scaffold requires a recorded loop representation; native construction blocked')
     lattice=LatticeType.HONEYCOMB
     if graph['lattice']['kind']!='honeycomb':
-        raise ValueError('Only recovered honeycomb lattice evidence is supported')
+        raise ReconstructionBlocked('lattice_type_unsupported', 'Only recovered honeycomb lattice evidence is supported')
     cells=tracks['cells']
     scaffold=tracks['classified']['scaf'][0]['sites']
     paths=[tracks['classified']['scaf'][0],*tracks['classified']['stap']]
@@ -96,13 +114,13 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
     for d in domains(scaffold):
         direction='FORWARD' if d[-1][1]>d[0][1] else 'REVERSE'
         if d[0][0] in polarity and polarity[d[0][0]]!=direction:
-            raise ValueError('Scaffold polarity is inconsistent on a helix')
+            raise ReconstructionBlocked('sequence_alignment_unresolved', 'Scaffold polarity is inconsistent on a helix')
         polarity[d[0][0]]=direction
     shifts=[shift for shift in ((0,) if tracks['native_cells'] else (0,1)) if all(
         _lattice_direction(row+shift,col,lattice).value==polarity.get(h)
         for h,(row,col) in cells.items())]
     if len(shifts)!=1:
-        raise ValueError('Lattice polarity translation is ambiguous')
+        raise ReconstructionBlocked('lattice_placement_unresolved', 'Lattice polarity translation is ambiguous')
     cells={h:(r+shifts[0],c) for h,(r,c) in cells.items()}
     identity=lambda label:str(uuid5(NAMESPACE_URL,f'nadoc:publication:{name}:{label}'))
     hid={h:identity(f'helix:{h}') for h in cells}
@@ -120,11 +138,13 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
             basis = 'Independent drawn loop; unique minimum forced-ligation-span cell at the source register; unrelaxed geometry'
         add('helix-add-at-cell',label,{'row':r,'col':c,'length_bp':extent,
             'populate_strands':False,'_helix_id':hid[h]},basis)
-    for h,bp,n in insertions['counts']:
+    from backend.core.publication_insertion_loops import insertion_plan
+    loop_plan = insertion_plan(insertions, classified, tracks['site_mapping'])
+    for h,bp,n in loop_plan['duplex_insertions']:
         native_h, native_bp = tracks['site_mapping'].get((h,bp), (h,bp))
         add('loop-skip-insert',f'Figure helix {h}[{bp}]: {n} inserted bases',
             {'helix_id':hid[native_h],'bp_index':native_bp,'delta':n},'Observed insertion annotation; oligo lengths and scaffold mass balance')
-    scaffold_sequence={**{name:seq for name,_,seq in SCAFFOLD_LIBRARY}, 'p7704':P7704_SEQUENCE}[sequence['scaffold_name']]
+    scaffold_sequence=PUBLICATION_SCAFFOLDS[sequence['scaffold_name']]
     offset=sequence['best']['offset']
     scaffold_sequence=scaffold_sequence[offset:]+scaffold_sequence[:offset]
     if sequence['length_discrepancy']:
@@ -176,10 +196,19 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
                     {'_fl_id':identity(f'join:{number}:{i}'),'three_prime_strand_id':ids[0],
                      'five_prime_strand_id':ids[i+1]},path_basis+'; nonlocal connection, never substituted for a native crossover')
                 counters['forced_ligations']+=1
+        if number == 0:
+            for loop in loop_plan['scaffold_loops']:
+                add('strand-loop-set', f"Scaffold loop: {loop['length']} bases",
+                    {'strand_id': ids[0], 'helix_id': hid[loop['helix']],
+                     'bp_index': loop['bp_index'], 'direction': loop['direction'],
+                     'length': loop['length'], 'aspect_ratio': 3.0, 'rotation_deg': 0.0}, loop['basis'])
         add('strand-sequence',f'Assign {title}',{'strand_id':ids[0],'name':title,
             'sequence':scaffold_sequence if number==0 else selected_paths[number-1]['table_row']['sequence']},
             (path['table_row']['basis'] if number and path['table_row'].get('sequence_source') == 'derived_from_aligned_scaffold'
              else f'Table page {table_page}; exhaustive scaffold alignment' + (('; '+sequence['length_discrepancy_note']) if number==0 and sequence['length_discrepancy'] else '')))
+        if number == 0:
+            operations[-1]['evidence'].append(
+                f"Scaffold reference {sequence['scaffold_name']} SHA-256 {sequence['scaffold_sha256']}")
         if number and colors[number-1]['color'] is not None:
             operations[-1]['params']['color']=colors[number-1]['color']
             operations[-1]['evidence'].append('Staple appearance: '+colors[number-1]['basis'])
@@ -187,7 +216,8 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
     if continuous_staples or periodic_staple_seams:
         from backend.core.publication_precursors import staple_precursors
         operations, precursor_summary = staple_precursors(
-            operations, paths, hid, identity, periodic_seams=periodic_staple_seams, span_gaps=True)
+            operations, paths, hid, identity, periodic_seams=periodic_staple_seams, span_gaps=True,
+            precut_revisited_domains='panel_selection' in graph)
     if row_order != sorted(cells):
         add('helix-reorder','Match source figure helix row order',{'ordered_ids':[hid[h] for h in row_order]},
             'Top-to-bottom row centers in orientation-normalized figure; preserve current visible helix labels')
@@ -195,16 +225,19 @@ def compile_publication(pdf, *, diagram_page, table_page, name, source_path,
             'sources':[{'path':source_path,'sha256':hashlib.sha256(pdf).hexdigest(),
                         'diagram_page':diagram_page,'table_page':table_page}], 'operations':operations}
     evidence={'sequence_search':sequence,'unpaired_scaffold':unpaired,
+              'vector_panel_registration': {key: graph[key] for key in ('panels', 'panel_registers', 'panel_selection')
+                                            if key in graph},
               'normalization_rotation':graph.get('normalization_rotation',0),'lattice_translation_rows':shifts[0],
               'helix_ids':hid,'helix_sources':tracks['sources'],'auxiliary_placement':placement,
               'cells':cells,'insertions':insertions,'classified':classified,
-              'source_insertions':source_insertions,
+              'source_insertions':source_insertions, 'insertion_representation':loop_plan,
               'connections':counters,'operations':len(operations), 'staple_precursors': precursor_summary,
               'terminal_unpaired_scaffold_sites': sorted(terminal_sites),
               'derived_staples': derived_staples,
               'staple_overhangs':overhangs,
               'native_reference_consulted':False, 'route_search':route_search,
               'reconstruction_report':{'status':'partial' if omissions else 'complete', 'omissions':omissions,
+                  'insertion_representation':loop_plan,
                   'base_conflicts':overhangs['conflicts'], 'scaffold_sequence_assigned':scaffold_sequence,
                   'appearance':{'helix_order':row_order,'staple_colors':colors},
                   'included_staples':len(classified['stap']), 'table_staples':len(table['rows']),

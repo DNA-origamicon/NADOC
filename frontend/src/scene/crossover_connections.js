@@ -295,6 +295,11 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
         .multiply(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion(...tr.rotation)))
         .multiply(new THREE.Matrix4().makeTranslation(...tr.pivot.map(v => -v)))]))
 
+    // Endpoint objects receive partial geometry updates in place. Read the
+    // latest derived landmarks instead of retaining a stale fitted seam.
+    const cornerGeometry = { get: k => (
+      nucA.corner_inserts?.[xo.id] ?? nucB.corner_inserts?.[xo.id]
+    )?.[k] }
     const productGeometry = new Map()
     for (const lesion of design.photoproduct_junctions ?? []) {
       for (let k = 0; k < n; k++) {
@@ -322,7 +327,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     const placements = buildCrossoverExtraPlacements({
       xoId: xo.id, count: n, pointA: posA, control: ctrl, pointB: posB,
       helixAxis: avgAx, sequence: xo.extra_bases, simReversed, localFrameReversed,
-      savedTransforms, productGeometry,
+      savedTransforms, productGeometry, cornerGeometry,
     })
     const posedPoints = placements.map(p => p.center.clone())
 
@@ -365,7 +370,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       pointA: posA.clone(),
       pointB: posB.clone(),
       sequence: xo.extra_bases,
-      savedTransforms, productGeometry,
+      savedTransforms, productGeometry, cornerGeometry,
       avgAx: avgAx.clone(),
       // Simulated inserts arrive numbered 5′→3′ from the strand's exit half; beads are
       // laid out A→B.  True when those two disagree — see extraBaseOrderReversed.
@@ -422,11 +427,11 @@ export function updateExtraBaseInstances(
   beadsMesh, slabsMesh, beadStartIdx, beadCount,
   posA, ctrl, posB, avgAx,
   simReversed = false, localFrameReversed = false,
-  savedTransforms = new Map(), sequence = '', productGeometry = new Map(),
+  savedTransforms = new Map(), sequence = '', productGeometry = new Map(), cornerGeometry = new Map(),
 ) {
   const placements = buildCrossoverExtraPlacements({
     xoId: null, count: beadCount, pointA: posA, control: ctrl, pointB: posB,
-    helixAxis: avgAx, sequence, simReversed, localFrameReversed, savedTransforms, productGeometry,
+    helixAxis: avgAx, sequence, simReversed, localFrameReversed, savedTransforms, productGeometry, cornerGeometry,
   })
   for (const placement of placements) {
     const idx = beadStartIdx + placement.geometricIndex

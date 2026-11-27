@@ -1,5 +1,145 @@
 # Issues fix log
 
+## 2026-11-25 — EM smooth playback and calculated-field crossfades
+
+- [x] EM uses 500 ms smooth segments and joins both fields to molecular endpoint
+  preparation. Cache misses hold a saved endpoint; pause/scrub restores its solve.
+- [x] Unequal adaptive clouds crossfade by opacity without per-subframe geometry
+  uploads, numerical field invention, or changes to archive/molecular histories.
+- [x] Protect active/pending fields, including background reads promoted to demand.
+- [x] 246 focused frontend tests and the real-EM application flow pass. Gold and
+  EM remain rendered; dense DNA is consistently hidden in the software-WebGL
+  test. Full-scene hardware appearance is tracked in MV-EM-SMOOTH.
+- [x] Main.js task delta: zero. Original source hash unchanged.
+- Smoke: 26 passed, two skipped, one assembly setup timeout at its part-save
+  request (scene_harness.js:355). No EM failure; test artifacts cleaned.
+
+## 2026-11-24 — ISSUE-267: Complete EM scope and sustained playback buffering
+
+- [x] Stable selected-frame count; missing pages collected into optical inputs.
+- [x] Playback no longer cancels every unfinished field request.
+- [x] Direct NumPy serialization and bounded compact field storage measured.
+- [x] 194 frontend tests, six API tests, and the real-EM app flow pass.
+- [x] Source design hash unchanged; main.js task delta zero.
+
+## 2026-11-24 — ISSUE-266: Foreground trajectory download ownership
+
+- [x] Animation cache pruning preserves active visualization page reads; explicit
+  cancellation still stops them. Foreground leases end when reads settle.
+- [x] Six download tests and 166 shared visualization-controller tests pass.
+- [x] The isolated browser loads the Plasmonic test trajectory across the
+  representation transition, calculates both EM frames, changes persistent dot
+  size and disables the overlay without console errors. Original source hash
+  remains unchanged. Dense DNA is hidden only in the software-WebGL trajectory
+  check; gold positions and EM rendering remain live. The separate standalone
+  EM browser check exercises the DNA and gold scene together.
+
+## 2026-11-24 — ISSUE-265: EM default-shell rejection detail
+
+- [x] Preserve API error details and report actual gap/shell dimensions.
+- [x] Offer explicit bare-mode recovery without changing model assumptions silently.
+- [x] Eight frontend and ten backend tests pass; isolated app check covers untouched
+  defaults, rejection, recovery and coated solve. Design hash unchanged and
+  temporary artifacts removed. `main.js` task LOC delta: zero.
+## 2026-11-23 — ISSUE-264: Profile and reduce Corner calculation overhead
+
+- [x] Profile native recording and both molecular projections separately.
+  Recording/routing is subsecond; closure, seed fitting and cache charging dominate.
+- [x] Accelerate seed costs with the original scalar types, cross products without
+  fastmath, immutable closure offsets and scalar memory accounting. Preserve the
+  native solver, two-pass order, exact cache keys and memory bounds.
+- [x] Paired cold backend previews improve by 21–24%; changed-direction previews
+  improve by 11–19%. Add a bounded native construction benchmark with no saved parts.
+- [x] Exact cost/seed-solver comparisons and all four approved geometry cases pass;
+  physical override isolation and unchanged unrelated junction atoms pass too.
+- [x] 36 focused backend checks pass, including cache ownership/charges,
+  worker cancellation, exact native projection equivalence, source isolation,
+  prepared Apply and independent native recipe replay. Backend/test and benchmark
+  lint pass. `main.js` LOC delta: 0.
+- [x] 6HB and square live workflows pass preview, Apply, undo/redo and history
+  edit; both axis displays were inspected. The combined square case exhausted
+  its 240 s total budget; a focused isolated rerun passes in 3.9 min with no
+  code or timing-limit change. Cleanup verified after both runs. App-run cold
+  previews remain about 16–19 s; do not claim the backend gain as a browser gain.
+- [ ] The 1–2 second Full-preview target is still unmet; approved seam fitting
+  remains the major cost. No production physical simulation was run.
+
+## 2026-11-23 — ISSUE-268 / ISSUE-269 / ISSUE-270: Reuse Corner preview and clip axes
+
+- [x] Commit the exact recorded/replayed candidate and its Full/undeformed
+  projections using a bounded, source-owned, single-use preview token.
+- [x] Preserve source/session/revision/policy and parameter checks, native undo,
+  edit recovery, save/reopen and independent replay. No molecular refit on Apply.
+- [x] Prepare independent projections concurrently; test exact serial-provider
+  equivalence and cancellation cleanup for both numerical workers.
+- [x] Reuse the feature-editor save hold to avoid autosave invalidation during
+  preview; verify drain, cancel, document reset and real saved-file workflows.
+- [x] Draw curved axes within a single occupied domain too. Unit regressions and
+  6HB / flat square app checks pass; both applied views were inspected.
+- [x] Nine focused backend and 59 frontend tests pass; lint passes. Apply starts
+  responding in 0.38–0.82 s, with complete scene refresh in 4.3–5.1 s in software
+  rendering. Initial Full preview remains about 16–22 s (ISSUE-264 stays open).
+- [x] Smoke: 26 passed, 2 skipped; the known assembly-exit fixture timeout at
+  `scene_harness.js:434` remains (ISSUE-266, previously reproduced upstream).
+  Test parts, sessions, reports, bridge keys and the two verified legacy-fixture
+  cache snapshots were removed; the isolated workspace ends with zero snapshots.
+
+## 2026-11-23 — ISSUE-266 / ISSUE-267: Smoke baseline and fixture-cache accounting
+
+- [ ] Assembly-exit fixture setup hits 60 seconds with and without Corner;
+  reproduced on untouched `afbc311c`. Full smoke: 26 passed, 2 skipped, 1 failed.
+- [x] Verified and removed only the isolated run's two legacy-fixture revision
+  snapshots; all test artifacts are gone and the main workspace is unchanged.
+- [ ] Add failure-safe ownership tracking for read-only smoke fixture caches;
+  do not weaken the existing prefix-only teardown guard.
+
+## 2026-11-23 — ISSUE-265: Keep extension display out of Corner atom inputs
+
+- [x] Reproduced recursive atom construction using native Corner → extension.
+- [x] Request only duplex endpoint geometry inside the Corner atom builder;
+  retain upstream measured extension slabs on the outer Full projection.
+- [x] Integrated regression, finite extension slabs and independent reopened
+  recipe replay pass; the ordinary extension-slab regression also passes.
+
+## 2026-11-23 — ISSUE-261 / ISSUE-264: Approved Corner provider and responsive progress
+
+- [x] Integrate the demonstrated two-pass molecular provider only for recorded
+  Corner inserts, after wedge deformation. Full representation uses its atoms.
+- [x] Preserve frozen coordinates, ordinary inserts and physical overrides;
+  test numerical-cache transport and disposable-worker cancellation.
+- [x] Stream actual fit progress without buffering and preserve immediate
+  cylinder previews. Verify native save/reopen and independent command replay.
+- [ ] Full preview still exceeds the requested 1–2 seconds. Production physical
+  simulations remain unvalidated; software checks are not stability evidence.
+
+## 2026-11-23 — ISSUE-263: Whole-preview Corner edit progress
+
+- [x] Reproduced premature completion; progress now includes source proof,
+  edited seams, later-feature replay/validation and Full projection.
+- [x] Two history/stream tests and the square-lattice app workflow pass. The
+  app checks monotonic completion and remaining-time estimates, plus actual
+  numeric arrows and history controls. No persisted test artifacts remain.
+
+## 2026-11-23 — ISSUE-262: Preserve Corner numeric increments
+
+- [x] Reproduced off-grid position snapping on both HC and square lattices.
+- [x] Native spinners now add 7/8 bp (or matching nm) and 15° from typed values.
+- [x] 13 focused frontend tests and the 6HB app workflow pass, including actual
+  arrow keys and history operations. Preview ready in 1.945 s, painted in 2.301 s.
+  Inspected preview; test part/revisions, browser captures, reports and bridge
+  credentials cleaned. No molecular placement changes.
+
+## 2026-11-23 — ISSUE-260: Corner source ownership at overlapping miter tips
+
+- [x] Reproduced ambiguous endpoint ownership using native Extrude → Auto
+  Scaffold → Make Cluster → Corner; added a regression for the exact failure.
+- [x] Preserve original endpoint ownership; v3 marks new tip sequence N and
+  leaves v1/v2 replay unchanged. Keep authored plane nicks unjoined.
+- [x] Focused backend/frontend checks and nicked/sequence-assigned routed 6HB
+  app checks pass. Routed preview ready in 1.687 s, painted in 2.040 s.
+- [x] This topology fix initially left molecular placement unchanged. The
+  candidate was subsequently approved and promoted under ISSUE-261.
+
 ## ISSUE-264 — Large-scene backbone rendering and native metadata assignment (2026-11-24)
 
 [x] Desktop enables fast CG backbone spheres independently of atomistic flags;

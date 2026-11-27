@@ -1,5 +1,8 @@
+import { TRACE_DEFAULTS, createTracePreview } from './photo_renderer/path_trace_preview.js'
+import { createTraceFrameSession } from './photo_renderer/path_trace_session.js'
 import { makePhotoBackboneGeometry, photoBackboneRadius } from './photo_renderer/backbone_spheres.js'
 import { settleZoomVolumes, drawZoomVolumes } from './zoom_volume_export.js'
+import { settleEMExport, prepareEMExportSize, hasVisibleEM } from './em_export.js'
 import { prepareExportGrids } from './photo_renderer/export_grid.js'
 import { renderSilhouetteHighlights } from './silhouette_highlight.js'
 /**
@@ -26,7 +29,8 @@ import { renderSilhouetteHighlights } from './silhouette_highlight.js'
  *   • the ChimeraX depth-outline silhouette + a depth cue
  *   • flat-colour background, SMAA, and tiled PNG export
  *
- * No user-supplied HDRI, no bloom, no path tracer, no visible ground plane, no
+ * Optional GPU path tracing includes emissive EM samples and offline exports.
+ * No user-supplied HDRI, no bloom, no visible ground plane, no
  * mist — all deliberate.
  *
  * REMOVED 2026-07-28 — multishadow ambient occlusion. A faithful port of
@@ -55,6 +59,9 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 
 import { makeMaterial, makeGoldNanoparticleMaterial }
   from './photo_renderer/material_presets.js'
+import { GRADE_DEFAULTS, initColorGrade } from './photo_renderer/color_grade.js'
+import { materialAvailability } from './photo_renderer/material_availability.js'
+import { PRESETS } from './photo_renderer/material_presets.js'
 import { reprOf }                     from './photo_renderer/mesh_repr.js'
 import { applyInstanceAlphaMaterial } from './instance_alpha.js'
 import { FigurePass }                 from './photo_renderer/figure_pass.js'
@@ -105,6 +112,8 @@ const RIG_PRESET = 'full'
 /** Factory defaults — the single source of truth for "what the experiment looks
  *  like out of the box". */
 export const DEFAULT_PHOTO_SETTINGS = Object.freeze({
+  ...TRACE_DEFAULTS,
+  ...GRADE_DEFAULTS,
   // Material preset per representation, keyed exactly like
   // material_presets.js PRESETS/PRESET_LABELS. Defaults are the FIGURE
   // materials (specularIntensity 0 — no highlight anywhere), which is what this
@@ -264,6 +273,12 @@ export function swapToFlatMaterials(root, presets = null) {
     const mat = obj.userData?.photoMaterialKind === 'gold-nanoparticle'
       ? makeGoldNanoparticleMaterial()
       : makeMaterial(repr, preset, vc, 1.0)
+    // Selecting a transmissive surface finish explicitly opts into its optical response.
+    // Keep molecular visibility/alpha separate from transmission through the surface.
+    if (repr === 'surface' && mat.userData.presetTransmission > 0) {
+      mat.transmission = mat.userData.presetTransmission
+      mat.transparent = true
+    }
     mat.side = src.side
     // Preserve the depth contract. Overlay geometry (ghost planes, hit targets,
     // immobilisation surfaces) is drawn depthWrite:false precisely so it cannot
@@ -351,6 +366,7 @@ export function createPhotoMode(sceneCtx) {
   const _settings = { ...DEFAULT_PHOTO_SETTINGS }
 
   let _active      = false
+  const _tracing = createTracePreview({ scene, camera, renderer, settings: _settings, isActive: () => _active, prepare: () => _syncForOfflineFrame(false) })
   let _composer    = null
   let _matSwap     = null
   let _lightGroup  = null
@@ -370,6 +386,8 @@ export function createPhotoMode(sceneCtx) {
   let _savedShadowType    = null
   const _savedMeshShadows = new Map()   // mesh → {cast, receive, customDepthMaterial}
   let _bounds = null                    // {center, radius} the rig is fitted to
+  const _grading = initColorGrade({ settings: _settings, renderer, isActive: () => _active })
+  let _gradePass = null
   let _figurePass = null
   let _savedFov   = null
   const _dollyScratch = new THREE.Vector3()
@@ -416,6 +434,7 @@ export function createPhotoMode(sceneCtx) {
     _savedLights = []
     scene.traverse(obj => {
       if (!obj.isLight) return
+      if (obj.userData.emLight) return
       if (_lightGroup && obj.parent === _lightGroup) return
       _savedLights.push({ light: obj, visible: obj.visible, castShadow: obj.castShadow })
       obj.visible = false
@@ -776,15 +795,19 @@ export function createPhotoMode(sceneCtx) {
   }
 
   function _buildComposer() {
+    _gradePass?.dispose()
+    _gradePass = null
     _composer?.dispose?.()
     const size = renderer.getDrawingBufferSize(new THREE.Vector2())
     const composer = new EffectComposer(renderer)
-    composer.addPass(new RenderPass(scene, camera))
+    composer.addPass(_tracing.pass(new RenderPass(scene, camera)))
     // Before SMAA so the contour gets antialiased with everything else.
     _figurePass = new FigurePass(scene, camera)
     composer.addPass(_figurePass)
     composer.addPass(new SMAAPass(size.x, size.y))
     composer.addPass(new OutputPass())
+    _gradePass = _grading.create()
+    composer.addPass(_gradePass)
     // AFTER every addPass — composer.setSize forwards to each pass it holds, so
     // sizing first would leave anything added later at its 1×1 placeholder.
     composer.setSize(size.x, size.y)
@@ -801,7 +824,7 @@ export function createPhotoMode(sceneCtx) {
     _savedToneMapping = renderer.toneMapping
     _savedExposure    = renderer.toneMappingExposure
     renderer.toneMapping         = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.0
+    renderer.toneMappingExposure = _settings.exposure
     renderer.getClearColor(_savedClearColor)
     _savedClearAlpha = renderer.getClearAlpha()
 
@@ -815,6 +838,7 @@ export function createPhotoMode(sceneCtx) {
 
     _lightGroup = new THREE.Group()
     _lightGroup.name = 'expPhotoLights'
+    _lightGroup.userData.photoLightRig = true
     scene.add(_lightGroup)
     _hideEditorLights()
 
@@ -880,10 +904,13 @@ export function createPhotoMode(sceneCtx) {
   function deactivate() {
     if (!_active) return
     _active = false
+    _tracing.stop()
 
     resetRenderFn()
     clearResizeCallback?.()
 
+    _gradePass?.dispose()
+    _gradePass = null
     _composer?.dispose?.()
     _composer = null
     _figurePass = null
@@ -1113,9 +1140,11 @@ export function createPhotoMode(sceneCtx) {
    *   frustum every frame, for callers stepping an animation. Stills leave it off.
    * @returns {{renderFrame: () => Promise<Blob>, dispose: () => void, tiles: number}}
    */
-  function beginFrameSession(width, height, { followMotion = false } = {}) {
+  function beginFrameSession(width, height, { followMotion = false, signal, onProgress } = {}) {
     assertPlacementExportSafe(scene)
     if (!_active) throw new Error('photo: beginFrameSession requires the mode to be active')
+    if (_settings.pathTracing) return createTraceFrameSession({ scene, camera, renderer, settings: _settings, width, height,
+      grading: _grading, preview: _tracing, syncFrame: () => _syncForOfflineFrame(followMotion), figureParams: _figureParams, cueRange: _pushCueRangeTo, signal, onProgress })
 
     const probeCanvas = document.createElement('canvas')
     const probeR = new THREE.WebGLRenderer({ canvas: probeCanvas, alpha: true })
@@ -1147,7 +1176,7 @@ export function createPhotoMode(sceneCtx) {
     })
     offRenderer.setPixelRatio(1)
     offRenderer.toneMapping         = THREE.ACESFilmicToneMapping
-    offRenderer.toneMappingExposure = 1.0
+    offRenderer.toneMappingExposure = _settings.exposure
     offRenderer.setSize(tileW, tileH, false)
     // The offscreen renderer is a separate GL context — it needs the shadow flag
     // set explicitly, or the export comes back without the cast shadow.
@@ -1163,6 +1192,8 @@ export function createPhotoMode(sceneCtx) {
     composer.addPass(figure)
     composer.addPass(new SMAAPass(tileW, tileH))
     composer.addPass(new OutputPass())
+    const grade = _grading.create()
+    composer.addPass(grade)
     composer.setSize(tileW, tileH)
 
     // PMREM textures are WebGL-context-local. Re-bake the same neutral studio
@@ -1191,9 +1222,11 @@ export function createPhotoMode(sceneCtx) {
       if (_disposed) throw new Error('photo: renderFrame() called after dispose()')
       syncSceneAnnotations(scene)
       _syncForOfflineFrame(followMotion)
+      offRenderer.toneMappingExposure = _settings.exposure
 
       const savedAspect = camera.aspect
       const restoreGrids = prepareExportGrids(scene, exportPixelScale)
+      const restoreEM = prepareEMExportSize(scene, exportPixelScale*(renderer.getPixelRatio?.() ?? 1))
       try {
         camera.aspect = width / height
         // The tiles are drawn with drawImage, which COMPOSITES. On a transparent
@@ -1227,6 +1260,7 @@ export function createPhotoMode(sceneCtx) {
         drawSceneAnnotations(scene, finalCtx, width, height, camera)
         drawZoomVolumes(scene, finalCtx, width, height, camera)
       } finally {
+        restoreEM()
         restoreGrids()
         camera.clearViewOffset()
         camera.aspect = savedAspect
@@ -1237,6 +1271,8 @@ export function createPhotoMode(sceneCtx) {
     }
 
     async function renderFrame() {
+      await settleEMExport(scene)
+      await settleZoomVolumes(scene)
       renderFrameToCanvas()
       return new Promise((resolve, reject) => finalCanvas.toBlob(blob => {
         try { assertPlacementExportSafe(scene); resolve(blob) } catch (error) { reject(error) }
@@ -1248,11 +1284,12 @@ export function createPhotoMode(sceneCtx) {
       _disposed = true
       composer.dispose?.()
       figure.dispose?.()
+      grade.dispose()
       exportEnvTexture?.dispose?.()
       offRenderer.dispose()
     }
 
-    return { renderFrame, renderFrameToCanvas, settleOverlays: () => settleZoomVolumes(scene), dispose, tiles: tilesX * tilesY }
+    return { renderFrame, renderFrameToCanvas, requiresFreshPalette: () => hasVisibleEM(scene), settleOverlays: async () => { await settleEMExport(scene); await settleZoomVolumes(scene) }, dispose, tiles: tilesX * tilesY }
   }
 
   /**
@@ -1260,18 +1297,18 @@ export function createPhotoMode(sceneCtx) {
    * A one-shot session — see `beginFrameSession` for the tiling and
    * separate-GL-context rules that govern both.
    */
-  function renderToBlob(width, height) {
-    return withMediaExport(() => captureToBlob(width, height))
+  function renderToBlob(width, height, options = {}) {
+    return withMediaExport(() => captureToBlob(width, height, options))
   }
 
-  async function captureToBlob(width, height) {
+  async function captureToBlob(width, height, options) {
     assertPlacementExportSafe(scene)
     if (!_active) throw new Error('photo: renderToBlob requires the mode to be active')
-    const session = beginFrameSession(width, height)
+    const session = beginFrameSession(width, height, options)
     try {
       return await session.renderFrame()
     } finally {
-      session.dispose()
+      await session.dispose()
     }
   }
 
@@ -1284,8 +1321,14 @@ export function createPhotoMode(sceneCtx) {
   /** Change one representation's material. Re-swaps in place — cheap, and it
    *  keeps the shadow flags/bounds valid because no geometry moved. */
   function setMaterialPreset(repr, preset) {
-    if (!(repr in _materialPresets())) return
-    _settings[repr] = preset
+    setMaterialPresets({ [repr]: preset })
+  }
+
+  function setMaterialPresets(presets) {
+    for (const repr of Object.keys(_materialPresets())) {
+      const preset = presets[repr]
+      if (Object.hasOwn(PRESETS[repr], preset)) _settings[repr] = preset
+    }
     if (!_active) return
     _matSwap?.restore()
     _matSwap = swapToFlatMaterials(scene, _materialPresets())
@@ -1573,9 +1616,16 @@ export function createPhotoMode(sceneCtx) {
 
   return {
     activate, deactivate,
+    setTraceDenoise: _tracing.setDenoise,
+    setPathTracePreviewBackend: _tracing.setPreviewBackend,
+    setTraceInteractive: _tracing.setInteractive,
+    setTraceMetricsEnabled: _tracing.setMetricsEnabled,
+    setPathTracing: _tracing.setEnabled, setPathTraceSamples: _tracing.setSamples, setPathTraceExportBackend: _tracing.setExportBackend, getPathTracingStatus: _tracing.getStatus,
     getDiagnostics,
     isActive: () => _active,
-    setBackground, setMaterialPreset,
+    setBackground, setMaterialPreset, setMaterialPresets,
+    setColorGrade: _grading.set,
+    getMaterialAvailability: () => materialAvailability(scene),
     setFOV, resetFOV, setParallel, setExportSize, renderToBlob, beginFrameSession,
     setOutline, setOutlineColor, setOutlineStrength, setOutlineThickness,
     setOutlineSensitivity, setOutlineDepthJump,

@@ -24,6 +24,7 @@ import { simulationRepresentationAllowed } from '../scene/simulation_representat
 import { simulationViewActive } from '../scene/vr_simulations.js'
 import { registerShortcut } from '../input/shortcuts.js'
 import { createAssemblyRepresentationActions } from './assembly_representation_actions.js'
+import { geometryLoads } from '../scene/geometry_loads.js'
 
 // All representations are mutually exclusive. Exactly one is active at
 // a time; switching to any one deactivates all others.
@@ -195,6 +196,7 @@ export function initRepresentationSwitcher({
   // heavy-frame reconstruction, the solvent refetch, the NAMD trajectory prebuild).
   // Null until the first apply, so the very first click always goes through.
   let _appliedRepr = null, settledRepr = null, generation = 0, pendingRepr = null
+  const geometryOwner={}
   const detailedBlocked = (repr, detail) => store.getState().presentationActive && (repr === 'surface-detail' || repr === 'surface' && detail && detail !== 'coarse')
   const simulationActive = () => simulationDisplay?.active() || simulationViewActive(document)
   function syncSimulation() {
@@ -225,80 +227,83 @@ export function initRepresentationSwitcher({
     if (simulationActive() && !simulationRepresentationAllowed(repr)) return false
     if (detailedBlocked(repr, detail)) { showToast('Detail Surface is unavailable during presentations. Use Quick Surface.', { severity: 'warn' }); return false }
     const ticket = ++generation
-    settledRepr = null
-    pendingRepr = repr
-    cancelSurfaceComputations()
-    if (repr === 'surface-detail') { repr = 'surface'; detail = 'chimerax' }
-    if (repr === 'surface') selectSurfaceDetail(detail ?? 'coarse')
-    simulationDisplay?.beforeChange()
-    await beforeRepresentationChange(repr)
-    if (ticket !== generation) return false
-    // ── Deactivate any currently active exclusive mode ────────────────────────
-    if (!['vdw', 'ballstick', 'stick'].includes(repr) && atomisticRenderer.getMode() !== 'off') {
-      applyAtomisticMode('off')
-      store.setState({ atomisticMode: 'off' })
-    }
-    if (repr !== 'surface' && getSurfaceMode() !== 'off') {
-      applySurfaceMode('off')
-      store.setState({ surfaceMode: 'off' })
-    }
-    if (repr !== 'hull-prism') {
-      getJointRenderer()?.setHullRepr(false)
-    }
-
-    // ── Activate the new representation ──────────────────────────────────────
-    if (repr === 'full' || repr === 'beads' || repr === 'cylinders') {
-      setCGVisible(true)
-      const lvl = { full: 0, beads: 1, cylinders: 2 }[repr]
-      overhangLinkArcs?.setRepresentation?.(repr)
-      if (lvl !== getLastDetailLevel()) {
-        setLastDetailLevel(lvl)
-        setLodMode(repr)
-        designRenderer.setDetailLevel(lvl)
-        unfoldView?.refreshArcVisibility()
+    const done=geometryLoads.begin(geometryOwner)
+    try {
+      settledRepr = null
+      pendingRepr = repr
+      cancelSurfaceComputations()
+      if (repr === 'surface-detail') { repr = 'surface'; detail = 'chimerax' }
+      if (repr === 'surface') selectSurfaceDetail(detail ?? 'coarse')
+      simulationDisplay?.beforeChange()
+      await beforeRepresentationChange(repr)
+      if (ticket !== generation) return false
+      // ── Deactivate any currently active exclusive mode ────────────────────────
+      if (!['vdw', 'ballstick', 'stick'].includes(repr) && atomisticRenderer.getMode() !== 'off') {
+        applyAtomisticMode('off')
+        store.setState({ atomisticMode: 'off' })
       }
-    } else if (repr === 'vdw' || repr === 'ballstick' || repr === 'stick') {
-      await applyAtomisticMode(repr)
-      if (ticket !== generation) return false
-      store.setState({ atomisticMode: repr })
-    } else if (repr === 'surface') {
-      const applied = await applySurfaceMode('on')
-      if (ticket !== generation) return false
-      if (applied === false) { await _setRepresentation('full'); return false }
-      store.setState({ surfaceMode: 'on' })
-    } else if (repr === 'hull-prism') {
-      setCGVisible(false)
-      // Per-lattice default scan margin: 7 bp square / 8 bp honeycomb. Set
-      // before activating the hull so the first build uses it (no rebuild yet —
-      // hull repr isn't active until setHullRepr below).
-      const lat = store.getState().currentDesign?.lattice_type
-      getJointRenderer()?.setHullScanTick(lat === 'HONEYCOMB' ? 8 : 7)
-      getJointRenderer()?.setHullRepr(true)
-    } else if (repr === 'mrdna-coarse' || repr === 'mrdna-fine' || repr === 'oxdna') {
-      if (repr === 'oxdna' && _appliedRepr !== 'oxdna') setColoringMode('base')
-      const available = simulationDisplay?.apply(repr) || await applyExternalRepresentation(repr)
-      if (ticket !== generation || available === false) return false
-    }
+      if (repr !== 'surface' && getSurfaceMode() !== 'off') {
+        applySurfaceMode('off')
+        store.setState({ surfaceMode: 'off' })
+      }
+      if (repr !== 'hull-prism') {
+        getJointRenderer()?.setHullRepr(false)
+      }
 
-    setCurrentRepr(repr)
-    flexibleArcs?.setRepresentation?.(repr)
-    _appliedRepr = repr
-    pendingRepr = null
-    _updateReprRadio(repr)
-    reprOptionSliders(repr)
-    await simulationDisplay?.refresh?.(repr)
-    if (ticket !== generation) return false
-    const waits = []
-    window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
-      detail: { representation: repr, waits },
-    }))
-    // Scene snapshots must include the job-owned coordinates, not the provisional
-    // native mesh (or the previous representation held while a frame loads).
-    await Promise.all(waits)
-    if (ticket !== generation) return false
-    await simulationDisplay?.refresh?.(repr)
-    if (ticket !== generation) return false
-    settledRepr = repr
+      // ── Activate the new representation ──────────────────────────────────────
+      if (repr === 'full' || repr === 'beads' || repr === 'cylinders') {
+        setCGVisible(true)
+        const lvl = { full: 0, beads: 1, cylinders: 2 }[repr]
+        overhangLinkArcs?.setRepresentation?.(repr)
+        if (lvl !== getLastDetailLevel()) {
+          setLastDetailLevel(lvl)
+          setLodMode(repr)
+          designRenderer.setDetailLevel(lvl)
+          unfoldView?.refreshArcVisibility()
+        }
+      } else if (repr === 'vdw' || repr === 'ballstick' || repr === 'stick') {
+        await applyAtomisticMode(repr)
+        if (ticket !== generation) return false
+        store.setState({ atomisticMode: repr })
+      } else if (repr === 'surface') {
+        const applied = await applySurfaceMode('on')
+        if (ticket !== generation) return false
+        if (applied === false) { await _setRepresentation('full'); return false }
+        store.setState({ surfaceMode: 'on' })
+      } else if (repr === 'hull-prism') {
+        setCGVisible(false)
+        // Per-lattice default scan margin: 7 bp square / 8 bp honeycomb. Set
+        // before activating the hull so the first build uses it (no rebuild yet —
+        // hull repr isn't active until setHullRepr below).
+        const lat = store.getState().currentDesign?.lattice_type
+        getJointRenderer()?.setHullScanTick(lat === 'HONEYCOMB' ? 8 : 7)
+        getJointRenderer()?.setHullRepr(true)
+      } else if (repr === 'mrdna-coarse' || repr === 'mrdna-fine' || repr === 'oxdna') {
+        if (repr === 'oxdna' && _appliedRepr !== 'oxdna') setColoringMode('base')
+        const available = simulationDisplay?.apply(repr) || await applyExternalRepresentation(repr)
+        if (ticket !== generation || available === false) return false
+      }
+
+      setCurrentRepr(repr)
+      flexibleArcs?.setRepresentation?.(repr)
+      _appliedRepr = repr
+      pendingRepr = null
+      _updateReprRadio(repr)
+      reprOptionSliders(repr)
+      await simulationDisplay?.refresh?.(repr)
+      if (ticket !== generation) return false
+      const waits = []
+      window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
+        detail: { representation: repr, waits },
+      }))
+      // Scene snapshots must include the job-owned coordinates, not the provisional
+      // native mesh (or the previous representation held while a frame loads).
+      await Promise.all(waits)
+      if (ticket !== generation) return false
+      await simulationDisplay?.refresh?.(repr)
+      if (ticket !== generation) return false
+      settledRepr = repr
+    } finally { done(); if(ticket===generation)pendingRepr=null }
   }
 
   for (const { id, repr, external, detail } of _ALL_REPRS) {
@@ -343,7 +348,7 @@ export function initRepresentationSwitcher({
         _updateColoringMenuAvailability(repr)   // atomistic-in-assembly → cpk/strand/cluster/source
         // Prepared CG tiers can change immediately. Saving stays ordered with
         // heavy choices, which retain their normal acknowledged display path.
-        await assemblyRepresentations.choose(assemblyRepr, assemblyContext)
+        await geometryLoads.track(geometryOwner, () => assemblyRepresentations.choose(assemblyRepr, assemblyContext))
         return
       }
 
@@ -365,7 +370,7 @@ export function initRepresentationSwitcher({
         let next = strandIds.length ? editStrandRepresentation(currentDesign, strandIds, repr, { globalColoring: store.getState().coloringMode }) : currentDesign.representation_overrides ?? []
         if (segs.length) next = editOverridesForSegments(next, segs, repr)
         if (proteinIds.length) next = editOverridesForProteins(next, proteinIds, repr)
-        await api.saveRepresentationOverrides(next)
+        await geometryLoads.track(geometryOwner, () => api.saveRepresentationOverrides(next))
         if (detail) refreshSurfaceRegions()
         return
       }
@@ -443,6 +448,6 @@ export function initRepresentationSwitcher({
     ensureSimulationRepresentation: () => simulationRepresentationAllowed(_appliedRepr) ? undefined : _setRepresentation("full"),
     updateReprRadio:      _updateReprRadio,
     syncAssemblyReprMenu: _syncAssemblyReprMenu,
-    dispose() { assemblyRepresentations.dispose(); simulationObserver.disconnect(); window.removeEventListener("nadoc:simulation-display", syncSimulation); document.removeEventListener("change", syncSimulation) },
+    dispose() { geometryLoads.cancel(geometryOwner); assemblyRepresentations.dispose(); simulationObserver.disconnect(); window.removeEventListener("nadoc:simulation-display", syncSimulation); document.removeEventListener("change", syncSimulation) },
   }
 }

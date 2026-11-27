@@ -118,12 +118,11 @@ def search_declared_scaffold(classified, insertions, table, custom_sequence=None
     A declared but unavailable scaffold never falls back silently to another one.
     Sequence alignment of recovered routes is distinct from validating all rows.
     """
-    from backend.core.sequences import SCAFFOLD_LIBRARY, P7704_SEQUENCE
+    from backend.core.sequences import PUBLICATION_SCAFFOLDS
     if len(classified['scaf'])!=1:
         return {'resolved':False,'reason':'One scaffold and resolved insertion lengths are required.',
                 'status':'unresolved_routing'}
-    library={name.lower():(name,seq) for name,_,seq in SCAFFOLD_LIBRARY}
-    library['p7704']=('p7704',P7704_SEQUENCE)
+    library = {name.lower(): (name, seq) for name, seq in PUBLICATION_SCAFFOLDS.items()}
     if custom_sequence:
         candidates=[('custom',custom_sequence)]; basis='user-supplied sequence'
     else:

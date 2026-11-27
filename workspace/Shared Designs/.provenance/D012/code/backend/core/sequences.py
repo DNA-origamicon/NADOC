@@ -1,0 +1,961 @@
+"""
+Sequence assignment for scaffold and staple strands.
+
+Supports:
+- M13mp18 scaffold assignment (7249 nt, standard caDNAno ordering).
+- p7560 scaffold assignment (7560 nt, M13-derived, caDNAno ordering).
+- p8064 scaffold assignment (8064 nt, M13-derived, caDNAno ordering).
+- Custom sequence assignment (arbitrary ATGCN string).
+- Complementary staple sequence derivation from scaffold sequence.
+
+Conventions
+-----------
+- Scaffold sequence is assigned 5' to 3' along the scaffold strand's domain list.
+- Each domain contributes bases in its natural traversal order
+  (FORWARD: start_bp to end_bp inclusive; REVERSE: start_bp to end_bp inclusive,
+  remembering that for REVERSE start_bp > end_bp and traversal is high to low).
+- Staple complement is Watson-Crick: A<->T, G<->C, upper-case throughout.
+  Positions not covered by the scaffold receive 'N'.
+- When a scaffold is longer than the chosen sequence, remaining positions are
+  filled with 'N' rather than raising an error.
+"""
+
+from __future__ import annotations
+
+import pathlib
+from collections import Counter, defaultdict
+
+from backend.core.models import Design, Direction, Strand, StrandType
+
+_CORE = pathlib.Path(__file__).parent
+
+
+def _load_seq(filename: str) -> str:
+    path = _CORE / filename
+    if not path.exists():
+        raise FileNotFoundError(f"Scaffold sequence file not found: {path}.")
+    return path.read_text().strip().upper()
+
+
+# ── Available scaffold sequences ──────────────────────────────────────────────
+
+M13MP18_SEQUENCE: str = _load_seq("m13mp18.txt")  # 7249 nt
+P7560_SEQUENCE: str = _load_seq("p7560.txt")  # 7560 nt
+# Additional reconstruction reference; provenance is in p7704.source.json.
+P7704_SEQUENCE: str = _load_seq("p7704.txt")  # 7704 nt
+P8064_SEQUENCE: str = _load_seq("p8064.txt")  # 8064 nt
+
+# Ordered list of (display_name, length, sequence) for the UI
+SCAFFOLD_LIBRARY: list[tuple[str, int, str]] = [
+    ("M13mp18", len(M13MP18_SEQUENCE), M13MP18_SEQUENCE),
+    ("p7560", len(P7560_SEQUENCE), P7560_SEQUENCE),
+    ("p8064", len(P8064_SEQUENCE), P8064_SEQUENCE),
+]
+
+# Reconstruction references are separate from the interactive scaffold menu.
+PUBLICATION_SCAFFOLDS: dict[str, str] = {
+    **{name: sequence for name, _, sequence in SCAFFOLD_LIBRARY},
+    "p7704": P7704_SEQUENCE,
+    "p8634": _load_seq("p8634.txt"),
+    "pEGFP": _load_seq("pegfp.txt"),
+}
+
+_SCAFFOLD_BY_NAME: dict[str, str] = {
+    "M13mp18": M13MP18_SEQUENCE,
+    "p7560": P7560_SEQUENCE,
+    "p8064": P8064_SEQUENCE,
+}
+
+# Watson-Crick complement map
+_COMPLEMENT: dict[str, str] = {"A": "T", "T": "A", "G": "C", "C": "G", "N": "N"}
+
+# Valid bases for custom sequence input
+_VALID_BASES: frozenset[str] = frozenset("ATGCN")
+
+
+def complement_base(base: str) -> str:
+    """Return the Watson-Crick complement of a single base (uppercase)."""
+    return _COMPLEMENT.get(base.upper(), "N")
+
+
+def is_watson_crick_complement(seq_a: str, seq_b: str, allow_n: bool = True) -> bool:
+    """Return True iff *seq_a* is the antiparallel Watson-Crick complement of *seq_b*.
+
+    Rules:
+      • Both sequences are uppercased.
+      • Each character must be in {A, C, G, T, N}; otherwise return False.
+      • Lengths must match.
+      • Antiparallel pairing: seq_a[i] is compared to complement_base(seq_b[-1 - i]).
+      • When *allow_n* is True, an N on either side matches everything (wildcard).
+        When *allow_n* is False, N never matches.
+    """
+    if seq_a is None or seq_b is None:
+        return False
+    a = seq_a.upper()
+    b = seq_b.upper()
+    if len(a) != len(b):
+        return False
+    valid = _VALID_BASES  # {'A','C','G','T','N'}
+    if any(c not in valid for c in a) or any(c not in valid for c in b):
+        return False
+    for i in range(len(a)):
+        ca = a[i]
+        cb = b[-1 - i]
+        if allow_n and (ca == "N" or cb == "N"):
+            continue
+        if not allow_n and (ca == "N" or cb == "N"):
+            return False
+        if complement_base(cb) != ca:
+            return False
+    return True
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+
+class _LoopMap(dict):
+    """Legacy duplex counts plus directional, unpaired insertion counts."""
+    def __init__(self):
+        super().__init__()
+        self.unpaired = {}
+
+    def get(self, key, default=None):
+        if len(key) == 3:
+            return super().get(key[:2], 0) + self.unpaired.get(key, 0)
+        return super().get(key, default)
+
+
+def _build_loop_skip_map(design: Design) -> dict[tuple[str, int], int]:
+    """Return {(helix_id, global_bp_index): delta} for every loop/skip in design."""
+    ls_map = _LoopMap()
+    for helix in design.helices:
+        for ls in helix.loop_skips:
+            ls_map[(helix.id, ls.bp_index)] = ls.delta
+    for strand in design.strands:
+        for loop in strand.loops:
+            ls_map.unpaired[(loop.helix_id, loop.bp_index, loop.direction)] = loop.length
+    return ls_map
+
+
+def domain_bp_range(domain):
+    """Yield bp indices in 5' to 3' traversal order for the domain."""
+    if domain.direction == Direction.FORWARD:
+        yield from range(domain.start_bp, domain.end_bp + 1)
+    else:
+        yield from range(domain.start_bp, domain.end_bp - 1, -1)
+
+
+def _domain_nt_count(domain, ls_map: dict[tuple[str, int], int]) -> int:
+    """Nucleotides contributed by one domain, accounting for loop/skip mods.
+
+    Skips (delta=-1) contribute 0 nt; loops (delta=+1) contribute 2 nt.
+    """
+    total = 0
+    for bp in domain_bp_range(domain):
+        delta = ls_map.get((domain.helix_id, bp, domain.direction), ls_map.get((domain.helix_id, bp), 0))
+        if delta <= -1:
+            continue  # skip -- no nucleotide at this position
+        total += delta + 1  # 1 for normal bp, 2 for a loop (+1), etc.
+    return total
+
+
+def _strand_nt_with_skips(strand: Strand, ls_map: dict[tuple[str, int], int]) -> int:
+    """Count nucleotides for a strand, accounting for loop/skip modifications."""
+    return sum(_domain_nt_count(d, ls_map) for d in strand.domains)
+
+
+def _domain_seq_span(domain, ls_map: dict[tuple[str, int], int]) -> int:
+    """Characters *this domain* contributes to ``strand.sequence``.
+
+    Duplex domains are loop/skip aware.  Overhang (``overhang_id``) and binder
+    (``binds_overhang_id``) domains use the raw bp span, because that is what
+    ``assign_staple_sequences`` has always emitted for them — an overhang tip
+    is assembled to its bp length and a binder walks its bp range directly.
+    Used by both :func:`strand_partner_bases` and :func:`assign_staple_sequences`
+    so the two can never drift out of alignment.
+    """
+    if domain.overhang_id is not None or domain.binds_overhang_id is not None:
+        return abs(domain.end_bp - domain.start_bp) + 1
+    return _domain_nt_count(domain, ls_map)
+
+
+def strand_sequence_length(
+    design: "Design", strand: Strand, *,
+    loop_skip_map: dict[tuple[str, int], int] | None = None,
+) -> int:
+    """Length ``strand.sequence`` must have for *strand*.
+
+    Equals :func:`strand_nucleotide_count` for every ordinary strand; they differ
+    only if a loop/skip sits under an overhang or binder domain, where the
+    derivation uses the raw bp span (see :func:`_domain_seq_span`).  Sequence
+    *editors* must validate against THIS, or a hand-typed sequence could be
+    rejected at exactly the length the derivation itself produces.
+
+    Bulk read-only assessments may pass the map built from this same Design
+    once, avoiding a full helix scan for every strand. Do not retain it across
+    design edits.
+    """
+    ls_map = _build_loop_skip_map(design) if loop_skip_map is None else loop_skip_map
+    return sum(_domain_seq_span(d, ls_map) for d in strand.domains)
+
+
+def strand_nucleotide_count(strand: Strand, design: "Design", *, loop_skip_map=None) -> int:
+    """Actual nucleotide count of *strand*, accounting for loop/skips.
+
+    Loops (+1) add a base and skips (-1) remove one, so this differs from the raw
+    bp-range span sum ``Σ(|end-start|+1)``. It matches the length the sequence
+    assignment produces. Sequence *exports* MUST use this rather than the bp-range,
+    or deleted (skip) positions get padded with spurious ``?`` (which breaks CanDo
+    and other downstream tools). See ``backend/api/routes_sequences.py``.
+    """
+    if loop_skip_map is None:
+        loop_skip_map = _build_loop_skip_map(design)
+    return _strand_nt_with_skips(strand, loop_skip_map)
+
+
+# ── Scaffold sequence assignment ───────────────────────────────────────────────
+
+
+def _active_scaffold(design: Design) -> Strand | None:
+    """First non-reference scaffold strand, or None.
+
+    Reference geometry is excluded from sequence assignment, so the scaffold
+    that seeds staple complements must skip reference scaffolds.
+    """
+    for s in design.scaffolds():
+        if not s.is_reference:
+            return s
+    return None
+
+
+def _sequenced_scaffolds(design: Design) -> list[Strand]:
+    """Sequenced scaffolds that may supply complementary bases.
+
+    Reference geometry is excluded as an automatic-assignment *target*, but it
+    remains valid read-only pairing context for active strands designed against
+    it.  Prefer active scaffolds when coverage overlaps, then let reference
+    scaffolds fill positions not covered by an active scaffold.
+    """
+    scaffolds = [s for s in design.scaffolds() if s.sequence is not None]
+    return sorted(scaffolds, key=lambda s: s.is_reference)
+
+
+def _resolve_scaffold_strand(design: Design, strand_id: str | None) -> Strand:
+    """Return the scaffold strand to assign a sequence to.
+
+    If *strand_id* is given, find that strand and verify it is a scaffold.
+    Otherwise fall back to the first non-reference scaffold strand.
+    """
+    if strand_id is not None:
+        strand = design.find_strand(strand_id)
+        if strand is None:
+            raise ValueError(f"Strand {strand_id!r} not found in the design.")
+        if strand.strand_type != StrandType.SCAFFOLD:
+            raise ValueError(
+                f"Strand {strand_id!r} is not a scaffold strand "
+                f"(strand_type={strand.strand_type!r})."
+            )
+        if strand.is_reference:
+            raise ValueError(
+                f"Strand {strand_id!r} is reference geometry and cannot be "
+                f"assigned a sequence automatically."
+            )
+        return strand
+    scaffold = _active_scaffold(design)
+    if scaffold is None:
+        raise ValueError("No scaffold strand found in the design.")
+    return scaffold
+
+
+def _do_assign_sequence(
+    design: Design,
+    scaffold_strand: Strand,
+    chosen_seq: str,
+    *,
+    custom_scaffold_length: int | None = None,
+) -> tuple[Design, int, int]:
+    """Walk *scaffold_strand*'s domains 5' to 3' and assign bases from *chosen_seq*.
+
+    Excess positions (scaffold longer than sequence) are filled with 'N'.
+
+    Returns
+    -------
+    (updated_design, total_nt, padded_nt)
+    """
+    ls_map = _build_loop_skip_map(design)
+    seq_len = len(chosen_seq)
+    total_nt = _strand_nt_with_skips(scaffold_strand, ls_map)
+    padded_nt = max(0, total_nt - seq_len)
+
+    bases: list[str] = []
+    seq_idx = 0
+    for domain in scaffold_strand.domains:
+        for bp in domain_bp_range(domain):
+            delta = ls_map.get((domain.helix_id, bp, domain.direction), ls_map.get((domain.helix_id, bp), 0))
+            if delta <= -1:
+                continue  # skip -- no nucleotide emitted
+            n_copies = delta + 1  # 1 for normal, 2 for a loop (+1), etc.
+            for _ in range(n_copies):
+                bases.append(chosen_seq[seq_idx] if seq_idx < seq_len else "N")
+                seq_idx += 1
+
+    new_scaffold = scaffold_strand.model_copy(update={
+        "sequence": "".join(bases),
+        "custom_scaffold_length": custom_scaffold_length,
+    })
+    new_strands = [
+        new_scaffold if s.id == scaffold_strand.id else s for s in design.strands
+    ]
+    return design.model_copy(update={"strands": new_strands}), total_nt, padded_nt
+
+
+def assign_scaffold_sequence(
+    design: Design,
+    scaffold_name: str = "M13mp18",
+    strand_id: str | None = None,
+) -> tuple[Design, int, int]:
+    """Assign a preset scaffold sequence to a scaffold strand.
+
+    Bases are assigned consecutively 5' to 3' starting from the scaffold's
+    5' terminus (sequence[0] maps to the first base of the scaffold strand).
+
+    If the scaffold strand is longer than the chosen sequence, the excess
+    positions are filled with 'N' rather than raising an error.
+
+    Parameters
+    ----------
+    design:
+        Active design with a scaffold strand.
+    scaffold_name:
+        One of "M13mp18", "p7560", "p8064".
+    strand_id:
+        If given, target this specific scaffold strand instead of the first one.
+
+    Returns
+    -------
+    (updated_design, total_nt, padded_nt)
+        updated_design -- new Design with scaffold sequence applied.
+        total_nt       -- number of scaffold nucleotides in the design.
+        padded_nt      -- number of positions filled with 'N' (0 if scaffold fits).
+
+    Raises
+    ------
+    ValueError
+        If no scaffold strand is found or scaffold_name is unrecognised.
+    """
+    if scaffold_name not in _SCAFFOLD_BY_NAME:
+        known = ", ".join(_SCAFFOLD_BY_NAME)
+        raise ValueError(f"Unknown scaffold '{scaffold_name}'. Choose one of: {known}.")
+    scaffold = _resolve_scaffold_strand(design, strand_id)
+    chosen_seq = _SCAFFOLD_BY_NAME[scaffold_name]
+    return _do_assign_sequence(design, scaffold, chosen_seq)
+
+
+def assign_custom_scaffold_sequence(
+    design: Design,
+    raw_sequence: str,
+    strand_id: str | None = None,
+) -> tuple[Design, int, int]:
+    """Assign a user-supplied raw DNA sequence to a scaffold strand.
+
+    Parameters
+    ----------
+    design:
+        Active design with a scaffold strand.
+    raw_sequence:
+        Arbitrary DNA string.  Only A, T, G, C, N characters are accepted
+        (case-insensitive).  Whitespace is stripped.
+    strand_id:
+        If given, target this specific scaffold strand instead of the first one.
+
+    Returns
+    -------
+    (updated_design, total_nt, padded_nt)
+
+    Raises
+    ------
+    ValueError
+        On invalid characters, empty sequence, or missing scaffold strand.
+    """
+    cleaned = (
+        raw_sequence.strip()
+        .upper()
+        .replace(" ", "")
+        .replace("\n", "")
+        .replace("\r", "")
+    )
+    if not cleaned:
+        raise ValueError("Custom sequence is empty after stripping whitespace.")
+    bad = sorted({c for c in cleaned if c not in _VALID_BASES})
+    if bad:
+        raise ValueError(
+            f"Invalid characters in custom sequence: {bad!r}. "
+            "Only A, T, G, C, N are allowed."
+        )
+    scaffold = _resolve_scaffold_strand(design, strand_id)
+    return _do_assign_sequence(
+        design, scaffold, cleaned, custom_scaffold_length=len(cleaned),
+    )
+
+
+# ── Scaffold position lookup ───────────────────────────────────────────────────
+
+
+def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], list[str]]:
+    """Build a mapping from (helix_id, bp_index, direction_value) to list of base letters.
+
+    Traverses the scaffold strand 5' to 3' and records the base(s) at each position,
+    honouring loop/skip modifications:
+      - Skip (delta<=-1): position omitted from the map (0 nt).
+      - Normal (delta=0): one-element list.
+      - Loop (delta=+1): two-element list.
+    """
+    scaffolds = _sequenced_scaffolds(design)
+    if not scaffolds:
+        return {}
+
+    from backend.core.scaffold_sequence_cache import scaffold_base_entries
+
+    inputs = tuple((s.sequence or "", tuple(
+        (d.helix_id, d.direction.value, tuple(domain_bp_range(d))) for d in s.domains
+    )) for s in scaffolds)
+    marks = _build_loop_skip_map(design)
+    entries = scaffold_base_entries(inputs, tuple(marks.items()), tuple(marks.unpaired.items()))
+    # Callers may extend maps with native templates or mutate returned lists;
+    # neither may alter the cached scaffold authority.
+    return {key: list(bases) for key, bases in entries}
+
+
+def build_scaffold_index_map(design: Design) -> list[tuple[str, int, str]]:
+    """Return a list mapping scaffold sequence index -> (helix_id, bp_index, direction_value).
+
+    The returned list has length equal to the number of scaffold nucleotides
+    (accounting for loop copies) and is ordered 0..N-1 matching the scaffold
+    strand.sequence indexing used elsewhere.
+    """
+    scaffold = _active_scaffold(design)
+    if scaffold is None or scaffold.sequence is None:
+        return []
+
+    ls_map = _build_loop_skip_map(design)
+    index_map: list[tuple[str, int, str]] = []
+    for domain in scaffold.domains:
+        h = domain.helix_id
+        d_val = domain.direction.value
+        for bp in domain_bp_range(domain):
+            delta = ls_map.get((h, bp, domain.direction), ls_map.get((h, bp), 0))
+            if delta <= -1:
+                continue
+            n_copies = delta + 1
+            for _ in range(n_copies):
+                index_map.append((h, bp, d_val))
+    return index_map
+
+
+# ── Staple sequence assignment ─────────────────────────────────────────────────
+
+
+def _assemble_overhang_5to3(spec: object, domain_len: int) -> list[str]:
+    """Assemble an overhang's bases 5'→3', length == *domain_len*.
+
+    Walks the overhang's sub-domains (overrides → parent-sequence slice → 'N'),
+    then pads/trims to ``domain_len``. Shared by the overhang-domain branch and
+    the binder-domain reverse-complement branch in ``assign_staple_sequences``.
+    See LESSONS F3: an overhang's stored ``sequence`` can be shorter than the
+    backing domain — the missing 3' positions become 'N'.
+    """
+    parent_seq = (
+        spec.sequence.upper()
+        if spec is not None and getattr(spec, "sequence", None) is not None
+        else None
+    )
+    sub_doms = list(getattr(spec, "sub_domains", []) or []) if spec else []
+
+    def _slot(s: str, n: int) -> list[str]:
+        s = s.upper()
+        return list(s[:n]) if len(s) >= n else list(s) + ["N"] * (n - len(s))
+
+    if not sub_doms:
+        assembled = (
+            _slot(parent_seq, domain_len)
+            if parent_seq is not None
+            else ["N"] * domain_len
+        )
+        return assembled[:domain_len]
+
+    assembled: list[str] = []
+    for sd in sorted(sub_doms, key=lambda sd: sd.start_bp_offset):
+        if sd.sequence_override:
+            assembled.extend(_slot(sd.sequence_override, sd.length_bp))
+        elif parent_seq is not None:
+            window = parent_seq[sd.start_bp_offset : sd.start_bp_offset + sd.length_bp]
+            assembled.extend(_slot(window, sd.length_bp))
+        else:
+            assembled.extend(["N"] * sd.length_bp)
+    if len(assembled) >= domain_len:
+        return assembled[:domain_len]
+    return assembled + ["N"] * (domain_len - len(assembled))
+
+
+def build_overhang_bp_bases(design: Design) -> dict[str, dict[int, str]]:
+    """Map ``overhang_id -> {bp_index: overhang base}`` for every overhang domain.
+
+    A binder base at bp X is the Watson-Crick complement of the overhang base at
+    the same (helix, bp) — antiparallel pairing, identical to the scaffold
+    complement path but sourced from the overhang sequence.
+    """
+    overhang_map: dict[str, object] = {o.id: o for o in design.overhangs}
+    overhang_bp_bases: dict[str, dict[int, str]] = {}
+    for s in design.strands:
+        for d in s.domains:
+            if d.overhang_id is None:
+                continue
+            spec = overhang_map.get(d.overhang_id)
+            oh_len = abs(d.end_bp - d.start_bp) + 1
+            oh_bases = _assemble_overhang_5to3(spec, oh_len)
+            step = 1 if d.end_bp >= d.start_bp else -1
+            bp_map: dict[int, str] = {}
+            for i, base in enumerate(oh_bases):
+                bp_map[d.start_bp + i * step] = base
+            overhang_bp_bases[d.overhang_id] = bp_map
+    return overhang_bp_bases
+
+
+def strand_partner_bases(
+    design: Design,
+    strand: Strand,
+    *,
+    scaf_map: dict[tuple[str, int, str], list[str]] | None = None,
+    ls_map: dict[tuple[str, int], int] | None = None,
+    overhang_bp_bases: dict[str, dict[int, str]] | None = None,
+) -> list[str | None]:
+    """Per-nucleotide partner base for *strand*, 5'→3'.
+
+    Returns one entry per character of ``strand.sequence`` — i.e.
+    ``len(result) == strand_sequence_length(design, strand)``:
+
+    * **duplex domain** — the scaffold base at the antiparallel ``(helix_id, bp)``.
+      If the staple domain is FORWARD at (helix, bp) the scaffold must be REVERSE
+      there, and vice versa.  ``None`` where the scaffold does not cover it.
+    * **binder domain** (``binds_overhang_id``) — the overhang base at the same
+      ``(helix, bp)``; ``None`` where the overhang has no base there.
+    * **overhang domain** (``overhang_id``) — ``None`` throughout: an overhang tip
+      is single-stranded and has no partner.
+
+    This is the ONE implementation of the pairing walk.  ``assign_staple_sequences``
+    derives each base as ``complement_base(partner)`` from it, and the strand-sequence
+    editor shows the same partners above the input so the user can see mismatches.
+    The optional maps let a caller building many strands hoist the shared work.
+    """
+    if scaf_map is None:
+        scaf_map = build_scaffold_base_map(design)
+    if ls_map is None:
+        ls_map = _build_loop_skip_map(design)
+    if overhang_bp_bases is None:
+        overhang_bp_bases = build_overhang_bp_bases(design)
+
+    partners: list[str | None] = []
+    for domain in strand.domains:
+        # Overhang domains are single-stranded — no partner anywhere along them.
+        if domain.overhang_id is not None:
+            partners.extend([None] * _domain_seq_span(domain, ls_map))
+            continue
+
+        # OH-binder domain: partner is the overhang base at the same (helix, bp).
+        if domain.binds_overhang_id is not None:
+            bp_map = overhang_bp_bases.get(domain.binds_overhang_id, {})
+            step = 1 if domain.end_bp >= domain.start_bp else -1
+            for bp in range(domain.start_bp, domain.end_bp + step, step):
+                partners.append(bp_map.get(bp))
+            continue
+
+        h = domain.helix_id
+        # Antiparallel: staple FORWARD pairs with scaffold REVERSE, and vice versa
+        scaf_dir_val = (
+            Direction.REVERSE.value
+            if domain.direction == Direction.FORWARD
+            else Direction.FORWARD.value
+        )
+        for bp in domain_bp_range(domain):
+            delta = ls_map.get((h, bp, domain.direction), ls_map.get((h, bp), 0))
+            if delta <= -1:
+                continue  # skip -- no nucleotide in the staple at this position
+            scaf_bases = scaf_map.get((h, bp, scaf_dir_val))
+            n_copies = delta + 1  # 1 for normal, 2 for loop
+            unpaired = getattr(ls_map, "unpaired", {}).get((h, bp, domain.direction), 0)
+            paired_count = n_copies - unpaired
+            partners.extend((list(scaf_bases or []) + [None] * paired_count)[:paired_count])
+            partners.extend([None] * unpaired)
+
+    return partners
+
+
+def assign_staple_sequences(design: Design, *, strand_ids: set[str] | None = None) -> Design:
+    """Assign complementary sequences to all staple strands.
+
+    Each staple base is the Watson-Crick complement of the scaffold base at
+    the antiparallel position on the same helix.  If the staple domain is
+    FORWARD at (helix_id, bp), the scaffold must be REVERSE at that (helix_id, bp)
+    and vice versa.  Unmatched positions receive 'N'.
+
+    Parameters
+    ----------
+    design:
+        Active design.  Scaffold must have ``sequence`` assigned first via
+        :func:`assign_scaffold_sequence` or :func:`assign_custom_scaffold_sequence`.
+
+    Returns
+    -------
+    Updated Design with ``sequence`` fields on all non-scaffold strands.
+
+    Raises
+    ------
+    ValueError
+        If no scaffold strand is found or it has no sequence.
+    """
+    scaffolds = _sequenced_scaffolds(design)
+    if not scaffolds:
+        if not design.scaffolds():
+            raise ValueError("No scaffold strand found in the design.")
+        raise ValueError(
+            "Scaffold has no sequence. Call assign_scaffold_sequence() first."
+        )
+
+    scaf_map = build_scaffold_base_map(design)
+    ls_map = _build_loop_skip_map(design)
+
+    # Build lookup: overhang_id -> OverhangSpec (for user-specified sequences)
+    overhang_map: dict[str, object] = {o.id: o for o in design.overhangs}
+    overhang_bp_bases = build_overhang_bp_bases(design)
+
+    native_ids = {h.id for h in design.helices if h.native_residues}
+    if native_ids:
+        # Imported forward strands are sequence templates for partners drawn on
+        # their native carriers, including after either strand is ligated.
+        for source in design.strands:
+            if source.is_reference:
+                continue
+            offset = 0
+            for domain in source.domains:
+                span = _domain_seq_span(domain, ls_map)
+                if domain.helix_id in native_ids and domain.direction == Direction.FORWARD:
+                    seq = iter((source.sequence or "")[offset:offset + span])
+                    for bp in domain_bp_range(domain):
+                        count = 1 if domain.overhang_id else max(0, 1 + ls_map.get((domain.helix_id, bp, domain.direction), ls_map.get((domain.helix_id, bp), 0)))
+                        scaf_map.setdefault((domain.helix_id, bp, Direction.FORWARD.value),
+                                            [next(seq, "N") for _ in range(count)])
+                offset += span
+    new_strands: list[Strand] = []
+    for strand in design.strands:
+        if strand_ids is not None and strand.id not in strand_ids:
+            new_strands.append(strand)
+            continue
+        if strand.is_scaffold:
+            new_strands.append(strand)
+            continue
+        if strand.is_reference:
+            # Reference geometry: leave its (manually-assigned) sequence verbatim.
+            new_strands.append(strand)
+            continue
+
+        partners = strand_partner_bases(
+            design,
+            strand,
+            scaf_map=scaf_map,
+            ls_map=ls_map,
+            overhang_bp_bases=overhang_bp_bases,
+        )
+
+        bases: list[str] = []
+        idx = 0
+        for domain in strand.domains:
+            span = _domain_seq_span(domain, ls_map)
+
+            # Overhang domains are single-stranded — assemble from sub-domain
+            # overrides where present, falling back to the parent OverhangSpec
+            # sequence (or 'N' if neither is set). Sub-domains tile the
+            # overhang gap-lessly 5'→3'; a freshly-created OverhangSpec is
+            # guaranteed to have at least one whole-overhang sub-domain
+            # (model validator backfill). partners is None across this span.
+            if domain.overhang_id is not None:
+                spec = overhang_map.get(domain.overhang_id)
+                bases.extend(_assemble_overhang_5to3(spec, span))
+                idx += span
+                continue
+
+            # Deposited G4 bases remain authored sequence when connected to a
+            # sequenced origami; scaffold reassignment must not erase the motif.
+            if domain.helix_id in native_ids and domain.direction == Direction.FORWARD:
+                bases.extend((strand.sequence or "")[idx:idx + span].ljust(span, "N"))
+                idx += span
+                continue
+
+            # Duplex + binder domains: base = complement of the partner base.
+            for p in partners[idx : idx + span]:
+                bases.append(complement_base(p) if p is not None else "N")
+            idx += span
+
+        # Manual loop sequence is independent of scaffold complement assignment.
+        if strand.loops:
+            from backend.core.strand_loops import strand_entries
+            for offset, entry in enumerate(strand_entries(design, strand)):
+                if entry[3] and strand.sequence and offset < len(strand.sequence):
+                    bases[offset] = strand.sequence[offset]
+        new_strands.append(strand.model_copy(update={"sequence": "".join(bases)}))
+
+    return design.model_copy(update={"strands": new_strands})
+
+
+def normalize_sequence_input(raw: str) -> str:
+    """Clean a user-typed DNA sequence: strip all whitespace, uppercase.
+
+    Raises ``ValueError`` naming the offending characters if anything outside
+    A/T/G/C/N survives.  Shared by every hand-entry path so they all accept the
+    same thing (a pasted sequence with line breaks, spaces or lowercase is fine).
+    """
+    cleaned = "".join(raw.split()).upper()
+    bad = sorted({c for c in cleaned if c not in _VALID_BASES})
+    if bad:
+        raise ValueError(
+            f"Invalid characters in sequence: {', '.join(bad)}. "
+            "Only A, T, G, C, N are allowed."
+        )
+    return cleaned
+
+
+def strand_sequence_segments(design: "Design", strand: Strand) -> list[dict]:
+    """Per-domain spans of ``strand.sequence``, for a sequence editor's UI.
+
+    Each entry is ``{start, length, kind, overhang_id, editable}`` where ``kind``
+    is ``'overhang'`` / ``'binder'`` / ``'duplex'``.  Offsets index directly into
+    ``strand.sequence`` (they use the same :func:`_domain_seq_span` the derivation
+    does), so a caller can slice an overhang's bases straight out of a submitted
+    sequence.
+
+    ``editable`` is False for an overhang whose ``OverhangSpec`` carries sub-domain
+    ``sequence_override``s — a whole-overhang write is rejected in that case
+    (the sub-domains own those bases; edit them in the Domain Designer), mirroring
+    the 409 guard in ``crud._build_overhang_patch``.
+    """
+    ls_map = _build_loop_skip_map(design)
+    spec_by_id = {o.id: o for o in design.overhangs}
+    out: list[dict] = []
+    start = 0
+    for d in strand.domains:
+        span = _domain_seq_span(d, ls_map)
+        if d.overhang_id is not None:
+            spec = spec_by_id.get(d.overhang_id)
+            has_override = any(
+                sd.sequence_override
+                for sd in (getattr(spec, "sub_domains", None) or [])
+            )
+            kind, oid, editable = "overhang", d.overhang_id, not has_override
+        elif d.binds_overhang_id is not None:
+            kind, oid, editable = "binder", None, True
+        else:
+            kind, oid, editable = "duplex", None, True
+        out.append(
+            {
+                "start": start,
+                "length": span,
+                "kind": kind,
+                "overhang_id": oid,
+                "editable": editable,
+            }
+        )
+        start += span
+    return out
+
+
+def overhang_dependent_strand_ids(
+    design: Design,
+    overhang_ids,
+    *,
+    extra_helix_ids=(),
+) -> set[str]:
+    """Every strand whose bases are derived from one of *overhang_ids*.
+
+    That is: the strand carrying the overhang tip itself (``Domain.overhang_id``)
+    and any strand that pairs against it (``Domain.binds_overhang_id`` — a linker
+    complement or a standalone OH binder).  ``extra_helix_ids`` additionally pulls
+    in every strand with a domain on those helices, used to catch the strands
+    ``generate_linker_topology`` puts on the virtual ``__lnk__<conn_id>`` bridge
+    helix.
+
+    This is the affected set for the implicit auto-assign hooks — passing it to
+    :func:`reassign_strands` re-derives exactly the strands the operation touched,
+    instead of rewriting every staple in the design.
+    """
+    oh = {o for o in overhang_ids if o}
+    helices = {h for h in extra_helix_ids if h}
+    out: set[str] = set()
+    for s in design.strands:
+        for d in s.domains:
+            if (
+                d.overhang_id in oh
+                or d.binds_overhang_id in oh
+                or d.helix_id in helices
+            ):
+                out.add(s.id)
+                break
+    return out
+
+
+def reassign_strands(design: Design, strand_ids: set[str] | list[str]) -> Design:
+    """Re-derive sequences for ONLY *strand_ids*, leaving every other strand alone.
+
+    ``assign_staple_sequences`` rewrites the sequence on every non-scaffold strand
+    in the design.  That is right for the explicit "Assign staple sequences" /
+    "Full autostaple" commands, but wrong for the implicit auto-assign hooks that
+    fire when an overhang is patched or a connection is created/applied — those
+    only ever change a handful of strands, and a whole-design rewrite silently
+    destroys sequences the user typed by hand elsewhere.
+
+    Retains global scaffold/overhang context but derives only requested strands.  No-op when the scaffold carries no
+    sequence, or on any derivation error — same tolerance as
+    :func:`reassign_if_sequenced`.
+    """
+    wanted = set(strand_ids)
+    if not wanted:
+        return design
+    if not _sequenced_scaffolds(design):
+        return design
+    try:
+        re_derived = assign_staple_sequences(design, strand_ids=wanted)
+    except Exception:
+        return design
+
+    new_seqs = {s.id: s.sequence for s in re_derived.strands if s.id in wanted}
+    if not new_seqs:
+        return design
+    new_strands = [
+        s.model_copy(update={"sequence": new_seqs[s.id]}) if s.id in new_seqs else s
+        for s in design.strands
+    ]
+    return design.model_copy(update={"strands": new_strands})
+
+
+def reassign_if_sequenced(design: Design) -> Design:
+    """Re-run :func:`assign_staple_sequences` IFF the scaffold already carries a
+    sequence — so staples, overhangs, linker complements and overhang binders
+    added/edited by a connection or sequence op propagate to **real bases**
+    automatically (no manual "Assign Staple Sequences" step before simulation).
+
+    No-op (returns ``design`` unchanged) when the scaffold is unsequenced — there
+    is nothing to pair staples against yet — or when assignment raises. This is
+    the auto-assign-on-connect/set hook: a complement domain
+    (``binds_overhang_id``) only becomes the reverse-complement of its overhang
+    once this runs, and the oxDNA / atomistic exporters read ``strand.sequence``.
+    """
+    if not _sequenced_scaffolds(design):
+        return design
+    try:
+        return assign_staple_sequences(design)
+    except Exception:
+        return design
+
+
+# ── Periodic-cell consensus sequence assignment ────────────────────────────────
+
+
+def assign_consensus_sequence(
+    full_design: Design,
+    sliced_design: Design,
+    bp_start: int,
+    period: int,
+) -> tuple[Design, dict[tuple[str, int, str], str]]:
+    """Assign sequences to a period-sliced design from the full design's sequences.
+
+    For each (helix_id, bp_offset, direction) in the sliced window, the base
+    is chosen by majority vote across all periods in the full design:
+
+        bp_offset = (bp_index - bp_start) % period
+
+    Because every two complementary strands at a base-pair position must be
+    Watson-Crick partners, the FORWARD base is chosen by majority vote and the
+    REVERSE base is always its complement.  This guarantees stable A:T and G:C
+    pairs regardless of what the independent REVERSE vote would have returned.
+
+    Positions covered by zero sequenced nucleotides in the full design fall back
+    to 'A' (FORWARD) / 'T' (REVERSE).
+
+    Parameters
+    ----------
+    full_design:
+        Complete design with sequence fields assigned on all strands.
+    sliced_design:
+        Period-sliced design (sequence=None on all strands, as produced by
+        _slice_to_bp_range).
+    bp_start:
+        Global bp index of the start of the sliced window (must satisfy
+        bp_start % period == 0 for the offset arithmetic to work).
+    period:
+        Crossover-repeat period in bp (typically 21 for honeycomb lattice).
+
+    Returns
+    -------
+    (updated_sliced_design, consensus_map)
+        updated_sliced_design — sliced_design with sequence fields assigned.
+        consensus_map         — {(helix_id, bp_offset, dir_val): base} for inspection.
+    """
+    ls_map = _build_loop_skip_map(full_design)
+    fwd_val = Direction.FORWARD.value
+    rev_val = Direction.REVERSE.value
+
+    # Step 1: tally votes from all sequenced strands in the full design.
+    # Key: (helix_id, bp_offset, dir_val)  where bp_offset = bp % period.
+    votes: dict[tuple[str, int, str], Counter] = defaultdict(Counter)
+
+    for strand in full_design.strands:
+        if not strand.sequence:
+            continue
+        seq_iter = iter(strand.sequence)
+        for domain in strand.domains:
+            h = domain.helix_id
+            d_val = domain.direction.value
+            for bp in domain_bp_range(domain):
+                delta = ls_map.get((h, bp, domain.direction), ls_map.get((h, bp), 0))
+                if delta <= -1:
+                    continue
+                n_copies = delta + 1
+                for _ in range(n_copies):
+                    base = next(seq_iter, "N")
+                    if base not in ("N", "n"):
+                        offset = bp % period
+                        votes[(h, offset, d_val)][base.upper()] += 1
+
+    # Step 2: build consensus.
+    # FORWARD base: majority vote; REVERSE base: Watson-Crick complement.
+    consensus: dict[tuple[str, int, str], str] = {}
+    covered_positions = {(h, off) for h, off, _ in votes}
+    for h, offset in covered_positions:
+        fwd_counter = votes.get((h, offset, fwd_val), Counter())
+        fwd_base = fwd_counter.most_common(1)[0][0] if fwd_counter else "A"
+        rev_base = _COMPLEMENT.get(fwd_base, "T")
+        consensus[(h, offset, fwd_val)] = fwd_base
+        consensus[(h, offset, rev_val)] = rev_base
+
+    # Step 3: assign bases to each strand in the sliced design.
+    ls_map_sliced = _build_loop_skip_map(sliced_design)
+    new_strands: list[Strand] = []
+
+    for strand in sliced_design.strands:
+        bases: list[str] = []
+        for domain in strand.domains:
+            h = domain.helix_id
+            d_val = domain.direction.value
+            for bp in domain_bp_range(domain):
+                delta = ls_map_sliced.get((h, bp), 0)
+                if delta <= -1:
+                    continue
+                n_copies = delta + 1
+                offset = (bp - bp_start) % period
+                base = consensus.get(
+                    (h, offset, d_val),
+                    "A" if d_val == fwd_val else "T",
+                )
+                bases.extend([base] * n_copies)
+        new_strands.append(strand.model_copy(update={"sequence": "".join(bases)}))
+
+    updated = sliced_design.model_copy(update={"strands": new_strands})
+    return updated, consensus

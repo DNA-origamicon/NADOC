@@ -273,7 +273,7 @@ export function initOccupancyOverlay({
       updateExtraBaseInstances(xo.beadsMesh, xo.slabsMesh, ad.beadStartIdx, ad.beadCount,
                                a, ctrlPt, b, ad.avgAx,
                                ad.simReversed, ad.localFrameReversed,
-                               ad.savedTransforms, ad.sequence)
+                               ad.savedTransforms, ad.sequence, ad.productGeometry, ad.cornerGeometry)
     }
     xo.beadsMesh.instanceMatrix.needsUpdate = true
     xo.slabsMesh.instanceMatrix.needsUpdate = true

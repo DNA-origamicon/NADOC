@@ -426,18 +426,21 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     },
     applyOxdnaCoreFrame(keys, frame) {
       const stride = keys.length ? frame.length / keys.length : 0
-      if (stride !== 9) return
-      const particles = store.getState().currentDesign?.nanoparticles || []
+      if (![6, 9, 12].includes(stride)) return
+      const particles = (externalView ?? store.getState()).currentDesign?.nanoparticles || []
       const poses = []
       for (let i = 0; i < keys.length; i++) {
         if (keys[i][0] !== '__gold__') continue
         const particle = particles[keys[i][1]]
         if (!particle) continue
         const j = i * stride
-        const a1 = new THREE.Vector3(frame[j+3], frame[j+4], frame[j+5])
-        const a3 = new THREE.Vector3(frame[j+6], frame[j+7], frame[j+8])
-        const a2 = new THREE.Vector3().crossVectors(a3, a1)
-        const pose = new THREE.Matrix4().makeBasis(a1, a2, a3)
+        // Compact frames carry centers but not a complete core orientation.
+        let pose = poseMatrix(particle).clone()
+        if (stride === 9) {
+          const a1 = new THREE.Vector3(frame[j+3], frame[j+4], frame[j+5])
+          const a3 = new THREE.Vector3(frame[j+6], frame[j+7], frame[j+8])
+          pose = new THREE.Matrix4().makeBasis(a1, new THREE.Vector3().crossVectors(a3, a1), a3)
+        }
         pose.setPosition(frame[j], frame[j+1], frame[j+2])
         poses.push({ id: particle.id, pose: pose.transpose().toArray() })
       }
@@ -445,7 +448,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     },
     clearOxdnaPoses() {
       oxdnaPoses = new Map()
-      for (const p of store.getState().currentDesign?.nanoparticles || []) {
+      for (const p of (externalView ?? store.getState()).currentDesign?.nanoparticles || []) {
         const mesh = meshes.get(p.id)
         if (!mesh) continue
         mesh.matrix.copy(poseMatrix(p)); mesh.matrixAutoUpdate = false
@@ -458,12 +461,13 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
       refreshAppearance()
     },
     getQuenchingParticles() {
-      return (store.getState().currentDesign?.nanoparticles ?? []).map(particle => ({
+      return ((externalView ?? store.getState()).currentDesign?.nanoparticles ?? []).map(particle => ({
         ...particle,
         // Live gizmo transforms take precedence over the saved pose. Visibility
         // is a view setting, so hidden gold remains physically present.
         pos: meshes.has(particle.id) ? meshes.get(particle.id).getWorldPosition(new THREE.Vector3())
-          : root.localToWorld(new THREE.Vector3().setFromMatrixPosition(poseMatrix(particle))),
+          : root.localToWorld(new THREE.Vector3().setFromMatrixPosition(oxdnaPoses.has(particle.id)
+            ? new THREE.Matrix4().fromArray(oxdnaPoses.get(particle.id)).transpose() : poseMatrix(particle))),
       }))
     },
     setGoldQuenching(results) {

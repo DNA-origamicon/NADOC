@@ -10,6 +10,7 @@ import { editExtrusionFeature, isNativeExtrusionFeature } from './extrusion_feat
 import { createFeatureHistoryFeedback, historyFailureStatus } from '../features/feature_history_feedback.js'
 import { createRoutingEditAction, ROUTING_HISTORY_EDITOR_ENABLED } from './routing_feature_editor.js'
 import { isNativeSweepFeature, SWEEP_HISTORY_EDITOR_ENABLED } from '../app/sweep_history_editor.js'
+import { isNativeCornerFeature } from './corner_parameters.js'
 import { isNativeTransformFeature, TRANSFORM_HISTORY_EDITOR_ENABLED } from '../app/transform_history_editor.js'
 import { connectionFeatureFields, createConnectionEditAction, CONNECTION_HISTORY_EDITOR_ENABLED } from './connection_feature_editor.js'
 /**
@@ -64,7 +65,7 @@ const REPLAYABLE_SUBTYPES = new Set([
   'joint-place', 'joint-update', 'joint-delete',
 ])
 
-export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, onEditExtrude, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager, showSeekPreview, sweepHistoryEnabled = SWEEP_HISTORY_EDITOR_ENABLED, transformHistoryEnabled = TRANSFORM_HISTORY_EDITOR_ENABLED, routingHistoryEnabled = ROUTING_HISTORY_EDITOR_ENABLED }) {
+export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, onEditCorner, onEditExtrude, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager, showSeekPreview, sweepHistoryEnabled = SWEEP_HISTORY_EDITOR_ENABLED, transformHistoryEnabled = TRANSFORM_HISTORY_EDITOR_ENABLED, routingHistoryEnabled = ROUTING_HISTORY_EDITOR_ENABLED }) {
   const editConnection = createConnectionEditAction({ api, store })
   const editAsset = createAssetEditAction({ api, store })
   const historyMenu = createFeatureLogContextMenu({ store, api })
@@ -1498,6 +1499,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         const isPattern = isPatternFeature(entry.op_kind)
         const nativeExtrusion = isNativeExtrusionFeature(entry)
         const nativeSweep = sweepHistoryEnabled && isNativeSweepFeature(entry)
+        const nativeCorner = isNativeCornerFeature(entry)
         const nativeTransform = transformHistoryEnabled && isNativeTransformFeature(entry)
         const nativeAsset = isNativeAssetFeature(entry)
         const nativeConnection = CONNECTION_HISTORY_EDITOR_ENABLED && connectionFeatureFields(entry).length > 0
@@ -1507,15 +1509,15 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         const isLinkerAdd = entry.op_kind === 'linker-add'
         const isNanoparticle = entry.op_kind === 'nanoparticle-create'
         const isGenerated = entry.params?._generator?.version === 1
-        const isEditable = (isGenerated || isLinkerAdd || isNanoparticle || isPattern || nativeExtrusion || nativeSweep || nativeTransform || nativeConnection || nativeAsset)
-          && (!isEvicted || ownedPattern || nativeExtrusion || nativeSweep || nativeTransform || nativeConnection || nativeAsset)
+        const isEditable = (isGenerated || isLinkerAdd || isNanoparticle || isPattern || nativeExtrusion || nativeSweep || nativeCorner || nativeTransform || nativeConnection || nativeAsset)
+          && (!isEvicted || ownedPattern || nativeExtrusion || nativeSweep || nativeCorner || nativeTransform || nativeConnection || nativeAsset)
         const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
         // Linker and nanoparticle editors change the current object; they do
         // not replay the original creation snapshot. Later operations are fine.
         const particle = isNanoparticle
           ? store.getState().currentDesign?.nanoparticles?.find(p => p.id === entry.params?.nanoparticle_id)
           : null
-        const editAllowed = isEditable && cursorAllowsEdit && (nativeExtrusion || nativeSweep || nativeTransform || nativeConnection || nativeAsset ? true : isGenerated ? canReplayGenerated(log, i) : isNanoparticle ? !!particle : (isLinkerAdd || isPattern || entry.op_kind === 'sweep' || !hasLaterSnapshot))
+        const editAllowed = isEditable && cursorAllowsEdit && (nativeExtrusion || nativeSweep || nativeCorner || nativeTransform || nativeConnection || nativeAsset ? true : isGenerated ? canReplayGenerated(log, i) : isNanoparticle ? !!particle : (isLinkerAdd || isPattern || entry.op_kind === 'sweep' || !hasLaterSnapshot))
 
         let editBtn = null
         if (isEditable) {
@@ -1526,10 +1528,10 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 ? `Open Overhangs Manager for this linker`
                 : isNanoparticle
                   ? `Edit scene diameter (currently ${particle.diameter_nm} nm)`
-                  : isPattern || nativeExtrusion || nativeTransform || nativeConnection || nativeAsset ? `Edit ${entry.label} parameters`
+                  : isPattern || nativeExtrusion || nativeCorner || nativeTransform || nativeConnection || nativeAsset ? `Edit ${entry.label} parameters`
                   : entry.op_kind === 'sweep' ? `Edit sweep path (${entry.params?.points_nm?.length ?? 0} points)`
                   : `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`)
-            : nativeExtrusion || nativeSweep || nativeTransform || nativeConnection || nativeAsset ? 'Move the history cursor to this feature or later to edit it.'
+            : nativeExtrusion || nativeSweep || nativeCorner || nativeTransform || nativeConnection || nativeAsset ? 'Move the history cursor to this feature or later to edit it.'
               : isNanoparticle ? 'Cannot edit: this nanoparticle has been deleted.'
               : 'Cannot edit: a later snapshot exists. Revert to this point first.'
           editBtn.disabled = !editAllowed
@@ -1610,6 +1612,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 return
               }
               if (nativeTransform) { onEditFeature?.(entry, i); return }
+              if (nativeCorner) { await onEditCorner?.(entry, i); return }
               if (entry.op_kind === 'sweep') {
                 const result = (e.detail?.nativeVR === true ? onEditSweep?.(entry, i, { nativeVR: true }) : onEditSweep?.(entry, i))
                 if (e.detail?.nativeVR) e.detail.completion = result

@@ -45,3 +45,24 @@ export function previewRuns(indices) {
   }
   return runs
 }
+
+/** Match the server NTRJ preview layout (backbone + a1); never retain a page. */
+export function loadedPreviewFrames(frames, indices, keyCount) {
+  const result = new Map()
+  if (!keyCount) return result
+  for (const index of indices) {
+    const frame = frames[index]
+    const stride = frame?.length / keyCount
+    if (stride === 6) result.set(index, Float32Array.from(frame))
+    else if (stride === 9) {
+      // The full oxDNA transport has the same first six values, then a3.
+      // Exact frames retain all nine; only the existing coarse preview uses six.
+      const compact = new Float32Array(keyCount*6)
+      for (let row=0; row<keyCount; row++) {
+        for (let axis=0; axis<6; axis++) compact[row*6+axis] = frame[row*9+axis]
+      }
+      result.set(index,compact)
+    }
+  }
+  return result
+}

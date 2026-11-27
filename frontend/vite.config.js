@@ -12,6 +12,9 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const API_PORT = process.env.VITE_API_PORT || '8000'
 
 export default {
+  // Trace mode is lazy-loaded; discovering this dependency after activation would
+  // otherwise make Vite reload the editor and discard the in-progress view.
+  optimizeDeps: { include: ['three-gpu-pathtracer', './trace_webgpu/index.js'], exclude: ['three-mesh-bvh/src/workers/GenerateMeshBVHWorker.js'] },
   plugins: [viewerTestPlugin(), internetSharePlugin({ autoStart: process.env.NADOC_SHARE_AUTOSTART !== '0' })],
   define: { __NADOC_BUILD_INFO__: JSON.stringify(frontendBuildInfo(__dirname)) },
   server: {

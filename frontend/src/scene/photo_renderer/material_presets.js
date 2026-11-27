@@ -54,6 +54,8 @@ export const PRESETS = {
   },
 
   surface: {
+    glossy: { roughness: 0.2, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.1 },
+    metallic: { roughness: 0.3, metalness: 1, clearcoat: 0 },
     flat: { ...FLAT },
     gummy: {
       roughness: 0.55, metalness: 0.0,
@@ -99,7 +101,7 @@ export const PRESETS = {
 export const PRESET_LABELS = {
   full:      { flat: 'Flat (figure)', matte: 'Matte', glossy: 'Glossy', metallic: 'Metallic' },
   cylinders: { flat: 'Flat (figure)', matte: 'Matte', glossy: 'Glossy', metallic: 'Metallic' },
-  surface:   { flat: 'Flat (figure)', gummy: 'Gummy (default)', wax: 'Wax (SSS)', skin: 'Skin (SSS)', matte: 'Matte', glass: 'Glass' },
+  surface:   { glossy: 'Glossy', metallic: 'Metallic', flat: 'Flat (figure)', gummy: 'Gummy (default)', wax: 'Wax (SSS)', skin: 'Skin (SSS)', matte: 'Matte', glass: 'Glass' },
   atomistic: { 'cpk-flat': 'CPK Flat (figure)', 'cpk-matte': 'CPK Matte', 'cpk-glossy': 'CPK Glossy', 'cpk-metallic': 'CPK Metallic' },
 }
 

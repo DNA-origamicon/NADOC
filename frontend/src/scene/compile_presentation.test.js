@@ -5,7 +5,10 @@ vi.mock('./encode_webm.js', () => ({ encodeWebM: async opts => {
   await opts.renderFrame(0); await opts.renderFrame(opts.totalDur / 2)
   return new Blob(['video'], { type: 'video/webm' })
 } }))
-vi.mock('./export_video.js', () => ({ editorVideoFrame: () => async t => { encoded.times.push(t) } }))
+vi.mock('./export_video.js', () => ({
+  editorVideoFrame: () => async t => { encoded.times.push(t) },
+  photoVideoFrame: ({ session }) => async t => { session.renderFrameToCanvas(t) },
+}))
 vi.mock('../viewer/placement_scene_guard.js', () => ({ assertPlacementExportSafe: () => {} }))
 import { compilePresentation } from './compile_presentation.js'
 function setup() {
@@ -48,4 +51,26 @@ it('renders only the selected clip, retaining preceding scene context but exclud
   expect(encoded.times).toEqual([2, 3.5, 5])
   expect(onPrepared.mock.calls[0][0]).toMatchObject({ clipKeyframeIds: ['b'], ranges: [{ start: 2, end: 5 }] })
   vi.restoreAllMocks()
+})
+
+it('uses the active photo session for clips and endpoints and disposes it on success or failure', async () => {
+  for (const fail of [false, true]) {
+    const options = setup(), onPrepared = vi.fn()
+    encoded.fail = fail
+    const session = { renderFrameToCanvas: vi.fn(), dispose: vi.fn() }
+    const photoRenderer = { isActive: () => true, beginFrameSession: vi.fn(() => session), getSettings: () => ({ exposure: 1.2 }) }
+    options.player.setLockFov = vi.fn()
+    if (fail) await expect(compilePresentation({ ...options, photoRenderer, onPrepared })).rejects.toThrow('encoder failed')
+    else {
+      await compilePresentation({ ...options, photoRenderer, onPrepared })
+      expect(session.renderFrameToCanvas.mock.calls.map(c => c[0])).toEqual([0, 1, 2, 2, 3.5, 5])
+      expect(encoded.times).toEqual([])
+      expect(onPrepared.mock.calls[0][0].appearance).toEqual({ exposure: 1.2 })
+    }
+    expect(photoRenderer.beginFrameSession).toHaveBeenCalledWith(1920, 1080, { followMotion: true })
+    expect(options.renderer.setSize).toHaveBeenCalledTimes(1) // restore only; preserve preview scale during photo capture
+    expect(session.dispose).toHaveBeenCalledOnce()
+    expect(options.player.setLockFov).toHaveBeenLastCalledWith(false)
+    vi.restoreAllMocks()
+  }
 })
