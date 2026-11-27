@@ -40,6 +40,8 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 - **[reference_efield_crossval_fixture](reference_efield_crossval_fixture.md)** — `workspace/6hb_e_test.nadoc`.
 - **[Focused validation](project_test_parallelization.md)** — default request → changed behavior/consumers → explicit backend tests or frontend related tests → relevant app check → report. `test-smart SOURCE…` and `test-frontend TEST_FILE…` are focused; broad sweeps are separate. Related slow checks need no session.
 
+- [MagicDNA interchange](project_magicdna_interchange.md) — local MagicDNA 2 source, MATLAB setup, basic 6HB/3×6 routing bridge and portable audited examples.
+
 ## Session loops (root files; read handoff first)
 
 | Loop | Files | Slash |

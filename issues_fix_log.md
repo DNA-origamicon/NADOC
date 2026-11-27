@@ -3166,3 +3166,43 @@ assertion failed (missing captured lattice_type). Boot, real-design render,
 assembly exit and Close Session passed. Temporary images/traces/logs were
 removed after review; no new files remain in the inventoried workspace test,
 project or session roots. Unrelated worktree changes were preserved.
+
+## MAGICDNA-SCAFFOLD-POINTER-20261126 — [x] Native source bridge fixes
+
+Reproduced malformed native scaffold pointers in both lattice compilers; moved
+`Z0` update after writing the crossover entry, with exact-anchor source patching.
+Windows MATLAB R2020a native parser walks and independently compiled/exported
+JSON now match the original directed graphs for 6HB and square 3×6. Restored the
+package's missing launch example and verified MagicDNA 2 GUI construction.
+No NADOC geometry constants changed; session `main.js` delta: 0. CLI, provenance
+contract and source-package identity are documented in `docs/magicdna_interchange.md`.
+
+## MAGICDNA-FREEFORM-BATCH-20261126 — Native batch boundaries and loader state
+
+The official free-form source stopped for Sketch/slicing/ssDNA/staple-clearance
+modal input during unattended construction. Added explicit batch inputs that
+invoke the existing GUI completion callbacks, plus a filename argument to native
+`LoadT`. Reproducible exact-anchor changes are in
+`tools/magicdna/prepare_freeform.py`; geometry and routing algorithms are unchanged.
+
+Two native state/I/O defects surfaced: ssDNA selection used `gcf` instead of its
+own dialog (reading a struct where slider offsets were expected), and the JSON
+exporter assumed an existing caDNAno color table was populated. Anchored dialog
+selection/close to its owner and extended the existing cosmetic color fallback.
+Native `loadobj` also unconditionally replaced saved `Tol=40` with 15, affecting
+future connection searches. Removed that legacy override so loading preserves
+serialized tolerance. Before-fix native reopen evidence is retained under
+`.development-artifacts/magicdna-freeform/loop02/curved_6hb/reopen/`.
+
+Native `figure(f)` calls also override the default hidden-figure setting and
+allowed desktop keyboard input to open an unrelated estimate-length dialog during
+replay. The batch graphics helper enforces hidden figures and empty keyboard
+callbacks through property listeners; interactive launches retain their normal
+behavior. The runner has a per-process timeout and scoped Windows process-tree
+cleanup. The interrupted replay was stopped by its recorded PID, without stopping
+other MATLAB sessions. See `docs/magicdna_headless.md` for scope and validation.
+
+Experimental checkpoint: user stopped work due to ongoing interference with normal
+PC operations. Hidden graphics is not accepted as resolved desktop isolation.
+Curved 6HB build/export/reopen passed including preserved tolerance; complete
+independent replay and curved 3×6 remain unverified. No further native runs.

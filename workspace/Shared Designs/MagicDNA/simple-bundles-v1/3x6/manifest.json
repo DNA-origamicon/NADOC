@@ -1,0 +1,14 @@
+{
+  "schema": "nadoc-magicdna-simple-bundle-v1",
+  "lattice": "SQUARE",
+  "routing": "routing.json",
+  "source": "source.nadoc",
+  "source_sha256": "c6bdfb3db2d9c6e01eb05e2d893067c95341674f0bc0f2104b864ccea2d573eb",
+  "helices": 18,
+  "scaffolds": 1,
+  "staples": 41,
+  "nucleotides": 4032,
+  "routing_sha256": "cf141ab904d2526eeac98de3af28bb670410966a978ff61594a3ece10dc59ecf",
+  "geometry": "Routing-only interchange; each editor uses its native geometric convention",
+  "sequence_policy": "Sequences and upstream construction are preserved in source.nadoc"
+}

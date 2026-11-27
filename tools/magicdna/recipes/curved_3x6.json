@@ -1,0 +1,32 @@
+{
+  "schema": "magicdna-freeform-test-v1",
+  "lattice": "SQUARE",
+  "helix_count": 18,
+  "seed": 731,
+  "points_nm": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      30
+    ],
+    [
+      8,
+      0,
+      60
+    ],
+    [
+      24,
+      0,
+      86
+    ]
+  ],
+  "segment_length_bp": 90,
+  "accept_native_slicing": true,
+  "accept_native_ss_defaults": true,
+  "staple_clearance_bp": 6
+}
