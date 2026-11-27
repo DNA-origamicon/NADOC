@@ -52,6 +52,14 @@ SCAFFOLD_LIBRARY: list[tuple[str, int, str]] = [
     ("p8064", len(P8064_SEQUENCE), P8064_SEQUENCE),
 ]
 
+# Reconstruction references are separate from the interactive scaffold menu.
+PUBLICATION_SCAFFOLDS: dict[str, str] = {
+    **{name: sequence for name, _, sequence in SCAFFOLD_LIBRARY},
+    "p7704": P7704_SEQUENCE,
+    "p8634": _load_seq("p8634.txt"),
+    "pEGFP": _load_seq("pegfp.txt"),
+}
+
 _SCAFFOLD_BY_NAME: dict[str, str] = {
     "M13mp18": M13MP18_SEQUENCE,
     "p7560": P7560_SEQUENCE,

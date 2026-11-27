@@ -42,6 +42,7 @@ export function expandCompactNucleotides(compact) {
           is_modification:   !!b.ismod?.[i],
           modification:      b.mod?.[i] ?? null,
           nucleobase:        b.base?.[i] ?? null,
+          ...(b.corner?.[i] ? { corner_inserts: b.corner[i] } : {}),
         })
       }
     }
@@ -70,7 +71,8 @@ export function positionUpdateLookup(compact) {
           placement_source: data.pv?.[i], strand_id: data.sid?.[i] ?? null,
           extension_id: data.extid?.[i] ?? null,
           is_modification: !!data.ismod?.[i],
-          modification: data.mod?.[i] ?? null }
+          modification: data.mod?.[i] ?? null,
+          ...(data.corner?.[i] ? { corner_inserts: data.corner[i] } : {}) }
         validateNativePlacement(nuc)
         lookup.set(`${helixId}:${bp}:${direction}:${copy}`, nuc)
       }

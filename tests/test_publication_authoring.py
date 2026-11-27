@@ -17,7 +17,8 @@ def test_d005_compiles_native_commands_without_an_import_root():
     assert evidence['staple_precursors']['periodic_seams']==60
     assert all('import' not in o['kind'] for o in ops)
     loops=[o['params']['delta'] for o in ops if o['kind']=='loop-skip-insert']
-    assert loops.count(144)==1 and loops.count(1)==360
+    assert loops.count(144)==0 and loops.count(1)==360
+    assert [o['params']['length'] for o in ops if o['kind']=='strand-loop-set']==[144]
     assert evidence['connections']['forced_ligations'] < evidence['connections']['crossovers']/5
 
 @pytest.mark.skipif(not (ASSETS/'twist-supp.pdf').exists(), reason='Local publication corpus not installed')

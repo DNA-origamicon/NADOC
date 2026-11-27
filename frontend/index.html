@@ -698,6 +698,16 @@
     .pxr-sel  { flex: 1 1 auto; min-width: 0; background: #0d1117;
                 border: 1px solid #30363d; border-radius: 3px; color: #c9d1d9;
                 padding: 2px 4px; font-size: var(--text-xs); }
+    #photo-advanced .pxr-lbl { flex-basis: 96px; }
+    .pxr-number { display: flex; flex: 1 1 0; min-width: 0; }
+    .pxr-number input { width: 0; appearance: textfield; -moz-appearance: textfield; border-radius: 3px 0 0 3px; }
+    .pxr-number input::-webkit-inner-spin-button,
+    .pxr-number input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .pxr-number-arrows { display: flex; flex-direction: column; }
+    .pxr-number-arrows .pxr-btn { padding: 0 5px; font-size: 9px; line-height: 12px; border-radius: 0; border-left: 0; }
+    .pxr-number-arrows .pxr-btn:first-child { border-radius: 0 3px 0 0; }
+    .pxr-number-arrows .pxr-btn:last-child { border-radius: 0 0 3px 0; border-top: 0; }
+    .pxr-number-arrows .pxr-btn:disabled { opacity: .5; cursor: default; }
     .pxr-btn  { padding: 4px 6px; background: #21262d; border: 1px solid #30363d;
                 border-radius: 3px; color: #c9d1d9; font-size: var(--text-xs);
                 cursor: pointer; font-family: var(--font-ui); }
@@ -4163,13 +4173,15 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
           <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
+          <button class="dropdown-item" id="menu-tools-corner">Corner…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-add-primitive">Add Primitive…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-overhangs-manager">Overhangs Manager…</button>
           <button class="dropdown-item" id="menu-tools-conjugate-manager">Conjugate Manager…</button>
-          <div class="submenu-item">Nanoparticle <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
+          <div class="submenu-item">Nanoparticles <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
+              <button class="dropdown-item" id="menu-tools-em-analysis">EM Analysis…</button>
               <button class="dropdown-item" id="menu-tools-gold-nanosphere">Gold nanosphere…</button>
               <button class="dropdown-item" id="menu-tools-gold-nanorod" disabled>Gold nanorod <span class="dim">(coming soon)</span></button>
               <button class="dropdown-item" id="menu-tools-quantum-dot">Quantum dot…</button>
@@ -7057,6 +7069,50 @@
                #3f464f→#20252b gradient on border-box — which is what makes them
                pop out even when packed flush. Chevron sits LEFT of the title. -->
           <div class="pxr-cards">
+          <div class="ox-card" id="photo-materials-panel">
+            <div id="photo-materials-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photo-materials-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Art &amp; materials</span>
+            </div>
+            <div id="photo-materials-body" class="ox-card__body">
+              <div class="pxr-col">
+                <label class="pxr-row"><span class="pxr-lbl">Art Themes</span><select id="photo-art-theme" class="pxr-sel"></select></label>
+                <div class="pxr-note">A complete look: lighting, materials, background, lens and figure effects. Your molecular colors and export size stay unchanged.</div>
+                <label class="pxr-row"><span class="pxr-lbl">Material</span><select id="photo-material" class="pxr-sel"></select></label>
+                <div id="photo-material-note" class="pxr-note"></div>
+                <label class="pxr-check" title="Progressive GPU lighting, reflections and emissive EM samples. Still views refine at native resolution. Interactive camera motion uses adaptive-resolution tracing; geometry loading uses raster preview. Exports trace every frame with the selected export backend. Scene guides and the raster shadow-catching floor are omitted.">
+                  <input id="photo-path-tracing" type="checkbox"> GPU path tracing
+                  <span id="photo-trace-spinner" class="nadoc-spinner" aria-label="Path tracing is working" role="img" hidden></span>
+                </label>
+                <div id="photo-trace-progress" hidden>
+                  <progress id="photo-trace-progress-bar" max="100" value="0" aria-label="Path tracing total work" style="width:100%;accent-color:#e9b949"></progress>
+                  <div id="photo-path-status" class="pxr-note" role="status" aria-live="polite"></div>
+                </div>
+                <details id="photo-advanced">
+                  <summary style="cursor:pointer;padding:8px 0">Advanced</summary>
+                  <div class="pxr-col">
+                    <label class="pxr-check" title="GPU spatial noise reduction for live preview and all trace export backends. Turn off to compare the raw samples instantly without restarting tracing. Color and alpha edges limit smoothing, but fine reflections and closely spaced details can soften. No temporal history is used."><input id="photo-trace-denoise" type="checkbox" checked> Denoise path tracing</label>
+                    <label class="pxr-check" title="WebGL only: adapts preview resolution and reuses geometry to target 15 low-sample views per second during camera movement. This does not mean 15 finished images per second. Paused views refine at full resolution. Exports retain their selected resolution and samples. Geometry changes and camera-dependent EM points use raster fallback during motion."><input id="photo-trace-interactive" type="checkbox" checked> Interactive tracing · WebGL</label>
+                    <div class="pxr-row" title="Samples per pixel for still preview and every exported frame (1–512). Higher values reduce noise and take longer. Edits apply on leaving the box or pressing Enter; arrows step through powers of two.">
+                      <label class="pxr-lbl" for="photo-path-samples">Trace samples</label>
+                      <div class="pxr-number">
+                        <input id="photo-path-samples" class="pxr-sel" type="number" min="1" max="512" step="1" value="64" disabled>
+                        <span class="pxr-number-arrows">
+                          <button id="photo-path-samples-up" class="pxr-btn" type="button" aria-label="Increase trace samples" title="Next power of two" disabled>▲</button>
+                          <button id="photo-path-samples-down" class="pxr-btn" type="button" aria-label="Decrease trace samples" title="Previous power of two" disabled>▼</button>
+                        </span>
+                      </div>
+                    </div>
+                    <label class="pxr-row" title="Live renderer. Native OptiX uses NVIDIA RT hardware through a persistent local renderer. Experimental: refines after motion stops, requires Blender/Cycles and an NVIDIA GPU, supports solid and clearcoat materials plus EM palettes. Startup and refinement progress are shown below the GPU path tracing toggle."><span class="pxr-lbl">Trace preview</span><select id="photo-trace-preview-backend" class="pxr-sel"><option value="webgl">WebGL</option><option value="optix">Native OptiX</option></select></label>
+                    <label class="pxr-row" title="Export renderer, independent of the Trace preview selection. WebGPU and OptiX are experimental and lighting may differ. OptiX requires Blender/Cycles and an NVIDIA GPU; it supports solid materials and EM palettes. All exporters include every visible EM point. An unavailable backend reports an error."><span class="pxr-lbl">Trace export</span><select id="photo-trace-backend" class="pxr-sel" disabled><option value="webgl">WebGL</option><option value="webgpu" title="Experimental export backend">WebGPU</option><option value="optix" title="Experimental export backend; requires Blender/Cycles and NVIDIA GPU">OptiX</option></select></label>
+                    <label class="pxr-row" title="Adjust image brightness. Applied to preview, images and photo videos; annotations keep their original colors."><span class="pxr-lbl">Exposure</span><input id="photo-exposure" class="pxr-rng" type="range" min="0.1" max="4" step="0.05" value="1"><span id="photo-exposure-label" class="pxr-val">1.00</span></label>
+                    <label class="pxr-row" title="Adjust the difference between light and dark tones. Applied to preview, images and photo videos; annotations keep their original colors."><span class="pxr-lbl">Contrast</span><input id="photo-contrast" class="pxr-rng" type="range" min="0.5" max="1.5" step="0.01" value="1"><span id="photo-contrast-label" class="pxr-val">1.00</span></label>
+                    <label class="pxr-row" title="Adjust color intensity. Applied to preview, images and photo videos; annotations keep their original colors."><span class="pxr-lbl">Saturation</span><input id="photo-saturation" class="pxr-rng" type="range" min="0" max="2" step="0.05" value="1"><span id="photo-saturation-label" class="pxr-val">1.00</span></label>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+
           <div class="ox-card" id="photo-lighting-panel">
             <div id="photo-lighting-heading" class="ox-card__header" style="color:#c9d1d9">
               <span id="photo-lighting-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Lighting</span>
@@ -7285,39 +7341,6 @@
                     <input id="photo-bg-color" type="color" value="#0b0d10"
                            style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="ox-card" id="photo-materials-panel">
-            <div id="photo-materials-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photo-materials-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Materials</span>
-            </div>
-            <div id="photo-materials-body" class="ox-card__body">
-              <div class="pxr-col">
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="Backbone beads, base slabs, 5′ cones and fluorophores.">Full</span>
-                  <select id="photo-mat-full" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="Helix and overhang cylinders.">Cylinders</span>
-                  <select id="photo-mat-cylinders" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="The marching-cubes molecular surface. Its SSS presets (wax, skin, gummy) only read below full opacity.">Surface</span>
-                  <select id="photo-mat-surface" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-row">
-                  <span class="pxr-lbl" title="Atoms and bonds in the VDW / ball-and-stick representations.">Atomistic</span>
-                  <select id="photo-mat-atomistic" class="pxr-sel"></select>
-                </div>
-                <div class="pxr-note">
-                  The <b>Flat</b> presets kill the specular lobe entirely
-                  (<code style="color:#8b949e">specularIntensity: 0</code>) — no highlight
-                  anywhere, so shape is read from the cast shadow rather than from a glint.
-                  That is the molecular-figure convention; the glossy/metallic presets are
-                  the product-render look.
                 </div>
               </div>
             </div>

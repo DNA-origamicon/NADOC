@@ -19,6 +19,15 @@ def test_reconstruction_failure_returns_actionable_report_not_a_fake_model(monke
         report=json.loads(archive.read('Reconstructed-1-p1.reconstruction.json'))
         assert report['status']=='not_constructed'
         assert report['construction_error']=='Unresolved lattice placement'
+        assert report['classification']['output'] == 'report_only'
+        assert report['classification']['native_file'] is None
+        assert report['classification']['issues'][0]['code'] == 'extraction_failed'
+        index = json.loads(archive.read('reconstruction-index.json'))
+        assert index['counts'] == {'complete': 0, 'partial': 0, 'report_only': 1}
+        result = index['results'][0]
+        assert result['report_file'] in archive.namelist()
+        assert result['issues'] == report['classification']['issues']
+        assert archive.read(report['source_file']) == data
 
 
 @pytest.mark.parametrize('selection',[[],[{'source_sha256':'absent','diagram_page':1,'table_page':2}]])

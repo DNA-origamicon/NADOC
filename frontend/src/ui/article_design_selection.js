@@ -1,3 +1,4 @@
+import { appendRasterEvidence, appendTableEvidence } from './article_import_evidence.js'
 /** Candidate selection and evidence review; never commits an inferred molecule. */
 export function createArticleDesignSelection({ body, fetchImpl, readPayload, onSelectionChange = () => {} }) {
   const host = document.createElement('section')
@@ -31,6 +32,7 @@ export function createArticleDesignSelection({ body, fetchImpl, readPayload, onS
       const summary = document.createElement('p')
       summary.textContent = `${design.rows} image rows · ${design.branches} junction branches · ${design.observed_paths.length} observed paths · ${design.route_hypotheses_tested} calibration hypotheses`
       card.append(summary)
+      appendRasterEvidence(card, design.raster_evidence)
       const choices = document.createElement('select'); choices.setAttribute('aria-label', `Staple list for ${design.label}`)
       const none = document.createElement('option'); none.value = ''; none.textContent = 'No staple list selected'; choices.append(none)
       for (const pairing of design.pairings) {
@@ -43,6 +45,14 @@ export function createArticleDesignSelection({ body, fetchImpl, readPayload, onS
         const pairing = design.pairings.find(p => p.list_id === choices.value)
         selections.delete(design.id)
         if (pairing?.publication_evidence) selections.set(design.id, { source_sha256: design.source_sha256, diagram_page: design.page, table_page: pairing.publication_evidence.table_page })
+        if (pairing?.table_import && pairing.table_source_sha256 === design.source_sha256) {
+          selections.set(design.id, { source_sha256: design.source_sha256, diagram_page: design.page, table_page: pairing.table_page })
+          appendTableEvidence(evidence, pairing.table_import, modules => {
+            const choice = selections.get(design.id)
+            if (choice) { if (modules.length) choice.table_modules = modules; else delete choice.table_modules }
+            selectionStatus()
+          })
+        }
         selectionStatus()
         if (!pairing) {
           evidence.textContent = design.pairings.length ? 'Select a likely staple list to compare hypotheses.' : 'No sufficiently supported staple-list pairing. Upload a labelled list or improve the diagram evidence.'
@@ -57,6 +67,11 @@ export function createArticleDesignSelection({ body, fetchImpl, readPayload, onS
           const recovered = document.createElement('p'); recovered.dataset.publicationRouting = ''
           recovered.textContent = `${item.matched_staples}/${item.table_rows} published staple endpoint pairs recovered from the figure; ${item.lengths_agree} path lengths agree. Base-index correction: ${item.base_index_offset}. ${item.scaffold_paths} scaffold path(s) oriented by antiparallel agreement; ${item.unclassified_paths} path(s) remain unclassified. ${item.unit_insertions_resolved ?? 0} unit insertions resolved; ${item.unresolved_insertions ?? 0} insertion lengths unresolved. ${item.limitation}`
           evidence.append(recovered)
+          if (item.vector_panel_registration && !item.recovered_topology?.lattice?.resolved) {
+            const placement = document.createElement('p')
+            placement.textContent = 'Routing was recovered across the panels. Native reconstruction still needs verified lattice placement.'
+            evidence.append(placement)
+          }
           if (item.staple_overhangs?.bases) {
             const overhang = document.createElement('p'); overhang.dataset.stapleOverhangs = ''
             const o = item.staple_overhangs

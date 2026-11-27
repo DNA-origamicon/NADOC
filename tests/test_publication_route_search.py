@@ -19,6 +19,11 @@ def test_d009_search_uses_sources_and_reports_ambiguity():
     assert all(c['color'] for c in e['appearance']['staple_colors'])
     assert sum(c['basis']=='source PDF route stroke' for c in e['appearance']['staple_colors'])==187
     assert recipe['operations'][-1]['kind']=='helix-reorder'
+    loops=[o['params'] for o in recipe['operations'] if o['kind']=='strand-loop-set']
+    assert sorted((p['helix_id'],p['bp_index'],p['length']) for p in loops)==sorted(
+        (e['helix_ids'][h],119,39) for h in (30,42))
+    assert not any(o['kind']=='loop-skip-insert' for o in recipe['operations'])
+    assert e['reconstruction_report']['insertion_representation']['limitation']
 
 
 def test_search_budget_never_turns_one_candidate_into_a_uniqueness_claim():

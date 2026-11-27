@@ -2,7 +2,8 @@
 from collections import defaultdict
 
 
-def staple_precursors(operations, paths, helix_ids, identity, *, periodic_seams=False, span_gaps=False):
+def staple_precursors(operations, paths, helix_ids, identity, *, periodic_seams=False, span_gaps=False,
+                      precut_revisited_domains=False):
     """Replace domain-by-domain staple drawing with occupied-interval pen strokes.
 
     The user-authorized end-wrap rule applies only to same-helix
@@ -113,14 +114,38 @@ def staple_precursors(operations, paths, helix_ids, identity, *, periodic_seams=
             nicks.append({'kind': 'nick', 'label': f'Nick at Staple {number} 3′ end',
                           'params': {'helix_id': hid, 'bp_index': bp, 'direction': direction},
                           'evidence': ['Published staple endpoint; prevents precursor cycles']})
+        # When a staple revisits a helix, an unfinished continuous precursor can
+        # connect two ports that belong to distinct source domains. Pre-cut the
+        # earlier and later boundaries for these paths before placing any joins.
+        # This avoids an intermediate self-ligation while preserving one pen
+        # stroke per occupied interval.
+        domain_helices = [op['params']['domains'][0]['helix_id'] for op in ops
+                         if op['kind'] == 'strand-add']
+        revisits_helix = precut_revisited_domains and len(set(domain_helices)) < len(domain_helices)
         for op in ops:
             if op['kind'] == 'crossover-place':
                 joins.append(op)
+                if revisits_helix:
+                    for half, cut in (('half_a', 'nick_bp_a'), ('half_b', 'nick_bp_b')):
+                        target = op['params'][half]
+                        h = target['helix_id']
+                        bp = op['params'][cut]
+                        step = 1 if directions[h] == 'FORWARD' else -1
+                        if bp in original_occupied[h] and bp + step in original_occupied[h]:
+                            nicks.append({'kind': 'nick', 'label': f'Separate revisited domains of Staple {number}',
+                                          'params': {'helix_id': h, 'bp_index': bp, 'direction': directions[h]},
+                                          'evidence': ['Directed source domain boundaries prevent transient cycles in the full helix precursor']})
             elif op['kind'] == 'forced-ligation-create':
                 raise ValueError('Nonperiodic staple ligation requires an explicit precursor endpoint selection')
             elif op['kind'] == 'strand-sequence':
                 op['params'].pop('strand_id')
                 op['select_route'] = [[helix_ids[h], bp] for h, bp in path['sites']]
                 assignments.append(op)
+    if precut_revisited_domains:
+        unique_nicks = {}
+        for op in nicks:
+            p = op['params']
+            unique_nicks.setdefault((p['helix_id'], p['bp_index'], p['direction']), op)
+        nicks = list(unique_nicks.values())
     return (prefix + groups[0] + pens + nicks + gap_deletions + joins + assignments + reserved,
             {'pen_strokes': len(pens), 'endpoint_nicks': len(nicks), 'periodic_seams': seam_count})

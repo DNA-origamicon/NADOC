@@ -10,6 +10,7 @@ import { initSurfaceRenderer } from './surface_renderer.js'
 import { filterAtomData } from './atom_filter.js'
 import { atomColorsFromLetters, computeAtomStrandColors, computeAtomNucColors, computeAtomNucAlphas, computeAtomStrandAlphas } from './color_util.js'
 import { coloringFallbackMode } from './coloring_modes.js'
+import { geometryLoads } from './geometry_loads.js'
 
 /** A volume is a display layer with its own coloring and opacity, even on overlap. */
 export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHiddenNucs = () => new Set(), getLiveDisplay = null, onError = console.error }) {
@@ -19,6 +20,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
     detail: { stage: `${kind}-${phase}`, revision, viewVolume: true },
   }))
   function remove(entry) {
+    geometryLoads.cancel(entry)
     entry.abort.abort()
     entry.motion?.dispose()
     if (entry.renderer) entry.renderer.dispose()
@@ -114,7 +116,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
         if (layer.strandId && getLiveDisplay && ['full', 'beads'].includes(layer.representation)) entry.motion = bindStrandDisplayMotion(entry, getLiveDisplay, scene)
         entry.picker = coarseVolumePicker(entry, keys, geometry)
       } else {
-        const work = (async () => {
+        const work = geometryLoads.track(entry, async () => {
           if (kind === 'atom') {
             const data = await ensureAtoms()
             if (!data || !current()) return
@@ -139,7 +141,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
             entry.renderer.update(mesh, 'strand', `volume-surface-${layer.id}`)
           }
           entry.ready = true; paint(entry, layer)
-        })()
+        })
         pending[kind].push(work)
       }
     }

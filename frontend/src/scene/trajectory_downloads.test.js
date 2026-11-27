@@ -71,3 +71,24 @@ it('serializes different resolutions of one job so backend extraction cannot sup
   expect(fetch).toHaveBeenCalledTimes(2)
   expect(fetch.mock.calls[1][1].stride).toBe(2)
 })
+
+it('animation pruning preserves a foreground page read but explicit cancellation still stops it', async () => {
+  let finish, signal
+  const cache = initTrajectoryDownloads(async (_, opts) => {
+    signal = opts.signal
+    return new Promise(resolve => { finish = resolve })
+  })
+  const pending = cache.foreground().get('A', {frameStart:0,frameEnd:7})
+  cache.retain([])
+  expect(signal.aborted).toBe(false)
+  finish(payload)
+  expect(await pending).toBe(payload)
+  cache.retain([])
+  expect(signal.aborted).toBe(true)
+  const next = cache.foreground().get('A')
+  const rejected = expect(next).rejects.toMatchObject({name:'AbortError'})
+  cache.cancelPending()
+  expect(signal.aborted).toBe(true)
+  finish(payload)
+  await rejected
+})

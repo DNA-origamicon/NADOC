@@ -230,8 +230,8 @@ describe('phase reporting', () => {
     await run({ player: makePlayer(2), rest: { onPhase: (k, info) => calls.push([k, info]) } })
     const cap = calls.filter(c => c[0] === 'capture')
     expect(cap).toHaveLength(21)                       // 2 s × 10 fps + 1
-    expect(cap[0][1]).toEqual({ done: 0, total: 20 })
-    expect(cap.at(-1)[1]).toEqual({ done: 20, total: 20 })
+    expect(cap[0][1]).toEqual({ done: 1, total: 21 })
+    expect(cap.at(-1)[1]).toEqual({ done: 21, total: 21 })
   })
 
   it('reports encode and save AFTER the last capture tick, so 100% is not the end', async () => {
@@ -308,6 +308,14 @@ describe('efficiency', () => {
     expect(quantizeSpy.mock.calls.length).toBeGreaterThan(0)
   })
 
+  it('keeps newly appearing EM colors by quantizing every visible-field GIF frame', async () => {
+    const photoRenderer=makePhotoRenderer()
+    photoRenderer.session.requiresFreshPalette=()=>true
+    await run({player:makePlayer(1),photoRenderer})
+    expect(writeFrame).toHaveBeenCalledTimes(11)
+    expect(quantizeSpy).toHaveBeenCalledTimes(11)
+  })
+
   it('every written frame still carries an explicit palette', async () => {
     // Reusing a palette must not degrade into writing frames with no colour table.
     await run({ player: makePlayer(3) })
@@ -368,4 +376,13 @@ it('waits for photo inset readiness before asking the frame session to render', 
   photoRenderer.session.renderFrameToCanvas.mockImplementation(() => { calls.push('render'); return document.createElement('canvas') })
   await run({ player: makePlayer(.1), photoRenderer })
   expect(calls).toEqual(['ready', 'render', 'ready', 'render'])
+})
+
+it('waits for path-traced samples before reading a photo video frame', async () => {
+  const photoRenderer=makePhotoRenderer(), calls=[]
+  photoRenderer.session.renderFrameToCanvas.mockImplementation(async()=>{
+    calls.push('start');await Promise.resolve();calls.push('accumulated');return document.createElement('canvas')
+  })
+  await run({player:makePlayer(.1),photoRenderer})
+  expect(calls).toEqual(['start','accumulated','start','accumulated'])
 })

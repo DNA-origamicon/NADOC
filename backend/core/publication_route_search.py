@@ -3,7 +3,7 @@ from collections import defaultdict
 
 
 def search_missing_routes(classified, insertions, alignment, table, lattice, *, max_states=200000):
-    from backend.core.sequences import SCAFFOLD_LIBRARY, P7704_SEQUENCE
+    from backend.core.sequences import PUBLICATION_SCAFFOLDS
     from backend.core.models import LatticeType
     from backend.core.crossover_positions import crossover_neighbor
     from backend.core.lattice import _lattice_direction
@@ -12,8 +12,7 @@ def search_missing_routes(classified, insertions, alignment, table, lattice, *, 
     if (len(classified['scaf']) != 1 or not alignment.get('sequence_supported')
             or alignment['best']['reverse'] or insertions['unresolved'] or not lattice.get('resolved')):
         return {**result, 'status': 'insufficient_alignment_or_lattice'}
-    library = {n:s for n,_,s in SCAFFOLD_LIBRARY}; library['p7704'] = P7704_SEQUENCE
-    seq = library[alignment['scaffold_name']]; off = alignment['best']['offset']
+    seq = PUBLICATION_SCAFFOLDS[alignment['scaffold_name']]; off = alignment['best']['offset']
     seq = seq[off:] + seq[:off]
     counts = {(h,b):n for h,b,n in insertions['counts']}
     blocks = {}; directions = {}; cursor = 0

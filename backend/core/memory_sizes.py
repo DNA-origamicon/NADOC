@@ -2,6 +2,8 @@
 import sys
 from dataclasses import fields, is_dataclass
 
+_SCALAR_TYPES = frozenset((str, bytes, int, float, bool, type(None)))
+
 
 def retained_bytes(value, depth=0):
     """Charge shared leaves repeatedly; this intentionally overcounts ownership.
@@ -10,7 +12,10 @@ def retained_bytes(value, depth=0):
     known data containers are traversed, never arbitrary object graphs/cycles.
     """
     size = sys.getsizeof(value)
-    if depth > 8:
+    # Atom records contain millions of these leaves. Exact built-in types have
+    # no children; avoid probing every scalar for arrays and dataclass fields.
+    # Subclasses still take the generic path (they may own additional data).
+    if type(value) in _SCALAR_TYPES or depth > 8:
         return size
     if hasattr(value, 'dtype') and hasattr(value, 'nbytes'):
         size = max(size, int(value.nbytes) + 128)

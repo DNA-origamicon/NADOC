@@ -32,10 +32,10 @@ export function showArticleReconstruction({ fetchImpl = globalThis.fetch } = {})
     <label>Scaffold sequence (optional; default M13mp18 hypothesis)<textarea data-scaffold rows="2" placeholder="ACGT…"></textarea></label>
     <p>Up to 100 pages per PDF. DOI lookup checks available metadata and open-access text. Upload PDFs when the paper or supplement cannot be accessed. caDNAno files are not required.</p>
     <div class="ie-toolbar"><button data-check>Check</button><button data-cancel disabled>Cancel</button></div>
-    <p>Basic screening accepts diagram captions or labels. Use Detect designs for image/list pairing and direction hypotheses. Select a detected design and its endpoint table to reconstruct. Partial results include a report of missing or ambiguous routes.</p>
+    <p>Basic screening accepts diagram captions or labels. Use Detect designs for image/list pairing and direction hypotheses. Select a detected design and its table to reconstruct. Module tables and raster traces are retained in the report when native routing is unresolved. Partial results include a report of missing or ambiguous routes.</p>
     <ol data-checks aria-live="polite"></ol>
     <p data-status role="status">Ready to check.</p>
-    <div class="ie-toolbar"><button data-reconstruct title="Select a detected figure and endpoint table" disabled>Reconstruct</button><button data-evidence>Inspect diagram evidence…</button></div>`
+    <div class="ie-toolbar"><button data-reconstruct title="Select a detected figure and table" disabled>Reconstruct</button><button data-evidence>Inspect diagram evidence…</button></div>`
   const q = selector => body.querySelector(selector)
   let controller = null, revision = 0
   const readPayload = async () => {

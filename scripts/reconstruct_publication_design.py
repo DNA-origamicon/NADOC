@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from backend.core.publication_authoring import compile_publication
+from backend.core.publication_reconstruction_report import classify_reconstruction
 from tools.design_archive.recorded_authoring import construct
 from scripts.agent_structure_guard import publish, audit
 from backend.core.models import Design
@@ -25,16 +26,21 @@ def compare(design, evidence):
     if actual!=expected:
         raise ValueError('Native directed routes differ from PDF evidence: '+str([k for k in expected.keys()|actual.keys() if expected.get(k)!=actual.get(k)][:12]))
     loops=sorted((ids[h.id],m.bp_index,m.delta) for h in design.helices for m in h.loop_skips)
-    if loops!=sorted(tuple(x) for x in evidence['insertions']['counts']):
+    plan = evidence.get('insertion_representation', {})
+    if loops!=sorted(tuple(x) for x in plan.get('duplex_insertions', evidence['insertions']['counts'])):
         raise ValueError('Native insertion counts differ from PDF evidence')
+    expected_loops = sorted((x['source_helix'], x['source_bp'], x['direction'], x['length'])
+                            for x in plan.get('scaffold_loops', []))
+    actual_loops = sorted((ids[x.helix_id], x.bp_index, x.direction.value, x.length)
+                          for s in design.strands for x in s.loops if s.is_scaffold)
+    if actual_loops != expected_loops or any(s.loops for s in design.strands if not s.is_scaffold):
+        raise ValueError('Native strand-owned insertion loops differ from source evidence')
     for i,path in enumerate(evidence['classified']['stap'],1):
         strand=next(s for s in design.strands if s.name==f'Staple {i}')
         if strand.sequence!=evidence.get('assigned_staple_sequences', [p['table_row']['sequence'] for p in evidence['classified']['stap']])[i-1]:
             raise ValueError('Native sequence differs from published oligo')
-    from backend.core.sequences import SCAFFOLD_LIBRARY, P7704_SEQUENCE
-    library={name:seq for name,_,seq in SCAFFOLD_LIBRARY}
-    library['p7704']=P7704_SEQUENCE
-    expected_scaffold=library[evidence['sequence_search']['scaffold_name']]
+    from backend.core.sequences import PUBLICATION_SCAFFOLDS
+    expected_scaffold=PUBLICATION_SCAFFOLDS[evidence['sequence_search']['scaffold_name']]
     offset=evidence['sequence_search']['best']['offset']
     expected_scaffold=expected_scaffold[offset:]+expected_scaffold[:offset]
     expected_scaffold=evidence.get('reconstruction_report',{}).get('scaffold_sequence_assigned',expected_scaffold)
@@ -65,7 +71,7 @@ def compare(design, evidence):
             if item['color'] and next(s for s in design.strands if s.name==f'Staple {i}').color!=item['color']:
                 raise ValueError('Native staple color differs from source appearance evidence')
     derived = len(evidence.get('derived_staples', []))
-    return {'routes':len(expected),'insertions':len(loops),'published_staples':len(expected)-1-derived,
+    return {'routes':len(expected),'insertions':len(loops)+len(actual_loops),'strand_owned_loops':len(actual_loops),'published_staples':len(expected)-1-derived,
             'derived_staples':derived,
             'scaffold_sequence_matches':True,'source_scaffold_bases':len(expected_scaffold),
             'native_helices':len(design.helices),
@@ -95,13 +101,17 @@ def main():
         name=args.name,source_path=relative, continuous_staples=args.continuous_staples,
         periodic_staple_seams=args.periodic_staple_seams, allow_partial=args.allow_partial)
     recipe['execution_code']={name:hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in [
-        'backend/core/publication_authoring.py','backend/core/publication_routing.py',
+        'backend/core/publication_authoring.py','backend/core/publication_insertion_loops.py','backend/core/strand_loops.py','backend/core/publication_routing.py',
         'backend/core/publication_sequence_search.py','backend/core/publication_unpaired_scaffold.py','backend/core/publication_auxiliary_placement.py','backend/core/publication_ligation_placement.py','backend/core/publication_native_tracks.py',
         'tools/design_archive/recorded_authoring.py','backend/core/publication_precursors.py',
         'backend/core/publication_missing_staples.py','backend/core/publication_lattice_insets.py',
         'backend/core/publication_base_labels.py','backend/core/publication_staple_overhangs.py',
         'backend/core/publication_base_conflicts.py','backend/core/publication_route_search.py','backend/core/publication_appearance.py',
-        'backend/core/scaffold_gap_overhangs.py','backend/api/part_strand_patch.py','backend/core/lattice.py']}
+        'backend/core/scaffold_gap_overhangs.py','backend/api/part_strand_patch.py','backend/core/lattice.py',
+        'backend/core/publication_vector_panels.py','backend/core/publication_diagram_labels.py',
+        'backend/core/publication_reconstruction_report.py','backend/core/sequences.py',
+        'backend/core/m13mp18.txt','backend/core/p7560.txt','backend/core/p7704.txt','backend/core/p8064.txt',
+        'backend/core/p8634.txt','backend/core/p8634.source.json','backend/core/pegfp.txt','backend/core/pegfp.source.json']}
     args.evidence.mkdir(parents=True,exist_ok=True)
     (args.evidence/'recipe.json').write_text(json.dumps(recipe,indent=2)+'\n')
     (args.evidence/'extraction.json').write_text(json.dumps(evidence,indent=2)+'\n')
@@ -118,9 +128,11 @@ def main():
     result={'publication':published,'reopened':audit(reopened),'comparison':comparison,
             'source_sha256':hashlib.sha256(pdf).hexdigest(),
             'design_sha256':hashlib.sha256(args.output.read_bytes()).hexdigest()}
-    evidence['reconstruction_report']['verification']=result
-    (dependency.parent/'reconstruction-report.json').write_text(json.dumps(evidence['reconstruction_report'],indent=2)+'\n')
-    args.output.with_suffix('.reconstruction.json').write_text(json.dumps(evidence['reconstruction_report'],indent=2)+'\n')
+    report = evidence['reconstruction_report']
+    report['verification'] = result
+    report['classification'] = classify_reconstruction(report, native_file=args.output.name)
+    (dependency.parent/'reconstruction-report.json').write_text(json.dumps(report,indent=2)+'\n')
+    args.output.with_suffix('.reconstruction.json').write_text(json.dumps(report,indent=2)+'\n')
     (dependency.parent/'publication-audit.json').write_text(json.dumps(result,indent=2)+'\n')
     for filename, digest in recipe['execution_code'].items():
         data = Path(filename).read_bytes()

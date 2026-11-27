@@ -65,6 +65,7 @@ BUILDERS = {
     **dict.fromkeys(('helix-add-at-cell', 'helix-extend', 'scaffold-domain-paint'), cell),
     **dict.fromkeys(('strand-add', 'strand-update', 'domain-add', 'helix-reorder', 'helix-update'), structural),
     'loop-skip-insert': build_loop,
+    'strand-loop-set': build_loop,
     'crossover-place': crossover,
     'strand-sequence': sequence,
     'nick': nick,
@@ -115,7 +116,9 @@ def construct(recipe, *, progress=None):
                 else:
                     state.mutate_with_feature_log(kind, operation['label'], params, fn)
             except Exception as exc:
-                raise ProcessRequired(f"Native {kind} failed: {getattr(exc, 'detail', str(exc))}") from exc
+                raise ProcessRequired(
+                    f"Native operation {number} ({kind}, {operation['label']}) failed: "
+                    f"{getattr(exc, 'detail', str(exc))}") from exc
             if progress is not None and (number % 100 == 0 or number == len(recipe['operations'])):
                 progress(number, len(recipe['operations']))
         design = state.get_or_404().model_copy(deep=True)

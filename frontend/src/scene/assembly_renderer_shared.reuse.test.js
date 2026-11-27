@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import { _createSharedInstancingRenderer } from './assembly_renderer_shared.js'
+import { geometryLoads } from './geometry_loads.js'
 
 function fixture(options = {}) {
   let assembly = { instances: ['a', 'b', 'c'].map(id => ({
@@ -231,7 +232,9 @@ describe('shared assembly source reuse', () => {
     const first = f.renderer.rebuild(f.assembly())
     const second = f.renderer.rebuild(f.assembly())
     expect(second).toBe(first)
+    expect(geometryLoads.getState().busy).toBe(true)
     await first
+    expect(geometryLoads.getState().busy).toBe(false)
     expect(f.api.getInstanceGeometry).toHaveBeenCalledExactlyOnceWith('a')
     f.renderer.dispose()
   })
