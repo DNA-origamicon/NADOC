@@ -3746,7 +3746,7 @@ async function main() {
   })
 
   const deformationToolLauncher = initDeformationToolLauncher({ store, selectionManager, showToast, deformView, watchDeformState: _watchDeformState, ownedEditor: featureEditor.creationEditor })
-  const bevelTool = initBevelTool({ store, selectionManager, scene, designRenderer, showToast })
+  const bevelTool = initBevelTool({ store, selectionManager, scene, designRenderer, showToast, camera, canvas, controls })
   const cornerTool = initCornerTool({ store, selectionManager, scene, designRenderer, showToast })
 
   // Tools → Add Primitive: reveal the right-sidebar Primitives library.

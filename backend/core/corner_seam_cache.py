@@ -13,15 +13,15 @@ import numpy as np
 
 _lock = threading.Lock()
 _entries = OrderedDict()
-_MAX_ENTRIES = 128
+_MAX_ENTRIES = 512
 _MAX_BYTES = 16 * 1024**2
 
 
-def fit_key(problem, max_iterations):
+def fit_key(problem, max_iterations, *, include_environment=True):
     digest = hashlib.sha256(b'approved-corner-closure-v1')
     arrays = [problem.original, problem.bridges, problem.free, problem.pairs,
               np.asarray(problem.branches, dtype=np.int64), *problem.bodies]
-    if problem.environment is not None:
+    if include_environment and problem.environment is not None:
         arrays.append(problem.environment.data)
     digest.update(str((max_iterations, len(problem.bodies), problem.environment is not None)).encode())
     for array in arrays:
@@ -50,16 +50,25 @@ def put_fit(key, xyz, report):
 
 
 def clear_fit_cache():
+    from backend.core.corner_seam_dependencies import clear_dependencies
     with _lock:
         _entries.clear()
+    clear_dependencies()
 
 
 def export_fits():
     """Private worker transport; preserve exact double values and ownership."""
+    from backend.core.corner_seam_dependencies import export_dependencies
     with _lock:
-        return [(key.hex(), xyz.tolist(), dict(report)) for key, (xyz, report) in _entries.items()]
+        rows = [(key.hex(), xyz.tolist(), dict(report)) for key, (xyz, report) in _entries.items()]
+    return rows + export_dependencies()
 
 
 def import_fits(rows):
-    for key, xyz, report in rows:
-        put_fit(bytes.fromhex(key), np.asarray(xyz, dtype=float), report)
+    from backend.core.corner_seam_dependencies import import_dependency
+    for row in rows:
+        if row[0] == 'dependency-v1':
+            import_dependency(row)
+        else:
+            key, xyz, report = row
+            put_fit(bytes.fromhex(key), np.asarray(xyz, dtype=float), report)

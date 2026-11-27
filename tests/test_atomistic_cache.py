@@ -69,6 +69,18 @@ def test_repeat_load_builds_once(monkeypatch):
     clear_atomistic_cache()
 
 
+def test_projection_can_release_temporary_atoms_without_evicting_live_models(monkeypatch):
+    counter = _install_stub(monkeypatch)
+    design = make_minimal_design()
+    temporary = build_atomistic_model_cached(design, retain=False)
+    assert cache_size() == 0
+    retained = build_atomistic_model_cached(design)
+    assert retained is not temporary and counter.calls == 2
+    assert build_atomistic_model_cached(design, retain=False) is retained
+    assert cache_size() == 1
+    clear_atomistic_cache()
+
+
 def test_distinct_designs_each_build(monkeypatch):
     counter = _install_stub(monkeypatch)
     d1 = make_minimal_design(helix_length_bp=42)

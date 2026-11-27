@@ -2,7 +2,7 @@ import { BDNA_RISE_PER_BP } from '../constants.js'
 
 export function isNativeBevelFeature(entry) {
   return entry?.feature_type === 'snapshot' && entry.op_kind === 'bevel'
-    && entry.params?._proof_version === 1 && typeof entry.params.operation_id === 'string'
+    && [1, 2].includes(entry.params?._proof_version) && typeof entry.params.operation_id === 'string'
     && entry.params.operation_id.length > 0
 }
 

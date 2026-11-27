@@ -73,6 +73,7 @@ class ComponentClosure:
         self.movable = np.array(sorted(movable), dtype=int)
         self.environment = (None if environment is None else
                             cKDTree(np.asarray(environment, dtype=float).reshape(-1, 3)))
+        self.query_bounds = None
         pairs = [(i, j) for i in range(len(model.atoms)) for j in range(i+1, len(model.atoms))
                  if (i in movable or j in movable) and j not in adjacent[i]
                  and not adjacent[i].intersection(adjacent[j])]
@@ -101,8 +102,13 @@ class ComponentClosure:
         # chemical-validity oracle. Independent clash/piercing checks still run.
         penetration = clearance_gradient(xyz, self.pairs, gradient)
         cost += float(penetration@penetration)
+        if self.environment is not None:
+            queries = xyz[self.movable]
+            bounds = np.array([queries.min(axis=0), queries.max(axis=0)])
+            self.query_bounds = bounds if self.query_bounds is None else np.array([
+                np.minimum(self.query_bounds[0], bounds[0]), np.maximum(self.query_bounds[1], bounds[1])])
         if self.environment is not None and self.environment.n:
-            neighbours = self.environment.query_ball_point(xyz[self.movable], .20)
+            neighbours = self.environment.query_ball_point(queries, .20)
             counts = np.array([len(row) for row in neighbours])
             if counts.sum():
                 own = np.repeat(self.movable, counts)
@@ -130,10 +136,13 @@ class ComponentClosure:
 
 def close_component(model, *, max_iterations=400, environment=None):
     from backend.core.corner_seam_cache import fit_key, get_fit, put_fit
+    from backend.core.corner_seam_dependencies import find_dependency, remember_dependency, trace_box
 
     problem = ComponentClosure(model, environment=environment)
     key = fit_key(problem, max_iterations)
     cached = get_fit(key)
+    if cached is None:
+        cached = find_dependency(problem, max_iterations)
     if cached is None:
         result = minimize(problem.objective, problem.x0, jac=True, method='L-BFGS-B',
                           options={'maxiter': max_iterations, 'ftol': 1e-12, 'gtol': 1e-7})
@@ -141,9 +150,12 @@ def close_component(model, *, max_iterations=400, environment=None):
         report = {'converged': bool(result.success), 'iterations': result.nit,
                   'objective': float(result.fun), 'preserves_terminal_gamma': False,
                   'max_displacement_nm': float(np.linalg.norm(xyz-problem.original, axis=1).max())}
+        report['_environment_bounds'] = (None if problem.query_bounds is None else problem.query_bounds.tolist())
         put_fit(key, xyz, report)
+        remember_dependency(problem, max_iterations, xyz, report)
     else:
         xyz, report = cached
+    trace_box(report.get('_environment_bounds'), fit=True)
     for atom, position in zip(model.atoms, xyz):
         atom.x, atom.y, atom.z = map(float, position)
-    return report
+    return {key: value for key, value in report.items() if key != '_environment_bounds'}

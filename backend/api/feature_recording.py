@@ -120,6 +120,9 @@ def record_feature(session, op_kind, label, params, fn):
         if op_kind in PROOF_SNAPSHOT_KINDS:
             from backend.api.part_proof_commands import PROOF_VERSION
             version = PROOF_VERSION
+            if op_kind == 'bevel':
+                from backend.api.part_bevel_commands import BevelCommand
+                version = BevelCommand.model_validate(params).proof_version
             if op_kind == 'corner':
                 from backend.api.part_corner_commands import CornerCommand
                 version = CornerCommand.model_validate(params).proof_version

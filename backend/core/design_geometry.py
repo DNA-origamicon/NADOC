@@ -536,6 +536,20 @@ def _geometry_for_helices(
     """
     from types import SimpleNamespace
 
+    from backend.core import bevel_geometry_cache
+    cache_key = None
+    if (helix_ids is None and extension_ids is None and not include_linker_helices and not compact_skips
+            and measured_positioning is True and junction_balance is True and extension_slabs and _corner_seams):
+        identity = bevel_geometry_cache.design_key(design)
+        if identity is not None:
+            cache_key = ('full', identity)
+            cached = bevel_geometry_cache.get(cache_key)
+            if cached is None:
+                cached = bevel_geometry_cache.slice_certified(design)
+                if cached is not None:
+                    bevel_geometry_cache.put_full(cache_key, cached)
+            if cached is not None:
+                return cached
     full_mode = helix_ids is None
     nuc_info = _strand_nucleotide_info(design, helix_ids)
     if junction_balance is not True:
@@ -753,6 +767,8 @@ def _geometry_for_helices(
     if extension_slabs:
         from backend.core.extension_slabs import attach_extension_slabs
         attach_extension_slabs(result, design)
+    if cache_key is not None:
+        bevel_geometry_cache.put_full(cache_key, result)
     return result
 
 
@@ -1089,6 +1105,18 @@ def _positions_for_design(
     strand transforms, overhangs, residue poses, and extensions cannot select
     different placement through an incremental response.
     """
+    from backend.core import bevel_geometry_cache
+    identity = (bevel_geometry_cache.design_key(design)
+                if measured_positioning is True and junction_balance is True else None)
+    key = ('positions', identity) if identity is not None else None
+    cached = bevel_geometry_cache.get(key) if key is not None else None
+    if cached is not None:
+        return cached
+    positions = bevel_geometry_cache.slice_positions(design) if key is not None else None
+    if positions is not None:
+        result = positions, deformed_helix_axes(design)
+        bevel_geometry_cache.put(key, result)
+        return result
     nucleotides = _geometry_for_design(
         design, measured_positioning=measured_positioning,
         junction_balance=junction_balance,
@@ -1097,4 +1125,7 @@ def _positions_for_design(
     lookup = {(n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
               for n in nucleotides}
     _apply_ovhg_rotations_to_axes(design, axes, nuc_lookup=lookup)
-    return _positions_by_helix(nucleotides), axes
+    result = _positions_by_helix(nucleotides), axes
+    if key is not None:
+        bevel_geometry_cache.put(key, result)
+    return result

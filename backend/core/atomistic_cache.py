@@ -74,6 +74,7 @@ def build_atomistic_model_cached(
     fingerprint: str | None = None,
     fast_bridges: bool = False,
     measured_positioning: bool = True,
+    retain: bool = True,
 ):
     """``build_atomistic_model(design)`` with a bounded cache + single-flight build.
 
@@ -112,17 +113,26 @@ def build_atomistic_model_cached(
         from backend.core.memory_budget import reserve
         from backend.core.memory_sizes import retained_bytes
         from backend.core.sequences import strand_nucleotide_count
+        from backend.core.corner_seam_dependencies import capture_dependencies, remember_model_dependencies
 
         nucleotides = sum(strand_nucleotide_count(s, design) for s in design.strands)
         # Heavy-atom Python models plus placement temporaries; no solvent atoms.
         allowance = 128 * 1024**2 + nucleotides * 32 * 4096
         with reserve(allowance, label='Atomistic model construction'):
-            model = build_atomistic_model(
-                design,
-                fast_bridges=fast_bridges,
-                measured_positioning=measured_positioning,
-            )
-            charge = int(retained_bytes(model) * 1.25)
+            with capture_dependencies() as trace:
+                model = build_atomistic_model(
+                    design,
+                    fast_bridges=fast_bridges,
+                    measured_positioning=measured_positioning,
+                )
+            remember_model_dependencies(model, trace)
+            # Full's Corner projection retains only exact seam landmarks and
+            # dependency certificates. Keeping hundreds of thousands of atom
+            # objects too adds repeated cyclic-GC scans to ordinary UI edits.
+            charge = int(retained_bytes(model) * 1.25) if retain else 0
+
+        if not retain:
+            return model
 
         with _registry_lock:
             if charge > _CACHE_MAX_BYTES:

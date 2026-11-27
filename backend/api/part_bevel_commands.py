@@ -19,7 +19,7 @@ class BevelRequest(BaseModel):
 
 
 class BevelCommand(BevelRequest):
-    proof_version: Literal[1] = Field(default=1, alias='_proof_version')
+    proof_version: Literal[1, 2] = Field(default=2, alias='_proof_version')
     operation_id: Annotated[str, Field(min_length=1, max_length=64, strict=True)]
 
 
@@ -73,19 +73,25 @@ def build(design, params):
     from backend.api.corner_build import _admit_references
     from backend.core.occupancy import require_unique_occupancy
     command = BevelCommand.model_validate(params)
-    guide = bevel_guide(design, command)
-    selected = {row['helix_id'] for row in guide['cuts']}
+    if command.proof_version == 1:
+        guide = bevel_guide(design, command)
+        selected = {row['helix_id'] for row in guide['cuts']}
+        limits = {row['helix_id']: (math.floor(row['cut_bp'] + 1e-9)
+            if command.trim_end == 'end' else math.ceil(row['cut_bp'] - 1e-9)) for row in guide['cuts']}
+        def keep(hid, bp):
+            return hid not in limits or (bp <= limits[hid] if command.trim_end == 'end' else bp >= limits[hid])
+    else:
+        from backend.api.bevel_live import source_axes, retained_sites
+        retained = retained_sites(source_axes(design, command.cluster_id), command)
+        selected = set(retained)
+        def keep(hid, bp):
+            return hid not in retained or bp in retained[hid]
     try:
         _admit_references(design, selected, command.cluster_id)
     except ValueError as error:
         raise ValueError(str(error).replace('Corner', 'Bevel')) from error
     if any(ref.helix_id in selected for cluster in design.cluster_transforms for ref in cluster.base_ids):
         raise ValueError('Bevel must resolve base-scoped placement membership before trimming this bundle.')
-    # Endpoints are whole bp stations; never extend material to meet the face.
-    limits = {row['helix_id']: (math.floor(row['cut_bp'] + 1e-9)
-        if command.trim_end == 'end' else math.ceil(row['cut_bp'] - 1e-9)) for row in guide['cuts']}
-    def keep(hid, bp):
-        return hid not in limits or (bp <= limits[hid] if command.trim_end == 'end' else bp >= limits[hid])
     marks = {}
     for helix in design.helices:
         for mark in helix.loop_skips:
@@ -108,17 +114,20 @@ def build(design, params):
         for index, domain in enumerate(source.domains):
             step = 1 if domain.end_bp >= domain.start_bp else -1
             stations = list(range(domain.start_bp, domain.end_bp + step, step))
-            retained = [bp for bp in stations if keep(domain.helix_id, bp)]
-            if not retained:
-                flush()
-                continue
-            if retained[0] != domain.start_bp:
-                flush()
-            domains.append(domain.model_copy(update={'start_bp': retained[0], 'end_bp': retained[-1]}))
-            if sequences is not None:
-                bases.extend(sequences[index][bp] for bp in retained)
-            if retained[-1] != domain.end_bp:
-                flush()
+            run = []
+            def append_run():
+                if run:
+                    domains.append(domain.model_copy(update={'start_bp': run[0], 'end_bp': run[-1]}))
+                    if sequences is not None:
+                        bases.extend(sequences[index][bp] for bp in run)
+                    run.clear()
+            for bp in stations:
+                if keep(domain.helix_id, bp):
+                    run.append(bp)
+                else:
+                    append_run()
+                    flush()
+            append_run()
         flush()
         for index, (domains, sequence) in enumerate(groups):
             strands.append(source.model_copy(update={

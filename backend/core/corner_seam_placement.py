@@ -122,8 +122,13 @@ def _place_corner_seams(design, model, links):
         flexible.add(sugar[first]["O3'"])
         flexible.update(sugar[second][name] for name in ('P', 'OP1', 'OP2', "O5'"))
     if any(len(link.extra_bases) == 2 for link in links):
+        def traced_clashes(positions, finite, bonds, threshold, cap):
+            from backend.core.corner_seam_dependencies import trace_clearance
+            rows = find_clashes(positions, finite, bonds, threshold, cap)
+            trace_clearance(positions, flexible, rows, cap, threshold)
+            return rows
         atomistic._apply_reciprocal_phosphate_clearance(model, allowed_atom_serials=flexible,
-                                                       clash_finder=find_clashes)
+                                                       clash_finder=traced_clashes)
     observer = _observer.get()
     completed, total = 0, 2*len(links)
     if observer:

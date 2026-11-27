@@ -40,12 +40,16 @@ def _project(input_name, input_size, output_name):
         try:
             from backend.api.corner_preview_projection import project_corner_preview, project_corner_straight
             from backend.core.corner_seam_cache import import_fits, export_fits
+            from backend.core.corner_seam_projection import import_projection, export_projection
             request = pickle.loads(source.buf[:input_size])
             import_fits(request['fits'])
+            import_projection(request.get('projection'))
             component = (project_corner_straight(request['design'], on_progress=progress)
                 if request['straight'] else
                 project_corner_preview(request['design'], on_progress=progress, include_straight=False))
-            result = {'issues': [], 'component': component, 'fits': export_fits()}
+            view = _view(request['design'], request['straight'])
+            result = {'issues': [], 'component': component, 'fits': export_fits(),
+                      'projection': export_projection(view)}
             encoded = orjson.dumps(result, option=orjson.OPT_SERIALIZE_NUMPY)
             if len(encoded) > _RESULT_LIMIT:
                 raise ValueError('Corner Full preview exceeds its geometry transport budget.')
@@ -61,10 +65,13 @@ def _project(input_name, input_size, output_name):
 class CornerProjectionWorker(VerificationWorker):
     def __init__(self, design, *, straight=False):
         from backend.core.corner_seam_cache import export_fits
+        from backend.core.corner_seam_projection import export_projection
         self._straight = straight
         stream = _BoundedInput(_INPUT_LIMIT)
         try:
-            pickle.dump({'design': design, 'fits': export_fits(), 'straight': straight}, stream, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump({'design': design, 'fits': export_fits(), 'straight': straight,
+                         'projection': export_projection(_view(design, straight))},
+                        stream, protocol=pickle.HIGHEST_PROTOCOL)
         except WorkerLimit as error:
             raise ValueError('Corner preview source exceeds its calculation budget.') from error
         self._initialize_input((stream.getvalue(),), _target=_project,
@@ -86,19 +93,27 @@ class CornerProjectionWorker(VerificationWorker):
         return result
 
 
-def project_corner_in_worker(design, *, on_progress=None):
+def _view(design, straight):
+    return design.model_copy(update={'deformations': [], 'cluster_transforms': []}) if straight else design
+
+
+def project_corner_in_worker(design, *, on_progress=None, include_straight=True):
     """Prepare both independent views concurrently, within the preview's bounds.
 
     The approved Full and undeformed providers are unchanged. Each disposable
     process has one numerical thread; cancellation always reaps both processes.
     """
     from backend.core.corner_seam_cache import import_fits
-    workers, results = [], [None, None]
-    fractions = [0., 0.]
+    from backend.core.corner_seam_projection import import_projection, prepare_cached_projection
+    views = (False, True) if include_straight else (False,)
+    if all(prepare_cached_projection(_view(design, straight)) for straight in views):
+        from backend.api.corner_preview_projection import project_corner_preview
+        return project_corner_preview(design, on_progress=on_progress, include_straight=include_straight)
+    workers, results = [], [None] * len(views)
+    fractions = [0.] * len(views)
     deadline = monotonic() + 120
     try:
-        workers.append(CornerProjectionWorker(design))
-        workers.append(CornerProjectionWorker(design, straight=True))
+        workers.extend(CornerProjectionWorker(design, straight=straight) for straight in views)
         for worker in workers:
             worker.start()
         while any(result is None for result in results):
@@ -108,7 +123,7 @@ def project_corner_in_worker(design, *, on_progress=None):
                 done, total = worker.progress() or (0, 0)
                 fractions[index] = max(fractions[index], done / total if total else 0.)
                 if on_progress:
-                    on_progress(int(500 * sum(fractions)), 1000)
+                    on_progress(int(1000 * sum(fractions) / len(views)), 1000)
                 if monotonic() >= deadline:
                     raise ValueError('Corner Full preview exceeded its calculation time allowance.')
                 if worker.wait(.025):
@@ -116,9 +131,10 @@ def project_corner_in_worker(design, *, on_progress=None):
                     fractions[index] = 1.
         for result in results:
             import_fits(result['fits'])
+            import_projection(result.get('projection'))
         if on_progress:
             on_progress(1000, 1000)
-        return {**results[0]['component'], **results[1]['component']}
+        return {key: value for result in results for key, value in result['component'].items()}
     finally:
         for worker in workers:
             worker.close()

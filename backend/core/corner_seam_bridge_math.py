@@ -145,5 +145,22 @@ def bridge_cost(c3, o3, p, o5, c5):
 
 def minimize_bridge(atoms, source, destination):
     from backend.core.atomistic_minimisers import _minimize_backbone_bridge
+    from backend.core.corner_seam_cache import get_fit, put_fit
+    import hashlib
 
-    _minimize_backbone_bridge(atoms, source, destination, cost_fn=bridge_cost)
+    # Exact inputs, including atom aliasing and absent names. A repeated seed
+    # bridge is independent of the rest of the model; do not optimize it again
+    # merely because distant residues were removed by a Bevel.
+    ids = list(dict.fromkeys([*source.values(), *destination.values()]))
+    indices = {serial: i for i, serial in enumerate(ids)}
+    membership = [[(name, indices[serial]) for name, serial in sorted(row.items())]
+                  for row in (source, destination)]
+    xyz = _np.array([[atoms[i].x, atoms[i].y, atoms[i].z] for i in ids])
+    key = hashlib.sha256(b'corner-seed-bridge-v1' + repr(membership).encode() + xyz.tobytes()).digest()
+    cached = get_fit(key)
+    if cached is None:
+        _minimize_backbone_bridge(atoms, source, destination, cost_fn=bridge_cost)
+        put_fit(key, _np.array([[atoms[i].x, atoms[i].y, atoms[i].z] for i in ids]), {})
+    else:
+        for serial, position in zip(ids, cached[0]):
+            atoms[serial].x, atoms[serial].y, atoms[serial].z = map(float, position)

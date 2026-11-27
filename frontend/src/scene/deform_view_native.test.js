@@ -34,3 +34,18 @@ it('keeps authoritative identity geometry without rewriting every rendered nucle
   expect(renderer.applyDeformLerp).not.toHaveBeenCalled()
   expect(renderer.setAxisShaftMode).toHaveBeenCalled()
 })
+
+it('applies a posed geometry batch once, and still applies standalone straight updates', async () => {
+  const renderer = { setAxisShaftMode: vi.fn(), applyDeformLerp: vi.fn() }
+  initDeformView(renderer)
+  const subscriptions = store.subscribe.mock.calls.map(([fn]) => fn)
+  const design = { helices: [], strands: [], deformations: [{}], cluster_transforms: [] }
+  const old = { currentDesign: design, currentGeometry: [], straightGeometry: [], currentHelixAxes: {}, straightHelixAxes: {} }
+  const next = { ...old, currentGeometry: [], straightGeometry: [] }
+  await subscriptions[0](next, old)
+  expect(renderer.applyDeformLerp).not.toHaveBeenCalled()
+  await subscriptions[1](next, old)
+  expect(renderer.applyDeformLerp).toHaveBeenCalledTimes(1)
+  await subscriptions[0]({ ...next, straightGeometry: [] }, next)
+  expect(renderer.applyDeformLerp).toHaveBeenCalledTimes(2)
+})

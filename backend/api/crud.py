@@ -555,13 +555,16 @@ def _design_response_with_geometry(
         return resp
     # Full path — compute nucleotides first, then derive axis positions using
     # nucleotide-derived pivots so axis arrows stay consistent with backbone beads.
-    nucleotides = _geometry_for_design(
+    from backend.core import bevel_geometry_cache
+    compact_payload = bevel_geometry_cache.compact(design) if compact_deformed and measured_positioning else None
+    nucleotides = None if compact_payload is not None else _geometry_for_design(
         design,
         measured_positioning=measured_positioning,
         junction_balance=True,
     )
     axes = deformed_helix_axes(design)
-    _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
+    if nucleotides is not None:
+        _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     if compact_deformed:
         # Re-bucket the per-nuc dicts into per-helix-per-direction parallel
         # arrays. Wire payload is ~50% of the dict-list form because field
@@ -574,7 +577,7 @@ def _design_response_with_geometry(
                 full_feature_log=full_feature_log,
                 normalize_legacy=normalize_legacy,
             ),
-            "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
+            "nucleotides_compact": compact_payload if compact_payload is not None else _compact_geometry_from_nucleotides(nucleotides),
             "helix_axes": axes,
         }
     else:
@@ -6254,7 +6257,8 @@ def delete_feature(
     entry = log[index]
     from backend.api.part_recipe_edit import supports_recipe_edit, change_recipe
     if supports_recipe_edit(design, entry):
-        return change_recipe(index, sub_index=sub_index, cascade=cascade)
+        response = change_recipe(index, sub_index=sub_index, cascade=cascade)
+        return ORJSONResponse(response) if getattr(entry, 'op_kind', None) == 'bevel' else response
 
     if entry.feature_type == "checkpoint":
         raise HTTPException(400, detail="Cannot delete checkpoint entries.")
@@ -6781,7 +6785,8 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
         restored = revert_recipe(design, index, sub_index)
         report = validate_design(restored)
         design_state.set_design(restored, expected_revision=revision)
-        return _design_replace_response(design, restored, report)
+        response = _design_replace_response(design, restored, report)
+        return ORJSONResponse(response) if getattr(entry, 'op_kind', None) == 'bevel' else response
 
     # Per-sub-step revert inside a Fine Routing cluster.
     if sub_index is not None:

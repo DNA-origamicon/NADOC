@@ -1,25 +1,33 @@
 import { createBevelPopup } from './bevel_popup.js'
 import { beginClusterSelection } from './tool_cluster_selection.js'
-import { createCornerPreview as createBevelPreview } from '../scene/corner_preview.js'
-import { captureBevelSource, previewBevel, applyBevel } from '../api/bevel.js'
+import { createBevelPreview } from '../scene/bevel_preview.js'
+import { createBevelPlaneControls } from '../scene/bevel_plane_controls.js'
+import { bevelPlane, bevelMask } from '../scene/bevel_math.js'
+import { captureBevelSource, applyBevel, loadBevelSource } from '../api/bevel.js'
 import { holdFeatureEditSaves } from '../api/client.js'
 import { isNativeBevelFeature } from './bevel_parameters.js'
 
 /** One source-bound Bevel interaction, from cluster pick through preview/apply. */
-export function initBevelTool({ store, selectionManager, scene, designRenderer, showToast,
+export function initBevelTool({ store, selectionManager, scene, designRenderer, showToast, camera, canvas, controls,
   makePopup = createBevelPopup, makePreview = createBevelPreview,
-  capture = captureBevelSource, calculate = previewBevel, commit = applyBevel,
-  pick = beginClusterSelection, debounceMs = 80, holdSaves = holdFeatureEditSaves,
+  capture = captureBevelSource, commit = applyBevel,
+  pick = beginClusterSelection, holdSaves = holdFeatureEditSaves,
+  loadSource = loadBevelSource, makePlane = createBevelPlaneControls,
 }) {
   let picker = null, source = null, sourceDesign = null, cluster = null, values = null
-  let controller = null, timer = null, generation = 0, ready = false, applying = false, opened = false
-  let previewToken = null, saveHold = null
+  let controller = null, generation = 0, ready = false, applying = false, opened = false
+  let saveHold = null, paths = null, loading = null
   const preview = makePreview({ scene, getLiveRoot: () => designRenderer.getDisplayGeometry()?.root })
   const popup = makePopup({ onChange: change, onInvalid: invalidate, onSelect: select,
     onCancel: cancel, onApply: apply })
+  const plane = makePlane({ scene, camera, canvas, controls, onChange: next => {
+    if (applying) return
+    popup.selected(cluster.name || 'Selected cluster', sourceDesign.lattice_type, next)
+    change(next)
+  }, onMode: mode => popup.mode?.(mode) })
   function invalidate() {
-    generation++; ready = false; previewToken = null; clearTimeout(timer); timer = null
-    controller?.abort(); controller = null; preview.clear()
+    generation++; ready = false
+    controller?.abort(); controller = null; preview.clear(); plane.clear(); paths = null; loading = null
   }
   function cancel({ force = false } = {}) {
     if (applying && !force) return
@@ -56,9 +64,10 @@ export function initBevelTool({ store, selectionManager, scene, designRenderer, 
       picker = pick({ store, selectionManager, onCancelled: cancel, onSelected: selected => {
         if (!opened) return
         cluster = selected; sourceDesign = store.getState().currentDesign; source = capture(sourceDesign)
-        const helices = sourceDesign.helices.filter(h => selected.helix_ids.includes(h.id))
-        const lo = Math.max(...helices.map(h => h.bp_start ?? 0))
-        const hi = Math.min(...helices.map(h => (h.bp_start ?? 0) + h.length_bp - 1))
+        const domains = sourceDesign.strands.flatMap(s => s.domains).filter(d => selected.helix_ids.includes(d.helix_id))
+        if (!domains.length) { popup.error('Select a cluster containing duplex material.'); return }
+        const lo = Math.min(...domains.map(d => Math.min(d.start_bp, d.end_bp)))
+        const hi = Math.max(...domains.map(d => Math.max(d.start_bp, d.end_bp)))
         values = { positionBp: Math.round((lo + hi) / 2), angleDeg: 0, directionDeg: 0, trimEnd: 'end' }
         popup.selected(selected.name || 'Selected cluster', sourceDesign.lattice_type, values)
         change(values)
@@ -69,45 +78,55 @@ export function initBevelTool({ store, selectionManager, scene, designRenderer, 
     return { cluster_id: cluster.id, position_bp: values.positionBp,
       angle_deg: values.angleDeg, direction_deg: values.directionDeg, trim_end: values.trimEnd }
   }
+  function renderLocal() {
+    if (!paths || !opened) return
+    const start = performance.now()
+    ready = false
+    try {
+      const frame = bevelPlane(paths, values)
+      plane.update(frame, paths, values)
+      const mask = bevelMask(paths, values, frame, true)
+      preview.mask(mask, start)
+      if (!mask.hasCut) throw new Error('Bevel needs material on both sides of the cutting plane.')
+      ready = true
+      popup.ready(source.featureId ? 'Live preview of this feature. Later features replay on Apply.'
+        : 'Live Full preview. Ready to apply.')
+    } catch (error) { popup.error(error.message) }
+  }
   function change(next) {
-    invalidate(); values = next
+    values = next; ready = false
     if (!source || !cluster) return
-    popup.calculating(null, 'Preparing cylinder preview…')
+    if (paths) { renderLocal(); return }
+    if (loading) return
+    popup.calculating(null, 'Preparing live Full preview…')
     const epoch = generation
-    timer = setTimeout(async () => {
-      controller = new AbortController()
-      try {
-        await calculate(source, parameters(), { signal: controller.signal, onEvent: event => {
-          if (epoch !== generation || !opened) return
-          if (event.type === 'guide') preview.guide(event.guide)
-          if (event.type === 'progress') {
-            const eta = event.remaining_seconds
-            popup.calculating(event.percent, `${event.stage}${Number.isFinite(eta) && eta > .1 ? ` · ~${eta.toFixed(1)} s remaining` : ''}`)
-          }
-          if (event.type === 'ready') {
-            if (!event.preview_token) throw new Error('Bevel preview has no prepared result. Reopen the tool.')
-            preview.full(event.candidate); previewToken = event.preview_token; ready = true
-            popup.ready('Full bevel preview ready.')
-          }
-        } })
-      } catch (error) {
-        if (epoch !== generation || error.name === 'AbortError') return
-        ready = false; preview.clear(); popup.error(error.message)
-      }
-    }, debounceMs)
+    controller = new AbortController()
+    const current = store.getState()
+    const component = !source.featureId && current.currentGeometry?.length && Object.keys(current.currentHelixAxes ?? {}).length
+      ? { component_kind: 'corner-preview-dna', component_version: 1,
+        display_topology: sourceDesign, nucleotides: current.currentGeometry,
+        helix_axes: Object.entries(current.currentHelixAxes).map(([helix_id, axis]) => ({
+          helix_id, ...axis, ovhg_axes: axis.ovhgAxes })), seam_inserts: [] } : null
+    loading = loadSource(source, parameters(), { signal: controller.signal, includeGeometry: !component }).then(data => {
+      if (epoch !== generation || !opened) return
+      paths = data.paths; preview.full(data.component ?? component); renderLocal()
+    }).catch(error => {
+      if (epoch !== generation || error.name === 'AbortError') return
+      popup.error(error.message); loading = null
+    })
   }
   async function apply() {
     if (!ready || applying || !source) return
     if (store.getState().currentDesign !== sourceDesign) { cancel(); return }
     const epoch = generation
-    applying = true; popup.setBusy(true); popup.calculating(null, source.featureId ? 'Updating Bevel…' : 'Applying Bevel…')
+    applying = true; plane.setEnabled?.(false); popup.setBusy(true); popup.calculating(null, source.featureId ? 'Updating Bevel…' : 'Applying Bevel…')
     try {
-      await commit(source, parameters(), previewToken)
+      await commit(source, parameters())
       applying = false; if (epoch === generation) cancel()
     } catch (error) {
       applying = false
       if (epoch !== generation) return
-      ready = false; preview.clear(); popup.setBusy(false); popup.error(error.message)
+      ready = false; plane.setEnabled?.(true); popup.setBusy(false); popup.error(error.message)
     }
   }
   function open() {
@@ -153,6 +172,6 @@ export function initBevelTool({ store, selectionManager, scene, designRenderer, 
   return { open, openEdit, cancel, dispose() {
     applying = false; cancel(); unsubscribe(); button?.removeEventListener('click', open)
     document.removeEventListener('keydown', escape); window.removeEventListener('nadoc:document-reset', reset)
-    popup.dispose(); preview.dispose()
+    popup.dispose(); preview.dispose(); plane.dispose()
   } }
 }

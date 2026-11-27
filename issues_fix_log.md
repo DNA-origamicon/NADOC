@@ -1,5 +1,25 @@
 # Issues fix log
 
+## ISSUE-273 — [ ] Cold Bevel and history actions below one second
+
+Removed speculative UI preparation. Exact dependency/geometry reuse eliminates
+repeated whole-model seam optimization for certified end deletions. Temporary
+atom models are released after Full projection; preview replay avoids recovery
+encoding and duplicate display interpolation. Approved atom regressions and
+uncached geometry equivalence pass. The app latency gate still fails: latest
+unprofiled Corner Apply 982 ms, editor opening 1170 ms and edit 1469 ms;
+undo/redo/delete/revert 394–785 ms. Upstream Corner replay remains a cold-editor
+cost. Unsupported seam-changing/restoring-material cases retain canonical fallbacks.
+
+## ISSUE-272 — [x] Live Bevel on cornered bundles
+
+Versioned plane-side trimming now handles whole Corner wedges and disjoint
+retained intervals. Full preview updates local private buffers, with Bend-style
+face dragging and Tab rotation. The popup leaves narrow canvases accessible.
+Real `corner_test.nadoc` gestures, Apply, retained-coordinate and independent
+replay checks pass; the original source and version-1 replay are preserved.
+
+
 ## ISSUE-271 — [ ] Corner near-plane duplicate intersection
 
 Discovered during Bevel integration. Bevel now counts an on-plane station once,

@@ -33,7 +33,7 @@ function addPlane(root, guide) {
 }
 
 /** Own only private meshes. The live Design and its geometry remain untouched. */
-export function createCornerPreview({ scene, getLiveRoot }) {
+export function createCornerPreview({ scene, getLiveRoot, onFullBuilt }) {
   let root = null, live = null, wasVisible = false, palette = null, lastGuide = null
   function clear() {
     if (root) disposeRoot(root)
@@ -105,6 +105,7 @@ export function createCornerPreview({ scene, getLiveRoot }) {
       next.traverse(node => { if (node.userData.setupOnly) node.visible = false })
       if (guide) addPlane(next, guide)
       install(next, true); palette = token; lastGuide = guide
+      onFullBuilt?.({ root: next, native, extras, connections, lines })
     } catch (error) { disposeRoot(next); _resetStapleColorPins(token); throw error }
   }
   return { guide, full, clear, dispose: clear }

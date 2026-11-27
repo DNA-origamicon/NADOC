@@ -260,7 +260,10 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
 
     // Identity-pose geometry is already authoritative in the renderer. Avoid
     // rewriting every instance twice when a response updates both geometry maps.
-    if (hasEffectiveDisplayPose(newState.currentDesign)) _applyLerp(_currentT)
+    // A batch containing currentGeometry is applied by the next subscriber
+    // after these maps are ready. Do not rewrite every instance twice.
+    if (newState.currentGeometry === prevState.currentGeometry
+        && hasEffectiveDisplayPose(newState.currentDesign)) _applyLerp(_currentT)
   })
 
   // When currentGeometry changes (undo/redo, topology mutation, new deformation):

@@ -1,5 +1,36 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-273 — Bevel repeats atomistic/display work on Apply and navigation (2026-11-27)
+
+- **Cause:** a plane deletion invalidated whole atom models and both Full/straight
+  projections. Subsequent geometry allocation also repeatedly triggered costly GC.
+- **Partial fix; latency gate still failing:** exact optimizer/environment dependency certificates,
+  bounded geometry caches and certified retained-frame slicing; release temporary
+  atom models used only for Full projection. Direct Apply replaces speculative
+  preparation. Read-only edit replay avoids recovery snapshot encoding, Corner
+  replay stops at the shortest passing insert, and display batches interpolate once.
+- **Gate:** first Apply, editor open/commit, undo, redo, delete and revert must each
+  pass the unchanged 1000 ms app assertion. Independent replay and fresh canonical
+  geometry comparisons must also pass. Unsupported cuts retain the exact fallback.
+- **Evidence:** `memory/project_corner_primitive.md` records measured scope/results.
+
+## ISSUE-272 — Bevel cannot traverse Corner wedges and popup covers its plane (2026-11-27)
+
+- **Cause:** v1 required every selected helix to cross the plane once, including
+  the separate occupied wedges created by Corner. Its Full preview rebuilt after
+  every change. On a narrow canvas, the popup's bounds also covered the plane.
+- **Fix:** version 2 classifies actual occupied stations by plane side, including
+  entirely retained/removed wedges and disjoint retained intervals. Native Full
+  preview buffers are reused locally. Bend-style face dragging, Tab rotation and
+  the existing adjacent-sidebar popup layout keep the plane interactive.
+- **Compatibility:** v1 replay stays unchanged. The recorder now preserves Bevel's
+  version, just as Corner's recorder does. No native molecular provider changed.
+- **Evidence:** `corner_test.nadoc` retained-coordinate and independent replay
+  checks pass; real app face drag, rotation, Apply and verification pass. The
+  original file is unchanged. See `memory/project_corner_primitive.md` for timing
+  scope and remaining ownership/reference limits.
+
+
 ## ISSUE-271 — Corner plane intersections double-count nearly on-plane samples (2026-11-27)
 
 - **Status:** open for Corner; Bevel uses a separate corrected intersection routine.

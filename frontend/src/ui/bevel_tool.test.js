@@ -5,139 +5,96 @@ import { createSelectionController } from '../scene/selection_controller.js'
 import { initBevelTool } from './bevel_tool.js'
 
 let tool
-afterEach(() => { tool?.dispose(); vi.useRealTimers(); document.body.replaceChildren() })
+const data = { component: {}, paths: [{ helix_id: 'h', bps: [0, 84, 167], points: [[0, 0, 0], [0, 0, 28], [0, 0, 56]], tangents: [[0, 0, 1], [0, 0, 1], [0, 0, 1]], rights: [[1, 0, 0], [1, 0, 0], [1, 0, 0]] }] }
+afterEach(() => { tool?.dispose(); document.body.replaceChildren() })
 function setup(options = {}) {
-  vi.useFakeTimers()
   document.body.innerHTML = '<button id="menu-tools-bevel">Bevel</button>'
   const design = { id: 'part', lattice_type: 'SQUARE', helices: [{ id: 'h', bp_start: 0, length_bp: 168 }],
+    strands: [{ domains: [{ helix_id: 'h', start_bp: 0, end_bp: 167 }] }],
     cluster_transforms: [{ id: 'c', name: 'Bundle', helix_ids: ['h'] }] }
-  const store = createMockStore({ currentDesign: design })
-  const selection = createSelectionController({ store })
-  const preview = { guide: vi.fn(), full: vi.fn(), clear: vi.fn(), dispose: vi.fn() }
-  const requests = []
-  const calculate = vi.fn((source, parameters, options) => {
-    requests.push({ source, parameters, ...options })
-    return new Promise(() => {})
-  })
+  const store = createMockStore({ currentDesign: design }), selection = createSelectionController({ store })
+  const preview = { full: vi.fn(), mask: vi.fn(), clear: vi.fn(), dispose: vi.fn() }
+  const plane = { update: vi.fn(), clear: vi.fn(), dispose: vi.fn() }
+  const loadSource = vi.fn(async () => data)
   const commit = vi.fn(async () => {}), showToast = vi.fn()
   tool = initBevelTool({ store, selectionManager: { clearSelection: selection.clear, setSelectionLevel: selection.setLevel },
-    makePreview: () => preview, designRenderer: {}, showToast, calculate, commit,
-    capture: () => ({ docId: 'doc', expected_design_id: 'part', expected_revision: 3 }),
-    holdSaves: () => null, ...options })
-  return { store, selection, preview, requests, commit, showToast }
+    makePreview: () => preview, makePlane: () => plane, designRenderer: {}, showToast, commit, loadSource,
+    capture: () => ({ docId: 'doc', expected_design_id: 'part', expected_revision: 3 }), holdSaves: () => null, ...options })
+  return { store, selection, preview, plane, loadSource, commit, showToast }
 }
 async function selected(d) {
   document.getElementById('menu-tools-bevel').click()
-  expect(d.store.getState().selection.level).toBe('cluster')
   d.selection.replace([{ kind: 'cluster', id: 'c' }])
-  await Promise.resolve(); await vi.advanceTimersByTimeAsync(100)
-  expect(d.store.getState().selection.level).toBe('default')
+  await Promise.resolve(); await Promise.resolve()
 }
-it('requires the source part owner instead of using a stale part behind an assembly', () => {
-  const d = setup()
-  d.store.setState({ assemblyActive: true })
-  document.getElementById('menu-tools-bevel').click()
-  expect(d.requests).toHaveLength(0)
-  expect(document.getElementById('bevel-panel').style.display).toBe('none')
-  expect(d.showToast.mock.calls[0][0]).toMatch(/source part/)
-})
-it('picks a cluster, shows cylinder then Full preview and commits the frozen source', async () => {
+const apply = () => document.querySelector('.def-btn.primary')
+it('loads Full once and changes the local mask immediately without server requests', async () => {
   const d = setup(); await selected(d)
-  const request = d.requests[0]
-  expect(request.parameters).toEqual({ cluster_id: 'c', position_bp: 84, angle_deg: 0, direction_deg: 0, trim_end: 'end' })
-  request.onEvent({ type: 'guide', guide: { cuts: [] } })
-  expect(d.preview.guide).toHaveBeenCalledWith({ cuts: [] })
-  request.onEvent({ type: 'progress', percent: 50, stage: 'Calculating seams', remaining_seconds: .4 })
-  expect(document.querySelector('[role=status]').textContent).toContain('50%')
-  request.onEvent({ type: 'ready', preview_token: 'prepared-bevel', candidate: { geometry: 'full' } })
-  expect(d.preview.full).toHaveBeenCalledWith({ geometry: 'full' })
-  document.querySelector('.def-btn.primary').click()
-  await Promise.resolve()
-  expect(d.commit).toHaveBeenCalledWith(request.source, request.parameters, 'prepared-bevel')
-  expect(request.signal.aborted).toBe(true)
-})
-it('aborts stale previews, ignores late Full results, and releases everything on document change', async () => {
-  const d = setup(); await selected(d)
-  const stale = d.requests[0]
+  expect(d.preview.full).toHaveBeenCalledOnce()
+  expect(apply().disabled).toBe(false)
   const field = document.getElementById('bevel-angleDeg')
-  field.value = '75'; field.dispatchEvent(new Event('input'))
-  expect(stale.signal.aborted).toBe(true)
-  stale.onEvent({ type: 'ready', preview_token: 'prepared-bevel', candidate: {} })
-  expect(d.preview.full).not.toHaveBeenCalled()
-  expect(document.querySelector('.def-btn.primary').disabled).toBe(true)
-  await vi.advanceTimersByTimeAsync(100)
-  expect(d.requests[1].parameters.angle_deg).toBe(75)
-  d.store.setState({ currentDesign: { id: 'other' } })
-  expect(d.requests[1].signal.aborted).toBe(true)
-  expect(d.preview.clear).toHaveBeenCalled()
+  field.value = '25'; field.dispatchEvent(new Event('input'))
+  expect(d.preview.mask).toHaveBeenCalledTimes(2)
+  expect(d.loadSource).toHaveBeenCalledOnce()
+  apply().click(); await Promise.resolve(); await Promise.resolve()
+  await vi.waitFor(() => expect(d.commit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ angle_deg: 25 })))
 })
-
-it('edits a recorded Bevel by feature identity without selecting or creating another bevel', async () => {
-  const d = setup()
-  const entry = { id: 'feature-1', feature_type: 'snapshot', op_kind: 'bevel',
-    params: { _proof_version: 1, operation_id: 'bevel-op', cluster_id: 'c',
-      position_bp: 56, angle_deg: 75, direction_deg: 30, trim_end: 'end' } }
+it('ignores late source geometry and restores the display after a document change', async () => {
+  let resolve
+  const d = setup({ loadSource: () => new Promise(r => { resolve = r }) }); await selected(d)
+  d.store.setState({ currentDesign: { id: 'other' } })
+  resolve(data); await Promise.resolve()
+  expect(d.preview.full).not.toHaveBeenCalled(); expect(d.preview.clear).toHaveBeenCalled()
+  expect(d.plane.clear).toHaveBeenCalled()
+})
+it('ignores a late commit completion after document reset', async () => {
+  let finish
+  const commit = vi.fn(() => new Promise(r => { finish = r }))
+  const d = setup({ commit })
+  await selected(d); apply().click()
+  window.dispatchEvent(new Event('nadoc:document-reset')); finish(); await Promise.resolve(); await Promise.resolve()
+  expect(commit).toHaveBeenCalledOnce()
+  expect(document.getElementById('bevel-panel').style.display).toBe('none')
+})
+it('loads the recorded input prefix for a native history edit', async () => {
+  const d = setup(), entry = { id: 'feature', feature_type: 'snapshot', op_kind: 'bevel', params: {
+    _proof_version: 2, operation_id: 'op', cluster_id: 'c', position_bp: 84, angle_deg: 15, direction_deg: 0, trim_end: 'end' } }
   d.store.setState({ currentDesign: { ...d.store.getState().currentDesign, feature_log: [entry] } })
-  tool.openEdit(entry)
+  tool.openEdit(entry); await Promise.resolve()
+  expect(d.loadSource).toHaveBeenCalledWith(expect.objectContaining({ featureId: 'feature' }), expect.anything(), expect.anything())
   expect(document.querySelector('.tool-popup__header h2').textContent).toBe('Edit Bevel')
-  expect(document.getElementById('bevel-angleDeg').value).toBe('75')
-  expect([...document.querySelectorAll('button')].find(node => node.textContent === 'Change selection').hidden).toBe(true)
-  await vi.advanceTimersByTimeAsync(100)
-  const request = d.requests[0]
-  expect(request.source.featureId).toBe('feature-1')
-  expect(request.parameters).toEqual({ cluster_id: 'c', position_bp: 56, angle_deg: 75, direction_deg: 30, trim_end: 'end' })
-  request.onEvent({ type: 'ready', preview_token: 'prepared-bevel', candidate: {} })
-  let complete
-  d.commit.mockImplementation(() => new Promise(resolve => { complete = resolve }))
-  document.querySelector('.def-btn.primary').click()
-  expect(document.querySelector('fieldset').disabled).toBe(true)
-  expect(d.commit).toHaveBeenCalledWith(request.source, request.parameters, 'prepared-bevel')
-  d.store.setState({ currentDesign: { id: 'other' } })
-  expect(document.getElementById('bevel-panel').style.display).toBe('none')
-  complete(); await Promise.resolve()
-  expect(document.getElementById('bevel-panel').style.display).toBe('none')
 })
-
-it('invalidates the completed result when a parameter changes and applies only its replacement', async () => {
+it('blocks Apply when the plane would remove nothing, but permits recovery', async () => {
   const d = setup(); await selected(d)
-  d.requests[0].onEvent({ type: 'ready', preview_token: 'old', candidate: {} })
-  const field = document.getElementById('bevel-angleDeg')
-  field.value = '75'; field.dispatchEvent(new Event('input'))
-  document.querySelector('.def-btn.primary').click()
-  expect(d.commit).not.toHaveBeenCalled()
-  await vi.advanceTimersByTimeAsync(100)
-  d.requests[1].onEvent({ type: 'ready', preview_token: 'replacement', candidate: {} })
-  document.querySelector('.def-btn.primary').click()
-  await Promise.resolve()
-  expect(d.commit).toHaveBeenCalledWith(d.requests[1].source,
-    { cluster_id: 'c', position_bp: 84, angle_deg: 75, direction_deg: 0, trim_end: 'end' }, 'replacement')
+  const field = document.getElementById('bevel-positionBp')
+  field.value = '167'; field.dispatchEvent(new Event('input'))
+  expect(apply().disabled).toBe(true)
+  field.value = '84'; field.dispatchEvent(new Event('input'))
+  expect(apply().disabled).toBe(false); expect(d.loadSource).toHaveBeenCalledOnce()
 })
-
-it('drains an in-flight save before capturing the source and releases the save hold on close', async () => {
+it('drains and releases an in-flight save without capturing its stale source', async () => {
   let saved
-  const release = vi.fn()
-  const holdSaves = vi.fn(() => ({ ready: new Promise(resolve => { saved = resolve }), release }))
-  const d = setup({ holdSaves })
+  const release = vi.fn(), d = setup({ holdSaves: () => ({ ready: new Promise(r => { saved = r }), release }) })
   document.getElementById('menu-tools-bevel').click()
-  expect(d.requests).toHaveLength(0)
-  // The acknowledgement can replace the frontend model while the hold drains.
+  expect(d.loadSource).not.toHaveBeenCalled()
   d.store.setState({ currentDesign: { ...d.store.getState().currentDesign } })
   saved(); await Promise.resolve()
-  expect(d.store.getState().selection.level).toBe('cluster')
-  d.selection.replace([{ kind: 'cluster', id: 'c' }])
-  await Promise.resolve(); await vi.advanceTimersByTimeAsync(100)
-  expect(d.requests).toHaveLength(1)
-  tool.cancel()
-  expect(release).toHaveBeenCalledOnce()
+  d.selection.replace([{ kind: 'cluster', id: 'c' }]); await Promise.resolve()
+  expect(d.loadSource).toHaveBeenCalledOnce()
+  tool.cancel(); expect(release).toHaveBeenCalledOnce()
 })
-it('releases a pending save hold on document reset and ignores its late completion', async () => {
-  let saved
-  const release = vi.fn()
-  const d = setup({ holdSaves: () => ({ ready: new Promise(resolve => { saved = resolve }), release }) })
-  document.getElementById('menu-tools-bevel').click()
-  window.dispatchEvent(new Event('nadoc:document-reset'))
-  saved(); await Promise.resolve(); await vi.advanceTimersByTimeAsync(100)
-  expect(release).toHaveBeenCalledOnce()
-  expect(d.requests).toHaveLength(0)
-  expect(document.getElementById('bevel-panel').style.display).toBe('none')
+it('requires source-part topology ownership in assembly mode', () => {
+  const d = setup(); d.store.setState({ assemblyActive: true }); tool.open()
+  expect(d.loadSource).not.toHaveBeenCalled(); expect(d.showToast).toHaveBeenCalled()
+})
+
+it('reuses loaded native geometry and requests only axis data for a new cut', async () => {
+  const loadSource = vi.fn(async () => ({ paths: data.paths, component: null }))
+  const d = setup({ loadSource })
+  d.store.setState({ currentGeometry: [{ helix_id: 'h', bp_index: 84 }],
+    currentHelixAxes: { h: { start: [0, 0, 0], end: [0, 0, 56], samples: [[0, 0, 0], [0, 0, 56]] } } })
+  await selected(d)
+  expect(loadSource).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ includeGeometry: false }))
+  expect(d.preview.full).toHaveBeenCalledWith(expect.objectContaining({ helix_axes: [expect.objectContaining({ helix_id: 'h' })],
+    nucleotides: d.store.getState().currentGeometry }))
 })

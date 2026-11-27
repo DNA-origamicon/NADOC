@@ -49,8 +49,9 @@ def build_corner(design, command, *, on_progress=None, check_cancel=None):
     from backend.api.corner_junction_evaluation import evaluate_corner_junctions
     from backend.core.occupancy import require_unique_occupancy
 
+    backbone_limit = 1.2 if command.proof_version == 1 else SSDNA_CONTOUR_PER_NT_NM
     guide, routes, seams = evaluate_corner_junctions(design, command.inputs(),
-        on_progress=on_progress, check_cancel=check_cancel)
+        on_progress=on_progress, check_cancel=check_cancel, first_within_nm=backbone_limit)
     check = check_cancel or (lambda: None)
     check()
     if command.angle_deg == 0:
@@ -64,7 +65,6 @@ def build_corner(design, command, *, on_progress=None, check_cancel=None):
     # v1 used the ordinary crossover envelope, which can overextend an ssDNA
     # insert chain. v2 uses the existing per-nucleotide contour limit instead.
     # Preserve v1 replay exactly. Neither screen is an atomistic approval.
-    backbone_limit = 1.2 if command.proof_version == 1 else SSDNA_CONTOUR_PER_NT_NM
     sequences = {}
     for seam in seams:
         fitting = [candidate for candidate in seam.candidates if candidate.max_backbone_length_nm <= backbone_limit]

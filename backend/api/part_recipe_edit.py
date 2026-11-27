@@ -407,7 +407,7 @@ def _fine_routing_removal(log, exc):
 
 def change_recipe(index, *, params=None, sub_index=None, cascade=False,
                   expected_design_id=None, expected_revision=None, expected_feature_id=None,
-                  complete_geometry=False):
+                  complete_geometry=False, compact_geometry=False):
     from backend.api.crud import _design_replace_response, _design_response_with_geometry
     from backend.api.part_history_verification import _slot
     from backend.api.part_source_bound_route import require_current
@@ -449,7 +449,8 @@ def change_recipe(index, *, params=None, sub_index=None, cascade=False,
         state.set_design(candidate, expected_revision=revision, expected_source=source,
             expected_session_identity=session_identity, expected_policy_generation=policy_generation)
         response = (_design_response_with_geometry(candidate, report, embed_straight=True,
-                    normalize_legacy=False, full_feature_log=True) if complete_geometry else
+                    normalize_legacy=False, full_feature_log=True,
+                    compact_deformed=compact_geometry) if complete_geometry else
                     _design_replace_response(source, candidate, report))
         removed = getattr(report, "auto_removed_features", [])
         if removed:

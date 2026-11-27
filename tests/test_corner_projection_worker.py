@@ -15,23 +15,29 @@ from backend.core.models import Design
 
 @pytest.fixture
 def source():
+    from backend.core.corner_seam_projection import clear_projection_cache
+    clear_projection_cache()
     with gzip.open(Path(__file__).parents[1] / 'frontend/src/ui/geometry_review_data/corner-closure.json.gz', 'rt') as stream:
         return Design.model_validate(json.load(stream)['controls']['hc2']['candidate_design'])
 
 
 @pytest.mark.slow
-def test_worker_projection_and_exact_cache_match_local_provider(source):
+@pytest.mark.parametrize('include_straight', [True, False])
+def test_worker_projection_and_exact_cache_match_local_provider(source, include_straight):
     clear_fit_cache()
     before = source.model_dump_json()
     progress = []
-    result = worker.project_corner_in_worker(source, on_progress=lambda done, total: progress.append((done, total)))
+    result = worker.project_corner_in_worker(source, include_straight=include_straight,
+        on_progress=lambda done, total: progress.append((done, total)))
     assert export_fits()
     from backend.core.atomistic_cache import clear_atomistic_cache
     clear_fit_cache()
     clear_atomistic_cache()
+    from backend.core.corner_seam_projection import clear_projection_cache
+    clear_projection_cache()
     # Compare the independently calculated wire representation, including the
     # usual JSON tuple-to-array conversion, without reusing the worker's fits.
-    assert result == json.loads(json.dumps(project_corner_preview(source)))
+    assert result == json.loads(json.dumps(project_corner_preview(source, include_straight=include_straight)))
     assert source.model_dump_json() == before
     completed = [done/total for done, total in progress if total]
     assert completed == sorted(completed) and completed[-1] == 1

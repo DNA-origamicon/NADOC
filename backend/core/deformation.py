@@ -2946,6 +2946,12 @@ def _apply_residue_poses_to_axes(design: "Design", axes: list[dict]) -> None:
 
 def deformed_helix_axes(design: "Design") -> list[dict]:
     """Project native non-helical paths alongside the ordinary duplex axes."""
+    from backend.core import bevel_geometry_cache
+    identity = bevel_geometry_cache.design_key(design)
+    cache_key = ('display-axes', identity) if identity is not None else None
+    cached = bevel_geometry_cache.get(cache_key) if cache_key is not None else None
+    if cached is not None:
+        return cached
     axes = (_scope.selected_axes(design, _lattice_helix_axes)
             if _scope.scoped(design) else _lattice_helix_axes(design))
     native = {h.id: h for h in design.helices if effective_helix_for_geometry(h, design).native_residues}
@@ -2967,6 +2973,8 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
             segment["start"] = points.get(segment["bp_lo"], samples[0])
             segment["end"] = points.get(segment["bp_hi"], samples[-1])
     _apply_residue_poses_to_axes(design, axes)
+    if cache_key is not None:
+        bevel_geometry_cache.put(cache_key, axes)
     return axes
 
 

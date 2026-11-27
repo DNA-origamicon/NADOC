@@ -114,6 +114,7 @@ def test_bevel_guarded_save_reopen_and_independent_audit(tmp_path):
 
 
 def test_preview_commit_is_bound_to_inputs_and_source(monkeypatch):
+    import json
     from backend.api.routes_bevel import preview_bevel
     from backend.api.corner_preview_projection import project_corner_preview
     monkeypatch.setattr('backend.api.corner_projection_worker.project_corner_in_worker', project_corner_preview)
@@ -122,7 +123,8 @@ def test_preview_commit_is_bound_to_inputs_and_source(monkeypatch):
         hb.add_cluster('Bevel source', [h.id for h in state.get_or_404().helices], log=True)
         source, revision = state.copy_for_persist()
         body = request(source, revision)
-        preview = preview_bevel(body)
+        preview = preview_bevel(body, prepare_only=True)
+        assert 'candidate' not in preview
         assert state.get_or_404().strands == source.strands
         token = preview['preview_token']
         # A late overlapping request must not evict the displayed result.
@@ -130,8 +132,84 @@ def test_preview_commit_is_bound_to_inputs_and_source(monkeypatch):
         with pytest.raises(HTTPException) as caught:
             create_bevel(body.model_copy(update={'preview_token': token, 'trim_end': 'start'}))
         assert caught.value.status_code == 409
-        response = create_bevel(body.model_copy(update={'preview_token': token}))
+        response = json.loads(create_bevel(body.model_copy(update={'preview_token': token})).body)
         assert response['bevel']['reused_preview']
         with pytest.raises(HTTPException):
             create_bevel(body.model_copy(update={'preview_token': token}))
         assert state.get_or_404().feature_log[-1].op_kind == 'bevel'
+
+
+def test_live_source_uses_axis_only_request_and_recorded_edit_prefix(monkeypatch):
+    import json
+    from backend.api.routes_bevel import bevel_source
+    calls = []
+    def project(design, *, include_straight):
+        assert include_straight is False
+        calls.append(design)
+        return {'source_bases': len(bases(design))}
+    monkeypatch.setattr('backend.api.corner_projection_worker.project_corner_in_worker', project)
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle([[0, 0], [0, 1]], 168, lattice=LatticeType.SQUARE, separate_fresh_extrusions=False)
+        hb.add_cluster('Bevel source', [h.id for h in state.get_or_404().helices], log=True)
+        source, revision = state.copy_for_persist()
+        body = request(source, revision)
+        response = json.loads(bevel_source(body, include_geometry=False).body)
+        assert calls == [] and response['component'] is None
+        assert len(response['paths']) == 2
+        assert state.get_or_404().feature_log == source.feature_log
+        create_bevel(body)
+        cut, revision = state.copy_for_persist()
+        assert cut.feature_log[-1].params['_proof_version'] == 2
+        with monkeypatch.context() as patch:
+            def forbidden(*args, **kwargs):
+                raise AssertionError('A read-only preview encoded recovery snapshots')
+            patch.setattr(state, 'encode_design_snapshot', forbidden)
+            response = json.loads(bevel_source(request(cut, revision), feature_id=cut.feature_log[-1].id,
+                                               include_geometry=False).body)
+        assert response['component']['source_bases'] == len(bases(source))
+        assert len(calls) == 1
+        from backend.core.part_overlay_commands import command_input
+        assert [(e.id, command_input(e)) for e in calls[0].feature_log] == [
+            (e.id, command_input(e)) for e in source.feature_log]
+        from backend.api.bevel_edit_source import replay_source
+        corrupted = cut.model_copy(deep=True)
+        corrupted.strands.pop()
+        with pytest.raises(HTTPException) as caught:
+            replay_source(corrupted, len(corrupted.feature_log)-1)
+        assert caught.value.status_code == 409
+
+
+def test_legacy_bevel_version_is_preserved_by_recording():
+    from backend.api.feature_recording import record_feature
+    from backend.api.part_bevel_commands import BevelCommand, build
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle([[0, 0], [0, 1]], 168, lattice=LatticeType.SQUARE, separate_fresh_extrusions=False)
+        source, revision = state.copy_for_persist()
+        inputs = {key: getattr(request(source, revision), key) for key in BevelRequest.model_fields}
+        params = BevelCommand(**inputs, _proof_version=1, operation_id='legacy').model_dump(mode='json', by_alias=True)
+        candidate, _, entry = record_feature(state._DesignSession(design=source), 'bevel', 'Legacy bevel', params,
+                                             lambda d: build(d, params))
+        assert entry.params['_proof_version'] == 1
+        assert assess_part_history(candidate, execute=execute, dependencies=dependencies)['status'] == 'verified'
+
+
+def test_material_frames_survive_trimming_but_invalidate_changed_pose(monkeypatch):
+    from backend.api import bevel_live
+    from backend.core import bevel_geometry_cache
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle([[0, 0], [0, 1]], 168, lattice=LatticeType.SQUARE, separate_fresh_extrusions=False)
+        source, revision = state.copy_for_persist()
+        owner = source.cluster_transforms[-1].id
+        bevel_live.source_axes(source, owner)
+        create_bevel(request(source, revision))
+        cut = state.get_or_404().model_copy(deep=True)
+        with monkeypatch.context() as patch:
+            def forbidden(*args, **kwargs):
+                raise AssertionError('Retained construction frames were recalculated')
+            patch.setattr(bevel_live, '_material_frame', forbidden)
+            cached = bevel_live.source_axes(cut, owner)
+        bevel_geometry_cache.clear()
+        assert bevel_live.source_axes(cut, owner) == cached
+        moved = cut.model_copy(deep=True)
+        moved.cluster_transforms[-1].translation[0] += 1
+        assert bevel_live.source_axes(moved, owner) != cached

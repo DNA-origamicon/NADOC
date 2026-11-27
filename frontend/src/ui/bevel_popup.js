@@ -20,12 +20,13 @@ export function createBevelPopup({ onChange, onCancel, onApply, onSelect, onInva
     el('div', { className: 'def-btn-row', children: [cancel, apply] })] })
   panel.style.display = 'none'
   fields.append(hint, selection, parameters, el('p', { className: 'tool-help',
-    text: '0° cuts perpendicular to the bundle. Removed material leaves open strand ends.' }), progress, status)
+    text: 'Drag the plane face along the bundle. Tab switches move/rotate controls (outside fields). 0° cuts perpendicular; removed material leaves open ends.' }), progress, status)
   const popup = createToolPopup({ panel, title: 'Bevel', onClose: onCancel, panelDisplay: 'flex' })
+  popup.setAvoidCanvas(true)
   let setting = false, valid = false, editing = false
 
   const end = el('select', { attrs: { id: 'bevel-trimEnd', 'aria-label': 'End to trim' },
-    children: ['end', 'start'].map(value => el('option', { text: value === 'end' ? 'End (higher bp)' : 'Start (lower bp)', attrs: { value } })),
+    children: ['end', 'start'].map(value => el('option', { text: value === 'end' ? 'End (forward side)' : 'Start (reverse side)', attrs: { value } })),
     on: { change: () => changed('trimEnd') } })
   parameters.append(el('div', { className: 'def-row', children: [el('label', { text: 'Trim:', attrs: { for: 'bevel-trimEnd' } }), end] }))
 
@@ -67,6 +68,7 @@ export function createBevelPopup({ onChange, onCancel, onApply, onSelect, onInva
     ] }))
   }
   return {
+    mode(value) { hint.textContent = `${value === 'rotate' ? 'Rotate with the rings' : 'Drag the plane face'} · Tab to switch` },
     setEditing(value) { editing = !!value; selection.hidden = editing; popup.setTitle(editing ? 'Edit Bevel' : 'Bevel') },
     setBusy(value) { parameters.disabled = value || !valid; selection.disabled = value || editing; cancel.disabled = value; if (value) apply.disabled = true },
     open() { valid = false; parameters.disabled = true; apply.disabled = true; status.textContent = ''; progress.hidden = true; hint.textContent = 'Select a cluster.'; popup.show() },

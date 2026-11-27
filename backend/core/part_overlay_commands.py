@@ -9,6 +9,7 @@ def proof_version_supported(kind, version):
     from backend.core.positional_refs import KINDS as POSITIONAL_KINDS
     versions = ((1, 2, GROUP_CREATE_VERSION) if kind == "cluster_create" else
                 (1, 2, 3) if kind == "corner" else
+                (1, 2) if kind == "bevel" else
                 (1, 2) if kind in {"extension-upsert", "helix-update"} or kind in POSITIONAL_KINDS else (1,))
     return type(version) is int and version in versions
 

@@ -63,6 +63,19 @@ def test_native_seam_search_has_actual_progress_and_preserves_source():
         assert progress == [(i, 96) for i in range(97)]
         assert all(len(s.candidates) == 8 for s in seams)
         assert all(np.isfinite(c.backbone_lengths_nm).all() for s in seams for c in s.candidates)
+        from backend.core.constants import SSDNA_CONTOUR_PER_NT_NM
+        for limit in (1.2, SSDNA_CONTOUR_PER_NT_NM):
+            progress = []
+            _, _, shortest = evaluate_corner_junctions(design,
+                dict(cluster_id=cluster.id, position_bp=84, angle_deg=90, direction_deg=15),
+                first_within_nm=limit, on_progress=lambda done, total: progress.append((done, total)))
+            for complete, abbreviated in zip(seams, shortest):
+                passing = [c for c in complete.candidates if c.max_backbone_length_nm <= limit]
+                expected = min(passing, key=lambda c: (len(c.sequence), c.max_backbone_length_nm))
+                actual = abbreviated.candidates[-1]
+                assert actual.sequence == expected.sequence
+                np.testing.assert_array_equal(actual.backbone_lengths_nm, expected.backbone_lengths_nm)
+            assert progress[-1][0] == progress[-1][1]
         assert design.model_dump() == before
 
 

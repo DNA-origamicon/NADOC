@@ -24,7 +24,7 @@ class EvaluatedSeam:
 
 
 def evaluate_corner_junctions(design, params, *, max_insert_bases=DEFAULT_MAX_INSERT_BASES,
-                              on_progress=None, check_cancel=None):
+                              on_progress=None, check_cancel=None, first_within_nm=None):
     if type(max_insert_bases) is not int or not 1 <= max_insert_bases <= 32:
         raise ValueError('Corner insert search must be bounded to 1–32 bases.')
     guide, routes = preflight(design, params, check_cancel=check_cancel)
@@ -66,5 +66,13 @@ def evaluate_corner_junctions(design, params, *, max_insert_bases=DEFAULT_MAX_IN
             completed += 1
             if on_progress:
                 on_progress(completed, total)
+            # Construction chooses the shortest passing insert. Each length
+            # has exactly one candidate, so longer candidates cannot win.
+            # The inspection API still evaluates all lengths by default.
+            if first_within_nm is not None and candidates[-1].max_backbone_length_nm <= first_within_nm:
+                total -= max_insert_bases - count
+                if on_progress:
+                    on_progress(completed, total)
+                break
         seams.append(EvaluatedSeam(junction.strand_id, junction.exit_domain, first, second, tuple(candidates)))
     return guide, routes, tuple(seams)
