@@ -1091,3 +1091,312 @@ Appearance validation: 23 focused backend tests and the live welcome/caDNAno
 editor flow passed, including all colors, row order/labels and insertion deltas.
 Browser autosave replay/source comparison passed; temporary artifacts cleaned.
 Main.js task LOC delta: 0.
+
+November 26, 2026 — preferred large scaffold insertion representation:
+`publication_insertion_loops.py` selects native `strand-loop-set` for multi-base
+scaffold-only insertion annotations, requiring a unique anchor, following base,
+and source-supported polarity. Paired insertions and single-base corrections
+remain helix-wide loop/skip marks. Compilation places loops after scaffold joins
+and before final sequence assignment; reports expose the representation and the
+native-only export limitation. D009 selects 39 bases on each of visible helices
+30 and 42 at 119; D005 selects its 144-base insertion. No bulk migration of
+legacy files or collapse of D006 auxiliary routed tracks. The user requested
+this preference after the strand-owned loop feature shipped; it uses that
+feature's approved default geometry without changing molecular placement code.
+D009 source rebuild and saved independent replay passed (1592 commands, two
+strand-owned loops, unchanged 7703 scaffold bases and 194/197 staples). Cold
+browser geometry took ~239 seconds after navigation, autosave ~265 seconds;
+90s and 240s observation budgets failed despite eventual successful render/save.
+Retain this display-performance limitation; do not bypass approved ring fitting
+or claim simulation/export support. Evidence: `.development-artifacts/d009-strand-loops/`.
+Longer app observation completed both 39-base loop render checks and caDNAno
+colors/order/count assertions without app errors. Its inherited 360s suite
+budget expired in teardown; do not report a clean Playwright pass. Browser
+save audit/cleanup is handled separately by finish-browser-audit.py in the
+same evidence directory.
+
+Browser-saved D009 independently replayed and matched source evidence; all four
+cleanup checks passed, including unchanged published-file hash. 26 focused
+backend tests passed. Loop close-ups and caDNAno screenshots were inspected.
+
+November 26 optimized-loop end-to-end benchmark (HEAD eab2ca3b plus current
+reconstruction changes): actual reconstruct_package, one fresh process per
+design, serial Ryzen 9 9950X runs. D005 332.882s, D006 100.050s, D007 78.268s,
+D008 63.986s, D009 243.827s. Includes PDF extraction/planning, native recorded
+authoring, all three audit passes, save/reopen and ZIP packaging. Starts with
+PDF and figure/table selection supplied; excludes DOI/network, detection UI,
+Python startup and browser rendering. D005–D008 complete; D009 194/197 staples,
+partial. All five source comparisons, guarded publications and reopened replays
+verified; loaded code hashes stable, shared files unchanged. Reports, source/code
+hashes and reproducible driver: `.development-artifacts/reconstruction-benchmark-20261126/`.
+Temporary package copies removed after retaining verification reports; scratch
+cleaned. This does not remeasure or supersede the historical browser-load timing.
+
+November 26 D014 lower-quality publication probe: channel-and-flap nanopore,
+10.1038/s41467-019-13284-1; Figure31 PDFp45, Table6 pp46–49. Catalog79 is
+manual image recoverability, not measured completion. Actual detect_designs
+finds the raster figure and four page lists (52/80/80/58 tokens); native package
+returns report-only in0.44s: no uniformly labelled publication ruler. No native
+models or validated routes. Four unique image assets in five PDF placements,
+including an overlapping duplicate, need compositing/registration and raster
+tracing. Endpoint-free Module/Notes/Sequence table needs multi-page grouping,
+variant and modification preservation; Note6's explicit module rule yields
+219 staples for each Top_A/Top_B variant, not all270 tokens combined. Header-
+derived exploratory inventory preserves raw chemical tokens and bold spans.
+Local exact12mer probe: M13mp18 supports at least one match for all219 rows;
+similar scaffolds support218. This does not resolve global route/register or
+prove scaffold identity; uncovered bases are not automatically overhangs.
+Context-only figure/list score60 is inflated by repeated paper-header words.
+Eight gaps/acceptance checks, source hash, actual baseline and deterministic
+probe scripts: `.development-artifacts/d014-reconstruction-exploration/limits.json`.
+No production behavior changed; shared D005–D009 hashes unchanged. Disposable
+page renderings inspected and removed; original corpus source retained.
+
+## Structured table import and raster trace evidence — 2026-11-26
+
+`publication_table_import.py` recognizes Module/Notes/DNA Sequence headers and
+adjacent continuation pages. It preserves physical rows, source boxes, bold
+functional spans, slash-delimited chemistry, module names and notes. Unlabelled
+rows retain possible continuation links rather than silently concatenating.
+D014 imports all 270 physical rows across pages 46–49; Top_A and Top_B remain
+separate 20-row modules (the documented Top_A+inner+cyl*/flap* selection is 219).
+The UI allows explicit module selections for the evidence report, not automatic
+assembly of every variant/accessory into one design.
+
+`publication_raster_tracing.py` renders the visible PDF composition (including
+occlusion), registers pixels back to unrotated PDF coordinates, and skeletonizes
+chromatic layers into paths with branch ambiguity retained. It does not bridge
+missing pixels or infer nucleotide coordinates/polarity. Neutral strokes remain
+unclassified. This replaces caption-only raster evidence but is not OCR or
+helix/base registration; D014 native reconstruction remains blocked there.
+
+Lipids are explicitly unsupported. Recognized terminal modification tokens are
+checked against NADOC's existing modification registry; terminal Cy5 is supported
+pending verified strand mapping, whereas internal Cy3 and unspecified /DYE/ are
+unsupported. Handles/toeholds are labeled native-overhang candidates pending
+verified unpaired intervals; bold text alone never proves an overhang. No
+terminal extension substitutes for overhang DNA. These annotations are retained
+in source evidence; no native chemistry is created on an unresolved route.
+
+Reconstruction ZIPs preserve source PDF, table rows, selected modules, annotation
+notices and registered raster traces even when native construction fails.
+Focused source-import/regression tests and the real D014 browser upload → module
+selection → report download passed. No shared molecular designs changed.
+Main.js task LOC delta: 0.
+
+Validation for this increment: 26 focused backend tests passed; real D014 raster
+probe produced 14,902 raw color-skeleton fragments and 1,814 ambiguous junction
+observations across five image placements (no trace cap reached). These counts
+include unclassified marks, not recovered oligos. The required smoke run was
+25 passed / 2 skipped / 2 failed: assembly setup exceeded 60 seconds and Close
+Session's progress-visible assertion failed. Those separate paths were not
+modified. Browser downloads, test structures and browser artifacts were cleaned.
+
+### D014 troubleshooting follow-up — 2026-11-26
+
+Corrected the prior missing-ruler diagnosis: visual source review finds an
+apparent 21 marker, while deterministic grid probes recover periods ~5.681,
+4.786 and 5.339 native pixels/cell for upper-left, lower-left and flap panels.
+Recovered 40/21/42 row-circle observations; helix 39 overlaps in the two left
+assets. These are evidence probes, not verified native registrations.
+
+Fixed production tracing to preserve native raster resolution within a 4096px
+page cap, reporting downsampling explicitly. D014 now uses 3.397 rather than
+2.613 pixels/PDF point. More detail does not solve semantic graph extraction:
+raw fragments/junction observations increase to 19,988/2,531. Template OCR and
+short-domain sequence probes do not yield a unique route. Details and measured
+limitations are in docs/publication_native_authoring.md, D014 troubleshooting.
+Main remaining implementation is cadnano lane/endpoint/crossing recognition and
+joint sequence-constrained pairing across panel cuts, not another unconstrained
+scaffold-offset search. Do not call the source impossible to reconstruct.
+
+17 focused backend tests and the real D014 browser flow passed after this fix;
+lint passed. Native model count remains zero. Temporary source images and browser
+artifacts cleaned; three useful source crops/probe results retained locally.
+
+### Registration algorithms and bounded sequence fallback — 2026-11-26
+
+Researched/tested phase correlation, SIFT/RANSAC and grid-normalized normalized
+cross-correlation. NCC supports D014's shared left-panel strip (0.872 vs next
+0.545), while the flap has weak ambiguous peaks (~0.453/0.443). Production
+`publication_panel_registration.py` reports these image-only hypotheses and caps
+asset size/panel count. Raster evidence and UI distinguish image overlap from
+molecular connectivity.
+
+Added `publication_sequence_domains.py`: bounded split-domain alignment, circular
+scaffold indexing, explicit unassigned bases, retained alternatives/pruning flags,
+and HiGHS occupancy compatibility with a second-optimum check. Native failure
+packages run 8-/6-base passes for selected modules; unset membership is deferred.
+Beam-8 D014 pools give 4,152/4,683 compatible paired bases with equal-score
+solutions. Beam-32/60s gives 5,243 incumbent bases, not proven optimal (~2% gap).
+These are candidate contact assignments, never completion percentages/native routes.
+Research/probes are under `.development-artifacts/d014-registration-search/`.
+See docs/publication_native_authoring.md for method references and caveats.
+
+REVNANO research comparison: upstream commits recorded in development artifacts;
+no example models/contact maps supplied as inputs. Raw D014 trial timed out at
+180s. Explicit bold-functional-span-as-unpaired hypothesis (438 bases/32 strands)
+with default MU_MIN=6, SIGMA=4, BETA=.3 resolved 78/219 before GAMMA=.65 stopped
+stage 2; SIGMA=2 resolved 73/219. No final contact map returned, no native model
+published; both runs used default GAMMA=.65. This is a research comparison only, not a
+runtime dependency. Tesseract numeric OCR trials also retained disagreements;
+temporary OCR runtime/debs cleaned with package hashes/recreation script retained.
+
+Alternative scaffold trials: p7560 resolved 68/219 before the same prerequisite;
+p8064 timed out during routing-tree construction at 120s (incomplete trial).
+Production full-PDF/219-row package probe completed in 10.64s, reporting one panel
+overlap and both ambiguous sequence passes; no native part. Decode PDF image
+assets through PyMuPDF rather than Pillow to handle this source's image streams.
+
+Validation: 28 focused backend tests, 16 frontend unit tests and the real D014
+upload/detect/module-select/download browser flow passed. Browser test now waits
+for and asserts the analysis HTTP response before checking cards; the previous
+card-only wait timed out. Browser downloads/artifacts and isolated bridge
+credentials were cleaned. This task made no main.js changes or native structures.
+
+### Stable sequence anchors — 2026-11-26
+
+Added `publication_sequence_anchors.py`: base-level consensus across compatible
+solutions, independent exact occurrence counts over the circular scaffold, and
+bounded whole-core exclusion challenges. Missing staples count against support;
+unique sequence occurrence is not unique native routing. Pruning, counterexamples,
+retained-pool necessity and timeouts are explicit. Alternative occupancy assignments
+are now retained, rather than only their scores.
+
+`publication_sequence_refinement.py` adds anchor-conditioned candidates without
+removing original alternatives; it preserves the best feasible incumbent if a
+larger timed-out search regresses. `publication_sequence_neighborhoods.py` jointly
+reassigns unresolved staples and their occupancy blockers while recording the fixed
+outside context. It reports residual circular scaffold intervals without declaring
+loops. `publication_anchor_image_mapping.py` reports length-compatible horizontal
+spans, possible offsets and both directions; it never promotes length alone to a
+native mapping. These stages are wired into failed reconstruction evidence and
+compact report summaries. main.js task LOC delta remains zero.
+
+D014 larger-budget exploration: 67 initially unique cores; 59 cores/961 bases
+survive six assignments. Sixteen two-second exclusion trials were inconclusive.
+Anchor-conditioned generation added 818 candidates across 62 rows, reaching 5,681
+paired bases at 30s. A union-of-original-pools control reached 5,800 at 30s, so do
+not attribute this gain to anchors. Eight local neighborhoods found no further
+pairing gain. Best residual: 1,449 bases in 219 gaps, largest 44. Image screening
+found 115 spans; even the longest surviving core has three candidates. Image
+endpoint/strand identities and crossover connectivity still block native routing.
+No D014 native structure was created.
+
+Default production uses tighter budgets: four one-second challenges, 12 expanded
+rows, beam 16, two one-second neighborhoods. Full PDF/219-row report completed in
+17.76s, retained 4,721 paired bases and 86 consensus cores (85 unique initially).
+These counts differ from broader exploration because fewer alternatives were
+searched, not because default anchors are more certain. Reproducible evidence:
+`.development-artifacts/d014-stable-anchors/`; detailed results and limitations in
+`docs/publication_native_authoring.md`.
+
+Validation for stable anchors: 39 focused backend tests passed (6.95s), including
+shifted boundaries, repeated sequences, circular wrap, missing support, exclusion
+witnesses/timeouts, incumbent preservation, blocker reassignment, and source-package
+contracts. Real D014 browser upload/detect/select/download passed (37.7s). Ruff and
+diff checks passed. Browser artifacts and the isolated bridge credential were
+removed; only reproducible development evidence remains locally.
+
+Visual review correction — D014 alignment demonstration (2026-11-26): all three
+length-screen spans for longest core p49-r230 (`cyl_lip / Pal`, 27 bases) are blue
+scaffold strokes, visible helices 80, 89 and 0. Do not call these three plausible
+staple placements. ISSUE-265 tracks missing scaffold/staple lane classification
+and endpoint/connectivity recovery. The user-requested annotated source review is
+`.development-artifacts/d014-alignment-review/alignment-issue.png`; raw temporary
+page/crop renders were removed. No algorithm or native structure changed here.
+
+### Scaffold/staple classification and connected tracing — 2026-11-26
+
+ISSUE-265 screening false positives are fixed: `publication_lane_classification.py`
+learns the recurring scaffold hue and alternating paired-lane pattern, with local
+corroboration. It does not assume blue means scaffold; blue staples and alternate
+scaffold colors are covered by tests. Unsupported rows remain unclassified.
+`publication_staple_tracing.py` traces the visible PDF composition, resolves only
+coherent distinct-color straight crossings, and records source pixel connectivity,
+domains and unresolved endpoint junctions. Same-color crossings and missing pixels
+are not joined. Unbranched traces are not certified full strands. No native routing
+or molecular geometry is generated.
+
+`publication_anchor_image_mapping.py` now uses only classified staple domains with
+supported color continuity. There is no raw-stroke fallback. All three prior source
+false positives are excluded (source-coordinate regression); the longest core now
+has one length-compatible staple fragment at visible helix 89, still not an identified
+table staple. Detection UI reports classified/unbranched trace counts as fragments.
+
+D014 visible source: two of four image placements support the pattern (32 flap and
+30 upper-left row observations). Overlapping lower-left placements remain unsupported;
+do not substitute hidden native assets. 309 staple trace observations, 99 unbranched;
+not recovered-staple counts. One coherent fragment spans staple lanes at visible
+helices 64 and 67. One distinct-color crossing resolved; dense junctions remain.
+Anchor screening excludes 303 scaffold-domain observations. Page probe 6.22s;
+full 219-row source-to-report package 18.54s, no native part. Evidence and annotated
+source review: `.development-artifacts/d014-staple-tracing/`.
+
+Remaining image work: terminal-marker recognition, ambiguous-junction recovery,
+neutral strokes, absolute base registration and strand/table identity. Main.js task
+LOC delta zero; native structures created zero.
+
+Final classifier guard: a strong local color/phase contradiction leaves the row
+unclassified even if the nominal scaffold lane contains some recurrent color.
+This guard is regression-tested; D014 observations remain unchanged. 43 focused
+backend tests and 17 frontend tests pass. Source-image review confirms separation
+at visible helix 89 and the connected fragment between 64 and 67; the annotated
+review is retained, disposable crop renders removed. Ruff and diff checks pass.
+Final browser exercise after the contradiction guard passed (45.1s). No browser
+artifacts or isolated bridge credential remain. Validation summary is retained in
+`.development-artifacts/d014-staple-tracing/validation.json`.
+
+D014 connector update: user identifies same-helix offset drawings on lower-bp
+side of helices 86/89. Added generic continuous-detour recognition, bounded graph
+alternatives, partial offset runs, neutral-ink screening and weak endpoint-marker
+annotations. Geometry excludes drawing excursions from base counts. Real source:
+89 partial offset with unresolved left continuity; 86 single thresholded dark
+pixel marker, not established polarity/ligation. Five partial hypotheses, zero
+complete connectors; upper-left 12k graph cap, marker caps100/panel. Full219-row
+package19.80s,4721 candidate paired bases, no native part/coverage gain. Evidence:
+.development-artifacts/d014-connector-drawings/. Source regression slow/headless;
+53 focused backend and18 frontend tests passed. Main.js task delta0.
+
+User correction (2026-11-26): helix86 dark pixel is a bp-index label, not an
+endpoint marker. Reject single-pixel neutral components; source regression now
+requires this false marker absent. Helix89 endpoint evidence is adequate to
+continue sequence checks. Small image gaps are not strand-break evidence.
+Added publication_sequence_continuity: same-row/color pairs with <=3 missing
+raster pixels are screened against exact table/scaffold cores spanning both
+fragments; retain directions/registers and competing identities. Offset connector
+spans also feed sequence checks. Results are conditional on image register,
+not automatic native ligations. Earlier connector-review.png helix86 annotation
+is superseded. New evidence: .development-artifacts/d014-sequence-continuity/.
+Current source verification: 2 small-gap continuity candidates; helix89 short
+fragment now yields32 exact sequence candidates (cap reached, alternatives
+truncated). No unique table identity/native route claimed. Full219-row package
+20.07s.42 focused tests passed;11 affected tests rerun after short-fragment search
+passed. Ruff/diff checks clean. No frontend changes; main.js task delta0.
+
+Reconstruction reporting (2026-11-26) separates complete and partial audited
+native output from report-only evidence. The download index and per-design
+reports carry issue codes, stages, severity, evidence references and actions.
+D014 remains report-only. Prioritize general labeled registration and joint
+source constraints over tuning D014-specific pixel rules. Corpus probes compare
+native-recipe outcomes, parser limits and independently reviewed source scope.
+See docs/publication_reconstruction_triage.md. Main.js task LOC delta: zero.
+
+2026-11-27 recovery session: authoring and Detect designs now try panel-local
+vector registration when the single-ruler extractor fails. D010/D011/D012
+match every directed pointer of their held-out author files, including rotated
+D011 and the separately scoped pEGFP D012. D010 and D011 need two rigid group
+frames plus validated scaffold junction geometry. All 32 catalog sources were
+inventoried; see docs/publication_recovery_session_20261127.md for the 26
+remaining targets, raster/fragmented source benchmarks and next discriminators.
+
+D012 (pEGFP variant only) was published through recorded editor operations
+in Shared Designs, then reopened and replayed (1,197 commands, 54 helices,
+121 staples, 4,733 scaffold bases, one strand-owned 71-base loop). The
+historical caDNAno scaffold resolves one discrepancy against GenBank.
+The continuous variant pre-cuts the later domains of a revisited helix
+before joins. It completed through the download path in 70.0 seconds with
+926 commands. Legacy single-panel operation schedules are preserved.
+The five-source sequence test measured 6.7 seconds in exhaustive full
+publication register comparisons, now routed to slow/headless. The focused
+run including it passed 81 tests. Main.js task LOC delta: zero.

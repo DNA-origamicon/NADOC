@@ -3,7 +3,7 @@ import math
 from statistics import median
 
 
-def consensus_insets(observations, row_ids, fit):
+def consensus_insets(observations, row_ids, fit, *, selected_panel=False):
     if len({label for label,_ in observations}) == len(observations):
         return fit(dict(observations), row_ids)
     radius = median(circle[2] for _,circle in observations)
@@ -16,6 +16,12 @@ def consensus_insets(observations, row_ids, fit):
                 observations[i][1][0]-x, observations[i][1][1]-y) < 2.2*radius}
             pending -= neighbors; group.extend(sorted(neighbors))
         groups.append([observations[i] for i in group])
+    if selected_panel:
+        complete = [group for group in groups if {label for label, _ in group} == set(row_ids)]
+        if complete:
+            # A selected route panel can share a page with a separate small
+            # design using a subset of the same helix labels.
+            groups = complete
     fits = []
     for group in groups:
         circles = dict(group)

@@ -11,6 +11,7 @@ from statistics import median
 import pymupdf
 
 from backend.core.publication_diagram_labels import numeric_labels
+from backend.core.publication_reconstruction_report import ReconstructionBlocked
 
 
 _TABLE_ROW = re.compile(r'(\d+)\[(\d+)\]\s+(\d+)\[(\d+)\]\s+([ACGTacgt]+)\s+(\d+)\s+(#[0-9a-fA-F]{6})')
@@ -67,19 +68,19 @@ def _extract_publication_paths(page):
         if all(abs(l['x']-origin-slope*l['value'])<slope*.08 for l in group):
             rulers.append((group,slope,origin))
     if not rulers:
-        raise ValueError('No uniformly labelled publication ruler.')
+        raise ReconstructionBlocked('base_register_unresolved', 'No uniformly labelled publication ruler.')
     ruler, scale, origin = max(rulers,key=lambda r:len(r[0]))
     columns = [g for g in vertical.values() if len(g)>=4 and max(l['x'] for l in g)<origin
                and len({l['value'] for l in g})==len(g)]
     if not columns:
-        raise ValueError('No unique helix label column beside the ruler.')
+        raise ReconstructionBlocked('helix_labels_unresolved', 'No unique helix label column beside the ruler.')
     labels = max(columns,key=len)
     centers = {l['value']:l['y'] for l in labels}
     ys=sorted(centers.values()); pitch=median(b-a for a,b in zip(ys,ys[1:]))
     def site(point):
         row=min(centers,key=lambda n:abs(point.y-centers[n]))
         if abs(point.y-centers[row])>pitch*.25:
-            raise ValueError('Path lies outside paired helix tracks.')
+            raise ReconstructionBlocked('diagram_route_unresolved', 'Path lies outside paired helix tracks.')
         return (row,math.floor((point.x-origin)/scale+1e-4))
     paths=[]
     for path_id, drawing in enumerate(page.get_drawings()):
@@ -92,27 +93,27 @@ def _extract_publication_paths(page):
         walk=[]; previous=None
         for item in items:
             if item[0] not in ('l','c'):
-                raise ValueError('Unsupported routing primitive.')
+                raise ReconstructionBlocked('diagram_route_unresolved', 'Unsupported routing primitive.')
             a,b=item[1],item[-1]
             if previous is not None and abs(a-previous)>.1:
-                raise ValueError('Disconnected subpaths in a candidate route.')
+                raise ReconstructionBlocked('diagram_route_unresolved', 'Disconnected subpaths in a candidate route.')
             previous=b
             u,v=site(a),site(b)
             if u[1]<0 or v[1]<0:
-                raise ValueError('Route outside the visible ruler.')
+                raise ReconstructionBlocked('diagram_route_unresolved', 'Route outside the visible ruler.')
             if u[0]==v[0] and item[0]=='l':
                 if abs(a.y-b.y)>.1:
-                    raise ValueError('Diagonal intrarow line requires separate interpretation.')
+                    raise ReconstructionBlocked('diagram_route_unresolved', 'Diagonal intrarow line requires separate interpretation.')
                 step=1 if v[1]>=u[1] else -1
                 segment=[(u[0],x) for x in range(u[1],v[1]+step,step)]
             else:
                 segment=[u,v]
             walk.extend(segment[1:] if walk and walk[-1]==segment[0] else segment)
         if len(set(walk))!=len(walk):
-            raise ValueError('Repeated sites or closed route require explicit cycle handling.')
+            raise ReconstructionBlocked('diagram_route_unresolved', 'Repeated sites or closed route require explicit cycle handling.')
         paths.append({'path_id':path_id,'sites':walk,'color':drawing['color']})
     if not paths:
-        raise ValueError('No continuous publication routing paths.')
+        raise ReconstructionBlocked('diagram_route_unresolved', 'No continuous publication routing paths.')
     insertions=[]
     for drawing in page.get_drawings():
         items=drawing['items']; rect=drawing['rect']
@@ -250,7 +251,7 @@ def publication_evidence(graph, tables, custom_sequence=None):
     return sorted(candidates,key=lambda c:-c['matched_staples'])
 
 
-def recover_lattice(page, labels, row_ids):
+def recover_lattice(page, labels, row_ids, *, selected_panel=False):
     """Read labelled circles and fit a honeycomb inset, allowing export rounding."""
     observations=[]
     for drawing in page.get_drawings():
@@ -264,7 +265,7 @@ def recover_lattice(page, labels, row_ids):
             key=inside[0]['value']
             observations.append((key, ((rect.x0+rect.x1)/2,(rect.y0+rect.y1)/2,rect.width/2)))
     from backend.core.publication_lattice_insets import consensus_insets
-    return consensus_insets(observations, row_ids, _fit_lattice_circles)
+    return consensus_insets(observations, row_ids, _fit_lattice_circles, selected_panel=selected_panel)
 
 
 def _fit_lattice_circles(circles, row_ids):

@@ -1,0 +1,8 @@
+{
+  "name": "pEGFP",
+  "length": 4733,
+  "sequence_sha256": "62fa4cf1fd6053bf630cb72489656fb4d560ac334cca2bc1c23d1d7304ed66bb",
+  "source": "https://github.com/sdouglas/cadnano/blob/master/edu/harvard/med/cadnano/data/Sequence.as",
+  "source_sha256": "4146df850f9ca6749e825e454e60f4b0a90c9a8fd51fa55c7fc7c9cc94c283a0",
+  "basis": "Legacy caDNAno scaffold sequence, with register checked against the original publication table."
+}

@@ -15,6 +15,7 @@ clone/pull of NADOC includes the committed designs and portable dependencies.
 | D007 — monolith | [D007.nadoc](D007.nadoc); 60 helices, 144/144 published staples, 1,680 bare terminal scaffold bases preserved; 1,298 replayed commands |
 | D008 — square nut | [D008.nadoc](D008.nadoc); 148 table staples plus one drawn 38-base staple with derived sequence; 1,186 replayed commands |
 | D009 — railed bridge (partial) | [D009.nadoc](D009.nadoc); 194/197 table staples; 1,592 replayed commands; [completion report](D009.reconstruction.json) |
+| D012 — genie bottle, pEGFP variant | [D012.nadoc](D012.nadoc); 54 helices, 121/121 published staple routes, one 71-base scaffold loop and 1,197 replayed commands; [completion report](D012.reconstruction.json) |
 
 D005 was authored from the published figure/table using native editor operations,
 without a caDNAno reference as a construction input. Its original supplement,
