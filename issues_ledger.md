@@ -4860,3 +4860,35 @@ Evidence: `.development-artifacts/scaffold-sequence-scope-validation.json`.
 - Browser regressions verify independent lenses/limits, saved zoom, keyframe preview,
   fullscreen hit testing and rendered export pixels. Evidence and remaining broad
   validation debt: `.development-artifacts/zoom-volume-persistence/validation.json`.
+
+## ISSUE-266 — Pattern browser checks click a cluster colour control (2026-11-27, FIXED)
+
+The part linear-pattern and circular-confirm checks clicked the centre of the
+cluster row. With the current sidebar width that point hits the colour button,
+which deliberately stops selection propagation; the tool correctly remains in
+"Select a cluster" with empty canonical selection. The real viewport-picking
+circular-axis check passes. Target the row's left selection area explicitly;
+retain real mouse input and all preview, construction, history and undo assertions.
+
+## ISSUE-267 — Part autosave invalidates an unchanged pattern draft (2026-11-27)
+
+Open: the existing part `save-workspace` path increments the design revision;
+metadata polling advances the frontend watermark without replacing the displayed
+source object. A linear-pattern draft captured at revision 12 is then refused
+at Confirm after autosave advances it to 13, despite unchanged topology/geometry.
+Reproduced by the part linear-pattern browser check after creating seven source
+clusters. The strict source-bound guard is retained; broad persistence/concurrency
+semantics are outside whole-origami assembly pattern authoring. The browser fixture
+now waits for its preceding autosave before opening a draft. Assembly patterns
+refresh their authoritative context at open and retain revision/history guards.
+
+## ISSUE-268 — Assembly exit smoke setup times out scanning thin rods (2026-11-27)
+
+Open: `assembly_exit_cleanup.spec.js` exhausts its 60-second timeout in
+`scene_harness.assemblyInstanceCandidates` / `_enterAssemblyAndFrame`, before the
+exit action. Reproduced both in `just smoke` and alone with one worker in an
+explicit isolated workspace. The new assembly-pattern workflow enters, renders,
+creates/edits patterns, undoes/redoes, and exports/reloads successfully. The exit
+check needs a rendering-readiness prerequisite instead of unrelated raycast/framing
+setup; no timeout increase or test guard bypass was applied. The other 26 smoke
+checks passed (two experimental autostaple cases skipped).

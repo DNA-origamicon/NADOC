@@ -122,3 +122,46 @@ comprehensive parity request.
 - `project_assembly_configurations.md` — assembly-owned poses/configurations/overrides.
 - `frontend/src/ui/file_io.js::savePartToAssembly` — existing design-to-instance save-back seam.
 - `backend/api/assembly.py::patch_instance_design` — source replacement, cache invalidation, mate resolve.
+
+## Whole-origami patterns (2026-11-27)
+
+Linear and Circular Pattern are available in the Assembly menu. The existing part
+panels, linear controls/offsets, circular angle convention, preview rendering and
+pattern feature editor are shared. `ui/assembly_pattern_host.js` supplies a transient
+read-only instance view; it never authors a part or flattens an assembly.
+
+Parity inventory:
+- Complete: 1D/2D grids, custom/negative linear directions, inclusive counts (128
+  placements maximum), circular full-circle/arc spacing, offsets, centered-about
+  another target, draggable axis, consistent-lattice snapping, BP totals, preview,
+  cancel, validation and errors.
+- Adapted: targets are whole origami instances; internal source metadata and
+  histories travel together, so part group-copy filters are unnecessary. Copies
+  are independent assembly instances, like Duplicate Part; existing assembly mates
+  remain on the originals. Inconsistent/mixed lattices disable snapping as in parts.
+- Complete: assembly undo/redo, seek/delete, pattern edits with transactional suffix
+  replay, native serialization, deterministic IDs and independent command replay.
+  Dependencies on removed copies reject an edit. Unsupported later replay commands
+  reject early edits explicitly, following the assembly history contract.
+- Assembly previews refresh the authoritative snapshot before capture because
+  initialization may update loadout metadata without advancing the frontend revision.
+  Commands still require the captured assembly identity, revision and history.
+
+Implementation: `backend/core/assembly_patterns.py`,
+`backend/api/routes_assembly_patterns.py`. Focused tests:
+`tests/test_assembly_patterns.py`, `ui/assembly_pattern_host.test.js`,
+`e2e/assembly_patterns.spec.js`, plus existing part-pattern and assembly history tests.
+Use an explicit isolated `NADOC_WORKSPACE` for browser verification so backend storage
+and global teardown resolve the same root on machines with a runtime workspace link.
+
+Validation: 40 distinct focused backend tests, 58 frontend tests and all four
+pattern browser cases passed (assembly workflow plus part grid/history, circular
+axis gestures, circular confirmation). Saved `.nass` instances and source histories
+were compared with independent replay; the source part also passed the agent
+construction audit. Smoke: 26 passed, two experimental cases skipped; the existing
+assembly-exit setup timed out before exit (ISSUE-268). Touched backend files pass
+Ruff; repository lint retains five findings in unrelated files. Existing part
+save-workspace draft invalidation is tracked as ISSUE-267. Browser and replay
+artifacts were removed, including 241,938 bytes of task files/project stores from
+the configured runtime root and the final isolated scratch root. `main.js` task
+LOC delta: 0 (renderer getter wiring only).

@@ -2099,6 +2099,7 @@ def seek_assembly_features(body: SeekAssemblyFeaturesRequest) -> dict:
 # Editable op kinds: backend allows the Edit button to re-run them with new
 # params.  Subset of replayable.
 _EDITABLE_OP_KINDS: set[str] = {
+    "assembly-linear-pattern", "assembly-circular-pattern",
     "assembly-polymerize",
     "assembly-polymerize-periodic",
     "assembly-overhang-connection-add",
@@ -2147,6 +2148,12 @@ def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assem
     Raises HTTPException with a specific message when the op kind isn't
     replayable or its params are malformed.
     """
+    if op_kind in {"assembly-linear-pattern", "assembly-circular-pattern"}:
+        from backend.core.assembly_patterns import pattern_assembly
+        try:
+            return pattern_assembly(assembly, op_kind, params)
+        except (ValueError, KeyError) as error:
+            raise HTTPException(422, str(error)) from error
     if op_kind in {"annotations-state", "view-volumes-state"}:
         from backend.core.presentation_checkpoints import apply
         return apply(assembly, op_kind, params)
@@ -2613,6 +2620,9 @@ def edit_assembly_feature(index: int, body: EditAssemblyFeatureRequest) -> dict:
     assembly = assembly_state.get_or_404()
     if index < 0 or index >= len(assembly.feature_log):
         raise HTTPException(404, detail=f"feature index {index} out of range.")
+    if assembly.feature_log[index].op_kind in {"assembly-linear-pattern", "assembly-circular-pattern"}:
+        from backend.api.routes_assembly_patterns import edit_pattern
+        return edit_pattern(assembly, index, body.params)
     if index != len(assembly.feature_log) - 1:
         raise HTTPException(
             422,

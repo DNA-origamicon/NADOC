@@ -1722,6 +1722,7 @@ export function initAssemblyRenderer(scene, store, api) {
       entries:     entry.helixCtrl?.backboneEntries ?? [],
       nucleotides: entry.nucleotides,
       extraBaseGeometry: entry.xoverResult,
+      helixAxes: entry.helixAxes,
       matrixWorld: entry.group.matrixWorld.clone(),
     }
   }

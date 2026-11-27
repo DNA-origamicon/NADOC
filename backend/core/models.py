@@ -2078,6 +2078,8 @@ SnapshotOpKind = Literal[
     "assembly-add-instance",
     "assembly-delete-instance",
     "assembly-duplicate-instance",
+    "assembly-linear-pattern",
+    "assembly-circular-pattern",
     "assembly-add-connector",
     "assembly-delete-connector",
     "assembly-add-joint",

@@ -3906,7 +3906,7 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
     const srcEntry = srcKey ? _sources.get(srcKey) : null
     if (!srcEntry) return empty
     const mw = getLiveTransform(instanceId) ?? new THREE.Matrix4()
-    return { entries: srcEntry.helixCtrl?.backboneEntries ?? [], nucleotides: srcEntry.nucleotides, matrixWorld: mw }
+    return { entries: srcEntry.helixCtrl?.backboneEntries ?? [], nucleotides: srcEntry.nucleotides, helixAxes: srcEntry.helixAxes, matrixWorld: mw }
   }
 
   // Render data for overhang-locations: the design + source-local nucleotides

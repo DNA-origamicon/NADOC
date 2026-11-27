@@ -1,3 +1,4 @@
+import { createAssemblyPatternHost } from './assembly_pattern_host.js'
 import { beginClusterSelection } from './tool_cluster_selection.js'
 import * as THREE from 'three'
 import { createToolPopup } from './tool_popup.js'
@@ -6,7 +7,7 @@ import { el } from './primitives/dom.js'
 import { canonicalSelection, selectedClusterIds } from '../scene/selection_model.js'
 import { clusterMemberFilter } from '../scene/cluster_entries.js'
 import { clusterLattice, latticeAligned, latticeCoordinates, latticePoint, snapToLattice, patternAngles } from './circular_pattern_math.js'
-import { createCircularPattern, capturePatternContext } from '../api/client.js'
+import { createCircularPattern } from '../api/client.js'
 import { createPatternOrganizationControls } from './pattern_organization.js'
 import './circular_pattern_panel.css'
 
@@ -51,7 +52,9 @@ export function beginCircularPatternSelection(options) {
   return beginClusterSelection({ ...options, resolveTarget: circularPatternTarget })
 }
 
-export function initCircularPatternPanel({ store, showToast, selectionManager, scene, canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, commitPattern = createCircularPattern }) {
+export function initCircularPatternPanel({ store, showToast, selectionManager, scene, canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, getAssemblyRenderer, commitPattern = createCircularPattern }) {
+  const host = createAssemblyPatternHost({ store, getAssemblyRenderer, kind: 'circular-pattern', commitPattern })
+  store = host.store; commitPattern = host.commit
   const panel = document.getElementById('circular-pattern-panel')
   if (!panel) return null
   let picking = null
@@ -86,7 +89,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
   const showPreview = (selectedTarget, context) => {
     const state = store.getState(), session = generation
     const active = () => session === generation
-    const noun = state.currentDesign.group_organization ? 'Placement' : 'Cluster'
+    const noun = state.patternAssembly ? 'Origami' : state.currentDesign.group_organization ? 'Placement' : 'Cluster'
     let target = selectedTarget ?? circularPatternTarget(state)
     if (!target) {
       showToast(`Select exactly one ${noun.toLowerCase()} in a part with loaded geometry to explore rotation axes.`, { severity: 'info' })
@@ -94,7 +97,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     }
     const initialDesign = state.currentDesign, initialGeometry = state.currentGeometry
     const organization = createPatternOrganizationControls(initialDesign, [target.cluster.id], () => update())
-    let frame = clusterLattice(state, target)
+    let frame = (target.cluster.patternLattice ?? clusterLattice(state, target))
     let radius = target.points.reduce((r, p) => Math.max(r, Math.hypot(...p)), 5)
     let point = frame ? frame.u.clone().multiplyScalar(radius * 1.4).toArray() : [radius * 1.4, 0, 0]
     let direction = frame ? frame.normal.toArray() : [0, 0, 1]
@@ -220,7 +223,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     const centerRow = el('label', { children: [`Center ${noun.toLowerCase()}`, centerSelect] })
     centerRow.hidden = true
     const centerButton = el('button', { text: 'Centered about', attrs: { 'aria-pressed': 'false', title: `Place the axis through another ${noun.toLowerCase()}’s centroid` } })
-    const offsetButton = el('button', { text: 'Offset', attrs: { 'aria-pressed': 'true', title: 'Position the axis by offsets in part coordinates or drag the amber bead' } })
+    const offsetButton = el('button', { text: 'Offset', attrs: { 'aria-pressed': 'true', title: `Position the axis by offsets in ${state.patternAssembly ? 'assembly' : 'part'} coordinates or drag the amber bead` } })
     centerButton.disabled = targets.length < 2
     function setCentered(value) {
       if (value && !reference) return
@@ -247,7 +250,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
       endDrag()
       target = targets.find(t => t.cluster.id === sourceSelect.value)
       organization?.update([target.cluster.id])
-      frame = clusterLattice(state, target)
+      frame = (target.cluster.patternLattice ?? clusterLattice(state, target))
       radius = target.points.reduce((r, p) => Math.max(r, Math.hypot(...p)), 5)
       preview.position.set(...target.center)
       copies.clear(); cloudGeometry.dispose()
@@ -268,7 +271,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     const directionButtons = new Map()
     const presets = el('div', { className: 'cp-presets' })
     for (const name of ['X', 'Y', 'Z', 'Helices']) {
-      const button = el('button', { text: name, attrs: { 'aria-pressed': String(name === directionMode), title: name === 'Helices' ? `Use the ${noun.toLowerCase()}’s helical axis direction` : `Use the part’s ${name} axis` }, on: { click: () => {
+      const button = el('button', { text: name, attrs: { 'aria-pressed': String(name === directionMode), title: name === 'Helices' ? `Use the ${noun.toLowerCase()}’s helical axis direction` : `Use the ${state.patternAssembly ? 'assembly' : 'part'}’s ${name} axis` }, on: { click: () => {
         directionMode = name
         direction = name === 'Helices' ? frame.normal.toArray() : ['X', 'Y', 'Z'].map(axis => Number(axis === name))
         if (centered) update(); else applySnap()
@@ -386,19 +389,27 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
       if (next.assemblyActive || next.currentDesign !== initialDesign || next.currentGeometry !== initialGeometry) reset()
     })
   }
-  const open = () => {
+  const open = async () => {
     if (disposePreview || picking) { reveal(); return }
+    if (host.isAssembly()) {
+      const session = generation
+      if (!await host.prepare() || session !== generation) return
+    }
     const state = store.getState()
     if (state.assemblyActive || !state.currentDesign?.cluster_transforms?.length || !state.currentGeometry?.length) {
-      showToast(`Open a part with a ${state.currentDesign?.group_organization ? 'placement' : 'cluster'} before creating a circular pattern.`, { severity: 'info' })
+      showToast(state.patternAssembly ? 'Wait for the assembly origami geometry to load before creating a pattern.' : `Open a part with a ${state.currentDesign?.group_organization ? 'placement' : 'cluster'} before creating a circular pattern.`, { severity: 'info' })
       return
+    }
+    if (state.patternAssembly) {
+      const target = circularPatternCluster(state, state.activeClusterId) ?? circularPatternCluster(state, state.currentDesign.cluster_transforms[0].id)
+      showPreview(target, host.capture(state)); return
     }
     panel.replaceChildren(el('div', { className: 'ox-card__body', children: [
       el('p', { className: 'tool-picking-hint', text: state.currentDesign.group_organization ? 'Select a placement' : 'Select a cluster', attrs: { 'aria-live': 'polite', title: `Select in the 3D view or ${state.currentDesign.group_organization ? 'placement' : 'cluster'} list. Selection returns to Default automatically.` } }),
       el('button', { className: 'btn btn--sm', text: 'Cancel', attrs: { type: 'button' }, on: { click: close } }),
     ] }))
     popup = createToolPopup({ panel, title: 'Circular Pattern', onClose: close })
-    const context = capturePatternContext(state)
+    const context = host.capture(state)
     picking = beginCircularPatternSelection({ store, selectionManager,
       onSelected: target => {
         if (store.getState().currentDesign !== context.source) { reset(); return }
@@ -410,5 +421,6 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     window.addEventListener('nadoc:document-reset', reset)
   }
   document.getElementById('menu-tools-circular-pattern')?.addEventListener('click', open)
+  document.getElementById('menu-assembly-circular-pattern')?.addEventListener('click', open)
   return { open, close, isActive: () => !!disposePreview || !!picking }
 }

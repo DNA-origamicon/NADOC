@@ -1,6 +1,7 @@
+import { createAssemblyPatternHost } from './assembly_pattern_host.js'
 import * as THREE from 'three'
 import { beginCircularPatternSelection, circularPatternCluster, circularPatternBPTotals } from './circular_pattern_panel.js'
-import { createLinearPattern, capturePatternContext } from '../api/client.js'
+import { createLinearPattern } from '../api/client.js'
 import { createPatternOrganizationControls } from './pattern_organization.js'
 import { createToolPopup } from './tool_popup.js'
 import { el } from './primitives/dom.js'
@@ -8,7 +9,9 @@ import { createLinearPatternControls, linearPatternDefaults, linearPatternSectio
 import { linearPatternOffsets } from './linear_pattern_math.js'
 import './circular_pattern_panel.css'
 
-export function initLinearPatternPanel({ store, showToast, selectionManager, scene, commitPattern = createLinearPattern }) {
+export function initLinearPatternPanel({ store, showToast, selectionManager, scene, getAssemblyRenderer, commitPattern = createLinearPattern }) {
+  const host = createAssemblyPatternHost({ store, getAssemblyRenderer, kind: 'linear-pattern', commitPattern })
+  store = host.store; commitPattern = host.commit
   const panel = document.getElementById('linear-pattern-panel')
   if (!panel) return null
   let picking, popup, dispose, committing = false, generation = 0
@@ -37,6 +40,7 @@ export function initLinearPatternPanel({ store, showToast, selectionManager, sce
     const initial = store.getState(), session = generation
     const active = () => session === generation
     const organized = !!initial.currentDesign.group_organization
+    const noun = initial.patternAssembly ? 'Origami' : organized ? 'Placements' : 'Clusters'
     const targets = initial.currentDesign.cluster_transforms.map(c => circularPatternCluster(initial, c.id)).filter(Boolean)
     const selected = new Set([target.cluster.id])
     const organization = createPatternOrganizationControls(initial.currentDesign, [...selected], () => update())
@@ -84,8 +88,8 @@ export function initLinearPatternPanel({ store, showToast, selectionManager, sce
       readout.hidden = !!valid
       readout.textContent = !selected.size ? `Select at least one ${organized ? 'placement' : 'cluster'}.` : overlaps ? `Selected ${organized ? 'placements' : 'clusters'} overlap; select each helix only once.` : organization && !organization.valid() ? 'Repair the missing named groups before copying.' : 'Use finite, nonzero vectors and spacing, and integer counts; at most 128 total instances. 2D directions must not be parallel.'
     }
-    const list = el('div', { className: 'lp-cluster-list tool-scroll-list', attrs: { role: 'group', 'aria-label': organized ? 'Available placements' : 'Available clusters', tabindex: 0 } })
-    const sources = linearPatternSection(organized ? 'Placements' : 'Clusters', [list])
+    const list = el('div', { className: 'lp-cluster-list tool-scroll-list', attrs: { role: 'group', 'aria-label': initial.patternAssembly ? 'Available origami' : organized ? 'Available placements' : 'Available clusters', tabindex: 0 } })
+    const sources = linearPatternSection(noun, [list])
     for (const t of targets) {
       const input = el('input', { attrs: { type: 'checkbox', 'aria-label': `Include ${t.cluster.name || t.cluster.id}` }, on: { change: event => { if (event.target.checked) selected.add(t.cluster.id); else selected.delete(t.cluster.id); organization?.update([...selected]); update() } } })
       input.checked = selected.has(t.cluster.id)
@@ -105,14 +109,22 @@ export function initLinearPatternPanel({ store, showToast, selectionManager, sce
     dispose = () => { unsubscribe(); group.removeFromParent(); geometries.forEach(g => g.dispose()); material.dispose() }
     show(); update()
   }
-  function open() {
+  async function open() {
     if (popup) { popup.show(); return }
+    if (host.isAssembly()) {
+      const session = generation
+      if (!await host.prepare() || session !== generation) return
+    }
     const state = store.getState()
     if (state.assemblyActive || !state.currentDesign?.cluster_transforms?.length || !state.currentGeometry?.length) {
-      showToast(`Open a part with a ${state.currentDesign?.group_organization ? 'placement' : 'cluster'} before creating a linear pattern.`, { severity: 'info' }); return
+      showToast(state.patternAssembly ? 'Wait for the assembly origami geometry to load before creating a pattern.' : `Open a part with a ${state.currentDesign?.group_organization ? 'placement' : 'cluster'} before creating a linear pattern.`, { severity: 'info' }); return
+    }
+    if (state.patternAssembly) {
+      const target = circularPatternCluster(state, state.activeClusterId) ?? circularPatternCluster(state, state.currentDesign.cluster_transforms[0].id)
+      preview(target, host.capture(state)); return
     }
     panel.replaceChildren(el('div', { className: 'ox-card__body', children: [el('p', { className: 'tool-picking-hint', text: state.currentDesign.group_organization ? 'Select a placement' : 'Select a cluster' }), el('button', { className: 'btn btn--sm', text: 'Cancel', on: { click: close } })] }))
-    const context = capturePatternContext(state)
+    const context = host.capture(state)
     picking = beginCircularPatternSelection({ store, selectionManager, onSelected: target => {
       if (store.getState().currentDesign !== context.source) { reset(); return }
       close(); preview(target, context)
@@ -120,5 +132,6 @@ export function initLinearPatternPanel({ store, showToast, selectionManager, sce
     show()
   }
   document.getElementById('menu-tools-linear-pattern')?.addEventListener('click', open)
+  document.getElementById('menu-assembly-linear-pattern')?.addEventListener('click', open)
   return { open, close, isActive: () => !!popup }
 }

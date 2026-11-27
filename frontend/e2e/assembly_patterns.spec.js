@@ -1,0 +1,68 @@
+import { test, expect } from '@playwright/test'
+import { loadScaffoldedPart, trackConsoleErrors } from './helpers/scene_harness.js'
+
+// Persistence inventory: __e2e__assembly-patterns.nadoc (File > New autosave)
+// and project revisions are removed even on failure by global-teardown.js.
+// Assembly and inline source remain in the isolated backend's memory; session
+// persistence is disabled by playwright.config.js. Screenshots use outputPath.
+test('whole origami linear and circular patterns, history edit, undo, reload', async ({ page }, testInfo) => {
+  test.setTimeout(180_000)
+  const errors = trackConsoleErrors(page)
+  page.on('response', async response => { if (response.status() >= 400) console.log('HTTP failure', response.url(), response.request().postData(), await response.text()) })
+  page.on('pageerror', error => console.log('Page error', error.message))
+  page.on('console', message => { if (message.type() === 'error') console.log('Console error', message.text()) })
+  await page.setViewportSize({ width: 1800, height: 1000 })
+  await loadScaffoldedPart(page, { doc: '__e2e__assembly-patterns', name: 'assembly-patterns' })
+  await page.evaluate(async () => {
+    const api = await import('/src/api/client.js')
+    const { store } = await import('/src/state/store.js')
+    await api.createBundle({ cells: [[0, 1], [1, 0]], lengthBp: 200, name: '__e2e__assembly-patterns' })
+    const design = store.getState().currentDesign
+    await api.createAssembly('__e2e__assembly-patterns')
+    await api.addInstance({ source: { type: 'inline', design }, name: 'Whole origami' })
+    await window.__nadocTest.enterAssemblyMode()
+  })
+  await expect(page.locator('#mode-indicator')).toContainText('ASSEMBLY')
+  const count = () => page.evaluate(() => window.__nadocTest.store.getState().currentAssembly.instances.length)
+  async function open(kind) {
+    await expect(async () => {
+      await page.locator('#menu-item-assembly > button').hover()
+      await page.locator(`#menu-assembly-${kind}-pattern`).click()
+      await expect(page.locator(`#${kind}-pattern-panel .cp-panel-body`)).toBeVisible({ timeout: 1000 })
+    }).toPass({ timeout: 20000 })
+  }
+  await open('linear')
+  await page.getByRole('checkbox', { name: '2D pattern' }).check()
+  await page.getByRole('spinbutton', { name: 'Instances 1', exact: true }).fill('3')
+  await page.getByRole('spinbutton', { name: 'Spacing 1 (nm)', exact: true }).fill('20')
+  await page.getByRole('spinbutton', { name: 'Spacing 2 (nm)', exact: true }).fill('25')
+  await expect(page.locator('[aria-label="Total after pattern"]')).toHaveText('2,400')
+  await page.evaluate(() => window.__nadocTest.applyCameraPoseForTest({ target: [35, 10, 34], position: [200, 180, 230], up: [0, 1, 0] }))
+  await page.screenshot({ path: testInfo.outputPath('assembly-linear-preview.png') })
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect.poll(count).toBe(6)
+  await page.evaluate(async () => (await import('/src/api/client.js')).undoAssembly())
+  await expect.poll(count).toBe(1)
+  await page.evaluate(async () => (await import('/src/api/client.js')).redoAssembly())
+  await expect.poll(count).toBe(6)
+  await open('circular')
+  await page.getByRole('spinbutton', { name: 'Instances', exact: true }).fill('4')
+  await page.getByRole('spinbutton', { name: 'Total angle (degrees)', exact: true }).fill('180')
+  await page.screenshot({ path: testInfo.outputPath('assembly-circular-preview.png') })
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect.poll(count).toBe(9)
+  await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+  await page.locator('#feature-log-panel-body button[title="Edit F2"]').click()
+  await page.getByRole('spinbutton', { name: 'Instances 1', exact: true }).fill('2')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect.poll(count).toBe(7)
+  await page.evaluate(async () => {
+    const api = await import('/src/api/client.js')
+    const content = await api.getAssemblyContent()
+    await api.importAssembly(content)
+  })
+  await expect.poll(count).toBe(7)
+  const logs = await page.evaluate(() => window.__nadocTest.store.getState().currentAssembly.feature_log.map(e => e.op_kind))
+  expect(logs).toEqual(['assembly-add-instance', 'assembly-linear-pattern', 'assembly-circular-pattern'])
+  expect(errors).toEqual([])
+})

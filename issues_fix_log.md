@@ -3070,3 +3070,16 @@ assertion failed (missing captured lattice_type). Boot, real-design render,
 assembly exit and Close Session passed. Temporary images/traces/logs were
 removed after review; no new files remain in the inventoried workspace test,
 project or session roots. Unrelated worktree changes were preserved.
+
+### ISSUE-266 — Target the cluster row selection area in pattern checks (2026-11-27)
+
+Changed the two pattern browser checks to click the left selection area instead
+of the row centre, where the colour control can intercept the event. Failure
+inspection showed an empty selection and an armed tool, not a geometry failure.
+The viewport selection path remains independently exercised by the circular-axis
+check. Product selection behavior is unchanged.
+
+ISSUE-266 verification: circular confirmation and the complete linear grid/history/
+undo/save/reload browser flows pass with explicit row selection. The linear fixture
+waits for prior autosave (separate ISSUE-267) and reloads from its configured
+`NADOC_WORKSPACE`, allowing failure-safe isolated storage and cleanup.

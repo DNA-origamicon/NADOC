@@ -164,7 +164,8 @@ test('confirm creates the displayed BP count and supports undo', async ({ page }
   await page.locator('#right-tab-strip [data-tab=clustering]').click()
   await page.getByRole('button', { name: 'Tools', exact: true }).hover()
   await page.locator('#menu-tools-circular-pattern').click()
-  await page.locator(`#cluster-list [data-cluster-id="${source}"]`).click()
+  // Click the row selection area; its center can contain the colour button.
+  await page.locator(`#cluster-list [data-cluster-id="${source}"]`).click({ position: { x: 10, y: 12 } })
   await expect(page.locator('.cp-panel-body')).toBeVisible()
   await page.getByRole('spinbutton', { name: 'Instances', exact: true }).fill('3')
   await expect(page.locator('[aria-label="New BP created"]')).toHaveText('400')

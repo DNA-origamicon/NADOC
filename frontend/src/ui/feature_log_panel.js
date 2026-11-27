@@ -1854,6 +1854,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
     // Op kinds the backend's /assembly/features/{i}/edit route knows how to
     // re-run. Stays in sync with _EDITABLE_OP_KINDS in backend/api/assembly.py.
     const editableOpKinds = new Set([
+      'assembly-linear-pattern', 'assembly-circular-pattern',
       'assembly-polymerize',
       'assembly-polymerize-periodic',
       'assembly-overhang-connection-add',
@@ -1913,7 +1914,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
       })
 
       // ── Edit button — supported op kinds, latest entry only ──────────
-      if (editableOpKinds.has(entry.op_kind) && isLatest(i) && !suppressed) {
+      if (editableOpKinds.has(entry.op_kind) && (isLatest(i) || entry.op_kind.endsWith('-pattern')) && !suppressed) {
         const editBtn = document.createElement('button')
         editBtn.textContent = '✎'
         editBtn.title = `Edit F${i + 1}`
@@ -1924,6 +1925,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         ].join(';')
         editBtn.addEventListener('click', async e => {
           e.stopPropagation()
+          if (entry.op_kind === 'assembly-linear-pattern' || entry.op_kind === 'assembly-circular-pattern') {
+            await editPatternFeature({ ...entry, op_kind: entry.op_kind.replace('assembly-', '') }, {
+              onSave: params => api.editAssemblyFeature(i, params),
+            })
+            return
+          }
           const newParams = await _promptEditAssemblyEntry(entry)
           if (!newParams) return
           const resp = await api.editAssemblyFeature(i, newParams)

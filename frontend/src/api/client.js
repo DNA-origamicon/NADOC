@@ -4537,6 +4537,24 @@ export async function addInstance(body) {
   return _syncFromAssemblyResponse(json)
 }
 
+export async function refreshAssemblyPatternContext(source) {
+  const generation = _documentRequests.capture()
+  const json = await _request('GET', '/assembly')
+  if (!json || !_documentRequests.isCurrent(generation) || !store.getState().assemblyActive
+      || store.getState().currentAssembly !== source) return false
+  _syncFromAssemblyResponse(json)
+  return true
+}
+
+export const assemblyPatternRevision = () => _assemblyRevisions.current()
+
+export async function createAssemblyPattern(kind, body) {
+  const generation = _documentRequests.capture()
+  const json = await _request('POST', `/assembly/${kind}`, body, { protectedRetry: false })
+  if (!_documentRequests.isCurrent(generation)) return null
+  return _syncFromAssemblyResponse(json)
+}
+
 export async function duplicateInstance(instanceId, { offset, name } = {}) {
   const body = {}
   if (offset) body.offset = offset
