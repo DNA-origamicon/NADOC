@@ -65,7 +65,7 @@ test('native hardware preview selects independently, reuses scenes and hands off
   expect(await page.evaluate(()=>window.__native.mode.getPathTracingStatus().work.stages.every(row=>row.state==='complete'))).toBe(true)
   expect(await page.evaluate(()=>window.__native.deletes)).toBeGreaterThanOrEqual(1)
   const first=await page.evaluate(()=>({status:window.__native.mode.getPathTracingStatus(),uploads:window.__native.uploads}))
-  expect(first.uploads).toEqual([false,true]);expect(first.status.diagnostics.device).toMatch(/NVIDIA|RTX|GeForce/)
+  expect(first.uploads[0]).toBe(false);expect(first.uploads.slice(1).every(Boolean)).toBe(true);expect(first.uploads.length).toBeGreaterThan(3);expect(first.status.diagnostics.device).toMatch(/NVIDIA|RTX|GeForce/)
   await page.evaluate(()=>{window.__native.holdNextFrame=true;window.__native.camera.position.x=.5;window.__native.camera.lookAt(0,0,0)})
   await expect.poll(()=>page.evaluate(()=>window.__native.uploads.length),{timeout:30000}).toBeGreaterThan(2)
   await page.waitForFunction(()=>window.__native.frameHeld)
@@ -89,7 +89,7 @@ test('native hardware preview selects independently, reuses scenes and hands off
   await expect(page.locator('#photo-trace-spinner')).toBeHidden()
   const reused=await page.evaluate(()=>window.__native.stats.at(-1).scene_reused)
   expect(reused).toBe(true)
-  expect(await page.evaluate(()=>window.__native.lightUpdates)).toEqual([false,false,true,true,false])
+  expect(await page.evaluate(()=>window.__native.lightUpdates.filter(Boolean).length)).toBe(2)
   // Different export dimensions force worker release/reacquisition, not cached
   // image reuse; a second native session must not race the preview's DELETE.
   const exported=await page.evaluate(async()=>{

@@ -1,4 +1,6 @@
-#em-analysis-panel { position: fixed; top: 75px; right: 24px; z-index: 1700; width: 340px; max-height: calc(100vh - 100px); overflow: auto; padding: 16px; border: 1px solid #576276; border-radius: 10px; background: #17202eed; color: #e7edf7; box-shadow: 0 8px 30px #0008; font-size: 12px; }
+#em-analysis-panel { box-sizing:border-box; width:100%; padding:12px; color:var(--color-text-primary,#e7edf7); font-size:12px; }
+#em-analysis-panel[hidden] { display:none; }
+.sidebar-column #em-analysis-panel > header { display:none; }
 #em-analysis-panel header, .em-actions, .em-scale { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
 #em-analysis-panel header strong { font-size: 16px; }
 #em-analysis-panel small { color: #ffc477; font-size: 11px; }
@@ -18,3 +20,5 @@
 .em-simulation-controls [data-em-trajectory][hidden] { display:none; }
 .em-simulation-controls .btn { vertical-align:middle; }
 .em-trajectory-progress { position:absolute; top:100%; left:0; right:0; height:3px; margin-top:2px; border-radius:2px; background-color:var(--color-border, #30363d); }
+#em-analysis-panel label[hidden], #em-analysis-panel [data-shell-estimate][hidden] { display:none; }
+#em-analysis-panel label[title] { cursor:help; }

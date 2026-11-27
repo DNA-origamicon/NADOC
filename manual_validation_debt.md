@@ -1,5 +1,123 @@
 # Manual Validation Debt — shift register
 
+- **MV-EM-CONTROLS-20261127 — PENDING:** Review the shorter EM panel and native
+  label hover-tooltip readability at normal sidebar width. Automated browser
+  checks cover control placement, conditional fields, and all four rendering
+  warning actions; they do not assess subjective tooltip readability.
+
+- **MV-EM-CHUNKS-20261126 — PENDING:** Review full-DNA Plasmonic at the user's
+  viewport/publication resolution with Native OptiX chunk updates and smooth EM.
+  Focused gold-plane test displays every completed chunk and matches uninterrupted
+  32-sample output within 3.8e-9; its raw 32-sample MSE against a finite 512-sample
+  reference is 9.57e-8 versus 8.52e-6 at one sample. This is not proof of equal
+  convergence speed to a field-free scene or a fully converged reference.
+  Dense bare-sphere and actual Appearance flow checks cover software behavior.
+
+- **MV-EM-GLOW-20261126 — PENDING (2026-11-26):** Review direct adaptive-volume
+  glow on real near-gap fields and overlapping trajectory endpoints at publication
+  resolution. The user confirmed the white curved rectangle is fixed after the
+  near-coplanar cell precision fix. The former 32 contour shells are replaced by exact tetrahedron-ray
+  intervals with quadrature of additive emission. Sampled peaks are retained;
+  subpixel peaks, saturation, palette mixing and dark/white backgrounds need
+  user review. Camera-visible glow composes over every rendering backend, with
+  opaque-depth clipping and approximate eight-light surface illumination. Native OptiX now also traces smooth emission in glossy reflections; review
+  gold hotspots and low-sample noise in the complete DNA scene at publication
+  resolution. The bare-sphere Plasmonic gold comparison passes with all 363348
+  cells; the reviewed image shows red/orange reflected hotspots. Other backends remain
+  camera-only. Refractive paths and physical volume scattering remain unsupported.
+
+- **MV-EM-NATIVE-SCALE — PENDING (2026-11-26):** Compact native transport and
+  normalized surface illumination have deterministic geometry, power-invariance,
+  native primary-pixel, 1k/10k-cloud, and Appearance export coverage. Review full
+  Plasmonic at publication resolution, dense transparent overlaps, specular gold,
+  crossfade movies and simultaneous simulation load. Compare raw equal-error
+  results before denoising. Blender 3.5+ light-tree performance and emission
+  heuristics with the camera/illumination split need a compatible-runtime check;
+  tested workstation is 3.3.1. WebGL/WebGPU still use legacy emission.
+
+
+- **MV-NATIVE-TRACE — PENDING (2026-11-26):** Native OptiX preview now retains
+  scenes and exposes delivery timings. Real GPU UI/camera/export handoff passed.
+  Staged spinner/progress now passes cold/warm and cancellation/sample-change
+  browser checks plus full 14.7M-triangle Plasmonic: intermediate snapshot,
+  upload and mesh work observed, final 100% verified, warm reuse explicit.
+  Evidence: `.development-artifacts/trace-progress-20261126/`.
+  Full Plasmonic ball-and-stick now completes native and WebGL diagnostic
+  renders (14.7M triangles); large native upload/export regression passes.
+  Screenshot settings (Glossy, 8 samples, denoise, WebGPU export, grading)
+  passed native 1615×1185 with injected upload-failure recovery.
+  Review final-quality Plasmonic at the user's exact zoom and lighting,
+  alongside their simulation GPU load. The 200 ms metric is completed-image
+  latency including transfers/denoise/compositing; no final-quality performance
+  claim follows from low-sample FPS. Native cold startup, EXR/float delivery,
+  unsupported material classes, the 2048-pixel preview limit and recomputation
+  of the quick sample and final target remain limitations. Async WebGL compilation
+  and native progress/pinned-light reuse now have focused browser coverage. Native/profile selection and
+  portable unsupported-hardware errors should be checked on the other computer.
+
+
+- **Performance-goal correction (2026-11-25):** the user's 15 FPS target is
+  **finished, adequately sampled images**, not one-sample interactive views.
+  The motion benchmarks below do not satisfy it. Measure final-image latency
+  against a stated reference quality and resolution before claiming success.
+
+- **MV-TRACE-DENOISE — PENDING (2026-11-25):** Inspect raw/denoised switching on full
+  Plasmonic atomistic strands, tightly packed NPs, sharp reflections and EM colors.
+  The shared spatial filter is benchmarked on optical fixtures, not the full
+  document. Check video flicker, tiny gaps, transparency and HDR highlights; no
+  temporal history or geometry guides are used. Review alongside real oxDNA GPU
+  work. Native optical benchmark retains 15 FPS at adaptive 1259×708 within a
+  1280×720 viewport; it does not establish full-model performance.
+  Contour follow-up: weak dark/bright and curved one/two-pixel GPU fixtures now
+  retain 99.2% contrast and match tiled output exactly; the native optical rerun
+  holds 15.12 FPS at full 1280×720. Raw guides/coherent-detail restoration trade
+  some smoothing for contour fidelity. Inspect actual dense strands at the
+  user's zoom and sample count; low-sample grain and video flicker remain open.
+
+- **MV-EM-TRACE — PENDING (2026-11-25):** Sampling now uses nonblocking timestamp
+  collection, a 12 ms batch target and retained SAH trees. Review responsiveness
+  alongside real oxDNA GPU work; the bounded budget is not an exclusive GPU
+  reservation or a hard execution-time cap. Native bare-reflector warm preview
+  throughput improves 2.10×, but dense initial preparation grows (4.5→12.4 s in
+  the stress fixture). Check this startup/refinement tradeoff on Plasmonic.
+  The new native RTX bare-metal benchmark
+  reaches 15 completed traced FPS during camera motion at native 1280×720
+  (one new sample per view). Rendering metrics now report actual resolution, GPU-completed
+  FPS and stationary noise. Verify full Plasmonic atomistic views with these
+  metrics; the optical fixtures do not establish full-model performance. A separate
+  3.03-million-triangle sphere stress scene also reaches 15 FPS at adaptive
+  957×539; this does not prove actual atomistic/trajectory throughput.
+  Review low-sample motion grain and resolution recovery when stopping. No
+  temporal denoising/reprojection is enabled. Camera-dependent EM point geometry
+  and moving molecular geometry still take the safe rebuild path.
+  In Plasmonic Run1, enable Appearance →
+  Art & materials → GPU path tracing. Review EM colors/reflections and noise at
+  64/256 samples on the workstation GPU, both paused and during smooth motion;
+  export representative PNG/video frames. Include a dense adaptive field and a
+  shared assembly. Optical browser tests cover traced pixels and lifecycle, not
+  full-scene hardware quality, movie throughput or simultaneous oxDNA GPU load.
+  Compare Advanced → Trace export backends WebGL/WebGPU/OptiX at identical dimensions
+  and sample counts, including tiled images, transparent backgrounds and motion.
+  WebGPU's reported vertical wrap is now reproduced and fixed: spatial browser
+  checks pass at 320×159 and 2560×1271 (six tiles). Full Plasmonic visual quality
+  and transparent-background review remain separate from this orientation check.
+  The user subsequently identified fixed geometry-budget rejection; those caps
+  are removed. Native RTX 2080 SUPER now passes 18,000 instances / 3.024 million
+  triangles / 175.4 MiB uploads with EM at 64²/four samples. Review the actual
+  Plasmonic atomistic view and full-resolution frames with concurrent workloads;
+  browser WebGPU checks use the headless software adapter. Check lighting/noise
+  differences and dense-field transfer/memory costs before choosing a faster
+  backend for a full movie. Check completed-view/repeat-export reuse with the
+  actual scene, including changed texture/field settings, annotations and zoom
+  insets; review native preparation/sample progress on a long tiled movie.
+  Switch Full → atomistic with live tracing enabled on the full Plasmonic model;
+  Review the colored strands again after the sampler correction: the November 25
+  screenshot completed 128 samples but retained biased speckles. The focused
+  browser check measures convergence on a glossy plane; full-model noise and
+  reflections on the workstation GPU still need review.
+  Automated delayed-loader checks now cover the explicit geometry/coordinate gate
+  and automatic resumption, but not that model's loading duration under GPU load.
+
 **What this is.** A queue of features that were shipped with the *accepted caveat*
 that their **live gesture / visual appearance was never hand-checked in the running
 app** — only verbatim-moved + unit-tested + smoke-gated. Sources: the "regression

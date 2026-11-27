@@ -22,7 +22,7 @@ def test_native_trajectory_progress_frame_and_delete(tmp_path, monkeypatch):
     monkeypatch.setenv('NADOC_TEST_SCRATCH_ROOT', str(tmp_path))
     app = FastAPI(); app.include_router(router)
     payload = {'particles': [{'id': 'gold', 'center_nm': [0, 0, 0], 'diameter_nm': 5}],
-               'resolution': 25, 'shell': {'model': 'none'}}
+               'resolution': 25, 'sampling': 'adaptive', 'shell': {'model': 'none'}}
     identity = None
     with TestClient(app) as client:
         try:
@@ -39,8 +39,11 @@ def test_native_trajectory_progress_frame_and_delete(tmp_path, monkeypatch):
             assert progress['frames'] == [17] and progress['completed'] == 1
             frame = client.get(f'/em-analysis/trajectories/{identity}/frames/0')
             assert frame.status_code == 200
-            assert frame.json()['frame_index'] == 17
-            assert frame.json()['inputs']['particles'] == payload['particles']
+            data = frame.json()
+            assert data['frame_index'] == 17
+            assert data['display_tetrahedra']
+            assert {i for tet in data['display_tetrahedra'] for i in tet} == set(range(len(data['intensity'])))
+            assert data['inputs']['particles'] == payload['particles']
             assert client.get(f'/em-analysis/trajectories/{identity}/frames/1').status_code == 404
         finally:
             if identity:

@@ -118,7 +118,8 @@ def solve(payload, *, reference=False, arrays=False):
     polarization = payload.get('polarization', 'parallel')
     if polarization not in ('parallel', 'perpendicular'):
         raise ValueError('Unknown polarization.')
-    eps = gold_permittivity()
+    wavelength = float(payload.get('wavelength_nm', 520))
+    eps = gold_permittivity(wavelength)
     sampling = payload.get('sampling', 'uniform')
     if sampling not in ('uniform', 'adaptive', 'field_adaptive'):
         raise ValueError('Unknown sampling grid.')
@@ -158,7 +159,7 @@ def solve(payload, *, reference=False, arrays=False):
     convergence_started = time.monotonic()
     for order in (4, 6, 8, 10, 12):
         cluster = miepy.sphere_cluster(position=centers, radius=radii,
-            material=miepy.constant_material(eps=eps), source=source, wavelength=520.,
+            material=miepy.constant_material(eps=eps), source=source, wavelength=wavelength,
             lmax=order, medium=miepy.constant_material(index=1.333))
         if coated:
             apply_shell(cluster, thicknesses, shell['refractive_index'])
@@ -199,7 +200,7 @@ def solve(payload, *, reference=False, arrays=False):
     field_seconds = time.monotonic() - field_started
     canonical = json.dumps(payload, sort_keys=True, separators=(',', ':'))
     return {
-        'quantity': '|E_total|²/|E_incident|²', 'wavelength_nm': 520., 'medium_index': 1.333,
+        'quantity': '|E_total|²/|E_incident|²', 'wavelength_nm': wavelength, 'medium_index': 1.333,
         'solver': f'MiePy {solver_version} generalized multiparticle Mie',
         'field_evaluator': ('nadoc-cuda-exterior-vsh-v1' if compute == 'gpu' else
                             'nadoc-exterior-vsh-v1' if optimized else 'miepy-reference'),

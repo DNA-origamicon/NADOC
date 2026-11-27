@@ -1,6 +1,20 @@
 import {it,expect,vi} from 'vitest'
 import * as THREE from 'three'
 import {traceOutputKey,createTraceOutputCache} from './path_trace_output.js'
+import {createEMFieldOverlay} from '../em_field.js'
+it('retains molecular preparation across EM membership, palette and crossfade changes only',()=>{
+  const scene=new THREE.Scene(),camera=new THREE.Camera(),overlay=createEMFieldOverlay(scene)
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial());scene.add(mesh)
+  const options={scene,camera,settings:{},width:64,height:64,ignoreEM:true,ignoreTraceLighting:true}
+  const key=()=>traceOutputKey(options),before=key()
+  const data={shape:[2,2,2],lower_nm:[-1,-1,-1],upper_nm:[1,1,1],origin_nm:[0,0,0],basis:[[1,0,0],[0,1,0],[0,0,1]],intensity:Array(8).fill(100),outside:Array(8).fill(true)}
+  overlay.show(data,{mode:'volume',minimum:0});expect(key()).toBe(before)
+  overlay.showTransition(data,{...data,intensity:Array(8).fill(.2)},.25,{mode:'volume',minimum:0});expect(key()).toBe(before)
+  const full=traceOutputKey({...options,ignoreEM:false})
+  overlay.show(data,{mode:'volume',minimum:0,dotSize:7});expect(traceOutputKey({...options,ignoreEM:false})).not.toBe(full)
+  mesh.material.roughness=.2;expect(key()).not.toBe(before)
+  overlay.dispose();mesh.geometry.dispose();mesh.material.dispose()
+})
 it('invalidates solved pixels for camera, geometry, color, lighting, dimensions and settings changes',()=>{
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(45,1,.1,100)
   const mesh=new THREE.Mesh(new THREE.SphereGeometry(),new THREE.MeshStandardMaterial()),light=new THREE.DirectionalLight()

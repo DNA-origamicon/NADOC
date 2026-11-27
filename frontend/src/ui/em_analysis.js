@@ -1,9 +1,13 @@
-import { EM_DEFAULTS, loadEMSettings, saveEMSettings } from './em_settings.js'
+import { EM_DEFAULTS, loadEMSettings, saveEMSettings, opticalSettings } from './em_settings.js'
+import {initEMLegend} from './em_legend.js'
+import {loadEMColors} from './em_color_settings.js'
 import { initEMSimulation } from './em_simulation.js'
 import * as THREE from 'three'
 import { createEMFieldOverlay } from '../scene/em_field.js'
 import { registerEMExport } from '../scene/em_export.js'
 import { nanoparticlePoseMatrix } from '../scene/nanoparticle_display.js'
+import {EM_PANEL_HTML, updateEMPanel, prepareEMPanel} from './em_analysis_panel.js'
+import {registerEMClear} from '../scene/em_export.js'
 import './em_analysis.css'
 
 /** Capture optical inputs in the actual scene frame, including hidden particles. */
@@ -30,14 +34,18 @@ export function captureEMParticles({ state, nanoparticleSubsystem, assemblyRende
 }
 
 export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRenderer, api,
-  addFrameCallback, removeFrameCallback, camera = null, controls = null, overlayFactory = createEMFieldOverlay, simulationDisplays = null }) {
+  rightSidebar = null, addFrameCallback, removeFrameCallback, overlayFactory = createEMFieldOverlay, simulationDisplays = null }) {
   let panel = null, overlay = null, result = null, controller = null, generation = 0, signature = null
   let interval = null, started = 0, lastCheck = 0
+  const legend=initEMLegend(scene)
   const button = document.getElementById('menu-tools-em-analysis')
+  const railButton=document.querySelector('#right-tab-strip [data-tab="em"]')
+  const standalone=()=>configure(false)
   const capture = () => captureEMParticles({ state: store.getState(), nanoparticleSubsystem, assemblyRenderer })
   const fingerprint = () => JSON.stringify([store.getState().currentDesign?.id, store.getState().currentAssembly?.id,
     store.getState().assemblyActive, capture()])
   const status = text => { if (panel) panel.querySelector('[data-status]').textContent = text }
+  const unregisterClear = registerEMClear(scene,()=>{invalidate();status('Field cleared. Calculate to begin.')})
   const unregisterExport = registerEMExport(scene, () => {
     if (!panel || (!result && !controller)) return
     if (controller) throw new Error('Wait for the EM calculation to finish before exporting.')
@@ -61,31 +69,26 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
     try { if (fingerprint() !== signature) invalidate() } catch { invalidate() }
   }
   function redraw() {
-    if (!result || !panel) return
+    if (!panel) return
+    updateEMPanel(panel)
+    if (!result) return
     overlay.show(result, { mode: panel.querySelector('[data-mode]').value,
       slice: Number(panel.querySelector('[data-slice]').value), minimum: Number(panel.querySelector('[data-minimum]').value),
-      maximum: 100, dotSize: Number(panel.querySelector('[data-dot-size]').value), lighting:panel.querySelector('[data-lighting]').value })
+      ...loadEMColors(), dotSize: Number(panel.querySelector('[data-dot-size]').value), lighting:panel.querySelector('[data-lighting]').value })
   }
   async function run() {
+    if([...panel.querySelectorAll('input:not(:disabled)')].some(input=>!input.reportValidity()))return
     cancel('Preparing current particle snapshot…')
     overlay.clear(); result = null; panel.querySelector('[data-download]').disabled = true
     const current = generation
     try {
       const particles = capture()
       signature = fingerprint()
-      const payload = { particles, resolution: Number(panel.querySelector('[data-resolution]').value),
-        polarization: panel.querySelector('[data-polarization]').value,
-        solver: panel.querySelector('[data-solver]').value,
-        sampling: panel.querySelector('[data-sampling]').value,
-        shell: { model: panel.querySelector('[data-shell]').value,
-          oligo_length_nt: Number(panel.querySelector('[data-oligo-length]').value),
-          persistence_length_nm: Number(panel.querySelector('[data-persistence]').value),
-          thickness_nm: Number(panel.querySelector('[data-thickness]').value),
-          refractive_index: Number(panel.querySelector('[data-shell-index]').value) } }
+      const payload = { particles, ...opticalSettings(Object.fromEntries(Object.keys(EM_DEFAULTS).map(key=>[key,panel.querySelector(`[data-${key}]`).value]))) }
       controller = new AbortController()
       panel.querySelector('[data-run]').disabled = true; panel.querySelector('[data-cancel]').disabled = false
       started = performance.now()
-      const update = () => status(`Solving 520 nm field · ${((performance.now() - started) / 1000).toFixed(0)} s elapsed`)
+      const update = () => status(`Solving ${payload.wavelength_nm} nm field · ${((performance.now() - started) / 1000).toFixed(0)} s elapsed`)
       update(); interval = setInterval(update, 1000)
       let requestError = null
       const next = await api._request('POST', '/em-analysis/solve', payload,
@@ -118,71 +121,43 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
       }
     }
   }
-  function frameMap() {
-    if (!result || !camera || !controls) return
-    const center = new THREE.Vector3(...result.origin_nm)
-    for (let i = 0; i < 3; i++) center.addScaledVector(new THREE.Vector3(...result.basis[i]), (result.lower_nm[i] + result.upper_nm[i]) / 2)
-    const radius = Math.hypot(...result.upper_nm.map((v, i) => v - result.lower_nm[i])) / 2
-    const direction = camera.position.clone().sub(controls.target).normalize()
-    if (!direction.lengthSq()) direction.set(1, 1, 1).normalize()
-    const halfAngle = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov || 45) / 2) * Math.min(1, camera.aspect || 1))
-    camera.position.copy(center).addScaledVector(direction, radius / Math.sin(halfAngle) * 1.2)
-    controls.target.copy(center); controls.update()
-  }
   function persist() {
     if (!panel) return
     saveEMSettings(Object.fromEntries(Object.keys(EM_DEFAULTS).map(key => [key, panel.querySelector(`[data-${key}]`).value])))
   }
   function close() {
     persist()
-    cancel(); removeFrameCallback?.(check); overlay?.dispose(); overlay = null
-    panel?.remove(); panel = null; result = null; signature = null; button?.focus()
+    if(rightSidebar){
+      for(const item of rightSidebar.getInstances())if(item.type==='em')rightSidebar.close(item.id)
+    }else if(panel)panel.hidden=true
+    button?.focus()
   }
-  function open(settingsOnly = false) {
-    const configure = () => {
-      for (const key of ['run','frame']) panel.querySelector(`[data-${key}]`).parentElement.hidden = settingsOnly === true
-      if (settingsOnly === true) status('These settings apply to the EM visualization. Close this panel to return to the simulation.')
-    }
-    if (panel) { configure(); return panel.querySelector('[data-solver]').focus() }
+  function configure(settingsOnly=false){
+    if(!panel)return
+    for(const key of ['run','download'])panel.querySelector(`[data-${key}]`).parentElement.hidden=settingsOnly===true
+    panel.querySelector('[data-clear]').hidden=settingsOnly===true
+    if(settingsOnly===true)status('These settings apply to the simulation EM visualization.')
+  }
+  function open(settingsOnly = false, reveal = true) {
+    if (panel) { configure(settingsOnly); panel.hidden=false; rightSidebar?.open('em'); return panel.querySelector('[data-solver]').focus() }
     overlay = overlayFactory(scene)
     panel = document.createElement('section'); panel.id = 'em-analysis-panel'
     panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', 'EM analysis')
-    panel.innerHTML = `<header><strong>EM analysis</strong><button data-close aria-label="Close EM analysis">×</button></header>
-      <p>520 nm plane wave in water (n = 1.333). Coupled, full-wave gold spheres.</p>
-      <label>Solver<select data-solver><option value="multipole">Full multipole Maxwell · optimized</option><option value="multipole_reference">Full multipole Maxwell · reference evaluation</option></select></label>
-      <label>Optical DNA coating<select data-shell><option value="ssdna_wlc">Full coverage · length-based ssDNA estimate</option><option value="manual">Full coverage · specified thickness</option><option value="none">Bare spheres · original model</option></select></label>
-      <p>Optical coverage is independent of explicitly modeled conjugates. These common shell settings apply to every particle.</p>
-      <label>Conjugated oligo length (nt)<input data-oligo-length type="number" min="1" max="200" step="1" value="20"></label>
-      <label>ssDNA persistence length (nm)<input data-persistence type="number" min="0.1" max="10" step="0.1" value="2.5"></label>
-      <label>Specified radial shell thickness (nm)<input data-thickness type="number" min="0" max="100" step="0.1" value="2.5"></label>
-      <label>Effective shell refractive index<input data-shell-index type="number" min="1" max="2.5" step="0.01" value="1.7"></label>
-      <p data-shell-estimate></p>
-      <label>Electric-field polarization<select data-polarization><option value="parallel">Along first particle pair</option><option value="perpendicular">Across first particle pair</option></select></label>
-      <label>Sampling<select data-sampling><option value="field_adaptive">Adaptive · field variation and hotspots</option><option value="adaptive">Adaptive · near particle surfaces</option><option value="uniform">Uniform grid</option></select></label>
-      <label>Sampling quality / budget<select data-resolution><option value="25">Preview · 15,625 + adaptive refinement</option><option value="33" selected>Standard · 35,937 + adaptive refinement</option><option value="49">Fine · 117,649 + adaptive refinement</option></select></label>
-      <div class="em-actions"><button data-run>Calculate 520 nm map</button><button data-cancel disabled>Cancel</button></div>
-      <button data-bare-retry hidden>Calculate without DNA coating</button>
-      <p data-status role="status" aria-live="polite">Uses the current particle positions, including hidden gold. Calculate to begin.</p>
-      <label>Display<select data-mode><option value="volume">3D field cloud</option><option value="xy">XY slice</option><option value="xz">XZ slice</option><option value="yz">YZ slice</option></select></label>
-      <label>Sampling dot size: <output data-dot-size-value>3 px</output><input data-dot-size type="range" min="1" max="12" step="0.5" value="3"></label>
-      <label>EM lighting<select data-lighting><option value="off">Plain samples</option><option value="glow">Glowing samples · fast</option><option value="illuminate">Glow + nearby surface illumination</option></select></label>
-      <p>Visible EM is included in Appearance image and video exports. Glow and surface illumination are illustrative, not emitted optical power. Illumination combines samples into at most eight lights per calculated field; no additional shadows.</p>
-      <label>Slice position<input data-slice type="range" min="0" max="1" step="0.02" value="0.5"></label>
-      <label>Cloud minimum intensity enhancement<input data-minimum type="number" min="0" max="1000" step="0.5" value="1.5"></label>
-      <div class="em-legend"></div><div class="em-scale"><span>0.1×</span><span>1×</span><span>10×</span><span>≥100×</span></div>
-      <p>Log color scale: |E<sub>total</sub>|² / |E<sub>incident</sub>|². Slice axes follow the particle pair; XY contains the pair and E. Adaptive slices show center samples from cells intersecting the selected plane. Point density indicates sampling effort, not field strength; use color for intensity.</p>
-      <details><summary>Model scope and numerical limits</summary><p>Bulk Johnson–Christy gold in water. Optional full-coverage dielectric DNA shells include fields within the shell; origami bodies and substrates are excluded. The length-based model uses the worm-like-chain RMS size with 0.59 nm/nt as an effective radial-size proxy, not a calibrated optical thickness. Persistence length depends on salt and sequence; 2.5 nm is a poly-T pure-water literature value. Shell n=1.7 is an adjustable literature starting point, not universal for hydrated DNA. Overlapping shells are rejected; compression and interpenetration require another dielectric geometry model. This is a static snapshot, not a trajectory average or fluorescence prediction. Diameters 5–100 nm; metal gaps ≥2 nm. Metal interiors are masked. A 1% multipole probe check does not certify grid convergence; compare resolutions before interpreting a peak.</p></details>
-      <div class="em-actions"><button data-frame>Frame map</button><button data-download disabled>Download field + inputs</button><button data-copy>Copy details</button></div>`
+    panel.innerHTML = EM_PANEL_HTML
+    prepareEMPanel(panel)
     const saved = loadEMSettings()
     for (const key of Object.keys(EM_DEFAULTS)) panel.querySelector(`[data-${key}]`).value = saved[key]
     panel.querySelector('[data-dot-size-value]').textContent = `${saved['dot-size']} px`
     panel.addEventListener('input', persist)
     panel.addEventListener('change', persist)
-    document.body.append(panel)
+    const host=document.getElementById('right-tab-content-em')
+    ;(host??document.body).append(panel)
+    panel.hidden=!host&&!reveal
+    if(reveal)rightSidebar?.open('em')
     panel.addEventListener('keydown', event => { event.stopPropagation(); if (event.key === 'Escape') close() })
     panel.querySelector('[data-close]').onclick = close
+    panel.querySelector('[data-clear]').onclick = ()=>{invalidate();status('Field cleared. Calculate to begin.')}
     panel.querySelector('[data-run]').onclick = run
-    panel.querySelector('[data-frame]').onclick = frameMap
     panel.querySelector('[data-cancel]').onclick = () => cancel()
     panel.querySelector('[data-bare-retry]').onclick = () => {
       panel.querySelector('[data-shell]').value = 'none'
@@ -201,33 +176,34 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
       const lp = Number(panel.querySelector('[data-persistence]').value)
       const thickness = model === 'none' ? 0 : model === 'manual' ? Number(panel.querySelector('[data-thickness]').value)
         : Math.sqrt(2 * lp * length + 2 * lp * lp * Math.expm1(-length / lp))
-      panel.querySelector('[data-shell-estimate]').textContent = `Radial shell thickness: ${thickness.toFixed(2)} nm. Length estimate is not an optical calibration.`
+      panel.querySelector('[data-shell-estimate]').textContent = `Radial shell thickness: ${thickness.toFixed(2)} nm`
+      updateEMPanel(panel)
       for (const name of ['oligo-length', 'persistence']) panel.querySelector(`[data-${name}]`).disabled = model !== 'ssdna_wlc'
       panel.querySelector('[data-thickness]').disabled = model !== 'manual'
       panel.querySelector('[data-shell-index]').disabled = model === 'none'
     }
     shellControls()
-    for (const selector of ['[data-sampling]', '[data-resolution]', '[data-polarization]', '[data-solver]', '[data-shell]',
+    for (const selector of ['[data-wavelength]', '[data-sampling]', '[data-resolution]', '[data-polarization]', '[data-solver]', '[data-shell]',
       '[data-oligo-length]', '[data-persistence]', '[data-thickness]', '[data-shell-index]']) {
       panel.querySelector(selector).onchange = () => { shellControls(); invalidate() }
-    }
-    panel.querySelector('[data-copy]').onclick = async () => {
-      try { await navigator.clipboard.writeText(`EM analysis · POST /api/em-analysis/solve\n${panel.querySelector('[data-status]').textContent}\n${location.href}`) }
-      catch { status('Clipboard unavailable. Select the result text to copy it.') }
     }
     panel.querySelector('[data-download]').onclick = () => {
       if (!result) return
       const url = URL.createObjectURL(new Blob([JSON.stringify(result)], { type: 'application/json' }))
-      const a = document.createElement('a'); a.href = url; a.download = 'em-analysis-520nm.json'; a.click()
+      const a = document.createElement('a'); a.href = url; a.download = `em-analysis-${result.wavelength_nm ?? 520}nm.json`; a.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     }
-    configure()
+    configure(settingsOnly)
+    redraw()
     addFrameCallback?.(check)
-    panel.querySelector('[data-run]').focus()
+    if(reveal)panel.querySelector('[data-run]').focus()
   }
+  open(false,false)
+  window.addEventListener('nadoc:em-colors',redraw)
   const simulation = simulationDisplays ? initEMSimulation({ scene, api, store, capture, openSettings:() => open(true),
     displays:simulationDisplays, addFrameCallback, removeFrameCallback,
     captureSimulation:() => captureEMParticles({ state:{}, nanoparticleSubsystem }) }) : null
+  railButton?.addEventListener('click',standalone)
   button?.addEventListener('click', open)
-  return { open, close, dispose() { unregisterExport(); simulation?.dispose(); close(); button?.removeEventListener('click', open) } }
+  return { open, close, dispose() { unregisterClear(); unregisterExport(); simulation?.dispose(); cancel(); removeFrameCallback?.(check); overlay?.dispose(); panel?.remove(); panel=null; legend.dispose(); railButton?.removeEventListener('click',standalone); window.removeEventListener('nadoc:em-colors',redraw); button?.removeEventListener('click', open) } }
 }

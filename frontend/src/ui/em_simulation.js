@@ -2,7 +2,7 @@ import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { icon } from './primitives/icon.js'
 import { createEMPlaybackPreparation } from './em_playback_preparation.js'
-import { registerEMExport } from '../scene/em_export.js'
+import { registerEMExport, registerEMClear } from '../scene/em_export.js'
 import { createEMFrameCache } from './em_frame_cache.js'
 import { createEMFieldOverlay, prepareEMField } from '../scene/em_field.js'
 import { loadEMSettings, opticalSettings, displaySettings } from './em_settings.js'
@@ -55,6 +55,7 @@ export function initEMSimulation({ scene, api, store, displays, captureSimulatio
   let batch = null, result = null, shown = '', busy = false, lastTick = 0, disposed = false, dialog = null
   const status = text => { for (const c of controls) c.status.textContent = c === active ? text : '' }
   const redraw = () => { if (result && active?.toggle.checked) (overlay ??= overlayFactory(scene)).show(result, displaySettings(settings)) }
+  const unregisterClear = registerEMClear(scene,()=>{for(const c of controls)c.toggle.checked=false;active=null;reset()})
   const unregisterExport = registerEMExport(scene, async () => {
     if (!active?.toggle.checked) return
     const token = generation, current = batch
@@ -307,7 +308,9 @@ export function initEMSimulation({ scene, api, store, displays, captureSimulatio
     settings = event.detail
     if (opticalChanged) { reset(); lastTick = 0; void tick() } else redraw()
   }
+  const recolor=()=>{shown='';if(batch)showCachedFrame();else redraw()}
+  window.addEventListener('nadoc:em-colors', recolor)
   window.addEventListener('nadoc:em-settings', changed); addFrameCallback?.(tick)
-  return { tick, dispose() { unregisterExport(); disposed = true; reset(); dialog?.close(); overlay?.dispose();
-    removeFrameCallback?.(tick); window.removeEventListener('nadoc:em-settings', changed); controls.forEach(c => { c.row.remove(); c.progress.remove() }) } }
+  return { tick, dispose() { unregisterClear(); unregisterExport(); disposed = true; reset(); dialog?.close(); overlay?.dispose();
+    removeFrameCallback?.(tick); window.removeEventListener('nadoc:em-colors',recolor); window.removeEventListener('nadoc:em-settings', changed); controls.forEach(c => { c.row.remove(); c.progress.remove() }) } }
 }

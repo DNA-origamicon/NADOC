@@ -3,7 +3,7 @@
 
 def resolve_frame(data, previous):
     if "meshes" in data:
-        return data, {key: data[key] for key in ("background", "transparent")}, True
+        return data, {key: data[key] for key in ("background", "transparent", "smoothEM") if key in data}, True
     if data.get("reuse_scene") is not True or previous is None:
         raise ValueError("OptiX requires a complete scene before camera-only frames")
     if "environment" in data:

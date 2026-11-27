@@ -227,3 +227,13 @@ it('refuses a missing analyzed frame instead of exporting an empty or stale fiel
  api._request.mockResolvedValue({status:'running',frames:[]})
  await expect(settleEMExport(scene)).rejects.toThrow('not ready')
 })
+it('recolors an active simulation field from the viewport legend without solving again',async()=>{
+ const {saveEMColors}=await import('./em_color_settings.js')
+ const {row,api,overlay}=setup()
+ row.querySelector('[data-em-toggle]').click();now+=500;await feature.tick()
+ await vi.waitFor(()=>expect(overlay.show).toHaveBeenCalled())
+ const calls=api._request.mock.calls.length
+ saveEMColors({colorMinimum:1,maximum:200,colormap:'magma'})
+ expect(overlay.show.mock.lastCall[1]).toMatchObject({colorMinimum:1,maximum:200,colormap:'magma'})
+ expect(api._request).toHaveBeenCalledTimes(calls)
+})

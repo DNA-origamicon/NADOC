@@ -68,7 +68,9 @@ class OptixSession:
                 cwd=self.root, limit=1024 * 1024,
             )
             ready = await asyncio.wait_for(self._message("NADOC_READY"), 90)
-            self.device = json.loads(ready)["device"]
+            info = json.loads(ready)
+            self.device = info["device"]
+            self.capabilities = info.get("capabilities", {})
             return self
         except BaseException:
             await self.close()

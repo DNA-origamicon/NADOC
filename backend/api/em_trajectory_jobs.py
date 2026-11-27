@@ -21,12 +21,13 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.physics.em_volume_archive import read_frame
+from backend.rendering.em_interpolation import with_display_tetrahedra
 
 
 def encode_frame(path, ordinal):
     # Native NumPy serialization avoids FastAPI walking every scalar on its event
-    # loop. Keep float64 values and the existing JSON wire contract unchanged.
-    return orjson.dumps(read_frame(path, ordinal), option=orjson.OPT_SERIALIZE_NUMPY)
+    # loop. Preserve float64 samples; attach derived display connectivity only here.
+    return orjson.dumps(with_display_tetrahedra(read_frame(path, ordinal)), option=orjson.OPT_SERIALIZE_NUMPY)
 
 
 def mount_trajectory_routes(router, request_type, solver_python, root, lock):

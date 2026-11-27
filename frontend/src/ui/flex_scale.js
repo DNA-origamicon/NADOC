@@ -24,7 +24,7 @@
  */
 
 import {
-  COLORMAPS, COLORMAP_LIST, colormapGradientCss, loadColormap, saveColormap, normalizeColormap,
+  COLORMAPS, COLORMAP_LIST, colormapRGB255, colormapGradientCss, loadColormap, saveColormap, normalizeColormap,
 } from './colormaps.js'
 
 export function chimeraxPalette(name) {
@@ -62,17 +62,17 @@ export function fractionToValue(frac, dataMin, dataMax) {
   return dataMin + f * (dataMax - dataMin)
 }
 
-export function initFlexScale() {
-  const root     = document.getElementById('flex-scale')
-  const track    = document.getElementById('flex-scale-track')
-  const titleEl  = document.getElementById('flex-scale-title')
-  const handleHi = document.getElementById('flex-scale-handle-hi')
-  const handleLo = document.getElementById('flex-scale-handle-lo')
-  const maxInput = document.getElementById('flex-scale-max')
-  const minInput = document.getElementById('flex-scale-min')
-  const resetBtn = document.getElementById('flex-scale-reset')
-  const cmapBtn  = document.getElementById('flex-scale-cmap')
-  let helpBtn = document.getElementById('flex-scale-help')
+export function initFlexScale({prefix='flex-scale',logarithmic=false,help=true,resetBounds=null}={}) {
+  const root     = document.getElementById(`${prefix}`)
+  const track    = document.getElementById(`${prefix}-track`)
+  const titleEl  = document.getElementById(`${prefix}-title`)
+  const handleHi = document.getElementById(`${prefix}-handle-hi`)
+  const handleLo = document.getElementById(`${prefix}-handle-lo`)
+  const maxInput = document.getElementById(`${prefix}-max`)
+  const minInput = document.getElementById(`${prefix}-min`)
+  const resetBtn = document.getElementById(`${prefix}-reset`)
+  const cmapBtn  = document.getElementById(`${prefix}-cmap`)
+  let helpBtn = document.getElementById(`${prefix}-help`)
 
   let _dataMin  = 0
   let _dataMax  = 1
@@ -81,11 +81,12 @@ export function initFlexScale() {
   let _mapType  = 'flex'
   let _colormap = 'viridis'
   let _onRecolor = null      // active map's recolour callback (lo, hi, colormapName)
+  let disposed=false, endDrag=()=>{}
   let _popup    = null       // lazily-built colormap-picker popup
 
-  if (!helpBtn && root) {
+  if (help && !helpBtn && root) {
     helpBtn = document.createElement('button')
-    helpBtn.id = 'flex-scale-help'; helpBtn.type = 'button'; helpBtn.textContent = '?'
+    helpBtn.id = `${prefix}-help`; helpBtn.type = 'button'; helpBtn.textContent = '?'
     helpBtn.title = 'Show ChimeraX recoloring commands'
     helpBtn.style.cssText = 'position:absolute;right:-7px;top:-8px;width:17px;height:17px;padding:0;border-radius:50%;border:1px solid var(--color-border-default);background:var(--color-bg-inset);color:var(--color-text-secondary);font-size:10px;font-weight:700;cursor:pointer'
     root.appendChild(helpBtn)
@@ -112,8 +113,8 @@ export function initFlexScale() {
   // Put the same help affordance beside every scalar-colour visualization choice.
   // The controls are static labels in the jobs panels; deriving these buttons here
   // keeps their command synchronized with this legend's currently adjusted state.
-  for (const input of document.querySelectorAll(
-    'input[type="radio"][value="flex"], input[type="radio"][value="rmsf"], input[type="radio"][value="deviation"]')) {
+  for (const input of help ? document.querySelectorAll(
+    'input[type="radio"][value="flex"], input[type="radio"][value="rmsf"], input[type="radio"][value="deviation"]') : []) {
     const label = input.closest('label')
     if (!label || label.querySelector('.chimerax-color-help')) continue
     const button = document.createElement('button')
@@ -124,23 +125,34 @@ export function initFlexScale() {
     label.appendChild(button)
   }
 
+  const fraction=(v)=>logarithmic?valueToFraction(Math.log10(Math.max(v,1e-6)),Math.log10(_dataMin),Math.log10(_dataMax)):valueToFraction(v,_dataMin,_dataMax)
+  const valueAtFraction=f=>logarithmic?10**fractionToValue(f,Math.log10(_dataMin),Math.log10(_dataMax)):fractionToValue(f,_dataMin,_dataMax)
   function _gap() { return Math.max(1e-6, (_dataMax - _dataMin) * 0.01) }
 
   function _render() {
-    if (maxInput) maxInput.value = _hi.toFixed(2)
-    if (minInput) minInput.value = _lo.toFixed(2)
+    const format=v=>logarithmic&&(v<.01||v>=1e5)?v.toPrecision(3):v.toFixed(2)
+    if (maxInput) maxInput.value = format(_hi)
+    if (minInput) minInput.value = format(_lo)
     // Handle top as a % of the track (0% = top = dataMax).
-    if (handleHi) handleHi.style.top = `${(1 - valueToFraction(_hi, _dataMin, _dataMax)) * 100}%`
-    if (handleLo) handleLo.style.top = `${(1 - valueToFraction(_lo, _dataMin, _dataMax)) * 100}%`
+    if (handleHi) handleHi.style.top = `${(1 - fraction(_hi)) * 100}%`
+    if (handleLo) handleLo.style.top = `${(1 - fraction(_lo)) * 100}%`
     // Ramp reflects the active colormap (bottom = dataMin, top = dataMax).
     if (track) track.style.background = colormapGradientCss(_colormap, { dir: 'to top' })
+    if(logarithmic && track){
+      const stops=Array.from({length:65},(_,i)=>{
+        const value=valueAtFraction(i/64),t=Math.log(value/_lo)/Math.log(_hi/_lo)
+        return `rgb(${colormapRGB255(_colormap,t).join(',')}) ${i/64*100}%`
+      })
+      track.style.background=`linear-gradient(to top,${stops.join(',')})`
+    }
     if (cmapBtn) cmapBtn.style.background = colormapGradientCss(_colormap, { dir: 'to right' })
   }
 
   function _emit() { _onRecolor?.(_lo, _hi, _colormap) }
 
   function _setBounds(lo, hi, { emit = true } = {}) {
-    const b = clampBounds(lo, hi)
+    const b = clampBounds(logarithmic?Math.max(1e-6,Number.isFinite(lo)?lo:_lo):lo, logarithmic?Math.max(1e-6,Number.isFinite(hi)?hi:_hi):hi)
+    if(logarithmic){_dataMin=Math.min(_dataMin,b.lo);_dataMax=Math.max(_dataMax,b.hi)}
     _lo = b.lo; _hi = b.hi
     _render()
     if (emit) _emit()
@@ -149,28 +161,29 @@ export function initFlexScale() {
   // ── Number-input entry ──────────────────────────────────────────────────────
   maxInput?.addEventListener('change', () => _setBounds(_lo, parseFloat(maxInput.value)))
   minInput?.addEventListener('change', () => _setBounds(parseFloat(minInput.value), _hi))
-  resetBtn?.addEventListener('click', () => _setBounds(_dataMin, _dataMax))
+  resetBtn?.addEventListener('click', () => _setBounds(...(resetBounds??[_dataMin,_dataMax])))
 
   // ── Handle dragging (real-time recolour) ────────────────────────────────────
   function _valueAt(clientY) {
     const rect = track?.getBoundingClientRect?.()
     if (!rect || !rect.height) return null
     const frac = 1 - (clientY - rect.top) / rect.height   // top = 1 = dataMax
-    return fractionToValue(frac, _dataMin, _dataMax)
+    return valueAtFraction(frac)
   }
 
   function _startDrag(which, ev) {
-    ev.preventDefault?.()
+    endDrag(); ev.preventDefault?.()
     const move = (e) => {
       const v = _valueAt(e.clientY)
       if (v == null) return
-      if (which === 'hi') _setBounds(_lo, Math.max(v, _lo + _gap()))
-      else                _setBounds(Math.min(v, _hi - _gap()), _hi)
+      if (which === 'hi') _setBounds(_lo, Math.max(v, logarithmic?_lo*1.01:_lo+_gap()))
+      else                _setBounds(Math.min(v, logarithmic?_hi/1.01:_hi-_gap()), _hi)
     }
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
+    endDrag=up
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
   }
@@ -181,7 +194,7 @@ export function initFlexScale() {
   function _buildPopup() {
     if (_popup || !root) return
     const pop = document.createElement('div')
-    pop.id = 'flex-scale-cmap-popup'
+    pop.id = `${prefix}-cmap-popup`
     pop.style.cssText = [
       'position:absolute', 'right:100%', 'top:0', 'margin-right:6px', 'display:none',
       'z-index:var(--z-overlay)', 'width:120px', 'padding:5px',
@@ -229,6 +242,7 @@ export function initFlexScale() {
     _popup.style.display = 'block'
     // Close on the next outside click / Escape.
     setTimeout(() => {
+      if(disposed)return
       window.addEventListener('pointerdown', _onOutside, true)
       window.addEventListener('keydown', _onKey, true)
     }, 0)
@@ -292,6 +306,8 @@ export function initFlexScale() {
       else return false
       return true
     },
+    setBounds: (lo,hi,options) => _setBounds(lo,hi,options),
+    dispose(){disposed=true;endDrag();_closePopup();_popup?.remove()},
     getBounds: () => ({ lo: _lo, hi: _hi }),
     getColormap: () => _colormap,
     getChimeraxPalette: () => chimeraxPalette(_colormap),

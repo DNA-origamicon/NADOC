@@ -15,9 +15,14 @@ import bpy
 from mathutils import Euler, Matrix, Vector
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from optix_emitters import expand_cloud, cloud_update_kind, cloud_emission, cloud_illumination
+from optix_sampling import configure_sampling, configure_emission, configure_sample_chunk
+from optix_volumes import NativeVolumes
+
 
 def unpack(value, dtype="<f4"):
-    result = np.frombuffer(base64.b64decode(value, validate=True), dtype=dtype)
+    result = np.asarray(value, dtype=dtype) if isinstance(value, np.ndarray) else np.frombuffer(base64.b64decode(value, validate=True), dtype=dtype)
     if dtype == "<f4" and not np.isfinite(result).all():
         raise ValueError("Non-finite render attributes")
     return result
@@ -50,14 +55,25 @@ def material(spec, name):
     alpha.inputs[1].default_value = spec["opacity"]
     links.new(vertex.outputs["Alpha"], alpha.inputs[0])
     links.new(alpha.outputs[0], shader.inputs["Alpha"])
-    if spec.get("palette"):
+    if spec.get("palette") or spec.get("emitter"):
+        configure_emission(mat)
         emission = nodes.new("ShaderNodeVertexColor")
         emission.layer_name = "nadoc_emission"
         multiply_emission = nodes.new("ShaderNodeMixRGB")
         multiply_emission.blend_type = "MULTIPLY"
         multiply_emission.inputs[0].default_value = 1
         multiply_emission.inputs[2].default_value = (*spec["emission"], 1)
-        links.new(emission.outputs["Color"], multiply_emission.inputs[1])
+        source = emission.outputs["Color"]
+        if spec.get("normalized_em"):
+            illumination = nodes.new("ShaderNodeVertexColor")
+            illumination.layer_name = "nadoc_illumination"
+            path = nodes.new("ShaderNodeLightPath")
+            visible = nodes.new("ShaderNodeMixRGB")
+            links.new(path.outputs["Is Camera Ray"], visible.inputs[0])
+            links.new(illumination.outputs["Color"], visible.inputs[1])
+            links.new(source, visible.inputs[2])
+            source = visible.outputs[0]
+        links.new(source, multiply_emission.inputs[1])
         links.new(multiply_emission.outputs[0], emission_socket)
     return mat
 
@@ -101,6 +117,12 @@ def mesh_object(spec, index, retained, progress=lambda value: None):
     attribute = mesh.color_attributes.get("nadoc_color") or mesh.color_attributes.new(name="nadoc_color", type="FLOAT_COLOR", domain="CORNER")
     attribute.data.foreach_set("color", colors[indices.ravel()].ravel())
     palettes = [m.get("palette") for m in spec["materials"]]
+    if "emission" in spec:
+        attribute = mesh.color_attributes.get("nadoc_emission") or mesh.color_attributes.new(name="nadoc_emission", type="FLOAT_COLOR", domain="CORNER")
+        attribute.data.foreach_set("color", spec["emission"][indices.ravel()].ravel())
+    if spec.get("illumination") is not None:
+        attribute = mesh.color_attributes.get("nadoc_illumination") or mesh.color_attributes.new(name="nadoc_illumination", type="FLOAT_COLOR", domain="CORNER")
+        attribute.data.foreach_set("color", spec["illumination"][indices.ravel()].ravel())
     if any(palettes):
         if len(palettes) != 1:
             raise ValueError("EM palettes require one material per cloud")
@@ -132,6 +154,7 @@ def world_scene(data):
     image = bpy.data.images.new("environment", env["width"], env["height"], float_buffer=True)
     image.colorspace_settings.name = "Non-Color"
     image.pixels.foreach_set(unpack(env["data"]))
+    image.update()
     texture = nodes.new("ShaderNodeTexEnvironment")
     texture.image = image
     coords = nodes.new("ShaderNodeTexCoord")
@@ -184,7 +207,11 @@ def lights_scene(lights):
             light.spot_size, light.spot_blend = 2 * entry["angle"], entry["penumbra"]
 
 
-def render(data, output, retained, update_scene=True):
+def render(data, output, retained, update_scene=True, emitter_retained=None, emitter_specs=None, volumes=None):
+    bpy.context.scene.cycles.transparent_max_bounces = 160 if data.get("smoothEM") else 5
+    emitter_retained = {} if emitter_retained is None else emitter_retained
+    emitter_specs = {} if emitter_specs is None else emitter_specs
+    emitter_updates = {"geometry": 0, "attributes": 0, "unchanged": 0}
     started = time.perf_counter()
     if any(type(data[k]) is not int or not 1 <= data[k] <= limit for k, limit in (("width", 2048), ("height", 2048), ("samples", 512))):
         raise ValueError("Invalid OptiX tile dimensions or samples")
@@ -214,10 +241,42 @@ def render(data, output, retained, update_scene=True):
     elif "lights" in data:
         lights_scene(data["lights"])
         rotate_world(data["rotation"])
+    if update_scene or "emitters" in data:
+        clouds = data.get("emitters", [])
+        for i in list(emitter_retained):
+            if i >= len(clouds):
+                emitter_specs.pop(i, None)
+                obj, _ = emitter_retained.pop(i)
+                mesh = obj.data
+                bpy.data.objects.remove(obj, do_unlink=True)
+                bpy.data.meshes.remove(mesh)
+        for i, cloud in enumerate(clouds):
+            report("geometry", f"Updating EM cloud {i + 1}/{len(clouds)}", i / max(1, len(clouds)))
+            kind = cloud_update_kind(cloud, emitter_specs.get(i))
+            emitter_updates[kind] += 1
+            if kind == "geometry":
+                mesh_object(expand_cloud(cloud), i, emitter_retained)
+            elif kind == "attributes":
+                emission, opacity = cloud_emission(cloud)
+                mesh = emitter_retained[i][0].data
+                mesh.color_attributes["nadoc_emission"].data.foreach_set("color", emission.ravel())
+                illumination = cloud_illumination(cloud)
+                if illumination is not None:
+                    mesh.color_attributes["nadoc_illumination"].data.foreach_set("color", illumination.ravel())
+                # Retain mesh, connectivity, normals and shader graph.
+                alpha = next(node for node in mesh.materials[0].node_tree.nodes if node.type == "MATH")
+                alpha.inputs[1].default_value = opacity
+                mesh.update()
+            emitter_specs[i] = cloud
+        for mat in list(bpy.data.materials):
+            if mat.users == 0:
+                bpy.data.materials.remove(mat)
+    if volumes is not None and (update_scene or "volumes" in data):
+        volumes.update(data.get("volumes", []), report)
     width, height = data["width"], data["height"]
     scene.render.resolution_x, scene.render.resolution_y = width, height
     scene.render.resolution_percentage = 100
-    scene.cycles.samples = data["samples"]
+    configure_sample_chunk(scene.cycles, data)
     camera = scene.camera
     camera.matrix_world = Matrix(np.array(data["camera"]["matrix"]).reshape(4, 4).T.tolist())
     projection = data["camera"]["projection"]
@@ -233,7 +292,11 @@ def render(data, output, retained, update_scene=True):
     bpy.context.view_layer.update()
     report("acceleration", "Building OptiX acceleration structures")
     prepared = time.perf_counter()
-    bpy.ops.render.render(write_still=True)
+    try:
+        bpy.ops.render.render(write_still=True)
+    finally:
+        if volumes is not None:
+            volumes.release_retired()
     rendered = time.perf_counter()
     report("readback", "Reading OptiX pixels", 0)
     image = bpy.data.images.load(exr, check_existing=False)
@@ -254,7 +317,8 @@ def render(data, output, retained, update_scene=True):
     report("readback", "Compositing complete · writing pixels", 2 / 3)
     pixels.tofile(output)
     report("readback", "Native pixel output ready", 1)
-    stats.update(scene_reused=not update_scene, samples=data["samples"],
+    stats["em_volume_cells"] = volumes.cell_count if volumes is not None else 0
+    stats.update(em_updates=emitter_updates, scene_reused=not update_scene, em_clouds=len(emitter_retained), em_updated="emitters" in data, samples=data["samples"],
                  prepare_ms=(prepared-started)*1000, render_ms=(rendered-prepared)*1000,
                  readback_ms=(time.perf_counter()-rendered)*1000,
                  worker_ms=(time.perf_counter()-started)*1000)
@@ -299,15 +363,20 @@ def main():
     scene.collection.objects.link(camera)
     scene.camera = camera
     camera.data.clip_start, camera.data.clip_end = .00001, 1e8
-    print("NADOC_READY " + json.dumps({"device": devices[0].name}), flush=True)
+    capabilities = configure_sampling(scene, bpy.app.version_string)
+    print("NADOC_READY " + json.dumps({"device": devices[0].name, "capabilities": capabilities}), flush=True)
     retained = {}
+    emitter_retained = {}
+    emitter_specs = {}
+    volumes = NativeVolumes()
     scene_state = None
     for line in sys.stdin:
         try:
             command = json.loads(line)
             report("decode", "Reading / decoding transferred scene")
             data, next_state, update_scene = resolve_frame(json.loads(Path(command["input"]).read_text()), scene_state)
-            stats = render(data, command["output"], retained, update_scene)
+            stats = render(data, command["output"], retained, update_scene, emitter_retained, emitter_specs, volumes)
+            stats.update(capabilities)
             scene_state = next_state
             print("NADOC_DONE " + json.dumps(stats), flush=True)
         except Exception as error:

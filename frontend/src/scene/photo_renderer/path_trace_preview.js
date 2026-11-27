@@ -1,3 +1,4 @@
+import {drawEMVolumes} from '../em_volume.js'
 import * as THREE from 'three'
 import { Pass } from 'three/addons/postprocessing/Pass.js'
 import { traceOutputKey, createTraceOutputCache } from './path_trace_output.js'
@@ -137,6 +138,7 @@ export function createTracePreview({scene,camera,renderer,settings,isActive,load
       if(traced){
         try{
           engine.draw(this.renderToScreen?null:read,{denoise:settings.pathTraceDenoise!==false})
+          drawEMVolumes(r,scene,camera,this.renderToScreen?null:read)
           if(engine.ready?.()??true){
             if(settings.pathTracePreviewBackend!=='optix')work.event({stage:'tracing',fraction:engine.samples/traceSamples(settings.pathTraceSamples),label:`Sampling · ${Math.floor(engine.samples)} / ${traceSamples(settings.pathTraceSamples)}`})
             if(engine.samples>=traceSamples(settings.pathTraceSamples))work.event({stage:'display',fraction:1,label:'Image ready'})

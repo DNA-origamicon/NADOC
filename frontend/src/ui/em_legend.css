@@ -1,0 +1,7 @@
+#em-scale { position:absolute; right:14px; top:50%; transform:translateY(-50%); z-index:var(--z-overlay,20); width:56px; padding:7px 6px; border:1px solid var(--color-border-default,#455a64); border-radius:6px; background:var(--color-bg-raised,#17202e); color:var(--color-text-primary,#eee); font:10px var(--font-ui,sans-serif); }
+#em-scale-title { font-size:9px; text-align:center; margin-bottom:4px; }
+#em-scale input { box-sizing:border-box; width:100%; font-size:10px; text-align:center; appearance:textfield; }
+#em-scale input::-webkit-inner-spin-button, #em-scale input::-webkit-outer-spin-button { appearance:none; }
+#em-scale-track { position:relative; width:18px; height:140px; margin:5px auto; border-radius:3px; }
+#em-scale-handle-hi, #em-scale-handle-lo { position:absolute; left:-5px; width:28px; height:5px; margin-top:-3px; border:1px solid #222; border-radius:2px; background:#eee; cursor:ns-resize; touch-action:none; }
+#em-scale-cmap, #em-scale-reset { width:100%; height:18px; padding:0; margin-top:5px; font-size:9px; cursor:pointer; }

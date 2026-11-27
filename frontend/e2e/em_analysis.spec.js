@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
-import path from 'node:path'
+import {fileURLToPath} from 'node:url'
 import { createHash } from 'node:crypto'
 
 // Existing design is read-only. File > New establishes an empty __e2e__ editor
@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 // No downloads or simulation jobs are created.
 // Dedicated Playwright servers disable session persistence. Browser cache is an
 // ephemeral Playwright context; screenshots/traces use its cleaned output directory.
-const source = path.resolve('..', 'workspace', 'Plasmonic_test.nadoc')
+const source = fileURLToPath(new URL('../../workspace/Plasmonic_test.nadoc',import.meta.url))
 const digest = async () => createHash('sha256').update(await readFile(source)).digest('hex')
 
 test('520 nm EM map on the existing plasmonic design, slices and cleanup', async ({ page }) => {
@@ -26,7 +26,7 @@ test('520 nm EM map on the existing plasmonic design, slices and cleanup', async
   })
   // Suppress workspace autosave: the source is a read-only visualization input.
   await page.route('**/api/design/save-workspace', route => route.fulfill({json:{identity_disposition:'confirmed'}}))
-  await page.setViewportSize({ width: 1100, height: 800 })
+  await page.setViewportSize({ width: 1500, height: 950 })
   try {
     await page.addInitScript(()=>Object.defineProperty(window,'devicePixelRatio',{get:()=>.5}))
     await page.goto('/')
@@ -47,6 +47,7 @@ test('520 nm EM map on the existing plasmonic design, slices and cleanup', async
       const { camera, controls } = window.__nadocTest
       controls.target.set(9, 16, 26); camera.position.set(105, 85, 125); controls.update()
     })
+    for(const instance of await page.evaluate(()=>window.__rightSidebar.getInstances()))await page.evaluate(id=>window.__rightSidebar.close(id),instance.id)
     await page.locator('.menu-item').filter({ hasText: 'Tools' }).first().hover()
     await page.locator('.submenu-item').filter({ hasText: 'Nanoparticles' }).first().hover()
     await page.locator('#menu-tools-em-analysis').click()
@@ -78,10 +79,34 @@ test('520 nm EM map on the existing plasmonic design, slices and cleanup', async
     await panel.locator('[data-mode]').selectOption('xz')
     await panel.locator('[data-slice]').fill('0.5')
     expect(await page.evaluate(() => window.__nadocTest.scene.getObjectByName('experimental-em-field')?.userData.sampleCount)).toBeGreaterThan(100)
-    if (process.env.NADOC_EM_VISUAL === '1') console.log('EM_SCREENSHOT:' + (await page.screenshot({type:'jpeg',quality:35})).toString('base64'))
-    await panel.locator('[data-close]').click()
-    await expect(panel).toHaveCount(0)
-    expect(await page.evaluate(() => window.__nadocTest.scene.children.filter(o => o.name === 'experimental-em-field').some(o => o.children.length > 0))).toBe(false)
+    const legend=page.locator('#em-scale')
+    await expect(legend).toBeVisible()
+    await expect(page.locator('.sidebar-column[data-panel-type="em"]')).toBeVisible()
+    await panel.locator('[data-mode]').selectOption('smooth')
+    await page.waitForFunction(()=>window.__nadocTest.scene.getObjectByName('experimental-em-field')?.children.some(o=>o.userData.emSmooth))
+    if(process.env.NADOC_EM_LAYER_REVIEW)await page.screenshot({path:process.env.NADOC_EM_LAYER_REVIEW})
+    const originalGeometry=await page.evaluate(()=>window.__nadocTest.scene.getObjectByName('experimental-em-field').children.find(o=>o.isMesh).geometry.uuid)
+    await page.locator('#em-scale-cmap').click()
+    await page.locator('#em-scale-cmap-popup [data-cmap="magma"]').click()
+    expect(await page.evaluate(()=>window.__nadocTest.scene.getObjectByName('experimental-em-field').children.find(o=>o.isMesh).geometry.uuid)).toBe(originalGeometry)
+    await panel.locator('[data-mode]').selectOption('volume')
+    await page.locator('#em-scale-max').fill('150')
+    await page.locator('#em-scale-max').press('Tab')
+    await page.locator('#right-tab-toggle').click()
+    await expect(page.locator('#right-panel')).toHaveClass(/hidden/)
+    expect((await page.locator('#right-panel').boundingBox()).width).toBe(0)
+    await expect(legend).toBeVisible()
+    await page.locator('#right-tab-toggle').click()
+    await expect(panel).toBeVisible()
+    await page.locator('.sidebar-column[data-panel-type="em"] .sidebar-close').click()
+    await expect(panel).not.toBeVisible();await expect(legend).toBeVisible()
+    expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('nadoc.em.colors.v1')))).toMatchObject({maximum:150,colormap:'magma'})
+    await page.locator('.right-tab-btn[data-tab="em"]').click()
+    await expect(panel).toBeVisible();await expect(page.locator('#em-scale-max')).toHaveValue('150.00')
+    await panel.locator('[data-mode]').selectOption('volume')
+    await panel.locator('[data-clear]').click()
+    await expect(legend).not.toBeVisible()
+    await page.locator('.sidebar-column[data-panel-type="em"] .sidebar-close').click()
     // Rail clicks add columns; free space before opening Simulations.
     for (const side of ['left','right']) {
       const close = page.locator(`#${side}-panel .sidebar-close:visible`)
@@ -94,7 +119,7 @@ test('520 nm EM map on the existing plasmonic design, slices and cleanup', async
     await ox.locator('[data-em-settings]').click()
     await expect(panel.locator('[data-shell]')).toHaveValue('none')
     await expect(panel.locator('[data-dot-size]')).toHaveValue('6')
-    await panel.locator('[data-close]').click()
+    await page.locator('.sidebar-column[data-panel-type="em"] .sidebar-close').click()
     await ox.locator('[data-em-toggle]').check()
     await expect(ox.locator('[data-em-status]')).toContainText('Select a simulation visualization')
     await ox.locator('[data-em-toggle]').uncheck()
@@ -103,7 +128,7 @@ test('520 nm EM map on the existing plasmonic design, slices and cleanup', async
     if (!await md.isVisible()) await page.locator('#md-jobs-viz-toggle').click()
     await md.locator('[data-em-settings]').click()
     await expect(panel.locator('[data-dot-size]')).toHaveValue('6')
-    await panel.locator('[data-close]').click()
+    await page.locator('.sidebar-column[data-panel-type="em"] .sidebar-close').click()
     expect(errors).toEqual([])
   } finally {
     if (errors.length) console.log('EM_BROWSER_ERRORS', errors)

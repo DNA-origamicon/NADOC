@@ -1,5 +1,14 @@
 import * as THREE from 'three'
 
+/** RGB display power, not optical radiance. The scale matches the existing
+ * raster illumination convention; cell subdivision preserves total power. */
+export function emSamplePowers(weights,colors,radius){
+  const total=weights.reduce((sum,w)=>sum+w,0),power=new Float32Array(colors.length)
+  if(total>0)for(let i=0;i<weights.length;i++)for(let k=0;k<3;k++)
+    power[i*3+k]=.3*radius*radius*weights[i]/total*colors[i*3+k]
+  return power
+}
+
 /** Illustrative lighting only. Integrate cell volumes so refinement adds no energy. */
 export function emLightAccumulator(center, radius) {
   const buckets = Array.from({length:8}, () => ({weight:0, position:[0,0,0], color:[0,0,0]}))

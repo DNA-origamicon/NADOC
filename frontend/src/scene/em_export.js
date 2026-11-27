@@ -26,3 +26,16 @@ export function prepareEMExportSize(scene, scale) {
   })
   return () => { for (const [material, size] of saved) material.size = size }
 }
+
+const clearers = new WeakMap()
+export function registerEMClear(scene, clear) {
+  if(!clearers.has(scene))clearers.set(scene,new Set())
+  clearers.get(scene).add(clear)
+  return ()=>clearers.get(scene)?.delete(clear)
+}
+export function clearEMFields(scene) { for(const clear of clearers.get(scene)??[])clear() }
+export function hasEMRenderField(scene) {
+  let found=false
+  scene?.traverseVisible?.(obj=>{if((obj.userData.emSamples||obj.userData.emVolume)&&obj.geometry?.attributes.position?.count&&obj.material?.visible!==false)found=true})
+  return found
+}

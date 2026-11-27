@@ -16,56 +16,73 @@ export async function createOptixTraceEngine(options){
   const abort=()=>controller.abort(signal?.reason);signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort()
   let id=null,payload=null,camera=null,width=options.width,height=options.height,samples=0,image=null,disposed=false
   let onStatus=options.onStatus,sequence=0,stopProgress=null,uploaded=false,capacity=null,pixels=null,filter=null,revision=0
-  let stats={},device='',lease=null,closing=null,triangles=0,emSamples=0,sceneKey=null,startupMs=0,lightingKey=null,lightingUpdate=null
+  let accumulationTarget=null,emVolumeCells=0
+  let stats={},device='',lease=null,closing=null,triangles=0,emSamples=0,sceneKey=null,startupMs=0,lightingUpdate=null,lightingKey=null
   const identityCamera=new THREE.Camera()
-  const keyFor=next=>traceOutputKey({scene:next.scene,camera:emSamples?next.camera:identityCamera,
+  const keyFor=next=>{ let smooth=false;next.scene.traverseVisible(o=>{if(o.userData.emSmooth)smooth=true})
+    return traceOutputKey({scene:next.scene,camera:identityCamera,
     settings:Object.fromEntries(Object.entries(next.settings).filter(([k])=>!k.startsWith('pathTrace')&&k!=='pathTracing')),
-    width:next.width,height:next.height,viewHeight:next.viewHeight,ignoreTraceLighting:true})
+    width:next.width,height:next.height,viewHeight:next.viewHeight,ignoreTraceLighting:true,ignoreEM:!smooth}) }
   const renderer=options.renderer,quad=new FullScreenQuad(new THREE.MeshBasicMaterial({toneMapped:false,depthTest:false,depthWrite:false,blending:THREE.NoBlending}))
   const request=(path,body,extra)=>requestOptix(path,body,controller.signal,extra)
   async function update(next){
     onStatus=next.onStatus
     if(sceneKey!==null)onStatus?.({reused:['device']})
     if(sceneKey!==null&&sceneKey===keyFor(next)){
-      onStatus?.({reused:['snapshot','environment','upload','decode','geometry']})
-      const lighting=nativeTraceLighting(next.scene),key=JSON.stringify(lighting)
-      if(key!==lightingKey){
-        if(uploaded)lightingUpdate=lighting
-        else Object.assign(payload,lighting)
+      onStatus?.({reused:['environment']})
+      const snapshot=await traceSnapshotAsync(next.scene,next.camera,next.viewHeight,{compactEM:true,onlyEM:true,
+        signal:controller.signal,onProgress:fraction=>onStatus?.({stage:'snapshot',fraction,label:'Preparing EM emitters; retaining molecular geometry'})})
+      try{
+        const hasEM=emSamples>0||snapshot.emSamples>0||lightingUpdate?.emitters!==undefined
+        if(!hasEM)onStatus?.({reused:['snapshot','upload','decode','geometry']})
+        triangles+=snapshot.triangles-emSamples*20;emSamples=snapshot.emSamples
+        const lighting=nativeTraceLighting(next.scene)
+        const key=JSON.stringify(lighting),update={...(key!==lightingKey?lighting:{}),...(hasEM?{emitters:snapshot.emitters}:{})}
+        if(uploaded)lightingUpdate={...lightingUpdate,...update}
+        else Object.assign(payload,update)
         lightingKey=key
-      }
+      }finally{snapshot.dispose()}
       camera=next.camera;samples=0;revision++;return
     }
-    const snapshot=await traceSnapshotAsync(next.scene,next.camera,next.viewHeight,{signal:controller.signal,onProgress:fraction=>onStatus?.({stage:'snapshot',fraction,label:'Preparing scene snapshot'})});let env
+    const snapshot=await traceSnapshotAsync(next.scene,next.camera,next.viewHeight,{compactEM:true,signal:controller.signal,onProgress:fraction=>onStatus?.({stage:'snapshot',fraction,label:'Preparing scene snapshot'})});let env
     onStatus?.({stage:'environment',fraction:null,label:'Preparing materials and environment'})
-    try{env=traceEnvironment(renderer,next.scene,next.settings);payload=nativeTracePayload(snapshot,env,next.scene,next.settings);triangles=snapshot.triangles;emSamples=snapshot.emSamples}
+    try{env=traceEnvironment(renderer,next.scene,next.settings);payload=nativeTracePayload(snapshot,env,next.scene,next.settings);triangles=snapshot.triangles;emSamples=snapshot.emSamples
+      emVolumeCells=payload.volumes.reduce((sum,v)=>sum+v.values.byteLength/16,0)}
     finally{snapshot.dispose();env?.dispose()}
-    lightingKey=JSON.stringify({lights:payload.lights,rotation:payload.rotation});lightingUpdate=null
+    lightingUpdate=null;lightingKey=JSON.stringify({lights:payload.lights,rotation:payload.rotation})
     sceneKey=keyFor(next);camera=next.camera;samples=0;uploaded=false;revision++
   }
   function drawRaw(target){const previous=renderer.getRenderTarget();try{renderer.setRenderTarget(target);quad.render(renderer)}finally{renderer.setRenderTarget(previous)}}
-  const api={update,get samples(){return samples},get triangles(){return triangles},get emSamples(){return emSamples},
+  const api={update,get samples(){return samples},get triangles(){return triangles},get emSamples(){return emSamples},get emVolumeCells(){return emVolumeCells},
     get diagnostics(){return {...stats,startupMs,backend:'optix',device,experimental:true,width,height,denoiseRuns:filter?.runs??0}},
     reset(c,w,h){camera=c;width=w;height=h;samples=0;revision++},ready:()=>true,
-    async advance(count,{quick=false}={}){
+    async advance(count,{quick=false,sampleTarget=count}={}){
+      const base=accumulationTarget===sampleTarget?samples:0,batch=count-base
+      if(batch<=0)return
       const started=performance.now(),requestId=String(++sequence)
       const report=info=>{
         if(info.stage==='complete')info={stage:'readback',fraction:1,label:'Native image ready for transfer'}
+        if(info.stage==='tracing')info={...info,samples:base+info.samples,target:sampleTarget,fraction:(base+info.samples)/sampleTarget,
+          label:`OptiX · ${base+info.samples}/${sampleTarget} samples`}
         if(quick&&['acceleration','tracing','readback','delivery'].includes(info.stage))info={...info,stage:`quick-${info.stage}`}
+        else if(count<sampleTarget&&['acceleration','readback','delivery'].includes(info.stage))info={...info,stage:'tracing',fraction:base/sampleTarget}
         onStatus?.(info)
       }
       report({stage:uploaded?'acceleration':'upload',label:uploaded?'Updating OptiX camera and lighting':'Encoding / uploading OptiX scene',fraction:uploaded?null:0})
       stopProgress=pollNativeTrace(id,requestId,report)
       try{
-        const response=await request(`/${id}/frame`,{...(uploaded?{reuse_scene:true,...lightingUpdate}:payload),width,height,samples:count,
+        const response=await request(`/${id}/frame`,{...(uploaded?{reuse_scene:true,...lightingUpdate}:payload),width,height,samples:batch,sample_offset:base,sample_total:sampleTarget,
           camera:{matrix:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),orthographic:!!camera.isOrthographicCamera}},
         {maxBytes:capacity.upload_limit_bytes,requestId,onProgress:uploaded?undefined:report})
         stopProgress?.();stopProgress=null
         const next=new Float32Array(await readNativeImage(response,width*height*16,controller.signal,report));controller.signal.throwIfAborted()
         if(next.length!==width*height*4)throw new Error('OptiX returned an incomplete frame.')
         stats=JSON.parse(response.headers.get('X-NADOC-Render-Stats')??'{}');stats.requestMs=performance.now()-started
-        pixels=next;uploaded=true;lightingUpdate=null
+        stats.chunkSamples=batch;stats.sampleOffset=base;stats.samples=count
+        if(base&&pixels)for(let i=0;i<next.length;i++)next[i]=pixels[i]+(next[i]-pixels[i])*(batch/count)
+        pixels=next;accumulationTarget=sampleTarget;uploaded=true;payload=null;lightingUpdate=null
         image?.dispose();image=new THREE.DataTexture(pixels,width,height,THREE.RGBAFormat,THREE.FloatType);image.needsUpdate=true;quad.material.map=image;samples=count;revision++
+        if(count<sampleTarget&&!quick)onStatus?.({stage:'tracing',fraction:count/sampleTarget,samples:count,target:sampleTarget,label:`OptiX · ${count}/${sampleTarget} samples displayed`})
       }finally{stopProgress?.();stopProgress=null}
     },
     readPixels:()=>pixels?.slice(),

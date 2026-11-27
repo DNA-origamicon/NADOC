@@ -3,12 +3,15 @@ import { bakePreparedAssemblyInstances } from '../prepared_assembly_instances.js
 import { preparedImpostorSpec } from '../impostor_material.js'
 import { instanceAlphaOnBeforeCompile } from '../instance_alpha.js'
 import { selectionBaseCompiler } from '../selection_tint.js'
+import { compactEMCloud } from './path_trace_em.js'
 import { checkTraceGeometry } from './path_trace_limits.js'
+
+const volumeLight=o=>o.userData.emLight&&o.parent?.parent?.children.some(child=>child.userData.emVolume)
 
 export function traceLights(scene){
   const lights=[]
   scene.traverseVisible(object=>{
-    if(!object.isLight || object.userData.emLight || object.isAmbientLight || object.isHemisphereLight)return
+    if(!object.isLight || (object.userData.emLight&&!volumeLight(object)) || object.isAmbientLight || object.isHemisphereLight)return
     const light=object.clone();light.position.setFromMatrixPosition(object.matrixWorld)
     if(object.target){light.target=object.target.clone();light.target.position.setFromMatrixPosition(object.target.matrixWorld);light.target.updateMatrixWorld()}
     lights.push(light)
@@ -17,10 +20,10 @@ export function traceLights(scene){
 }
 
 // A disposable rendering projection, never an authored structure. No point thinning.
-function* snapshotSteps(scene, camera, viewHeight, { maxTextureSize = Infinity } = {}) {
-  const root = new THREE.Group(), owned = new Set()
+function* snapshotSteps(scene, camera, viewHeight, { maxTextureSize = Infinity, compactEM = false, onlyEM = false } = {}) {
+  const root = new THREE.Group(), owned = new Set(), emitters = []
   const own = value => { owned.add(value); return value }
-  let triangles = 0, vertices = 0, bytes = 0, emSamples = 0
+  let triangles = 0, vertices = 0, bytes = 0, emSamples = 0, smoothEM = false
   let completedWork=0,totalWork=0
   const jobs=[]
   const dispose = () => { for (const value of owned) value.dispose(); owned.clear() }
@@ -114,6 +117,17 @@ function* snapshotSteps(scene, camera, viewHeight, { maxTextureSize = Infinity }
     const positions = points.geometry.attributes.position, colors = points.geometry.attributes.color
     const start = points.geometry.drawRange.start, count = Math.min(positions.count-start, points.geometry.drawRange.count)
     if (!count || points.material.opacity <= 0) return
+    if (compactEM) {
+      checkTraceGeometry({vertices:vertices+count*60,triangles:triangles+count*20},maxTextureSize)
+      const steps=compactEMCloud(points,camera,viewHeight)
+      for(;;){
+        const next=steps.next()
+        if(next.done){if(next.value)emitters.push(next.value);break}
+        yield Math.min(.999,(completedWork+next.value*count*60)/Math.max(1,totalWork))
+      }
+      completedWork+=count*60;emSamples+=count;triangles+=count*20;vertices+=count*60
+      return
+    }
     // Small 20-face spheres preserve source centers, screen dot diameter and palette.
     const template = own(new THREE.IcosahedronGeometry(1,0))
     checkTraceGeometry({vertices:vertices+count*template.attributes.position.count,triangles:triangles+count*20},maxTextureSize)
@@ -146,11 +160,13 @@ function* snapshotSteps(scene, camera, viewHeight, { maxTextureSize = Infinity }
     function visit(object) {
       if (!object.visible || object.isTransformControlsRoot || object.userData?.presentationSelection || object.userData?.vrAnnotation) return
       if (object.isLine || object.isLineSegments2 || object.isSprite || object instanceof THREE.ArrowHelper) return
+      if (object.userData.emVolume) return
+      if (object.userData.emSmooth) smoothEM = true
       if (object.isPoints && object.userData.emSamples && object.material.visible) {
         totalWork+=Math.min(object.geometry.attributes.position.count-object.geometry.drawRange.start,object.geometry.drawRange.count)*60
         jobs.push(()=>emit(object))
       }
-      else if (object.isMesh && !object.userData?.photoFloor) {
+      else if (!onlyEM && object.isMesh && !object.userData?.photoFloor) {
         if (object.isSkinnedMesh || object.isBatchedMesh || Object.keys(object.geometry.morphAttributes).length) throw new Error('Animated shader geometry is not supported by path tracing.')
         const mesh = bakePreparedAssemblyInstances(object), spec = preparedImpostorSpec(mesh.material)
         if (mesh===object && object.userData?.sharedInstanced) throw new Error('This shared display shader cannot yet be path traced.')
@@ -158,7 +174,7 @@ function* snapshotSteps(scene, camera, viewHeight, { maxTextureSize = Infinity }
         const geometry = spec ? own(new THREE.SphereGeometry(1,12,8)) : mesh.geometry
         totalWork+=(geometry.attributes.position?.count??0)*(mesh.isInstancedMesh?mesh.count:1)
         jobs.push(()=>bake(mesh,geometry,mesh.material,spec?.radius ?? 1))
-      } else if (object.isLight && !object.userData.emLight && !object.isAmbientLight && !object.isHemisphereLight) {
+      } else if (object.isLight && (!object.userData.emLight||volumeLight(object)) && !object.isAmbientLight && !object.isHemisphereLight) {
         const light = object.clone(); light.position.setFromMatrixPosition(object.matrixWorld)
         if(object.target) { light.target=object.target.clone(); light.target.position.setFromMatrixPosition(object.target.matrixWorld); light.target.updateMatrixWorld() }
         root.add(light)
@@ -168,7 +184,7 @@ function* snapshotSteps(scene, camera, viewHeight, { maxTextureSize = Infinity }
     visit(scene)
     for(const job of jobs)yield* job()
     root.updateMatrixWorld(true)
-    return {root,triangles,vertices,bytes,emSamples,dispose}
+    return {root,triangles,vertices,bytes,emSamples,emitters,smoothEM,dispose}
   } catch(error) {
     dispose()
     if(error instanceof RangeError)throw new Error(`The browser could not allocate the path-tracing geometry (${(bytes/1048576).toFixed(1)} MiB of geometry buffers). ${error.message}`,{cause:error})

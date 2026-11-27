@@ -20,7 +20,14 @@ export function initPhotoPathTracing({mode,changed,root=document}) {
   interactive?.addEventListener('change',selectInteractive)
   const up=root.getElementById('photo-path-samples-up'),down=root.getElementById('photo-path-samples-down')
   let draft=false
-  const enable=()=>{mode.setPathTracing(toggle.checked);sync();changed()}
+  const enable=async()=>{
+    const wanted=toggle.checked
+    if(wanted&&mode.confirmPathTracing){
+      const choice=await mode.confirmPathTracing()
+      if(choice==='cancel'||choice==='disable'){sync();changed();return}
+    }
+    mode.setPathTracing(wanted);sync();changed()
+  }
   const edit=()=>{draft=true}
   const quality=()=>{
     if(!draft)return

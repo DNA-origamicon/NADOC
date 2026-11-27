@@ -42,14 +42,17 @@ def test_api_schema_and_no_document_dependency(monkeypatch):
         assert client.post('/em-analysis/solve', json={'particles': [particle()]}).json()['received']['resolution'] == 33
         assert client.post('/em-analysis/solve', json={'particles': [particle()], 'resolution': 500}).status_code == 422
         assert client.post('/em-analysis/solve', json={'particles': [particle()], 'polarization': 'arbitrary'}).status_code == 422
-        assert client.post('/em-analysis/solve', json={'particles': [particle()], 'wavelength_nm': 600}).status_code == 422
+        assert client.post('/em-analysis/solve', json={'particles': [particle()], 'wavelength_nm': 600}).json()['received']['wavelength_nm'] == 600
+        for wavelength in [0, 187.8, 1938]:
+            assert client.post('/em-analysis/solve', json={'particles': [particle()], 'wavelength_nm': wavelength}).status_code == 422
 
 
-def test_single_small_sphere_matches_electrostatic_limit_and_symmetry():
+@pytest.mark.parametrize('wavelength', [520, 650])
+def test_single_small_sphere_matches_electrostatic_limit_and_symmetry(wavelength):
     executable = routes.solver_python()
     if not executable:
         pytest.skip('Optional isolated EM engine not installed')
-    payload = {'particles': [particle(diameter=5)], 'resolution': 25, 'polarization': 'parallel'}
+    payload = {'particles': [particle(diameter=5)], 'resolution': 25, 'polarization': 'parallel', 'wavelength_nm': wavelength}
     process = subprocess.run([executable, '-m', 'backend.physics.em_analysis'],
         input=json.dumps(payload), capture_output=True, text=True, timeout=90,
         env={**os.environ, 'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1', 'NUMBA_NUM_THREADS': '1'})
@@ -60,12 +63,14 @@ def test_single_small_sphere_matches_electrostatic_limit_and_symmetry():
     # On the polarization axis at x=5.2083 nm (outside radius 2.5 nm).
     x = result['lower_nm'][0] + 17 * (result['upper_nm'][0] - result['lower_nm'][0]) / 24
     eps_b = 1.333 ** 2
-    beta = (gold_permittivity() - eps_b) / (gold_permittivity() + 2 * eps_b)
+    beta = (gold_permittivity(wavelength) - eps_b) / (gold_permittivity(wavelength) + 2 * eps_b)
     expected = abs(1 + 2 * beta * (2.5 / x) ** 3) ** 2
     assert values[17, 12, 12] == pytest.approx(expected, rel=.04)
     assert values[7, 12, 12] == pytest.approx(values[17, 12, 12], rel=1e-5)
     assert result['outside'][12 * 25 * 25 + 12 * 25 + 12] is False
     assert result['probe_relative_error'] < .01
+    assert result['wavelength_nm'] == wavelength
+    assert result['gold_epsilon'] == pytest.approx([gold_permittivity(wavelength).real,gold_permittivity(wavelength).imag])
     assert result['inputs'] == payload
     assert len(result['source_sha256']) == 64
 
@@ -122,7 +127,7 @@ def test_stream_is_ordered_and_stops_on_invalid_frame():
     executable = routes.solver_python()
     if not executable:
         pytest.skip('Optional isolated EM engine not installed')
-    payload = {'particles': [particle(diameter=5)], 'resolution': 25, 'polarization': 'parallel'}
+    payload = {'particles': [particle(diameter=5)], 'resolution': 25, 'polarization': 'parallel', 'wavelength_nm': 520}
     moved = {**payload, 'particles': [particle((1, 2, 3), diameter=5)]}
     process = subprocess.run([executable, '-m', 'backend.physics.em_analysis', '--stream'],
         input='\n'.join(json.dumps(p) for p in [payload, moved, {**payload, 'resolution': 500}, payload]),
@@ -144,7 +149,7 @@ def test_volume_cli_retains_unrounded_solver_output(tmp_path):
     executable = routes.solver_python()
     if not executable:
         pytest.skip('Optional isolated EM engine not installed')
-    payload = {'particles': [particle(diameter=5)], 'resolution': 25, 'polarization': 'parallel'}
+    payload = {'particles': [particle(diameter=5)], 'resolution': 25, 'polarization': 'parallel', 'wavelength_nm': 520}
     destination = tmp_path / 'fields'
     process = subprocess.run([executable, '-m', 'backend.physics.em_volume_archive', str(destination)],
         input=json.dumps({'frame_index': 25, 'time_ps': 1.5, 'input': payload}) + '\n',

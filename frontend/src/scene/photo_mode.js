@@ -1,3 +1,5 @@
+import {confirmEMRender} from '../ui/em_render_warning.js'
+import { releaseEMVolumeRenderer } from './em_volume.js'
 import { TRACE_DEFAULTS, createTracePreview } from './photo_renderer/path_trace_preview.js'
 import { createTraceFrameSession } from './photo_renderer/path_trace_session.js'
 import { makePhotoBackboneGeometry, photoBackboneRadius } from './photo_renderer/backbone_spheres.js'
@@ -243,7 +245,7 @@ export function swapToFlatMaterials(root, presets = null) {
     const src = obj.material
     if (Array.isArray(src)) return
     if (src.isLineBasicMaterial || src.isLineDashedMaterial) return
-    if (src.blending === THREE.AdditiveBlending) return
+    if (src.blending === THREE.AdditiveBlending || obj.userData.emSmooth) return
     if ((src.userData?.isImpostor || src.userData?.impostorRadius != null) && photoBackboneRadius(obj) == null) return
     // Assembly surfaces use ordinary instanceMatrix transforms and can safely
     // receive the selected surface material. Other shared-LOD meshes carry
@@ -1286,6 +1288,7 @@ export function createPhotoMode(sceneCtx) {
       figure.dispose?.()
       grade.dispose()
       exportEnvTexture?.dispose?.()
+      releaseEMVolumeRenderer(scene, offRenderer)
       offRenderer.dispose()
     }
 
@@ -1620,6 +1623,7 @@ export function createPhotoMode(sceneCtx) {
     setPathTracePreviewBackend: _tracing.setPreviewBackend,
     setTraceInteractive: _tracing.setInteractive,
     setTraceMetricsEnabled: _tracing.setMetricsEnabled,
+    confirmPathTracing: () => confirmEMRender({scene,mode:{getSettings, setPathTracing:_tracing.setEnabled},pathTracing:true}),
     setPathTracing: _tracing.setEnabled, setPathTraceSamples: _tracing.setSamples, setPathTraceExportBackend: _tracing.setExportBackend, getPathTracingStatus: _tracing.getStatus,
     getDiagnostics,
     isActive: () => _active,
@@ -1676,12 +1680,17 @@ export function initPhotoMode({
   let _panel = null
   let _savedOriginAxesVisible = null
 
-  function enter() {
+  async function enter() {
     if (mode.isActive()) return
     if (!_panel) _panel = initPhotoPanel(mode, {
       onExit: exit,
       store, player, exportPhotoVideo, trajectoryKeyframes,
     })
+
+    _panel.applyActiveProfile()
+    const approval=confirmEMRender({scene:sceneCtx.scene,mode})
+    if(approval?.then&&await approval==='cancel'){syncLightingControl();return}
+    if(mode.isActive())return
 
     // Same gizmo suppression photo mode v1 used — an editor overlay in
     // a render being judged for its shading is noise, and the `toneMapped:false`
@@ -1702,7 +1711,7 @@ export function initPhotoMode({
     assemblyJointRenderer?.setVisible?.(false)
 
     mode.activate()
-    _panel.onEnter()
+    _panel.onEnter({applyProfile:false})
     syncLightingControl()
   }
 

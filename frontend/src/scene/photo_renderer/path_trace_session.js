@@ -1,3 +1,4 @@
+import {drawEMVolumes,releaseEMVolumeRenderer} from '../em_volume.js'
 import * as THREE from 'three'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
@@ -36,6 +37,7 @@ export function createTraceFrameSession({scene,camera,renderer:liveRenderer,sett
         const size=renderer.getDrawingBufferSize(new THREE.Vector2())
         filter.draw(filter.render(t=>drawable.draw(t),size.x,size.y,++drawRevision),target)
       }else drawable.draw(target)
+      drawEMVolumes(r,scene,frameCamera,target)
     }
   }
   composer.addPass(new TracePass())
@@ -134,7 +136,7 @@ export function createTraceFrameSession({scene,camera,renderer:liveRenderer,sett
     dispose(){if(disposed)return closing;disposed=true;controller.abort();signal?.removeEventListener('abort',abort);
       closing=(async()=>{
         while(busy)await nextTask()
-        try{await engine?.dispose()}finally{engine=null;filter?.dispose();composer.dispose();figure.dispose();grade.dispose();renderer.dispose();release()}
+        try{await engine?.dispose()}finally{engine=null;filter?.dispose();composer.dispose();figure.dispose();grade.dispose();releaseEMVolumeRenderer(scene,renderer);renderer.dispose();release()}
       })();return closing},
     tiles:nx*ny,
   }

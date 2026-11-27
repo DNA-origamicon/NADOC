@@ -32,3 +32,11 @@ def test_camera_and_lights_update_without_geometry_or_environment_upload():
     assert "lights" not in next_frame  # updates are applied once, not every refinement
     with pytest.raises(ValueError, match="environment"):
         resolve_frame(dict(reuse_scene=True, environment={}), prior)
+
+
+def test_smooth_glow_transparency_budget_survives_camera_only_frames():
+    _, state, _ = resolve_frame(dict(meshes=[], background="#000000", transparent=False, smoothEM=True), None)
+    frame, _, changed = resolve_frame(dict(reuse_scene=True), state)
+    assert not changed and frame["smoothEM"] is True
+    _, state, _ = resolve_frame(dict(meshes=[], background="#000000", transparent=False, smoothEM=False), state)
+    assert state["smoothEM"] is False

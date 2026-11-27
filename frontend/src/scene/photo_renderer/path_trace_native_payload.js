@@ -1,4 +1,5 @@
 import {traceLights} from './path_trace_snapshot.js'
+import {nativeTraceVolumes} from './path_trace_volumes.js'
 
 function packed(array){
   return new Uint8Array(array.buffer,array.byteOffset,array.byteLength)
@@ -38,6 +39,7 @@ export function nativeTracePayload(snapshot,environment,scene,settings){
       lights.push(lightDTO(o))
     }
   })
-  return {meshes,lights,emSamples:snapshot.emSamples,environment:{data:packed(environment.image.data),width:environment.image.width,height:environment.image.height},
+  const volumes=nativeTraceVolumes(scene)
+  return {meshes,lights,volumes,smoothEM:!!snapshot.smoothEM||volumes.length>0,emitters:snapshot.emitters??[],emSamples:snapshot.emSamples,environment:{data:packed(environment.image.data),width:environment.image.width,height:environment.image.height},
     rotation:scene.environmentRotation.toArray().slice(0,3),background:settings.bgColor??'#ffffff',transparent:settings.bgType==='transparent'}
 }

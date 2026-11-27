@@ -17,7 +17,7 @@ export async function createWebGPUTraceEngine(options){
       projection.add(snapshot.root);env=traceEnvironment(renderer,scene,settings);projection.environment=env
       projection.environmentRotation.copy(scene.environmentRotation)
       projection.background=settings.bgType==='transparent'?null:new THREE.Color(settings.bgColor??'#ffffff')
-      await backend.update(projection.toJSON(),camera.toJSON(),signal)
+      await backend.update(projection.toJSON(),camera.toJSON(),signal,{smoothEM:snapshot.smoothEM})
       triangles=snapshot.triangles;emSamples=snapshot.emSamples
     }finally{snapshot.dispose();env?.dispose()}
   }

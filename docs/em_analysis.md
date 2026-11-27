@@ -1,6 +1,7 @@
 # EM analysis
 
-Open **Tools → Nanoparticles → EM Analysis…**, then **Calculate 520 nm map**.
+Open **EM Analysis** on the right sidebar rail (or **Tools → Nanoparticles → EM Analysis…**), then use **Calculate 520 nm map** at the top. The wavelength input directly below
+changes both the calculation and button label; the default remains 520 nm.
 The analysis reads the current scene's gold sphere positions (including hidden
 particles and live particle poses); it never edits the design, DNA, history or
 simulation. Assembly inputs use each instance's world transform. One to four
@@ -9,8 +10,9 @@ Other nanoparticle materials reject rather than silently disappearing.
 
 The backend runs MiePy 1.1.0 generalized multiparticle Mie theory in an isolated
 process. It solves mutually coupled electric and magnetic multipoles, with an
-incident plane wave at **520 nm vacuum wavelength** in water, n=1.333. Gold uses
-the bundled Johnson–Christy n/k table, interpolated at 520 nm; positive imaginary
+incident plane wave at the selected **vacuum wavelength** in water, n=1.333.
+The supported input range is 187.9–1937 nm, matching the bundled Johnson–Christy
+gold n/k table, interpolated at the selected wavelength; positive imaginary
 permittivity corresponds to the solver's exp(-iωt) convention.
 
 The initial polarization is along the first pair's center-to-center axis; the
@@ -20,6 +22,117 @@ direction arrows are omitted from the scene and exports.
 For one sphere, the pair axis is world X. Slice XY spans the pair axis and its
 transverse direction; propagation is local Z.
 
+Coating controls show only inputs used by the selected model: bare spheres hide
+all DNA-layer fields, specified thickness hides oligo/persistence lengths, and
+the length-based estimate hides specified thickness. Explanations appear as label
+hover tooltips. Wavelength persists with the other EM settings and is included in
+simulation/trajectory requests and downloaded field metadata and filenames.
+
+Enabling **Lighting and Appearance** with GPU path tracing and a visible EM field
+opens a rendering-time warning before activation. **Continue** keeps both;
+**Clear field** removes active EM overlays (and turns off simulation EM display);
+**Disable path tracing** keeps the field and uses raster lighting; **Cancel**
+leaves lighting off. Escape/closing the dialog also cancels. Enabling path tracing
+from Appearance with a field present gives the same choices.
+
+## Sidebar and viewport color legend
+
+EM Analysis is a docked right-sidebar column. The right-sidebar toggle hides or
+shows it with the other columns; its header × closes that column independently.
+Closing the column retains the calculated field and viewport legend. **Clear
+field** removes a standalone field; simulation EM remains controlled by its own
+visualization checkbox. Particle/optical changes still invalidate stale results.
+
+The viewport legend follows the flexibility-map placement at the right-center
+of the canvas. When the flexibility legend is also visible, EM sits beside it.
+Drag the handles or enter positive bounds to adjust the logarithmic intensity
+color window, and use the palette button for the shared colormap choices.
+Bounds default to 0.1–100× with Jet; Reset restores those bounds. Choices persist
+in browser storage and apply to clouds, slices, smooth glow and trajectory frames,
+including their rendered colors in image/video exports. This is a viewport DOM
+legend, like the flex legend; it is not embedded into the rendered image.
+Color bounds do not change the 3D intensity cutoff or recalculate the optical
+field. Smooth recoloring reuses tetrahedron buffers.
+
+## Direct adaptive-volume glow
+
+Choose **Display → Smooth 3D glow** (also available for trajectory fields).
+The default intensity cutoff remains **3×**; existing saved choices are retained.
+Dot size has no effect on this mode. The persistent legend controls the palette
+and log intensity mapping independently of the cutoff.
+
+The former 32 nested contour surfaces have been replaced by direct ray integration.
+Adaptive fields use the original sample positions and Delaunay tetrahedra;
+uniform fields are split into conforming tetrahedra using every source node.
+Intensity is interpolated linearly in each tetrahedron. There is no coarse-grid
+resampling or cell-volume averaging. Masked/nonfinite samples contribute zero,
+and the field ends at the sample convex hull. Recalculate legacy responses that
+lack display connectivity. Scientific results and molecular documents are unchanged.
+
+Numerically coplanar cells (relative determinant within 64 double-precision
+epsilons of zero) are excluded before inversion. This removes roundoff-volume
+cells whose GPU interpolation planes can become unstable; genuine thin cells
+and their original intensities remain. GPU interpolation is bounded to each
+cell's sample range, so precision loss cannot invent a brighter hotspot.
+
+Each projected tetrahedron supplies its exact ray entry/exit interval. The interval
+is clipped analytically to the intensity cutoff, camera near/far planes and opaque
+scene depth, then integrated with eight-point Gauss–Legendre quadrature. There is
+no fixed spatial marching step that can skip a tiny refined tetrahedron. Cells
+entirely below cutoff are omitted. The palette is evaluated along the interval,
+not at an isosurface or a cell-average intensity. Subpixel hotspots can still be
+smaller than point sprites; integration is not a maximum-intensity projection.
+
+This first version uses **additive emission without field absorption**. A 1×
+background contributes zero. Local RGB emission is the palette color multiplied
+by `(I - 1) / 99`, with 100× contributing two linear radiance units per 10 nm of
+ray length. This fixed illustrative transfer does not normalize by the frame
+maximum, cell size or sample count. Weak foreground fields cannot attenuate a
+hotspot, although colors from overlapping regions add and bright overlaps can
+saturate. Glow has greater contrast against a dark background.
+
+The same camera-volume integration runs in ordinary raster views and over WebGL,
+WebGPU and Native OptiX Appearance previews/exports, before figure effects and
+color grading. Camera-compositor hulls are excluded from trace snapshots. A depth pass uses the
+original scene materials, including display impostors, and clips at depth-writing
+surfaces. Transparent objects do not provide volumetric refraction or attenuation.
+**Native OptiX also traces smooth EM emission in glossy reflection rays**, including
+gold nanoparticle reflections. It receives the original retained tetrahedra and
+their vertex intensities. Linked tetrahedral volumes evaluate the same linear
+intensity interpolation, logarithmic palette, cutoff and enhancement-weighted
+emission. Full affine cell transforms are preserved, including shear. Boundary
+hulls have a small overlap for reliable native traversal, but shader membership
+clips emission to the original cells, preventing energy overlap. No contour
+shells, coarse voxel resampling or intensity averaging are used. Native instances
+use compact procedural instances on Blender 3.4+ (validated with 4.5.9 LTS).
+An SVD rotation/scale/rotation decomposition preserves the full affine cells,
+including shear and reflected orientation. Four scalar instance attributes avoid
+color-alpha conversion of intensity values. Shared shader ramps retain all 256
+palette entries and avoid stale generated-texture caches during legend changes.
+The Blender 3.3 compatibility path expands native objects and is substantially
+slower and more memory-intensive for dense fields; use the newer runtime.
+
+Native volume emission is suppressed for camera rays, which continue to use the
+existing compositor, and for diffuse/transmission/shadow rays. This avoids a second
+camera glow and keeps the separate Illuminate control's existing behavior.
+Illuminate uses eight normalized approximate point lights. Raster, WebGL and
+WebGPU still use camera-visible glow plus those optional approximate lights;
+they do not yet trace the smooth volume in reflections. Volume refraction,
+absorption and scattering remain unsupported. This is illustrative intensity
+visualization, not calibrated optical emission or full medium light transport.
+
+Palette changes reuse the tetrahedron buffers. Trajectory endpoints use independent
+fields with emission weights that sum to one; no correspondence between adaptive
+cells is assumed. Changed views require a depth render and volume integration. Unchanged views
+reuse a context-local radiance image; camera, geometry, visibility and palette
+changes invalidate it. Crossfade weights composite the cached endpoint images.
+Dense projected overlap still costs fill rate during integration. Publication-resolution appearance,
+subpixel peaks and two-field movies remain review items.
+
+The alternative of increasing the number of opacity-corrected contour surfaces
+was not implemented. Historical contour extraction helpers remain for their
+regression tests; the Smooth display path now uses `em_volume*.js`.
+
 ## Appearance image and video export
 
 **Appearance → Art & materials → GPU path tracing** enables progressive lighting
@@ -28,6 +141,21 @@ the toggle has one status line for percentage, current phase, completion or
 errors. It includes measured preparation and delivery work as well as samples;
 reused preparation is excluded on warm renders. This is weighted work, not a
 time estimate.
+
+Native OptiX now updates the viewport after each completed sample chunk: 1, 4,
+8, 16, 32, then every 16 samples up to the selected target. Dense fields above
+100,000 cells start with 16 samples, then use up to 64 new samples per chunk to
+amortize native per-render overhead. Each request traces
+only its own sample range; linear radiance is averaged by sample count before
+denoising. The last completed image stays visible during the next chunk. Camera,
+field or material changes discard obsolete accumulation. Exports still wait for
+the selected total. Chunk delivery does not reduce the sample target or smooth
+the original EM grid.
+
+The native EM shader bypasses interpolation and palette calculations on paths
+that cannot receive reflected emission, and excludes cells from shadow rays.
+Other ray visibility remains enabled to track cells containing a reflection's
+starting point. Dense EM tracing still costs more than tracing without the field.
 
 **Advanced → Trace samples** sets 1–512 samples (default 64),
 for both the stationary preview and each offline exported frame. Type a value
@@ -65,7 +193,15 @@ palette, opacity and apparent dot diameter follow the displayed field. These
 emitters participate in ray intersections, reflections and indirect lighting;
 the eight raster EM lights are excluded to avoid adding the same light twice.
 This is illustrative emission, not calibrated optical radiance or a second EM
-solver. Rendered brightness depends on the visible sample density and dot size.
+solver. WebGL/WebGPU brightness depends on the visible sample density and dot size.
+Native OptiX retains that primary-ray dot appearance, while surface illumination
+uses cell-volume-weighted log enhancement with a normalized RGB power budget.
+Refining sampling does not add power; dot radius changes emitting area and
+compensating radiance, rather than total illumination power. Reflections and
+indirect lighting use normalized emission. Marker occlusion, soft shadows and
+very-near-field illumination can still change with marker size. Crossfade opacity
+scales each cloud; suppressed (≤1×) samples remain visible but add no surface
+power. These are illustrative rendering weights, not calibrated optical power.
 No molecular geometry, EM values or feature history is changed.
 
 The installed WebGL 2 path tracer requires floating-point render targets.
@@ -92,7 +228,7 @@ omitted. Unrecognized custom shaders and section clipping require raster mode.
 Low sample counts can be noisy, particularly in indirect light and reflections.
 
 **Advanced → Trace export** selects WebGL (default), experimental WebGPU, or
-experimental OptiX. Preview remains WebGL. The chosen backend is fixed for an
+experimental OptiX. **Trace preview** independently selects WebGL or Native OptiX. The chosen backend is fixed for an
 export session; unsupported hardware or materials produce an explicit error.
 All three backends retain every visible EM sample within the snapshot budget.
 Export errors identify the backend and failing step (EM preparation, renderer
@@ -116,7 +252,17 @@ against the resulting device limits; validation, memory and device-loss failures
 are reported explicitly.
 
 OptiX runs a persistent Blender/Cycles worker on an NVIDIA OptiX device, with
-mesh reuse for unchanged connectivity and two CPU support threads. Install the
+mesh reuse for unchanged connectivity and two CPU support threads. Native EM
+clouds transfer compact centers/radii/colors/power and one icosahedron template,
+instead of expanded triangles. The worker still uses the same 20-face geometry;
+this reduces browser preparation and transport, not native triangle count.
+EM-only updates retain molecular meshes and the studio environment. Unchanged
+clouds skip updates; palette/power/opacity edits update attributes without
+rebuilding their geometry. Membership/position/radius changes update cloud geometry.
+Session diagnostics report the actual Blender version and light-tree capability.
+The worker enables the light tree when supported and explicitly enables emission
+sampling. Blender 3.3 lacks the light tree; configuring OptiX alone does not add it.
+ Install the
 optional Linux x64 runtime with `uv run python scripts/setup_optix_renderer.py`,
 or configure an existing Blender with `--executable /path/to/blender` (the
 `NADOC_BLENDER` environment variable takes precedence). Runtime selection is
@@ -176,9 +322,9 @@ can still cost more on dense molecular scenes; glow is the fast default.
 
 ## What is displayed
 
-**Frame map** fits the camera around the complete field volume.
 The 3D field cloud and XY/XZ/YZ slices show **|E_total|²/|E_incident|²** on a fixed
-logarithmic color scale from 0.1× to 100× (values above 100× saturate red).
+logarithmic color scale, initially 0.1× to 100× with Jet (values above the upper
+bound saturate at the palette endpoint); adjust it in the viewport legend.
 Cloud thresholding affects display only; slices retain suppressed-field regions.
 The result is an intensity map, not a saved complex vector-field volume, optical
 cycle animation, SERS factor, or fluorescence enhancement prediction.
@@ -766,7 +912,7 @@ the archive manifest; each volume records its actual backend and optical inputs.
 ## Tools menu and simulation visualization integration
 
 EM Analysis is available under **Tools → Nanoparticles → EM Analysis**. Optical
-and display settings persist in local browser storage across popup closure and
+and display settings persist in local browser storage across sidebar closure and
 reload. The oxDNA and NAMD Visualizations cards share these settings, with an
 **EM visualization** checkbox and adjacent options gear. The gear opens settings
 without starting a separate standalone solve. Display/Flex/Deviation overlays use
@@ -835,7 +981,7 @@ updates likewise use their centers without inventing an unrecorded orientation.
 
 Changing optical settings invalidates a trajectory cache and requires Continue
 again for a full rerun; changing dot size/slice/color threshold redraws existing
-results. Closing the options popup preserves settings and the active simulation
+results. Closing the options sidebar preserves settings and the active simulation
 overlay. Disabling the EM toggle, switching away from its analyzed trajectory,
 or disposing the controller cancels work and deletes the derived cache.
 

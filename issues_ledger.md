@@ -1,4 +1,474 @@
 # Issues & bugs ledger — "fix next issue" loop
+## EM-CONTROLS-20261127 — [x] Contextual analysis controls and rendering warning
+
+The calculation action was buried, wavelength was fixed at 520 nm, and unused DNA
+inputs and inline explanations crowded the panel. Enabling Appearance with tracing
+and an EM overlay also had no opportunity to avoid the added rendering cost.
+Resolved with top calculation/wavelength controls, conditional fields, label
+hover explanations, and Continue/Clear field/Disable path tracing/Cancel choices.
+Wavelength is carried through the solver, persisted settings and field export.
+No molecular structures were authored or modified.
+
+## EM-NATIVE-CHUNKS-20261126 — [x] Slow EM tracing and delayed viewport refinement
+
+Native preview now accumulates disjoint sample chunks and displays each result.
+EM shader branching and shadow visibility filtering reduce unnecessary work while
+preserving volume tracking for reflections starting inside cells. Dense Plasmonic
+32-sample retained tracing measured ~35 s versus ~52 s before this change.
+Field-free speed parity and publication-resolution convergence are not established;
+see MV-EM-CHUNKS-20261126 and the fix log for evidence.
+
+## EM-VOLUME-REFLECTIONS-20261126 — [x] Smooth EM missing from gold reflections
+
+Native OptiX now traces emission through the original adaptive tetrahedra for
+specular/glossy reflected rays. Camera glow stays in the existing compositor;
+cutoff, palette, source intensities and endpoint weights are shared. No resampling
+or document changes. Compact procedural instances on Blender 3.4+ avoid one
+Blender object per cell; NADOC's local renderer is now verified portable 4.5.9 LTS.
+The bare-sphere Plasmonic test retains all 363348 cells and shows red/orange gold
+reflections. Preparation is ~1.5 s, versus ~131 s for expanded 3.3 objects; dense
+32-sample tracing still takes ~49 s at 192² on the tested RTX 2080 SUPER.
+Raster/WebGL/WebGPU smooth-volume reflections remain unsupported. Publication
+resolution/full-DNA visual review remains in MV-EM-GLOW-20261126.
+
+## EM-VOLUME-PRECISION-20261126 — [x] Unstable near-coplanar volume cells
+
+User reported a white curved rectangle that disappears with Clear field.
+Bare-sphere Plasmonic data exposed 191 retained cells with float32 barycentric
+errors above 0.1 (worst 2.47e11), caused by inverting roundoff-sized determinants.
+Reject numerical zero volume using a relative double-precision tolerance before
+inversion; bound shader interpolation to the original vertex intensity range
+and reject invalid intervals. No extra smoothing or scientific-data changes.
+Afterward there are zero unstable cells (worst error 0.000626); close-up peak
+radiance remains 1.46484375, and raster/compositor pixels match exactly.
+The user subsequently confirmed the white rectangle is fixed. See issues_fix_log.md for validation.
+
+
+## EM-DIRECT-VOLUME-20261126 — [x] Direct adaptive camera-volume integration
+
+Smooth glow now integrates rays through original adaptive tetrahedra instead of
+32 contour shells. Analytic interval/cutoff/depth clipping preserves narrow cells;
+eight-point quadrature samples the shared palette. Additive enhancement-weighted
+emission eliminates field absorption of foreground hotspots. Uniform fields use
+all original nodes. Camera-volume composition works with raster and all three
+trace backends; optional normalized eight-light illumination enters tracing.
+Volume reflections/refraction/scattering remain outside this first implementation.
+Stationary views cache integrated radiance, with camera/content/palette invalidation
+and export-resource cleanup. The cache fixes the initial software-WebGL UI timeout
+from reintegrating dense fields every frame. Crossfade weights reuse cached images.
+Validation: 86 focused frontend tests and five synthetic app checks pass (raster,
+WebGL, Native OptiX, WebGPU, plus depth/orthographic/inside/crossfade/cache/normal-pass
+checks). The complete bare-sphere Plasmonic app flow also passes (1.9 min),
+including palette changes and sidebar controls; source file hash is unchanged.
+Publication appearance remains MV-EM-GLOW-20261126.
+
+
+## EM-SIDEBAR-LEGEND-20261126 — [x] Persistent color controls and docked EM analysis
+
+EM analysis now mounts into the shared right sidebar stack. Independent close
+and global collapse preserve the field; Clear field is explicit. A viewport-
+owned logarithmic legend reuses flex-map controls, persists color bounds/palette,
+and applies one color transfer to points, slices, contours and trajectory frames.
+Smooth recoloring retains geometry. Simulation-settings opens hide standalone
+actions; the EM rail restores them. Reviewed Plasmonic outer glow edges and
+recorded two unimplemented layering remedies in docs/em_analysis.md.
+Validation: 77 focused frontend tests; real Plasmonic workflow, sidebar lifecycle,
+and raster/WebGL/Native OptiX/WebGPU Plasma-palette app checks pass (6 total).
+Lint passes. Smoke: 26 pass / 2 optional skips / existing assembly fixture timeout
+at scene_harness.js:434 (ASSEMBLY-SMOKE-FRAMING-20261126). Main.js LOC delta 0;
+only an existing sidebar dependency is passed. Full dossier: issues_fix_log.md.
+
+## PHOTO-EM-PEAK-20261126 — [x] Adaptive glow suppressed sampled hotspots
+
+The 33³ display grid used cell-volume-weighted tent averaging, suppressing tiny
+refined peaks visible in the point cloud. Replaced adaptive resampling with
+Delaunay connectivity over every original sample and piecewise-linear tetrahedral
+contours. The backend verifies that every point is represented in nondegenerate
+cells; display topology is added to solve/frame responses, never scientific
+archives. Uniform 49³ grids also retain all source nodes. Shared emissive meshes,
+cutoff 3× and intensity-weighted optical depth remain in every renderer.
+Bare-sphere Plasmonic reproduction with default parallel polarization: 76,996
+samples, peak 119.438668× retained, 453,639 tetrahedra, 32 contour layers and
+2,208,211 rendered triangles. On this workstation: 5.53 s connectivity and 4.26 s
+contour preparation. This favors fidelity over the old coarse-grid cost.
+Task main.js delta: 0. See PHOTO-EM-PEAK-20261126 in issues_fix_log.md.
+
+## PHOTO-EM-VEIL-20261126 — [x] Weak contours obscured hotspots
+
+User observed weak foreground layers hiding hotspots in smooth EM raster and
+path tracing. All 32 contours previously used opacity .025, irrespective of
+intensity. Replaced equal opacity with differences of a fixed enhancement-to-
+optical-depth transfer, split across entry and exit surfaces. Background at 1×
+is transparent and 1–3× bands transmit >95%; stronger bands carry more opacity
+and thus more emitted color. Unit checks cover the optical-path transmittance
+and invariance to contour subdivision. Default cutoff raised to 3; stored
+explicit choices retained. This remains an illustrative display transfer, not
+maximum-intensity projection or calibrated volume emission.
+
+
+## PHOTO-EM-WORLD-20261126 — [x] Stale native environment pixels
+
+During the EM illumination power check, changing the retained native world's
+1×1 float map from .05 to zero left ~.0524 mean receiver radiance. Cycles did
+not see the replacement generated image pixels after foreach_set alone.
+Calling image.update() after the pixel write makes the zero-power, black-world
+control black. The native EM regression checks that control alongside radius
+and power changes, without hiding the residual through background subtraction.
+No molecular data changes; source-only fix in backend/rendering/optix_worker.py.
+
+
+## PHOTO-NATIVE-UPLOAD-RETRY-20261126 — Confirmed screenshot settings; recover connection timeouts
+
+Reproduced `Failed to fetch` on an OptiX upload as Chrome
+`ERR_CONNECTION_TIMED_OUT`, before rendering. The shown settings are supported:
+Glossy ball-and-stick, native OptiX preview, 8 samples, denoising, WebGPU export,
+exposure 1.15, contrast 1.00 and saturation 1.10. The interactive checkbox applies
+only to WebGL; export selection does not control the preview renderer.
+
+Upload pieces now retry transient network failures with bounded backoff (four
+attempts maximum). The backend records a SHA256 receipt for the latest committed
+piece, verifies identical duplicate bytes after a lost acknowledgement, and rolls
+back interrupted appends to their preceding offset. Completed chunks remain for
+retry; explicit cancellation/DELETE and lease expiry still release the worker and
+scratch. Rendering requests themselves are never automatically replayed.
+
+Validation: 26 frontend and 11 backend tests plus lint pass. Actual Plasmonic,
+Windows Chrome / RTX 2080 SUPER, all 14,743,332 triangles, 1615×1185 and all eight
+samples completed in 163.0 s cold. The final retained-scene eight-sample request
+took 3.96 s including delivery. This run injected one pre-upload connection
+failure and one lost post-commit acknowledgement; both recovered. Background
+poll connection timeouts also occurred, without a rendering failure. The exact
+cause of the underlying Windows/WSL loopback connection intermittency is not
+established. Evidence and screenshot: `.development-artifacts/trace-settings-20261126/`.
+No claim of final-quality 15 FPS. Part autosaves blocked before load, source hash
+unchanged; owned scratch/profile/reports cleaned, live bridge preserved.
+Main.js task LOC delta 0; broader regression debt unchanged.
+
+## PHOTO-BALLSTICK-UPLOAD-20261126 — Native preview exceeded browser string/storage limits
+
+- Plasmonic ball-and-stick expands to 14,743,332 traced triangles and roughly
+  1 GB of base64 JSON. Eager binary-string packing plus whole-scene
+  `JSON.stringify` exceeded browser string capacity. A giant/chained Blob also
+  failed in real Chrome with `ERR_BLOB_REFERENCED_BLOB_BROKEN`; small Blob
+  transfers still accumulated that storage failure. Final transport uses raw
+  byte buffers, not Blob bodies, for large scenes.
+- `path_trace_native_upload.js` retains typed-array views, encodes bounded
+  base64 fragments, measures exact UTF-8 size before upload, and sends roughly
+  8 MiB pieces sequentially. Small control/camera requests retain single-body
+  compatibility. The backend validates frame identity, offsets, completeness
+  and current RAM/scratch capacity before consuming the assembled temporary
+  JSON. Cancellation/disconnect removes owned partial data. No atoms, bonds or
+  geometry detail are dropped; no fixed total scene-size cap was added.
+- Verified actual Plasmonic in Windows Chrome / RTX 2080 SUPER, 672×914, two
+  diagnostic samples: native completed in 157.0 s (retained-scene next request
+  636 ms), WebGL in 105.2 s. Cold preparation remains expensive; these are not
+  final-quality FPS measurements. Source autosaves intercepted, original part
+  hash unchanged. Evidence: `.development-artifacts/trace-ballstick-20261126/`.
+- Validation: 30 frontend and 11 backend tests; native preview cancellation,
+  camera/lighting reuse and export handoff; ordinary EM export; two 183,912,195-
+  byte exports with changed EM palettes through chunk transport; lint all pass.
+  Owned reports, worker scratch and test artifacts cleaned; live bridge kept.
+  Main.js task LOC delta 0. Broader regression debt is unchanged.
+
+## PHOTO-TRACE-STARTUP-20261126 — Frozen startup status and redundant native work
+
+- Actual Plasmonic stationary-scene fingerprint stayed stable. WebGL blocked the
+  browser for 36.5 s compiling its first tracing shader, after 4.7 s geometry
+  preparation. Async compilation now keeps raster/status updates alive and
+  names the compile stage. Native preparation/sample/readback stages reach UI.
+- Native refinement now renders 1 then target, rather than restarting at every
+  doubling. Driver-managed CUDA/OptiX caches persist across sessions. Ordinary
+  camera-pinned light changes retain native geometry/environment; paired light
+  and rotation updates are applied explicitly instead of silently ignored.
+- Actual 672×914 Plasmonic diagnostics: WebGL cold completion 42.1 s before /
+  40.6 s after (two samples); native 64 samples 18.3 / 16.2 s on successive
+  sessions, final retained-scene request 789 / 763 ms. These are diagnostic
+  timings, not equivalent-quality comparisons or 200 ms/15 finished-FPS claims.
+  Evidence: `.development-artifacts/trace-startup-20261126/`. Part autosaves
+  intercepted before load; source SHA256 unchanged. No molecular authoring.
+
+- Validation: 37 frontend tests and 11 backend tests pass; native GPU browser
+  regression covers cancelled startup, metrics open at 64 samples, pinned-light
+  updates, an intentionally delayed frame with further camera movement, and
+  export handoff. WebGL/EM/WebGPU/export regression passes. Lint passes.
+  Smoke: 26 passed, 2 skipped, the known ISSUE-179 assembly fixture timed out
+  before its exit assertion. Test workspace/report/native scratch cleanup
+  verified; live bridge preserved. Main.js task LOC delta: 0.
+
+## PHOTO-OPTIX-SESSION-20261126 — Startup cancellation could orphan the native worker
+
+- Cancelling an abortable startup fetch after server allocation could discard
+  the returned session ID, leaving no ID to DELETE. Page exit and Vite module
+  replacement also lacked explicit session release. A subsequent attempt could
+  receive 409 until the idle lease expired. No surviving worker was found when
+  diagnosing the reported error; this reproducible lifecycle gap was repaired.
+- A dedicated frontend session owner now consumes the startup acknowledgement
+  despite caller cancellation, awaits release, and owns pagehide/HMR cleanup
+  and the heartbeat. Frame requests remain abortable. Genuine contention with
+  another live tab/export remains protected and reports an actionable message.
+- Admission reaps expired/dead workers before rejecting another request.
+  Unclaimed startup acknowledgements expire after 10 seconds; acknowledged idle
+  sessions retain the 120-second lease. Active rendering/uploads are preserved.
+- Validation: 24 frontend tests, eight backend tests, real native GPU browser
+  cancellation/re-enable/camera/export regression and lint passed. Browser test
+  holds the successful startup response after allocation, cancels and immediately
+  re-enables tracing; leaked worker is deleted before the replacement starts.
+  No document writes; temporary worker/report artifacts cleaned and verified.
+  Task main.js LOC delta: 0. Broader regression debt remains unchanged.
+
+## PHOTO-NATIVE-PREVIEW-20261126 — Native hardware rendering and 200 ms quality baseline
+
+- Implemented a separate persisted Trace preview selector for WebGL / native
+  OptiX. Retain native scenes for camera-only frames, serialize asynchronous
+  refinement, hide obsolete views and await disposal before export handoff.
+  Clearcoat now maps to both Blender 3.x and 4.x inputs. Expose measured native
+  startup, render/write, readback and delivery durations.
+- Hardware path tracing does not achieve the requested final-image target with
+  the current Blender/EXR/float-over-HTTP bridge. RTX 2080 SUPER at 1280×720:
+  the optical fixture has no native count under 200 ms (one sample 1.25 s);
+  WebGL 2 samples finish in 106.5 ms but foreground RGB RMSE is 0.1626.
+  Plasmonic's default full-representation overview has 845,184 triangles and
+  5.87% foreground: WebGL 4 samples take 116.4 ms with foreground RMSE 0.1338;
+  native one sample takes 752.3 ms. These are three-trial medians. A tested
+  count qualifies only if every trial is within 200 ms. Counts tested: 1–32
+  in powers of two, independently reset; finite 256-sample raw references.
+- Whole-image SSIM can conceal foreground noise: Plasmonic scores 0.9800 at
+  four WebGL samples despite 0.1338 foreground error. Metrics use ACES/sRGB
+  display RGB and separate primary-visibility masks. Timing includes native
+  transfer and GPU completion of shared denoising/compositing, excluding only
+  quality readback/scoring. Cold preparation is reported separately.
+- Native scene/material mapping remains experimental; no claim of physical
+  equivalence between backends or final-quality 15 FPS. Existing native preview
+  size limit is 2048 pixels per axis. Progressive native counts recompute;
+  geometry-guided temporal reconstruction/zero-copy native transport remain
+  future work. User deferred further silhouette changes.
+- Benchmark cleanup detected an automatic workspace save on opening the real
+  file. Molecular state/history and embedded snapshot equal its existing
+  November 24 immutable main revision; the byte encoding was rewritten.
+  Harness now blocks workspace saves; repeated app inspection blocked one
+  request and preserved SHA256. Evidence: source-audit.json alongside results.
+
+- Validation: **84 focused frontend tests**, **12 backend tests**, native preview
+  UI/camera/export handoff, Appearance profile controls, native EM export, and
+  WebGL/WebGPU preview/image/video/cache regression all passed; `just lint`
+  passed. Four 1280×720 native-browser benchmarks and read-only full-app
+  inspection completed. The first multi-file browser invocation selected three
+  workers; stopped it and completed the remaining render regression with one
+  worker. Temporary worker/browser/report artifacts were cleaned and checked;
+  the live viewer credential remains untouched. Task `main.js` LOC delta: **0**.
+  Broader regression debt (including existing ISSUE-179) is not cleared.
+  Memory lint reports an unrelated missing occupancy-cloud index entry and
+  22 size warnings; that broader hygiene check is not a pass.
+
+
+## PHOTO-TRACE-DENOISE-20261125 — Raw Monte Carlo grain in preview and exports
+
+- **Contour follow-up (2026-11-25):** user reported missing silhouette lines.
+  Reproduced 79.5% contrast loss on weak one-pixel contours. Both filter passes
+  now guide on raw samples, and a bounded local restoration protects connected
+  narrow/curved detail while rejecting isolated noise. Expanded contour tests
+  retain 99.2% contrast; raw alpha and full/tiled output agree exactly. FigurePass
+  outlines already run after denoising, so no compositor reordering was needed.
+  Native reflector SSIM rises to 0.8149; some noise reduction is traded for detail
+  (HDR RMSE 0.3100 versus previous filter 0.3071, raw 0.3221). Motion remains
+  about 15 FPS. Full Plasmonic visual review remains pending.
+- **Implemented:** shared GPU spatial filter with log-HDR/color/alpha edge
+  stopping, immediate raw comparison without restarting rays, raw diagnostics,
+  profile persistence and six-pixel export halos. Preview reuse is filtered once;
+  WebGL/WebGPU/OptiX share the export compositor. Errors report raster fallback.
+- **Evidence:** native reflective-fixture 32-sample HDR RMSE improves 4.66% versus
+  a finite 128-sample reference, SSIM 0.7742→0.8033; motion retains 15 traced FPS
+  at adaptive 1259×708. Compressed-color-only weighting was rejected because it
+  blurred bright reflections and worsened HDR error; log luminance protects them.
+- **Limits:** spatial filtering can soften fine details and leaves residual
+  highlight noise. No temporal/geometry-guided or neural reconstruction. Full
+  Plasmonic review remains MV-TRACE-DENOISE. Also restored the previously omitted
+  interactive-tracing profile setter while wiring denoise persistence.
+
+
+## PHOTO-TRACE-THROUGHPUT-20261125 — Completed work waits on timing statistics
+
+- GPU fences could report completion while delayed timestamp availability still
+  forced `ready()` false. Separate query collection from readiness using a bounded
+  ring, retain one fenced work batch, and tune a bounded 12 ms batch target.
+- Our direct BVH worker had silently used CENTER splitting, unlike the upstream
+  tracer's SAH builder. Benchmark alternatives; select SAH/four-triangle leaves
+  for repeated tracing and retain the existing update/refit paths. Dense initial
+  preparation is slower, so measure and report it independently of sampling.
+- The faster readiness path exposed a metrics race: completion between the first
+  frame poll and a view reset could go uncounted. Credit completed samples once
+  before reset/submission without treating queued work as completed.
+- Native quality metrics and performance evidence are recorded in the fix log.
+
+## PHOTO-TRACE-SCHEDULING-20261125 — Motion restarts and misleading display FPS
+
+- Camera and camera-pinned light changes previously invalidated the complete
+  tracing snapshot, reverting to raster until 200 ms of stillness. A 60 FPS
+  display could therefore complete zero traced frames during movement.
+- Added separate GPU-completed tracing metrics and adaptive-resolution camera
+  updates retaining scene resources. Still/export resolution remains unchanged.
+- Instrumentation also exposed repeated readiness polls resetting GPU-tuned
+  batch sizes to two tiles; retain those measurements until the next timed batch.
+  Opaque output avoids alpha compositing; transparent output reads the latest
+  ping-pong target rather than a fixed slot that lags on even samples.
+- Native RTX benchmark reaches 15 traced FPS on the bare-metal fixture. Dense
+  geometry and full Plasmonic qualification are distinct from that result.
+
+## PHOTO-TRACE-SPECKLES-20261125 — Persistent speckles at completed sample count
+
+- User screenshot shows colored strands heavily speckled at 128/128 samples.
+  The bundled WebGL sampler's texture dimensions are transposed relative to its
+  shader indexing. With our 5+5 bounces, `rand(15)` is out of bounds; reflection
+  branch selection stays fixed per pixel instead of varying between samples.
+- Select the supported frame-seeded PCG sampler for live/WebGL rendering. Keep
+  sample count, geometry, materials, lighting, scheduler and export reuse intact.
+  Independent WebGPU and OptiX sampling is unchanged. Real-browser convergence
+  regression measures spatial noise rather than only checking colored pixels.
+  Full Plasmonic hardware review remains MV-EM-TRACE.
+
+## PHOTO-TRACE-GEOMETRY-20261125 — Tracing restarts before atomistic loading completes
+
+- The live preview inferred readiness from 200 ms without a fingerprint change.
+  Fetch/reconstruction pauses could satisfy this while geometry was still absent
+  or provisional; subsequent mesh/material installation interrupted tracing again.
+- Explicit geometry ownership now holds tracing through native/selected-region
+  loads, assembly instances and representation listeners' simulation-coordinate
+  waits. Obsolete/failed/cancelled work releases safely; a load revision rejects
+  late tracer builds. Ready preview pixels cannot be reused during a load.
+- Appearance synchronizes newly installed materials and bounds before the final
+  snapshot, avoiding its periodic refresh invalidating that new trace. The live
+  status explains the wait and tracing remains enabled for automatic resumption.
+
+## PHOTO-WEBGPU-TILES-20261125 — Export appears vertically wrapped
+
+- User image `nadoc-figure-2560x1271 (1).png` splits particles between the top
+  and bottom edges. A spatial browser regression reproduced upside-down single
+  tiles and six-tile output with a black seam through a continuous center bar.
+- Cause: `QuadMesh` has top-origin UVs, but the tracer's display material already
+  flips top-down storage assuming bottom-origin UVs. This reverses each tile,
+  independently of its correct camera offset and final canvas placement.
+- Fix: normalize an owned WebGPU quad's UVs to match the tracer's display path;
+  retain the separate WebGPU → WebGL row conversion and dependency isolation.
+  No hardware budget, queue, scientific data or saved-document changes.
+- Earlier small optical tests only counted colored pixels; the new regression
+  asserts marker positions, seam continuity and six-tile coverage at the reported
+  export size. Full Plasmonic hardware quality review remains MV-EM-TRACE.
+
+## PHOTO-TRACE-REUSE-20261125 — Locked controls, discarded samples and silent rendering
+
+- Advanced controls were disabled with tracing off, forcing an unnecessary render
+  before users could choose quality/backend. They now remain editable.
+- Export previously destroyed the preview and accumulated every image afresh.
+  Exact completed WebGL previews can now supply their linear pixels; a bounded
+  last-export cache avoids repeated rays for unchanged output across all backends.
+  Camera, field/scene, settings, dimensions and backend mismatches reject reuse;
+  annotations/insets are freshly composited. Changed frames retain geometry reuse.
+- The image button had no progress UI, video counted only finished frames, and
+  OptiX discarded intermediate native status. Image export now owns the standard
+  cancellable popup; tile/sample counts and preparation/encoding stages feed it.
+  Video reports tracing inside the active frame. OptiX reports operation-scoped
+  native status and ignores stale prior-frame progress. Unknown totals are not
+  assigned guessed percentages. Full-scene quality/performance remains MV-EM-TRACE.
+
+
+## PHOTO-TRACE-CAPACITY-20261125 — Fixed geometry and upload limits reject capable hardware
+
+- **Confirmed trigger:** user’s OptiX scene and atomistic preview both fail the
+  shared snapshot’s fixed three-million-triangle check before GPU allocation.
+  The native worker repeats that cap and the upload path separately caps 128 MiB.
+- **Change:** remove those policy cutoffs. WebGL checks actual packed texture
+  dimensions and built BVH size against device limits. WebGPU requests adapter
+  buffer/texture limits and checks packed buffers, with scoped GPU errors.
+  Native uploads stream to owned scratch and use current OS/container RAM and
+  scratch capacity. All visible atoms/emitters remain; allocation errors surface.
+- **Limits:** no reliable free-VRAM query in browsers; memory fit cannot be
+  guaranteed. 32-bit indexing and API buffer/texture limits still apply. Frame
+  tile/sample bounds and single-native-export admission remain workload controls.
+
+
+## PHOTO-TRACE-RESOLUTION-20261125 — Enlarged low-resolution preview (fixed)
+
+- **Cause:** a 1024-pixel longest-edge cap rendered the observed 1882×1185
+  viewport at approximately 1024×645. More samples could not recover the missing
+  spatial detail. No depth-of-field blur is enabled.
+- **Fix:** trace actual drawing-buffer pixels (including DPR); bound tile size
+  instead of downscaling the image. Report a hardware limit with raster fallback
+  if the viewport exceeds maximum target dimensions.
+- **Evidence:** DPR-sized 3764×2370 regression, hardware-limit fallback, and real
+  1280×64→2560×64 browser resize with target dimensions and retained-engine
+  tile resizing verified.
+
+## PHOTO-TRACE-FETCH-20261125 — Unlocalized export network error (diagnostics fixed; original cause unconfirmed)
+
+- User reported “Failed to fetch”; requested verification of all export backends.
+- WebGL, WebGPU and native OptiX successfully exported generic instanced geometry
+  with EM emitters; changed colors and retained sessions were checked. No network
+  request failed in those runs. This does not establish the original cause.
+- Export failures now include backend/stage and preserve their cause. Native
+  HTTP errors retain status/detail; uploads exceeding 128 MiB fail before sending
+  rather than risking an early server rejection during a large upload. No
+  automatic renderer fallback, duplicate render retry or emitter thinning.
+- Exact Plasmonic/high-resolution failure remains pending reproduction; see
+  MV-EM-TRACE. Distinguish browser module loading, EM-result fetching and native
+  transport instead of inferring a GPU or backend queue fault from the old text.
+
+
+## PHOTO-TRACE-INPUT-20261125 — Status refresh overwrites unfinished sample input (fixed)
+
+- **Cause:** the panel calls trace-control sync every 500 ms, replacing typed
+  digits with the saved sample target before the user finishes entering it.
+- **Fix:** retain a draft until blur/Enter. Custom up/down buttons and keyboard
+  arrows step powers of two without committing; clamp committed values to 1–512.
+  Move Advanced explanations into hover tooltips and widen label columns.
+- **Validation:** 59 focused UI tests and a real Appearance-panel browser flow
+  pass, including typing across multiple status ticks and layout at 280 px.
+
+
+## PHOTO-TRACE-SCHEDULE-20261125 — Single-tile pacing and repeated setup (fixed)
+
+- **Cause:** one trace tile per animation tick tied convergence to display pacing;
+  every exported frame rebuilt the renderer, BVH and studio environment.
+- **Fix:** timer-sized bounded batches with GPU fences; persistent export engine,
+  stable-connectivity BVH reuse/refit and periodic rebuild. Explicit cancellation
+  waits for native cleanup; WebGPU workers observe abort while building.
+- **Evidence:** browser diagnostics show one build/environment capture across
+  color updates, then a refit for moved points. Scheduler tests cover completion
+  backpressure, timing adaptation and exact sample targets.
+
+## OPTIX-COLOR-20261125 — Native exports contained only background (fixed)
+
+- **Cause:** Blender's reserved `color` attribute name yielded zero shader alpha
+  even when uploaded alpha was one. Reproduced with CPU Cycles and OptiX.
+- **Fix:** use explicit `nadoc_color` / `nadoc_emission` corner attributes.
+- **Evidence:** native RTX 2080 SUPER export now renders red and then blue EM
+  fields through the same worker; raw linear data and final PNG pixels checked.
+  Native request teardown awaits owned worker/scratch cleanup; regression covers
+  runtime and OS errors, bounded admission, process reuse and explicit failure.
+
+
+## PHOTO-TRACE-RELOAD-20261125 — First lazy tracer load reloads the editor (fixed)
+
+- **Evidence:** activating GPU tracing in the browser fixture triggered Vite's
+  newly-discovered dependency reload; the current view disappeared.
+- **Fix:** prebundle `three-gpu-pathtracer` and leave the BVH worker entry under
+  Vite's worker transform. The actual tracer remains lazily imported.
+- **Validation:** subsequent GPU browser activation/render/export/off passes;
+  production build includes the separate tracer and worker chunks.
+
+## EM-GIF-20261125 — Reused video palette loses new field colors (fixed)
+
+- **Trigger:** export red → blue EM fields through Appearance GIF capture.
+- **Cause:** the encoder reused its first palette for twelve frames. Blue dots
+  were present in the rendered frame but disappeared after GIF decoding.
+- **Fix:** refresh the GIF palette each frame when a populated EM cloud is
+  visible, in both Appearance and editor exporters. Retain ordinary periodic
+  quantization for videos without EM. This costs more GIF encoding work but
+  preserves newly appearing hues; GIF remains limited to 256 colors per frame.
+- **Validation:** browser render/decode comparison reproduced zero blue pixels
+  before the fix and 184 after it in the optical fixture; per-frame palette
+  regression, Appearance PNG workflow and 170 focused frontend tests pass.
+
+
 
 ## ISSUE-270 — Autosave invalidates a ready Corner candidate (2026-11-23)
 

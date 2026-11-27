@@ -59,7 +59,8 @@ export async function createWebGPUExport() {
   }
   function releaseScene(){scene?.traverse(o=>{o.geometry?.dispose();for(const m of [].concat(o.material??[])){for(const v of Object.values(m))if(v?.isTexture)v.dispose();m.dispose()}});scene?.environment?.dispose();scene=null}
   return {
-    async update(sceneJSON,cameraJSON,signal){
+    async update(sceneJSON,cameraJSON,signal,{smoothEM=false}={}){
+      tracer.maxTransparentBounces=smoothEM?160:5
       signal?.throwIfAborted();releaseScene()
       scene=new THREE.ObjectLoader().parse(sceneJSON);camera=new THREE.ObjectLoader().parse(cameraJSON)
       buildSignal=signal

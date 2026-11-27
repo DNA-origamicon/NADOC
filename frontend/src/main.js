@@ -6135,7 +6135,7 @@ async function main() {
     expandedSpacing.toggleExtraBaseAdjust()   // pill syncs via the onModeChange dep
   })
 
-  initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRenderer, api, addFrameCallback, removeFrameCallback, camera, controls,
+  initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRenderer, api, addFrameCallback, removeFrameCallback, camera, controls, rightSidebar,
     simulationDisplays: { oxdna: () => oxdnaDisplay, md: () => mdViz.isActive() ? mdViz : mdDisplayController } })
 
   // ── Help / Hotkeys modal ─────────────────────────────────────────────────────

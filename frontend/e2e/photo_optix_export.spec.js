@@ -13,11 +13,12 @@ test('OptiX exports changed EM fields through one persistent native worker',asyn
   await page.goto('/optix-fixture')
   const large=process.env.NADOC_TEST_TRACE_LARGE==='1'
   const result=await page.evaluate(async ({large,size,samples})=>{
-    const raw=[],uploads=[],fetchOriginal=window.fetch
+    const raw=[],uploads=[],stats=[],fetchOriginal=window.fetch
     window.fetch=async(...args)=>{
       if(String(args[0]).endsWith('/frame'))uploads.push(Number(args[1]?.headers?.['X-NADOC-Upload-Bytes'])||args[1]?.body?.size||0)
       const response=await fetchOriginal(...args)
       if(String(args[0]).endsWith('/frame')&&response.ok){
+        stats.push(JSON.parse(response.headers.get('X-NADOC-Render-Stats')))
         const pixels=new Float32Array(await response.clone().arrayBuffer());let red=0,blue=0,min=Infinity,max=-Infinity
         for(let i=0;i<pixels.length;i+=4){min=Math.min(min,pixels[i],pixels[i+1],pixels[i+2]);max=Math.max(max,pixels[i],pixels[i+1],pixels[i+2]);if(pixels[i]>pixels[i+1]+.1&&pixels[i]>pixels[i+2]+.1)red++;if(pixels[i+2]>pixels[i]+.1)blue++}
         raw.push({red,blue,min,max})
@@ -52,7 +53,7 @@ test('OptiX exports changed EM fields through one persistent native worker',asyn
       const red=await capture()
       overlay.show({...data,intensity:Array(8).fill(.2)},options);cloud.material.opacity=1
       const blue=await capture()
-      return {red,blue,raw,uploads,samples,progress:progress.filter((p,i,a)=>JSON.stringify(p)!==JSON.stringify(a[i-1])),instances:large?18000:512}
+      return {red,blue,raw,uploads,stats,samples,progress:progress.filter((p,i,a)=>JSON.stringify(p)!==JSON.stringify(a[i-1])),instances:large?18000:512}
     }finally{await session.dispose();mode.deactivate();overlay.dispose();disposeGraphics();renderer.dispose();window.fetch=fetchOriginal}
   },{large,size:large?64:Number(process.env.NADOC_TEST_TRACE_SIZE??1024),samples:large?4:Number(process.env.NADOC_TEST_TRACE_SAMPLES??512)})
   console.log('OPTIX_BACKEND_CHECK',JSON.stringify(result))
@@ -65,6 +66,11 @@ test('OptiX exports changed EM fields through one persistent native worker',asyn
   expect(result.progress.some(p=>p.stage==='denoise')).toBe(true)
   expect(result.red.red).toBeGreaterThan(10);expect(result.blue.blue).toBeGreaterThan(10)
   expect(result.blue.red).toBeLessThan(result.red.red)
-  if(large)expect(Math.min(...result.uploads)).toBeGreaterThan(128*1048576)
+  expect(result.stats[0].compact_em).toBe(true)
+  expect(result.stats[1].scene_reused).toBe(true)
+  expect(result.stats[1].em_updated).toBe(true)
+  expect(result.stats[1].em_clouds).toBe(1)
+  expect(result.uploads[1]).toBeLessThan(result.uploads[0]/10)
+  if(large)expect(result.uploads[0]).toBeGreaterThan(128*1048576)
   expect(errors).toEqual([])
 })

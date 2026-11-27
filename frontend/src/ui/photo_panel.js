@@ -954,7 +954,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
   return {
     syncToState,
     applyActiveProfile: () => _applyProfile(loadPhotoProfiles()[_activeProfileName()]),
-    onEnter: () => { _applyProfile(loadPhotoProfiles()[_activeProfileName()]); _refreshAnimList(); _startStatusPolling() },
+    onEnter: ({applyProfile=true}={}) => { if(applyProfile)_applyProfile(loadPhotoProfiles()[_activeProfileName()]); else {syncToState();_schedulePersist()} _refreshAnimList(); _startStatusPolling() },
     onExit:  () => { _stopStatusPolling() },
     dispose: () => {
       artControls?.dispose()

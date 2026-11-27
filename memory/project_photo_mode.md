@@ -1,4 +1,13 @@
 ---
+
+## EM controls and rendering warning (2026-11-27)
+EM panel layout/contextual visibility lives in `ui/em_analysis_panel.js`; wavelength
+is shared through `em_settings.opticalSettings` and the backend solver (default520,
+bundled table range187.9–1937nm). `em_render_warning.js` prompts before photo entry
+or tracing enable when a visible EM overlay exists. Profiles load before entry
+approval; onEnter skips reapplying the profile so Disable remains effective.
+`em_export` clear registry invalidates standalone fields and disables simulation
+EM controls. Cancel/X/Escape do not activate lighting. No molecular edits.
 name: photo-mode
 description: "Photo mode — GPU path tracing with EM emitters, unified materials, six Art Themes, studio lighting, scientific silhouettes, Advanced grading, and shared photo/compiled export. v1 remains archived."
 metadata: 
@@ -8,6 +17,210 @@ metadata:
 ---
 
 # Photo mode
+
+## Native EM sampling and chunk delivery (2026-11-26)
+
+Native preview accumulates disjoint Cycles sample subsets (stable total/offset),
+weighted in linear RGBA before the existing display-only denoiser. Completed
+counts are 1, 4, 8, 16, 32, then increments of 16. Above 100,000 cells use
+16 samples first, then up to 64 new samples per chunk to amortize native per-render overhead.
+The previous image remains visible while a chunk runs. Reset/update discards old samples. Exports use the
+same protocol but request their whole target; no camera/field authoring changes.
+`optix_sampling.configure_sample_chunk` supports modern subsets and legacy offsets.
+`path_trace_optix.js` owns accumulation; the native preview adapter schedules it.
+Progress reports cumulative samples, diagnostics also expose chunk size/offset.
+
+EM emission now uses an empty/emission Mix Shader branch so non-reflected paths
+can bypass interpolation/palette work. Only shadow visibility is disabled.
+Do NOT disable camera/diffuse/transmission visibility: Cycles needs their volume
+stack if the next reflection starts inside a cell. A discarded broad-visibility
+trial failed the inside-cell regression and changed dense retained-frame pixels.
+
+192²/32-sample bare Plasmonic: fresh baseline 52.50 s cold / 51.88 s retained;
+optimized 38.26 s cold / 35.28 s retained. All 363348 cells retained. Mean red
+reflection gain .02498706 versus .02497234 baseline; retained max delta 2.98e-7.
+Dense 1/15/16-sample chunks measured 28.03/35.18/35.61 s; fixed per-render overhead
+dominates. Their accumulated red channel differs from whole 32 spp by 6.44e-6.
+Five tiny chunks exceeded the unchanged 180 s regression budget; do not restore
+that policy for dense fields.
+Focused chunk test draws every delivered image and matches whole-frame output
+to 3.73e-9. Raw MSE against a finite 512-sample gold-plane reference decreases
+from 8.52e-6 at one sample to 9.57e-8 at 32; this does not establish field-free
+throughput or full-DNA/publication convergence. See MV-EM-CHUNKS-20261126.
+
+
+## Native smooth EM reflections (2026-11-26)
+
+Gold reflections now receive the original adaptive volume's emission. Full
+Plasmonic bare-sphere validation retains 363348 cells; reviewed reflected hotspots
+are present and disappear on clear. Cold preparation ~1.54 s; 192²/32-sample
+tracing ~49 s cold / ~48 s retained, so dense tracing still costs time. Mean
+reflected red gain .02497234, 12898 changed pixels; retained difference <3e-7.
+Use procedural instances on 3.4+, not expanded legacy objects for dense fields.
+NADOC's local config now points to the checksum-verified portable runtime at
+`/mnt/c/Users/Public/NADOC/renderers/blender-4.5.9-windows-x64/blender.exe`;
+installed Blender 3.3 is unchanged. Existing point emitter normalization/transport
+and Appearance preview/export checks also pass with 4.5.9. New regression specs:
+`em_reflections.spec.js`, `em_np_reflections.spec.js`; native opt-in required.
+
+## Direct adaptive-volume rendering (2026-11-26)
+
+Smooth display now uses `scene/em_volume_data.js`, `em_volume_shader.js` and
+`em_volume.js`, replacing contour shells in `em_field.js`. Original adaptive
+vertices/tetrahedra are retained; uniform nodes get a conforming tetrahedral split.
+Each hull fragment integrates its exact ray interval with eight-point Gaussian
+quadrature, clipped to cutoff and scene depth. Additive emission is zero at 1×,
+linear in enhancement above 1×, referenced to 100× / 10 nm; no field absorption.
+Palette edits reuse cell buffers; trajectory weights scale emission.
+
+White-polygon investigation: Plasmonic bare-sphere data contained 191
+numerically coplanar retained cells with float32 barycentric errors up to
+2.47e11. `prepareVolumeCells` now rejects relative determinants at double
+roundoff before inversion; the shader bounds interpolated intensity to its
+source range and rejects invalid intervals. No extra smoothing or changes to
+scientific samples. The user subsequently confirmed the white rectangle is fixed.
+
+Raster meshes own depth/radiance targets per renderer and release them on disposal
+or export-session teardown. A content-aware cache covers camera, molecular
+geometry/instancing, visibility and palette changes; endpoint weights only
+composite cached radiance. This avoids reintegrating stationary fields every frame.
+Trace snapshots exclude these shader hulls; the shared camera-volume compositor
+runs after WebGL/WebGPU/OptiX image output and before grading in preview/export.
+The optional eight normalized illumination lights now also enter tracing.
+Native OptiX now receives original cell arrays via `path_trace_volumes.js` and
+`optix_volumes.py` for glossy reflected emission. `optix_volume_instances.py`
+supports legacy 3.3 batches; `optix_volume_nodes.py` uses compact procedural
+instances on 3.4+. SVD preserves shear through rotation/scale/rotation; separate
+scalar attributes avoid color-alpha unpremultiplication. Shared tetrahedron geometry and
+shader interpolate four source values in object-space barycentrics.
+Legacy parent-inverse matrices preserve shear; slightly expanded traversal hulls are
+clipped back to original tetrahedra in the shader. Primary emission is disabled
+to avoid duplicating the compositor. Retired resources survive until render
+synchronization to prevent persistent Cycles cache aliasing. Palette shader
+ramps retain all 256 LUT entries without generated-texture cache dependencies.
+Limitations: other backends have no smooth-volume reflections; no volume
+refraction/multiple scattering on any backend. Depth-writing
+surfaces clip glow, transparent surfaces do not. Dark backgrounds show additive
+glow more clearly. Historical contour tests/helpers remain but are not the active
+display path. See docs/em_analysis.md for the transfer and review boundaries.
+
+Validation: 86 focused frontend tests and six app checks pass, including all four
+renderers, depth/crossfade/cache behavior and the full bare-sphere Plasmonic flow
+(1.9 min). The initial uncached UI timeout was resolved without increasing its
+timeout. Review capture showed continuous outer glow and a bright gap; source
+document hash unchanged. Temporary captures/native scratch were cleaned.
+
+## EM viewport legend and docked analysis (2026-11-26)
+
+EM Analysis is a right-sidebar stack type (`em`), with ordinary collapse, close,
+copy and detached-view behavior. Closing its column retains the standalone field
+and validation callback; Clear field cancels/removes it. Simulation fields remain
+owned by their own toggle/controller. `em_analysis.js` eagerly mounts its controls
+into the parked source pane, so rail opens and restored sidebar layouts work.
+Main.js only passes the existing rightSidebar dependency (zero LOC growth).
+
+`ui/em_legend.js` owns an independent viewport legend, cloning the flex legend's
+layout and reusing the now prefix-configurable `initFlexScale`. EM uses log-space
+handle positions with intensity-unit inputs, shared colormap choices, and separate
+browser preferences in `em_color_settings.js`. The legend sits at canvas right-
+center and shifts beside an active flex legend; sidebar visibility does not own
+it. `scene/em_colors.js` is the common transfer for cloud/slice/contour colors.
+Color bounds default to .1–100× / Jet and are independent of the intensity cutoff.
+Standalone and trajectory fields listen for color changes; recoloring a smooth
+field preserves its tetrahedron buffers. Viewport DOM
+legends are not burned into image/video exports; field colors are exported.
+
+Validation: 77 focused tests and six EM app checks pass, including a real
+Plasmonic workflow and all four renderers with Plasma. Smoke remains 26 pass /
+2 skips / existing ASSEMBLY-SMOKE-FRAMING-20261126 timeout.
+
+The original layer review recorded stepped outer glow edges. The subsequently
+authorized direct-volume implementation above supersedes the shell representation.
+
+## PHOTO-EM-SMOOTH-20261126 — Historical contour implementation (superseded above)
+
+EM Display now offers Smooth 3D glow alongside dots/slices, persisted through
+shared EM settings and usable by trajectory endpoints/crossfades. New
+`scene/em_smooth.js` extracts 32 low-opacity contours. Adaptive fields use
+`scene/em_tetrahedra.js` with original sample vertices and backend-derived
+Delaunay connectivity; uniform grids retain all source nodes (through 49³). Default cutoff is
+now 3× (saved explicit cutoffs retained). Opacity uses intensity-band differences
+of tau(I)=1.6*log1p(max(0,I-1)/99)/ln(2), split across entry/exit surfaces.
+This makes 1× background transparent, transmits >95% across 1–3× bands and keeps
+opacity independent of contour subdivision. No per-frame peak normalization;
+strong contours carry more glow weight in raster and all trace backends.
+Follow-up validation: 40 focused frontend tests and four renderer app flows
+passed with cutoff deliberately lowered to 1× and a visible-hotspot pixel check;
+Python lint passed. Native scratch and browser outputs were cleaned. Uniform input uses
+log-intensity trilinear interpolation; adaptive vertices use linear intensity
+interpolation without averaging or cell-volume weights.
+Source arrays and documents are immutable. Cutoff removes subthreshold regions;
+dot size is disabled in smooth mode. See `docs/em_analysis.md` for approximation
+limits (subpixel peaks, convex-hull boundaries and large-magnification bands).
+
+Peak-preservation follow-up (PHOTO-EM-PEAK-20261126): bare-sphere Plasmonic
+parallel solve retains 119.438668× across 76,996 source samples; adaptive glow
+has 2.21M triangles (5.53 s topology + 4.26 s contour preparation locally).
+19 frontend / 21 backend tests and all four adaptive renderer app checks pass.
+Recalculate already-open fields after updating to obtain display connectivity.
+
+Standard emissive meshes survive Photo material swapping and all trace snapshots.
+WebGL/WebGPU/native allow 160 transparent intersections when smooth glow is
+present (5 otherwise). Native retained-frame state carries this setting through
+camera-only refinements; changed smooth geometry forces a full scene snapshot,
+while point-only updates keep their compact transport. Smooth contour emission
+is illustrative; the normalized native point-light model remains dot-specific.
+Synthetic app coverage lives in `e2e/em_smooth.spec.js`; use native/WebGPU opt-in
+environment flags and --workers=1. Raster, WebGL, Native OptiX and WebGPU
+fixture exports passed, with actual panel mode/cutoff changes and material
+preservation. Focused validation: 194 frontend tests, 4 retained-frame backend
+tests and Python lint passed. Smoke: 26 pass / 2 opt-in skips, with the assembly
+fixture setup timing out both in-suite and alone (ASSEMBLY-SMOKE-FRAMING-20261126).
+Test parts, revision stores, captures, bridge keys and native scratch were cleaned.
+Full real-field quality review remains
+MV-EM-GLOW-20261126. main.js task LOC delta: 0.
+
+## PHOTO-EM-NATIVE-20261126 — Compact emitters and normalized surface illumination
+
+Native snapshots retain every visible EM sample as compact center/radius/palette/
+power data plus a shared 20-face template. Molecular meshes/environment survive
+EM-only changes. Worker distinguishes geometry, attribute-only and unchanged
+clouds; uploaded browser geometry buffers are released after acknowledgement.
+Primary-ray markers retain palette/brightness/opacity; user explicitly chose
+normalized surface illumination while preserving dot appearance. Weights are
+cell volume times max(0, log10(enhancement)), normalized to the existing raster
+illustrative scale (.3 * field-radius²), with palette RGB and cloud opacity.
+Native emission compensates for two-sided icosahedron area. Reflections/indirect
+rays use normalized emission; opacity/occlusion/near-field distribution can still
+change with marker size. WebGL/WebGPU retain legacy emission for now.
+
+Initial sampling validation used Blender 3.3.1 / RTX 2080 SUPER: light tree unavailable.
+Smooth reflection development subsequently validated 4.5.9 LTS on the same GPU,
+including compact volume instances and enabled light-tree support.
+Supported runtimes explicitly enable the tree; both old/new material APIs enable
+emission sampling. No runtime/driver upgrade. Compact legacy-mode native image
+comparison: ~1e-8 RMS difference; 1,000-emitter payload 4,221,301 → 99,873 bytes.
+10,000-emitter unchanged warm geometry preparation ~1 ms in the small 96² test.
+These are fixture measurements, not full-design quality/FPS claims. Native
+normalization checks preserve direct marker pixels, hold mean receiver light
+within 1% when doubling radius, and double EM contribution within Monte Carlo
+error when doubling power. Regression: generated environment image pixels now
+call image.update(), preventing stale world illumination with persistent Cycles.
+
+ReSTIR/native analytic primitives remain future work: current cold native mesh
+construction still costs ~1.5 s for 10k points in the synthetic fixture, whereas
+unchanged warm tracing is ~25–32 ms at 96²/16 samples. Resolve cold construction
+and benchmark full-size image quality before a renderer rewrite. See
+`frontend/e2e/photo_em_native.spec.js`; run native specs with --workers=1.
+
+Validation: 340 affected frontend tests pass (one existing skip), 30 focused
+backend tests, three serial native browser flows, and repository Python lint
+pass. Native browser coverage includes Appearance controls, cancellation, warm
+reuse, export handoff, dense cloud/power checks and changed-field export. Owned
+worker scratch, Playwright reports and isolated bridge credentials cleaned.
+Main.js task LOC delta 0; full-scene visual/performance debt remains in
+`MV-EM-NATIVE-SCALE`. No designs or simulations were written.
+
 
 ## PHOTO-TRACE-STATUS-20261126 — Compact rendering status
 

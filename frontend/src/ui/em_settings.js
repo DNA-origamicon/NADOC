@@ -1,11 +1,12 @@
+import {loadEMColors} from './em_color_settings.js'
 /** Shared persisted optical and display options; no molecular/document mutations. */
-export const EM_DEFAULTS = Object.freeze({ solver:'multipole', shell:'ssdna_wlc', 'oligo-length':20,
+export const EM_DEFAULTS = Object.freeze({ solver:'multipole', wavelength:520, shell:'ssdna_wlc', 'oligo-length':20,
   persistence:2.5, thickness:2.5, 'shell-index':1.7, polarization:'parallel', sampling:'field_adaptive',
-  resolution:33, mode:'volume', 'dot-size':3, lighting:'glow', slice:.5, minimum:1.5 })
+  resolution:33, mode:'volume', 'dot-size':3, lighting:'glow', slice:.5, minimum:3 })
 const choices = { solver:['multipole','multipole_reference'], shell:['none','manual','ssdna_wlc'],
   polarization:['parallel','perpendicular'], sampling:['uniform','adaptive','field_adaptive'],
-  resolution:[25,33,49], mode:['volume','xy','xz','yz'], lighting:['off','glow','illuminate'] }
-const bounds = { 'oligo-length':[1,200], persistence:[.1,10], thickness:[0,100], 'shell-index':[1,2.5],
+  resolution:[25,33,49], mode:['volume','smooth','xy','xz','yz'], lighting:['off','glow','illuminate'] }
+const bounds = { wavelength:[187.9,1937], 'oligo-length':[1,200], persistence:[.1,10], thickness:[0,100], 'shell-index':[1,2.5],
   'dot-size':[1,12], slice:[0,1], minimum:[0,1000] }
 const key = 'nadoc.em.settings.v1'
 export function sanitizeEMSettings(input = {}) {
@@ -25,8 +26,8 @@ export function saveEMSettings(settings) {
   return value
 }
 export function opticalSettings(s) {
-  return { solver:s.solver, resolution:s.resolution, sampling:s.sampling, polarization:s.polarization,
-    shell:{ model:s.shell, oligo_length_nt:s['oligo-length'], persistence_length_nm:s.persistence,
-      thickness_nm:s.thickness, refractive_index:s['shell-index'] } }
+  return { wavelength_nm:Number(s.wavelength ?? 520), solver:s.solver, resolution:Number(s.resolution), sampling:s.sampling, polarization:s.polarization,
+    shell:{ model:s.shell, ...(s.shell==='none'?{}:{refractive_index:Number(s['shell-index']),
+      ...(s.shell==='manual'?{thickness_nm:Number(s.thickness)}:{oligo_length_nt:Number(s['oligo-length']), persistence_length_nm:Number(s.persistence)})}) } }
 }
-export function displaySettings(s) { return { mode:s.mode, slice:s.slice, minimum:s.minimum, maximum:100, dotSize:s['dot-size'], lighting:s.lighting } }
+export function displaySettings(s) { return { mode:s.mode, slice:s.slice, minimum:s.minimum, ...loadEMColors(), dotSize:s['dot-size'], lighting:s.lighting } }

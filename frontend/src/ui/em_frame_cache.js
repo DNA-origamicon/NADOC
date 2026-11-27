@@ -1,9 +1,9 @@
 /** Own compact numeric arrays; keep scientific values at float64 precision. */
 export function compactEMVolume(value) {
-  for (const key of ['intensity','outside','sample_positions_nm','cell_sizes_nm']) {
+  for (const key of ['intensity','outside','sample_positions_nm','cell_sizes_nm','display_tetrahedra']) {
     if (!Array.isArray(value[key])) continue
     const source = Array.isArray(value[key][0]) ? value[key].flat(Infinity) : value[key]
-    value[key] = key === 'outside' ? Uint8Array.from(source) : Float64Array.from(source)
+    value[key] = key === 'outside' ? Uint8Array.from(source) : key === 'display_tetrahedra' ? Uint32Array.from(source) : Float64Array.from(source)
   }
   return value
 }

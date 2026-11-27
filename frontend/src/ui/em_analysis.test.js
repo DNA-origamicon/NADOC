@@ -23,19 +23,24 @@ describe('EM analysis snapshot and lifecycle', () => {
   it('rejects unknown optical materials', () => {
     expect(() => captureEMParticles({ state:{}, nanoparticleSubsystem:{getQuenchingParticles:()=>[{...sphere,kind:'quantum_dot'}]} })).toThrow(/materials/)
   })
-  it('renders results, supports slices, and removes the scene overlay on close', async () => {
+  it('renders results, supports slices, and retains the scene overlay when the panel closes', async () => {
     const store = createMockStore({ currentDesign:{id:'d'} }), original = store.getState()
     const overlay = { show:vi.fn(), clear:vi.fn(), dispose:vi.fn() }, remove = vi.fn()
     feature = initEMAnalysis({ scene:{}, store, nanoparticleSubsystem:np, api:{_request:vi.fn().mockResolvedValue(result)},
       overlayFactory:()=>overlay, addFrameCallback:vi.fn(), removeFrameCallback:remove })
-    feature.open(); document.querySelector('[data-run]').click()
+    feature.open(); expect(document.querySelector('[data-minimum]').value).toBe('3'); document.querySelector('[data-run]').click()
     await vi.waitFor(()=>expect(overlay.show).toHaveBeenCalled())
     expect(document.querySelector('[data-status]').textContent).toContain('3.00×')
     const select = document.querySelector('[data-mode]'); select.value='xy'; select.dispatchEvent(new Event('input'))
     expect(overlay.show.mock.lastCall[1].mode).toBe('xy')
-    feature.close(); expect(overlay.dispose).toHaveBeenCalled(); expect(remove).toHaveBeenCalled()
+    select.value='smooth'; select.dispatchEvent(new Event('input',{bubbles:true}))
+    expect(overlay.show.mock.lastCall[1].mode).toBe('smooth')
+    expect(document.querySelector('[data-dot-size]').disabled).toBe(true)
+    expect(JSON.parse(localStorage.getItem('nadoc.em.settings.v1')).mode).toBe('smooth')
+    feature.close(); expect(overlay.dispose).not.toHaveBeenCalled(); expect(remove).not.toHaveBeenCalled()
     expect(store.getState()).toBe(original)
-    expect(document.querySelector('#em-analysis-panel')).toBeNull()
+    expect(document.querySelector('#em-analysis-panel').hidden).toBe(true)
+    feature.open(); document.querySelector('[data-clear]').click(); expect(overlay.clear).toHaveBeenCalled()
   })
   it('discards a result arriving after cancellation', async () => {
     let resolve
@@ -148,4 +153,35 @@ it('retains optical and display settings after closing and reopening the popup',
   expect(document.querySelector('[data-shell]').value).toBe('none')
   expect(document.querySelector('[data-resolution]').value).toBe('49')
   expect(document.querySelector('[data-dot-size]').value).toBe('6')
+})
+it('restores standalone actions on a rail open after simulation settings',()=>{
+ document.body.innerHTML='<div id="right-tab-strip"><button data-tab="em">EM</button></div>'
+ feature=initEMAnalysis({scene:{},store:createMockStore({}),nanoparticleSubsystem:np,api:{},overlayFactory:()=>({clear:vi.fn(),dispose:vi.fn()})})
+ feature.open(true)
+ expect(document.querySelector('[data-run]').parentElement.hidden).toBe(true)
+ expect(document.querySelector('[data-clear]').hidden).toBe(true)
+ document.querySelector('[data-tab="em"]').click()
+ expect(document.querySelector('[data-run]').parentElement.hidden).toBe(false)
+ expect(document.querySelector('[data-clear]').hidden).toBe(false)
+})
+
+it('puts calculation and wavelength first, hides irrelevant controls, and carries wavelength to the solver',async()=>{
+ const request=vi.fn().mockResolvedValue({...result,wavelength_nm:650})
+ feature=initEMAnalysis({scene:{},store:createMockStore({}),nanoparticleSubsystem:np,api:{_request:request},overlayFactory:()=>({show:vi.fn(),clear:vi.fn(),dispose:vi.fn()})})
+ const panel=document.querySelector('#em-analysis-panel'),input=key=>panel.querySelector(`[data-${key}]`)
+ expect(input('run').compareDocumentPosition(input('wavelength'))&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+ expect(input('wavelength').closest('label').title).toContain('Johnson–Christy')
+ for(const [shell,shown] of [['none',[]],['manual',['thickness','shell-index']],['ssdna_wlc',['oligo-length','persistence','shell-index']]]){
+  input('shell').value=shell;input('shell').dispatchEvent(new Event('change'))
+  for(const key of ['oligo-length','persistence','thickness','shell-index'])expect(input(key).closest('label').hidden).toBe(!shown.includes(key))
+ }
+ input('shell').value='none';input('shell').dispatchEvent(new Event('change'))
+ input('wavelength').value='650';input('wavelength').dispatchEvent(new Event('change',{bubbles:true}))
+ expect(input('run').textContent).toBe('Calculate 650 nm map')
+ expect(panel.querySelectorAll(':scope > p:not([data-status])')).toHaveLength(0)
+ input('run').click();await vi.waitFor(()=>expect(request).toHaveBeenCalled())
+ expect(request.mock.calls[0][2]).toMatchObject({wavelength_nm:650,shell:{model:'none'}})
+ expect(request.mock.calls[0][2].shell).toEqual({model:'none'})
+ expect(JSON.parse(localStorage.getItem('nadoc.em.settings.v1')).wavelength).toBe(650)
+ expect(input('slice').closest('label').hidden).toBe(true)
 })

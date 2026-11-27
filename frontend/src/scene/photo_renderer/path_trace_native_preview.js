@@ -1,7 +1,7 @@
 /** Adapt asynchronous whole-image native renders to the synchronous viewport.
  * One request at a time; changed scenes never display the previous result.
- * Native sampling currently restarts at each larger count, rather than claiming
- * that Cycles has a resumable accumulation API. No browser main-thread waits. */
+ * Disjoint native sample subsets accumulate without retracing completed work.
+ * Keep the last completed image visible while the next chunk is in flight. */
 export async function createNativeTracePreviewEngine(options,{create}={}){
   create??=(await import('./path_trace_optix.js')).createOptixTraceEngine
   const native=await create(options)
@@ -16,8 +16,13 @@ export async function createNativeTracePreviewEngine(options,{create}={}){
     advance(target){
       if(disposed||pending)return
       if(error)throw error
-      const own=revision,count=Math.min(target,native.samples<1?1:target)
-      pending=Promise.resolve().then(()=>native.advance(count,{quick:count<target})).then(()=>{if(!disposed&&own===revision)visible=true})
+      // Dense procedural fields have a large fixed per-render cost.
+      // Spend that first setup on a useful 16-sample image, then amortize setup
+      // across larger chunks. Small scenes retain the immediate 1-sample image.
+      const dense=(native.emVolumeCells??native.diagnostics?.em_volume_cells??0)>100000
+      const next=dense?native.samples+64:native.samples+Math.min(16,Math.max(3,native.samples))
+      const own=revision,count=Math.min(target,native.samples<1?(dense?16:1):next)
+      pending=Promise.resolve().then(()=>native.advance(count,{quick:native.samples===0&&count<target,sampleTarget:target})).then(()=>{if(!disposed&&own===revision)visible=true})
         .catch(e=>{if(!disposed)error=e}).finally(()=>{pending=null})
     },
     draw(...args){if(visible)native.draw(...args)},

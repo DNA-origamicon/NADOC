@@ -68,6 +68,7 @@ export async function createTraceEngine({renderer,scene,camera,width,height,view
     signal?.addEventListener('abort',abort,{once:true})
     try{
       snapshot=await traceSnapshotAsync(scene,camera,viewHeight,{maxTextureSize:renderer.capabilities.maxTextureSize,signal,onProgress:fraction=>onStatus({stage:'snapshot',fraction,label:'Preparing scene snapshot'})})
+      material.transmissiveBounces=snapshot.smoothEM?160:5
       if(!snapshot.triangles)throw new Error('There are no visible surfaces or EM samples to path trace.')
       onStatus({stage:'geometry',fraction:null,label:'Preparing tracing geometry and acceleration'})
       generator=new DynamicPathTracingSceneGenerator(snapshot.root.children);generator.prepScene()

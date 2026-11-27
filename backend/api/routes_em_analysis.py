@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import sys
 
+from backend.rendering.em_interpolation import with_display_tetrahedra
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
@@ -34,6 +36,7 @@ class DNAShell(BaseModel):
 class EMRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     particles: list[Particle] = Field(min_length=1, max_length=4)
+    wavelength_nm: float = Field(default=520, ge=187.9, le=1937, allow_inf_nan=False)
     polarization: Literal['parallel', 'perpendicular'] = 'parallel'
     resolution: Literal[25, 33, 49] = 33
     sampling: Literal['uniform', 'adaptive', 'field_adaptive'] = 'uniform'
@@ -84,7 +87,7 @@ async def run_solver(payload, request):
                 raise HTTPException(500, 'EM solver failed without a valid result.') from None
             if process.returncode or 'error' in result:
                 raise HTTPException(422, result.get('error', 'EM solver failed.'))
-            return result
+            return await asyncio.to_thread(with_display_tetrahedra, result)
         except TimeoutError:
             raise HTTPException(504, 'EM analysis exceeded the 180 second experimental limit. Try the coarser grid.') from None
         finally:

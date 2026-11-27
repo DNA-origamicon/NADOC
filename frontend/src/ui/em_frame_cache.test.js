@@ -101,3 +101,10 @@ it('promotes a pending background read to a required endpoint despite its origin
  expect(await required).toBe(true);await warm
  expect(cache.get(1)).not.toBeNull();cache.dispose()
 })
+it('compacts adaptive connectivity as integer indices and retains source precision',async()=>{
+ const cache=createEMFrameCache({load:async()=>({intensity:[100.123456789],display_tetrahedra:[[0,1,2,3]]})})
+ await cache.prefetch([0],0)
+ expect(cache.get(0).display_tetrahedra).toEqual(new Uint32Array([0,1,2,3]))
+ expect(cache.get(0).intensity[0]).toBe(100.123456789)
+ cache.dispose()
+})

@@ -89,7 +89,7 @@ async def create_session(request: Request):
             raise HTTPException(503, str(error) or "OptiX startup timed out") from error
         session.touched = time.monotonic()
         sessions[session.id] = session
-        return {"id": session.id, "device": session.device}
+        return {"id": session.id, "device": session.device, "capabilities": getattr(session, "capabilities", {})}
 
 
 @router.delete("/{session_id}")
