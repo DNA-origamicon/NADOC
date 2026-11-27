@@ -365,6 +365,9 @@
   transition: background var(--motion-fast) var(--motion-ease);
 }
 .ox-card__header:hover { background: rgba(177, 186, 196, 0.09); }
+.ox-card > summary.ox-card__header { list-style: none; }
+.ox-card > summary.ox-card__header::-webkit-details-marker { display: none; }
+.ox-card:not([open]) > summary.ox-card__header .icon--rotates { transform: rotate(-90deg); }
 .ox-card__chevron { width: 12px; height: 12px; color: var(--color-text-dim); }
 .ox-card__title { flex: 1; }
 .ox-card__body { padding: 8px; }

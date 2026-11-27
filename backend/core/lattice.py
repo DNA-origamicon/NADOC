@@ -34,6 +34,7 @@ References
 from __future__ import annotations
 
 import math
+from itertools import accumulate
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -2783,7 +2784,8 @@ def compute_nick_plan(
 
 
 def nick_all_major_ticks(
-    design: Design, skip_strand_ids: frozenset[str] = frozenset(), *, experimental=None
+    design: Design, skip_strand_ids: frozenset[str] = frozenset(), *,
+    experimental=None, avoid_single_base_staples: bool = False,
 ) -> Design:
     """Nick every non-scaffold strand at *all* major tick marks (co-linear only).
 
@@ -2799,12 +2801,16 @@ def nick_all_major_ticks(
     ``skip_strand_ids`` names hand-routed staples (locked / overhang) that are left
     whole — never nicked — so full-autostaple does not split them.
     Experimental HC routing omits nicks in the skipped crossover repeats.
+    Full Autostaple can also omit nicks that would isolate a single nucleotide,
+    so a later crossover cannot route away the only neighbor of that fragment.
     """
     from backend.core.experimental_autostaple import retain_boundary
+    from backend.core.sequences import _build_loop_skip_map
 
     is_hc = design.lattice_type == LatticeType.HONEYCOMB
     period = 21 if is_hc else 32
     tick_set = frozenset({0, 7, 14}) if is_hc else frozenset({0, 8, 16, 24})
+    loop_skips = _build_loop_skip_map(design) if avoid_single_base_staples else None
 
     xover_bps: set[tuple[str, int]] = set()
     for xo in design.crossovers:
@@ -2849,6 +2855,22 @@ def nick_all_major_ticks(
             if i > 0 and positions[i - 1][0] != h_cur:
                 continue
             nick_indices.append(i)
+
+        if loop_skips is not None and nick_indices:
+            prefix = list(accumulate(
+                max(0, 1 + loop_skips.get(
+                    (helix_id, bp, direction), loop_skips.get((helix_id, bp), 0)
+                ))
+                for helix_id, bp, direction in positions
+            ))
+            retained = []
+            last_cut = 0
+            for i in nick_indices:
+                if prefix[i] - last_cut < 2 or prefix[-1] - prefix[i] < 2:
+                    continue
+                retained.append(i)
+                last_cut = prefix[i]
+            nick_indices = retained
 
         for idx in reversed(nick_indices):
             h, bp, d = positions[idx]

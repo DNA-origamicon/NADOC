@@ -1,0 +1,73 @@
+.oxdna-torsion { color: #c9d1d9; font-size: var(--text-xs); line-height: 1.45; }
+.oxdna-torsion-setup:not([hidden]) {
+  display: grid;
+  gap: 8px;
+}
+.oxdna-torsion :is(p, dl) { margin: 0; }
+.oxdna-torsion label {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.oxdna-torsion label[hidden] { display: none; }
+.oxdna-torsion :is(input, select) {
+  min-width: 0;
+  min-height: 25px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 2px 5px;
+  color: inherit;
+  font: inherit;
+}
+.oxdna-torsion-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.oxdna-torsion-coordinates fieldset {
+  margin: 0 0 5px;
+  min-width: 0;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+}
+.oxdna-torsion-vector { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.oxdna-torsion [hidden] { display: none; }
+.oxdna-torsion-grip {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+}
+.oxdna-torsion-grip strong { color: #5cc8e6; }
+.oxdna-torsion-sites { max-height: 110px; overflow: auto; color: #a3afbd; }
+.oxdna-torsion-sites > div, .oxdna-torsion-key {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5px;
+}
+.oxdna-torsion-status:not(:empty) { margin-top: 6px; color: #a3afbd; }
+.oxdna-torsion canvas { width: 100%; background: #0d1117; }
+.oxdna-torsion-key span:first-child { color: #5cc8e6; }
+.oxdna-torsion-key span:last-child { color: #e8ae68; }
+.oxdna-torsion-values { display: grid; grid-template-columns: 1fr auto; gap: 3px 6px; }
+.oxdna-torsion-values dd { margin: 0; font-variant-numeric: tabular-nums; }
+.oxdna-torsion-measurement:not(:empty) { display: grid; gap: 6px; }
+.oxdna-torsion-error { color: #f28b82; }
+.oxdna-torsion .oxdna-torque-enable { display: flex; align-items: center; gap: 5px; }
+.oxdna-torsion .oxdna-torque-enable input { min-height: 0; }
+.oxdna-torsion .oxdna-torque-arrow-size { grid-template-columns: 1fr auto; }
+.oxdna-torque-arrow-size input { grid-column: span 2; padding: 0; accent-color: #ffb14c; }
+.oxdna-torque-enable:has(+ .oxdna-torsion-setup:not([hidden])) { margin-bottom: 6px; }
+#oxdna-metrics-torque { margin-bottom: 8px; }
+.oxdna-torque-metric { display: flex; align-items: center; gap: 5px; }
+.oxdna-torque-metric span { flex: 1; }
+.oxdna-torque-metric button {
+  font-size: var(--text-xs);
+  padding: 3px 7px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  color: #c9d1d9;
+  cursor: pointer;
+}
+.oxdna-torque-metric button:disabled { color: #484f58; cursor: not-allowed; }

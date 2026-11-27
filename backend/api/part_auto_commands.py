@@ -94,7 +94,8 @@ def build(kind, design, params):
         from backend.api.routes_assign_sequences import _FullAutostapleBody
 
         return build_full_autostaple(
-            design, _FullAutostapleBody.model_validate({"frame_scoped_crossovers": False, **params})
+            design, _FullAutostapleBody.model_validate({"frame_scoped_crossovers": False, **params}),
+            avoid_single_base_staples=params.get("avoid_single_base_staples", False),
         )[0]
     from backend.core.lattice import make_autobreak, make_merge_short_staples
 

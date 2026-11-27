@@ -337,6 +337,9 @@ import { initOxdnaInputOverlay } from './scene/oxdna_input_overlay.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
 import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
+import { initTorqueAxisGizmo } from './scene/torque_axis_gizmo.js'
+import { torqueDesignCenter, torqueSelectionCenter } from './scene/torque_selection_center.js'
+import { createExternalTargets } from './scene/annotation_external.js'
 import { initForcesCard } from './ui/forces_card.js'
 import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
 import { initGrapheneDisplayControls } from './ui/graphene_display_controls.js'
@@ -1310,6 +1313,12 @@ async function main() {
     ctrlBeadNucs: (selectionManager?.getCtrlBeads?.() || []).map(b => b.nuc),
     clusterMemberStrandIds: id => selectionManager?.clusterMemberStrandIds?.(id) || [],
   })
+  const torqueGizmo = initTorqueAxisGizmo(scene, getRenderCamera, canvas, getActiveControls, addFrameCallback)
+  const torqueExternalTargets = createExternalTargets({
+    getDesign: () => store.getState().currentDesign,
+    getProteinRenderer: () => proteinRenderer,
+    getNanoparticleSubsystem: () => nanoparticleSubsystem,
+  })
 
   const namdPegCoating = initNamdPegCoating({ api, store })
   const mdPanel = initMdJobsPanel({ submodel,
@@ -1473,6 +1482,12 @@ async function main() {
     getWorkspacePath: () => store.getState().assemblyActive
       ? _assemblyWorkspacePath : _workspacePath,
     getAnchorSelection: _anchorSelectionState,
+    torqueGizmo,
+    getTorqueSelectionCenter: () => torqueSelectionCenter(store.getState(), {
+      resolveBase: key => selectionManager.getBaseWorldPosition?.(key),
+      resolveExternal: torqueExternalTargets.resolve,
+    }),
+    getTorqueDefaultCenter: () => torqueDesignCenter(store.getState().currentGeometry),
     flexScale,
     getRunElements: _oxdnaRunElements,
     getDesignLattice: () => store.getState().currentDesign?.lattice_type ?? null,
@@ -2566,6 +2581,7 @@ async function main() {
       // retarget the armed footprint), but keep them blocked for normal slice-plane
       // selection / read-only visibility.
       if (slicePlane.isVisible() && !slicePlane.isPlacement()) return true
+      if (torqueGizmo.ownsPointer()) return true
       if (_isUnfoldActive()) return true
       if (isDeformActive()) return true
       const s = store.getState()

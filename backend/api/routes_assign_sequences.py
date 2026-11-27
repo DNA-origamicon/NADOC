@@ -107,6 +107,8 @@ class _FullAutostapleBody(BaseModel):
 def autostaple_params(body: "_FullAutostapleBody") -> dict:
     """Record routing semantics; omit the region for whole-structure runs."""
     params = body.model_dump()
+    # Older commands replay the routing policy they originally executed.
+    params["avoid_single_base_staples"] = True
     if body.max_staple_length is None:
         params.pop("max_staple_length")
     if body.experimental is None:

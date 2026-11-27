@@ -4613,7 +4613,12 @@
           <!-- ── oxDNA (single consolidated panel: relaxation + production + display) ──── -->
           <div class="panel-section" id="oxdna-jobs-panel">
             <div id="oxdna-jobs-body" style="margin-top:2px">
-              <details class="ox-card" id="oxdna-box-card" open><summary class="ox-card__header"><span class="ox-card__title">Box</span></summary><div class="ox-card__body" id="oxdna-submodel"></div></details>
+              <details class="ox-card" id="oxdna-box-card" open>
+                <summary class="ox-card__header">
+                  <span class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Box</span>
+                </summary>
+                <div class="ox-card__body" id="oxdna-submodel"></div>
+              </details>
 
               <!-- availability badge — HIDDEN: install state now shows as a ⚠ on the
                    engine tab (kept in the DOM so the panel's availability logic is intact). -->
@@ -4667,8 +4672,8 @@
 
               <!-- ── Advanced (collapsible card) ──────────────────────────── -->
               <div class="ox-card">
-                <div id="oxdna-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e">
-                  <span id="oxdna-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
+                <div id="oxdna-jobs-adv-toggle" class="ox-card__header">
+                  <span id="oxdna-jobs-adv-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Advanced</span>
                 </div>
                 <div id="oxdna-jobs-adv-body" class="ox-card__body" style="display:none;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
                   <label style="font-size:var(--text-xs);color:#8b949e">Backend</label>
@@ -4777,6 +4782,8 @@
                   </div>
                 </div>
               </div>
+
+              <details class="ox-card" id="oxdna-torsion"></details>
 
               <!-- ── Hard surface / floor (collapsible card) ──────────────── -->
               <div class="ox-card">
@@ -5082,7 +5089,7 @@
               <!-- ── Graphs and Metrics (collapsible) ─────────────────────────── -->
               <div class="ox-card">
                 <div id="oxdna-metrics-toggle" class="ox-card__header" style="color:#c9d1d9">
-                  <span id="oxdna-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
+                  <span id="oxdna-metrics-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Graphs and Metrics</span>
                 </div>
                 <div id="oxdna-metrics-card" class="ox-card__body" style="display:none">
                   <!-- System monitor — live CPU / GPU / RAM sparklines (whole machine) -->
@@ -5115,6 +5122,17 @@
                   <div style="display:flex;gap:12px;margin-bottom:8px;font-size:var(--text-xs);color:#8b949e">
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="oxdna-metrics-scope" id="oxdna-metrics-scope-latest" checked> Latest job</label>
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="Concatenate this job's whole parent/child lineage into one timeline (spatial profiles overlay per job)."><input type="radio" name="oxdna-metrics-scope" id="oxdna-metrics-scope-chain"> All parent/child jobs</label>
+                  </div>
+                  <!-- Torque transfer -->
+                  <div id="oxdna-metrics-torque" class="oxdna-torsion" hidden>
+                    <div class="oxdna-torque-metric">
+                      <span>Torque transfer</span>
+                      <button data-torque-generate title="Generate torque and rotation measurements">Generate</button>
+                      <button data-torque-display title="Show the torque plot and failure indicators" disabled>Display</button>
+                      <button data-torque-export title="Export PNG and/or CSV" disabled>Export</button>
+                    </div>
+                    <div class="oxdna-torsion-status" role="status"></div>
+                    <div class="oxdna-torsion-measurement" data-torque-output></div>
                   </div>
                   <!-- Twist -->
                   <div style="margin-bottom:8px">
@@ -5158,7 +5176,7 @@
                    initOxdnaExportCard (oxdna_export_card.js), wired in oxdna_jobs_panel.js. -->
               <div class="ox-card">
                 <div id="oxdna-export-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
-                  <span id="oxdna-export-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Export trajectory</span>
+                  <span id="oxdna-export-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Export trajectory</span>
                 </div>
                 <div id="oxdna-export-card" class="ox-card__body" style="display:none">
                   <!-- timeline: segment bar + boundary ticks + dim overlays + two overlapping range thumbs -->

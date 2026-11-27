@@ -33,7 +33,7 @@ export function createOxdnaJobSettings({ save, onSaved, onError, delayMs = 250, 
         state.pending = null
         try {
           const saved = await save(id, patch)
-          if (!saved?.job_id) throw new Error('Could not save oxDNA field, surface and anchor settings.')
+          if (!saved?.job_id) throw new Error('Could not save oxDNA simulation settings.')
           if (!state.pending) state.latest = null
           persist()
           onSaved?.(saved, !state.pending)

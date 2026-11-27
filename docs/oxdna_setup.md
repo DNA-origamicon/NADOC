@@ -61,6 +61,48 @@ runs NADOC. By default that is `<repo>/.venv/bin/python`; set `NADOC_OXPY_PYTHON
 only when the backend intentionally uses a different interpreter. The managed build
 also applies NADOC's `BaseForce.F0`/`BaseForce.dir` steering patch required by Live.
 
+## Torque
+
+In **Dynamics → oxDNA → Jobs**, create a local **Production** job in the
+wizard. Choose the completed relaxation or production job to continue from. If
+the source contains both stages, **Starting checkpoint** allows you to pick the
+saved frame. Set the run length and trajectory cadence in the wizard.
+
+Select the queued job and enable **Apply torque** below **Anchors**. Changes
+save to that job. Use **Structure Anchors** to hold sites such as the central
+shaft. Add a viewer selection to **Driven sites** to limit the load to sites
+such as a wheel rim. With no driven selection, torque acts on all unanchored
+particles. Clearing the structure anchors allows the specimen to rotate freely.
+Use the regular **Run** button when the setup is ready.
+
+**Axis of Rotation** is the orange arrow in the viewport. Its base is a point on
+the axis, and the arrow points along its local +Z direction. **Arrow size** is
+saved with the job and controls viewport size. Adjust it or choose **Select axis
+in viewport** to show the transform handles. Press **Tab** in the viewport to switch between
+translation and rotation. The collapsible **Position and rotation** fields edit
+the same pose in design coordinates, with position in nm and XYZ rotation in
+degrees. **Center on Selection** moves the arrow base to the selection's center.
+Domains use the helix centerline. A bundle uses the midpoint of its member
+helices. The solver registers the design pose to the saved checkpoint before
+applying the load. Positive rotation follows the right-hand rule.
+
+- **Rotation ramp** moves the driven sites through a signed angle over the
+  chosen number of steps using rotating harmonic traps. A zero-angle run can
+  serve as a control at the same trap stiffness.
+- **Tangential load** applies a force couple with a specified initial axial
+  moment and zero net force. The force directions stay fixed and the moment
+  changes with the lever arms.
+
+On a completed, stopped or failed torque job, open **Graphs and Metrics →
+Torque transfer**. **Generate** samples saved frames, **Display** opens the
+torque plot and failure indicators, and **Export** downloads PNG and CSV files.
+Applied and anchor reaction torques use the same axis. With no anchors, the
+plot reports driven rotation and applied torque. With anchors, it shows
+relative twist when the anchor geometry resolves an angle, and reports the
+reaction torque, anchor motion and torque ratio. Late means use the final
+fifth of sampled frames. Fitting stiffness and comparing failure indicators
+across runs requires matching loading schedules, restraints and sampling.
+
 ## Surface deposition
 
 Surface deposition is an option on a prepared continuation job. Select a completed

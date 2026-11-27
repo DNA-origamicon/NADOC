@@ -487,7 +487,7 @@ export function initOxdnaExportCard({
   toggle?.addEventListener('click', () => {
     const open = bodyEl.style.display === 'none'
     bodyEl.style.display = open ? '' : 'none'
-    if (arrow) arrow.style.transform = open ? 'rotate(90deg)' : ''
+    arrow?.classList.toggle('is-collapsed', !open)
     if (open) rebuild()
   })
 

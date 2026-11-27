@@ -1948,6 +1948,12 @@ async def run_job(
             if spec.external_forces
             else None
         )
+        torsion = (spec.forces_meta or {}).get("torsion", False)
+        if torsion and job.stages[idx].completed_steps:
+            from backend.core.oxdna_torsion import forces_text, load_fixture
+
+            forces = (stage_dir / "torsion_attempt_forces.txt").resolve()
+            forces.write_text(forces_text(load_fixture(jd), job.stages[idx].completed_steps))
         from backend.physics.oxdna_attachments import compose_stage_forces
         forces = compose_stage_forces(jd, stage_dir, forces)
         if forces is not None:
@@ -2255,7 +2261,7 @@ async def run_job(
         # without this the job would finish "done" with a blown-apart structure that
         # display / autorefine then measures.  Treat it exactly like a crash blow-up:
         # halve dt and re-run from the relaxed seed; fail clearly once the budget is out.
-        if not spec.thermal_ramp and spec.kind in _BLOWUP_EXTENT_KINDS and _structure_blew_up(stage_dir, conf):
+        if not spec.thermal_ramp and not torsion and spec.kind in _BLOWUP_EXTENT_KINDS and _structure_blew_up(stage_dir, conf):
             if job.production_retries < job.max_production_retries:
                 logger.info(
                     "[%s] %s completed but the structure blew up (extent > %.1f× "

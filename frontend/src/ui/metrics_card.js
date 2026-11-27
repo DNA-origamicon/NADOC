@@ -50,7 +50,8 @@ export function initMetricsCard({
   toggle?.addEventListener('click', () => {
     _open = !_open
     card.style.display = _open ? '' : 'none'
-    if (arrow) arrow.style.transform = _open ? 'rotate(90deg)' : ''
+    if (arrow?.classList.contains('icon--rotates')) arrow.classList.toggle('is-collapsed', !_open)
+    else if (arrow) arrow.style.transform = _open ? 'rotate(90deg)' : ''
   })
 
   // Live whole-machine CPU/GPU/RAM sparklines (own toggle + poll loop inside the card).

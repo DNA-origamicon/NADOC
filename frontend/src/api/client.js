@@ -3175,6 +3175,8 @@ export const startOxdnaJob       = (id)          => _oxdnaJSON('POST', `/oxdna/j
 export const appendOxdnaProduction = (id, body)  => _oxdnaJSON('POST', `/oxdna/jobs/${id}/production`, body)
 export const appendOxdnaField    = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field`, { run_dir: getRunDir('oxdna'), ...body })
 export const appendOxdnaRun      = (id, body)    => withCreatingJob('oxdna', body, () => _oxdnaJSON('POST', `/oxdna/jobs/${id}/run`, { run_dir: getRunDir('oxdna'), ...body }))
+export const previewOxdnaTorsion = (id, body) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/torsion/preview`, body)
+export const getOxdnaTorsionResults = id => _oxdnaJSON('GET', `/oxdna/jobs/${id}/torsion/results`)
 export const startOxdnaSurfaceDeposition = (id, body) =>
   _oxdnaJSON('POST', `/oxdna/jobs/${id}/surface-deposition`, { run_dir: getRunDir('oxdna'), ...body })
 export const previewOxdnaFieldAnchors = (id, body) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field/anchor-preview`, body)

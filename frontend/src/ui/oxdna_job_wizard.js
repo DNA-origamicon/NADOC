@@ -318,6 +318,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       : `1 stage · ${stages[0].steps.toLocaleString()} scheduled steps · ${outputEstimate(stages)}`
     renderActiveStageTable(stages)
     configPre.textContent = `continue_from = ${parentJob.job_id || '(none selected)'}\n`
+      + (values.checkpoint_stage ? `checkpoint_stage = ${values.checkpoint_stage}\n` : '')
       + (values.thermal_ramp ? `# thermal_ramp = ${JSON.stringify(thermalConfig(values.thermal_ramp))}\n` : '')
       + stages.map(stage => `# ${stage.name}: ${stage.purpose}\n` + Object.entries(stage)
         .filter(([key, value]) => key !== 'purpose' && value != null)
@@ -503,7 +504,6 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
           onParentChange(parentJobId)
         }
         values.parentJobId = parentJobId
-        values.inherited_parameters = { salt_concentration: parents.find(job => job.job_id === parentJobId)?.salt_concentration, ...(parents.find(job => job.job_id === parentJobId)?.continuation_parameters || {}) }
         const select = createSelect({ size: 'sm' })
         select.setAttribute('aria-label', 'Continue from')
         const parentLabels = getParentLabels()
@@ -514,19 +514,48 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
           }))
         }
         select.value = parentJobId
+        const checkpoints = createSelect({ size: 'sm' })
+        checkpoints.setAttribute('aria-label', 'Starting checkpoint')
+        const source = el('label', { className: 'wizard-field', children: [
+          el('span', { className: 'wizard-field__label', text: 'Starting checkpoint' }), checkpoints,
+        ] })
+        const updateCheckpoints = () => {
+          const parent = parents.find(job => job.job_id === parentJobId)
+          const choices = parent?.torsion_checkpoints || []
+          source.style.display = choices.length >= 2 || (choices.length && parent?.status === 'stopped') ? '' : 'none'
+          checkpoints.replaceChildren(el('option', { text: 'Latest saved frame', attrs: { value: '' } }),
+            ...choices.map(choice => el('option', { text: choice.kind === 'relaxation'
+              ? 'Completed relaxation' : 'Finished production', attrs: { value: choice.stage } })))
+          checkpoints.value = values.checkpoint_stage || ''
+        }
+        const inheritCheckpoint = () => {
+          const parent = parents.find(job => job.job_id === parentJobId)
+          const choice = parent?.torsion_checkpoints?.find(item => item.stage === values.checkpoint_stage)
+          values.inherited_parameters = { salt_concentration: parent?.salt_concentration,
+            ...(choice?.parameters || parent?.continuation_parameters || {}) }
+        }
+        updateCheckpoints()
+        inheritCheckpoint()
+        checkpoints.addEventListener('change', () => {
+          values.checkpoint_stage = checkpoints.value || null
+          inheritCheckpoint()
+          renderSettings(); renderConfig(); paintValidation()
+        })
         // Re-sync the shared Anchors/Electric-field/Hard-surface/PEG panels to whichever
         // job is chosen HERE, not whatever's selected in the main list — those are
         // independent once the wizard is open (fixes stale/false capture-strand state).
         select.addEventListener('change', () => {
           parentJobId = select.value
           values.parentJobId = parentJobId
-          values.inherited_parameters = { salt_concentration: parents.find(job => job.job_id === parentJobId)?.salt_concentration, ...(parents.find(job => job.job_id === parentJobId)?.continuation_parameters || {}) }
+          values.checkpoint_stage = null
+          updateCheckpoints()
+          inheritCheckpoint()
           onParentChange(parentJobId)
           renderSettings(); renderConfig(); paintValidation()
         })
         children.push(el('label', { className: 'wizard-field', children: [
           el('span', { className: 'wizard-field__label', text: 'Continue from' }), select,
-        ] }))
+        ] }), source)
       }
     }
     sourceMount.replaceChildren(...children)

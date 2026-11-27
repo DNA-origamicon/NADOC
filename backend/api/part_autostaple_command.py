@@ -1,11 +1,11 @@
 """Native full-autostaple pipeline shared by authoring and recipe replay."""
 
 
-def build_full_autostaple(design, body):
+def build_full_autostaple(design, body, *, avoid_single_base_staples=True):
     from backend.core.routing_identity import identity_scope
 
     with identity_scope(body.history_seed):
-        return _build(design, body)
+        return _build(design, body, avoid_single_base_staples=avoid_single_base_staples)
 
 
 MAX_REGION_INTERVALS = 10_000
@@ -36,7 +36,7 @@ def region_staple_ids(design, region):
     return touching
 
 
-def _build(design, body):
+def _build(design, body, *, avoid_single_base_staples):
     from backend.api.routes_assign_sequences import (
         _locked_and_overhang_staple_ids,
         _linearize_staple_precursors,
@@ -128,7 +128,10 @@ def _build(design, body):
     # none has to be pruned — which is also why full density is preserved.
     progress("Break staple precursors", "Nick at major ticks", 0.34)
     precursors, precursor_report = _linearize_staple_precursors(sequenced, preserved)
-    nicked = nick_all_major_ticks(precursors, skip_strand_ids=protected_ids, experimental=routing_policy)
+    nicked = nick_all_major_ticks(
+        precursors, skip_strand_ids=protected_ids, experimental=routing_policy,
+        avoid_single_base_staples=avoid_single_base_staples,
+    )
     # Iterate crossover placement to a FIXPOINT. A single pass is order-dependent
     # (it nicks staples + recomputes coverage every step but only re-ligates at the
     # end, so progressive fragmentation falsely starves later bow sites — see the
@@ -203,6 +206,16 @@ def _build(design, body):
             from backend.core.staple_length_limit import staple_lengths
             length_limit_report['longest_nt'] = max(staple_lengths(clean)[0].values(), default=0)
             length_limit_report['added_nicks'] += sum(s['added_nicks'] for s in folding_report['stages'])
+    if avoid_single_base_staples:
+        from backend.core.staple_length_limit import staple_lengths
+
+        lengths, _ = staple_lengths(clean)
+        singletons = sum(length == 1 for sid, length in lengths.items() if sid not in outside)
+        if singletons:
+            raise ValueError(
+                f"Full Autostaple could not connect {singletons} one-nucleotide "
+                "staple(s). Adjust the staple coverage or neighboring crossovers and try again."
+            )
     full_report = {
         "scaffold": {
             "total_nt": total_nt,

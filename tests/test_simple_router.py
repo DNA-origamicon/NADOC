@@ -12,6 +12,8 @@ Covers the three stages that replaced the Aksel method:
      crossover traversed (no nick lands on a crossover).
 """
 
+import pytest
+
 from backend.api import headless_build as hb
 from backend.api import state as design_state
 from backend.core.crossover_positions import scaffold_seam_positions
@@ -465,6 +467,50 @@ def test_full_autostaple_staple_lengths_in_range():
     assert lengths
     assert min(lengths) >= 21, f"a honeycomb staple below 21 nt: {min(lengths)}"
     assert max(lengths) <= 56, f"a staple over 56 nt: {max(lengths)}"
+
+
+@pytest.mark.parametrize(("cells", "length", "lattice"), [
+    (_HC6_CELLS, 64, LatticeType.HONEYCOMB),
+    (_SQ6_CELLS, 65, LatticeType.SQUARE),
+])
+def test_full_autostaple_keeps_one_base_tips_on_connected_staples(cells, length, lattice):
+    from backend.api.part_auto_commands import build
+    from backend.api.part_history_verification import verify_current_part
+    from backend.physics.oxdna_interface import _strand_nucleotide_order, topology_rows
+
+    with hb.scratch_session(lattice):
+        hb.create_bundle(cells, length, lattice=lattice)
+        before = hb.auto_scaffold(seamless=False)
+        routed = hb.full_autostaple()
+        assert verify_current_part()["status"] == "verified"
+
+    params = dict(routed.feature_log[-1].params)
+    assert params.pop("avoid_single_base_staples") is True
+    legacy = build("full-autostaple", before, params)
+    assert any(n3 == n5 == -1 for _, _, n3, n5 in topology_rows(legacy)[0])
+    assert all(n3 != -1 or n5 != -1 for _, _, n3, n5 in topology_rows(routed)[0])
+    assert sorted(_strand_nucleotide_order(routed)) == sorted(_strand_nucleotide_order(before))
+    assert routed.scaffolds() == legacy.scaffolds()
+
+
+def test_full_autostaple_rejects_an_isolated_staple_atomically():
+    from fastapi import HTTPException
+
+    with hb.scratch_session():
+        hb.create_bundle(_HC6_CELLS, 64, lattice=LatticeType.HONEYCOMB)
+        design = hb.auto_scaffold(seamless=False)
+        staple = next(s for s in design.strands
+                      if s.strand_type == StrandType.STAPLE and len(s.domains) == 1)
+        end = staple.domains[0]
+        nicked = hb.nick(end.helix_id, end.start_bp, end.direction)
+        original_ids = {s.id for s in design.strands}
+        remainder = next(s for s in nicked.strands if s.id not in original_ids)
+        hb.delete_strand(remainder.id)
+        before = design_state.get_design_with_revision()
+        with pytest.raises(HTTPException, match="one-nucleotide staple") as error:
+            hb.full_autostaple()
+        assert error.value.status_code == 422
+        assert design_state.get_design_with_revision() == before
 
 
 def test_full_autostaple_keeps_full_crossover_density():

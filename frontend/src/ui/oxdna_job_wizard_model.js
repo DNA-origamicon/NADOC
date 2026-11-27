@@ -200,8 +200,8 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
     refresh_vel: true, bussi_tau: 1000, newtonian_steps: 53,
     max_backbone_force: null, max_backbone_force_far: null, min_bp_retained: 0,
     print_energy_every: Math.max(1, Math.floor(Number(v.steps) / 100)),
-    ...(v.inherited_parameters || {}),
     ...(parentJob.continuation_parameters || {}),
+    ...(v.inherited_parameters || {}),
     ...(v.thermal_ramp ? THERMAL_PHYSICS_DEFAULTS : {}),
     ...(v.stage_overrides?.['1_production'] || {}),
     steps: Number(v.steps), print_conf_interval: Number(v.steps_per_frame),
@@ -218,6 +218,7 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
 export function oxdnaProductionPayload(values) {
   const v = oxdnaProductionDefaults(values)
   return { ...(v.dna_concentration_uM != null ? {dna_concentration_uM:v.dna_concentration_uM} : {}), steps: Number(v.thermal_ramp ? thermalConfig(v.thermal_ramp).block_steps : v.steps), steps_per_frame: Number(v.steps_per_frame),
+    ...(v.checkpoint_stage ? { checkpoint_stage: v.checkpoint_stage } : {}),
     ...(v.backend || v.vmmc_melting ? { backend: v.vmmc_melting ? 'CPU' : v.backend } : {}),
     ...(v.vmmc_melting ? {vmmc_melting:vmmcConfig(v.vmmc_melting)} : {}),
     ...(v.thermal_ramp ? { thermal_ramp: thermalConfig(v.thermal_ramp) } : {}),

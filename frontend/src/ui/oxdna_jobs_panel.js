@@ -32,6 +32,7 @@ import { filterJobsForPart } from './md_jobs_panel.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer, fieldAtFrame } from './oxdna_trajectory_player.js'
 import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
+import { DEFAULT_TORQUE_ARROW_SIZE, initOxdnaTorque } from './oxdna_torsion.js'
 import { initOxdnaExportCard } from './oxdna_export_card.js'
 import { showConfirm } from './primitives/confirm.js'
 import { createModal } from './primitives/modal.js'
@@ -556,12 +557,14 @@ export function productionRunAnchors(elements = {}) {
 /** Pure: list-row label for a run child — "Run N" plus its element indicators.
  *  No lightning-bolt icon: the [E] tag denotes the electric field instead. */
 export function runRowLabel(job, index) {
+  if (job.run_config?.torsion) return `Torque ${index}`
   const tags = runIndicatorTags(job)
   return `${job.run_config?.vmmc_melting ? 'VMMC Run' : isThermalRun(job) ? 'Tm Run' : 'Run'} ${index}${tags ? ' ' + tags : ''}`
 }
 
 /** Pure: hover title for a run child describing its added elements. */
 export function runChildTitle(job) {
+  if (job.run_config?.torsion) return 'Torque run'
   const el = runElements(job)
   if (el.field) return fieldChildTitle(job)
   const parts = []
@@ -575,7 +578,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammpsDisplay = null, getAnchorSelection = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCurrentDesign = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, simGuard = null } = {}) {
+export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammpsDisplay = null, getAnchorSelection = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCurrentDesign = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, simGuard = null, torqueGizmo = null, getTorqueSelectionCenter = null, getTorqueDefaultCenter = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -583,6 +586,14 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
   // heading was removed (the tab names the engine); it's optional now — the collapse
   // base guards a null heading. Only panel + body are required to wire the panel.
   if (!panel || !body) return
+  const torque = initOxdnaTorque({
+    mount: document.getElementById('oxdna-torsion'), gizmo: torqueGizmo, getSelection: getAnchorSelection,
+    getSelectionCenter: getTorqueSelectionCenter, getDefaultCenter: getTorqueDefaultCenter,
+    onChange: _runElementsChanged,
+  })
+  const torqueEditable = job => !!job?.parent_job_id && oxdnaJobEditable(job)
+    && (job.execution_target || 'local') === 'local' && job.run_config?.kind === 'run'
+    && !job.run_config?.thermal_ramp && !job.run_config?.vmmc_melting
 
   const statusEl      = document.getElementById('oxdna-jobs-status')
   const newBtn        = document.getElementById('oxdna-jobs-new-btn')
@@ -1318,7 +1329,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // Open to `grid` (the body is a 2-col grid): setting display '' would strip the
     // inline rule entirely and drop to `.ox-card__body`'s block, losing the layout.
     if (advBody) advBody.style.display = _advOpen ? 'grid' : 'none'
-    if (advArrow) advArrow.style.transform = _advOpen ? 'rotate(90deg)' : ''
+    advArrow?.classList.toggle('is-collapsed', !_advOpen)
   })
 
   // Jobs + Visualizations + Health cards: simple collapse (start open).
@@ -1401,7 +1412,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
       }
       window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
     },
-    onError: () => showToast(api.lastErrorMessage?.() || 'Field/surface/anchor settings were not saved. Retry before running.', 'error'),
+    onError: () => showToast(api.lastErrorMessage?.() || 'Simulation settings were not saved. Retry before running.', 'error'),
   })
   function _runElementsChanged() {
     if (!getRunElements || _applyingRunControls || _controlsJobId !== _selectedId) return
@@ -1409,13 +1420,27 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     if (!oxdnaJobEditable(job)) return
     const kind = job.run_config?.kind || 'relax'
     if (!['relax', 'run', 'surface_deposition'].includes(kind)) return
-    const patch = job.parent_job_id
+    let patch = job.parent_job_id
       ? continuationElementsSettings(getRunElements())
       : relaxationElementsSettings(getRunElements())
     if (job.parent_job_id) patch.surface_deposition = !!depositionBtn?.checked
     const saved = _jobSettings.overlay(job).run_config
-    if (relaxationElementsSignature(patch) === relaxationElementsSignature(saved) &&
-        (!job.parent_job_id || patch.surface_deposition === (saved?.surface_deposition ?? kind === 'surface_deposition'))) return
+    const canEditTorque = torqueEditable(job)
+    const torqueSpec = canEditTorque ? torque.settings() : saved?.torsion
+    const torqueSignature = spec => spec && JSON.stringify([spec.mode, spec.target, spec.axis, spec.drive, spec.drive_stiffness])
+    const torqueChanged = torqueSignature(torqueSpec ?? null) !== torqueSignature(saved?.torsion ?? null)
+    const pending = _jobSettings.hasPending(job.job_id)
+    const size = torque.arrowSize()
+    const sizeChanged = canEditTorque && size !== (saved?.torque_arrow_size ?? DEFAULT_TORQUE_ARROW_SIZE)
+    const elementsChanged = torqueChanged || relaxationElementsSignature(patch) !== relaxationElementsSignature(saved)
+      || (job.parent_job_id && patch.surface_deposition !== (saved?.surface_deposition ?? kind === 'surface_deposition'))
+    if (!elementsChanged && !sizeChanged) return
+    if (sizeChanged && !elementsChanged && !pending) {
+      patch = { torque_arrow_size: size }
+    } else {
+      if (torqueChanged || (canEditTorque && (torqueSpec || pending))) patch.torsion = torqueSpec ?? null
+      if (canEditTorque && (sizeChanged || saved?.torque_arrow_size != null)) patch.torque_arrow_size = size
+    }
     _jobSettings.change(job, patch)
     _controlsSignature = _settingsSignature(_jobSettings.overlay(job))
   }
@@ -1556,11 +1581,15 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
         usesGpu: !submodel?.capture('oxdna') && (job.backend || 'CUDA') === 'CUDA',
       }))) return
       if (_selectedId !== jobId) return
+      if (!torque.valid()) {
+        showToast('Complete the Torque settings before running.', 'error')
+        return
+      }
       // Capture even a typed edit whose card debounce has not fired yet.
       _runElementsChanged()
       _setRunActionLabel('Saving settings…')
       try { await _jobSettings.flush(jobId) } catch {
-        showToast(api.lastErrorMessage?.() || 'Could not save surface/anchor settings; the job was not started.', 'error')
+        showToast(api.lastErrorMessage?.() || 'Save the simulation settings before running.', 'error')
         return
       }
       if (_selectedId !== jobId) return
@@ -1976,6 +2005,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     _controlsJobId = job?.job_id ?? null
     _controlsSignature = _settingsSignature(job)
     const cfg = runConfigForJob(job)
+    torque.apply(job, torqueEditable(job))
     if (cfg.advanced) {
       const a = cfg.advanced
       if (backendSel && a.backend) backendSel.value = a.backend
@@ -1991,9 +2021,10 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // the surface). Reflect that in the toggle so the user isn't misled.
     const hasSurface = !!(cfg.surface || cfg.surfaceStrands)
     if (alignToggle) {
-      alignToggle.disabled = hasSurface
-      if (hasSurface) alignToggle.checked = false
-      alignToggle.title = hasSurface
+      const hasTorque = !!job?.run_config?.torsion
+      alignToggle.disabled = hasSurface || hasTorque
+      if (hasSurface || hasTorque) alignToggle.checked = false
+      alignToggle.title = hasTorque ? 'Torque playback preserves rotation in the simulation frame.' : hasSurface
         ? 'Off for surface jobs — aligning to the design pose would look like the structure clips through the surface.'
         : ''
     }
@@ -2007,6 +2038,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
   function _clearRunCards() {
     _controlsJobId = null
     _controlsSignature = null
+    torque.apply(null, false)
     if (alignToggle) { alignToggle.disabled = false; alignToggle.title = '' }
     applyRunConfig?.({ advanced: null, field: null, surface: null, surfaceStrands: null, anchors: [] }, null)
   }
@@ -2200,6 +2232,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
   }
 
   function _updateButtons(job) {
+    torque.refresh(job, torqueEditable(job))
     const ps = productionState(job)
     const prodRunning = job?.status === 'running' && ps === 'running'
     // Production is allowed whenever the job is completed — the first run starts
@@ -2413,6 +2446,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     const el = getRunElements?.() || {}
     const body = { steps, steps_per_frame: stepsPerFrame,
       ...(wizardPayload?.dna_concentration_uM != null ? {dna_concentration_uM:wizardPayload.dna_concentration_uM} : {}) }
+    if (wizardPayload?.checkpoint_stage) body.checkpoint_stage = wizardPayload.checkpoint_stage
     if (wizardPayload?.backend) body.backend = wizardPayload.backend
     if (wizardPayload?.vmmc_melting) body.vmmc_melting = structuredClone(wizardPayload.vmmc_melting)
     if (wizardPayload?.thermal_ramp) body.thermal_ramp = structuredClone(wizardPayload.thermal_ramp)
@@ -2459,14 +2493,14 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // A field with no anchors drifts the whole structure (COM drift) — the E-field
     // card shows a warning notice, but the run is allowed (no longer blocked here).
 
-    const submodelBox = submodel?.capture('oxdna')
+    const submodelBox = body.torsion ? undefined : submodel?.capture('oxdna')
     if (submodelBox !== undefined) body.submodel = { box: submodelBox }
     try {
       const fc = await api.estimateOxdnaRunDisk(parentJobId, { steps, steps_per_frame: stepsPerFrame, ...(body.submodel ? { submodel: body.submodel } : {}) })
       if (!(await confirmDiskSpaceOk(fc))) return null
     } catch { /* forecast is best-effort — never block a launch on it */ }
 
-    const what = [body.field && 'field', body.surface && 'surface',
+    const what = [body.torsion && 'torsion test', body.field && 'field', body.surface && 'surface',
       productionRunAnchors(el).length && 'anchors',
       body.surface_strands && `${capPlan.nBeads} capture beads`].filter(Boolean).join(' + ') || 'production'
     _setProdStatus(`Creating run (${what})…`, _C.accent)

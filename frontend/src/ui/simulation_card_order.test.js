@@ -13,9 +13,9 @@ describe('standard simulation card order', () => {
   it('orders cards without moving intervening non-card panel state', () => {
     const body = document.createElement('div')
     const status = document.createElement('div')
-    body.append(card('Graphs and Metrics'), status, card('Electric field'), card('Clusters'), card('Anchors'))
+    body.append(card('Graphs and Metrics'), status, card('Torque'), card('Electric field'), card('Clusters'), card('Anchors'))
     document.body.append(body)
-    expect(standardizeSimulationCardOrder(body)).toEqual(['Clusters', 'Anchors', 'Electric field', 'Graphs and Metrics'])
+    expect(standardizeSimulationCardOrder(body)).toEqual(['Clusters', 'Anchors', 'Torque', 'Electric field', 'Graphs and Metrics'])
     expect(body.children[1]).toBe(status)
   })
 

@@ -50,7 +50,7 @@ from typing import Optional, Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
@@ -430,12 +430,53 @@ class SurfaceElement(SurfaceGeometry):
     )
 
 
+class TorsionAxisSelections(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["selections"]
+    start: list[AnchorRef] = Field(min_length=1)
+    end: list[AnchorRef] = Field(min_length=1)
+
+
+class TorsionAxisCoordinates(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["coordinates"]
+    point_nm: tuple[FiniteFloat, FiniteFloat, FiniteFloat]
+    direction: tuple[FiniteFloat, FiniteFloat, FiniteFloat]
+
+
+class TorsionAxisPose(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["pose"]
+    position_nm: tuple[FiniteFloat, FiniteFloat, FiniteFloat]
+    rotation_deg: tuple[FiniteFloat, FiniteFloat, FiniteFloat]
+
+
+class TorsionTest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["rotation", "tangential"] = "rotation"
+    target: float = Field(allow_inf_nan=False)
+    axis: Literal["auto", "x", "y", "z"] | TorsionAxisSelections | TorsionAxisCoordinates | TorsionAxisPose = "auto"
+    clamp: list[AnchorRef] = Field(default_factory=list)
+    clamp_anchors: list[AnchorRef] = Field(default_factory=list)
+    drive: list[AnchorRef] = Field(default_factory=list)
+    clamp_stiffness: float = Field(default=20, gt=0, allow_inf_nan=False)
+    drive_stiffness: float = Field(default=5, gt=0, allow_inf_nan=False)
+    checkpoint_stage: str | None = None
+    checkpoint_sha256: str | None = Field(None, pattern=r"^[0-9a-f]{64}$")
+
+
 class RunRequest(BaseModel):
     vmmc_melting: VmmcMelting | None = None
     dna_concentration_uM: float | None = Field(None, gt=0, allow_inf_nan=False, description="Total DNA strand concentration in micromolar; null preserves automatic/inherited box")
     backend: Literal["CPU", "CUDA"] | None = None
     thermal_ramp: ThermalRamp | None = None
     submodel: SubmodelSelection | None = None
+    torsion: TorsionTest | None = None
+    checkpoint_stage: str | None = None
     run_dir: Optional[str] = None
     """A consolidated production run: unbiased MD plus any combination of an electric
     field, a hard surface, and anchor traps (each independent/optional).  Branches a
@@ -1288,11 +1329,12 @@ _CONTINUATION_PARAMETERS = (
 )
 
 
-def _continuation_parameters(job, workspace, stage_name=None):
+def _continuation_parameters(job, workspace, stage_name=None, *, specs=None):
     """Use the resolved MD stage that supplied the continuation coordinates."""
     if stage_name is None:
         _, stage_name = _latest_relaxed_conf(job, workspace)
-    specs = load_stage_specs(job.job_dir(workspace))
+    if specs is None:
+        specs = load_stage_specs(job.job_dir(workspace))
     source = next((spec for spec in specs if spec.name == stage_name and spec.sim_type == "MD"), None)
     if source is None:
         return {}
@@ -1307,6 +1349,50 @@ def _can_seed_production(job, workspace):
         return False
     conf, _ = _latest_relaxed_conf(job, workspace)
     return conf is not None and conf.is_file() and conf.stat().st_size > 0
+
+
+def _torsion_checkpoints(job, workspace):
+    """Expose the finished relaxation and production frames available to branch."""
+    if job.execution_target != "local" or not _can_seed_production(job, workspace):
+        return []
+    sources = {}
+    for stage in job.stages:
+        if stage.status != "done":
+            continue
+        if stage.kind in ("md_relax", "equil"):
+            kind = "relaxation"
+        elif stage.kind in ("production", "run", "field"):
+            kind = "production"
+        else:
+            continue
+        conf = job.stage_dir(workspace, stage.name) / "last_conf.dat"
+        if conf.is_file() and conf.stat().st_size > 0:
+            sources[kind] = {"stage": stage.name, "kind": kind}
+    return list(sources.values())
+
+
+def _run_checkpoint(job, workspace, torsion, stage=None):
+    stage = stage or (torsion.checkpoint_stage if torsion else None)
+    if stage is None:
+        return _latest_relaxed_conf(job, workspace)
+    if not any(checkpoint["stage"] == stage for checkpoint in _torsion_checkpoints(job, workspace)):
+        raise HTTPException(422, "Choose a saved relaxation or production checkpoint from this job.")
+    return job.stage_dir(workspace, stage) / "last_conf.dat", stage
+
+
+def _continuation_metadata(job, workspace, specs=None):
+    if not _can_seed_production(job, workspace):
+        return {"can_seed_production": False, "torsion_checkpoints": []}
+    if specs is None:
+        specs = load_stage_specs(job.job_dir(workspace))
+    checkpoints = _torsion_checkpoints(job, workspace)
+    for checkpoint in checkpoints:
+        checkpoint["parameters"] = _continuation_parameters(job, workspace, checkpoint["stage"], specs=specs)
+    return {
+        "can_seed_production": True,
+        "continuation_parameters": _continuation_parameters(job, workspace, specs=specs),
+        "torsion_checkpoints": checkpoints,
+    }
 
 
 def _inherit_continuation_parameters(stages, job, workspace, stage_name=None, *, deposition=False):
@@ -1332,9 +1418,7 @@ def _list_oxdna_jobs() -> tuple[list[dict], list]:
     to_warm: list = []
     for j in jobs:
         d = j.to_dict()
-        d["can_seed_production"] = _can_seed_production(j, ws)
-        if d["can_seed_production"]:
-            d["continuation_parameters"] = _continuation_parameters(j, ws)
+        d.update(_continuation_metadata(j, ws))
         d.update(legacy_job_status(_job_fingerprint(j), current_fp, engine="oxdna"))
         if d.get("status") == "running":
             from backend.core.oxdna_runner import job_overall_fraction, load_stage_specs
@@ -1366,10 +1450,10 @@ async def get_oxdna_job(job_id: str) -> dict:
     except (OSError, ValueError, IndexError):
         pass
     from dataclasses import asdict
-    d["stage_specs"] = [asdict(spec) for spec in load_stage_specs(job.job_dir(_workspace()))]
-    d["can_seed_production"] = _can_seed_production(job, _workspace())
-    if d["can_seed_production"]:
-        d["continuation_parameters"] = _continuation_parameters(job, _workspace())
+    workspace = _workspace()
+    specs = load_stage_specs(job.job_dir(workspace))
+    d["stage_specs"] = [asdict(spec) for spec in specs]
+    d.update(_continuation_metadata(job, workspace, specs))
     d.update(legacy_job_status(_job_fingerprint(job), _current_design_fingerprint(), engine="oxdna"))
     return d
 
@@ -1428,6 +1512,10 @@ async def copy_oxdna_job(job_id: str, body: Optional[OxdnaRunLocation] = None) -
     copied_dir = copied.job_dir(ws)
     copied_dir.mkdir(parents=True, exist_ok=copied.archived)
     files = {"submodel_selection.json", "topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", "attachment_forces.txt", AVERAGE_SEQUENCE_FILE, "cpd.dat", "cpd_model.json", "cpd_manifest.json"}
+    if (copied_config or {}).get("torsion"):
+        from backend.core.oxdna_torsion import SETUP_FILE
+
+        files.add(SETUP_FILE)
     if (copied_config or {}).get("vmmc_melting"):
         files.add("oxDNA2_sequence_dependent_parameters.txt")
     files.update(spec.forces_file for spec in copied_specs if spec.forces_file)
@@ -1511,6 +1599,7 @@ def _rebuild_continuation_settings(job, updates):
     from pydantic import ValidationError
     recorded = job.run_config or {}
     merged = {**recorded, **updates}
+    torque_edit = bool(recorded.get("torsion") or merged.get("torsion"))
     if (merged.get("thermal_ramp") or merged.get("vmmc_melting")) and updates.get("execution_target", job.execution_target) != "local":
         raise HTTPException(422, "Thermal ramps and VMMC currently require the local managed runner.")
     deposition = merged.get("surface_deposition", recorded.get("kind") == "surface_deposition")
@@ -1547,7 +1636,10 @@ def _rebuild_continuation_settings(job, updates):
         target = deepcopy(job)
         target.archived = True
         target.archive_path = directory
-        prepared = prepare(job.parent_job_id, request, target=target)
+        kwargs = {}
+        if torque_edit and not deposition and merged.get("checkpoint_stage") == recorded.get("checkpoint_stage"):
+            kwargs["seed_checkpoint"] = (jd / "conf.dat", recorded.get("checkpoint_stage"))
+        prepared = prepare(job.parent_job_id, request, target=target, **kwargs)
         specs = load_stage_specs(Path(directory))
         if recorded.get("kind") == prepared.run_config.get("kind") and not (recorded.get("thermal_ramp") or "thermal_ramp" in updates or recorded.get("vmmc_melting") or "vmmc_melting" in updates):
             old_specs = {s.name: s for s in load_stage_specs(jd)}
@@ -1566,6 +1658,8 @@ def _rebuild_continuation_settings(job, updates):
             spec.device = job.device
             spec.salt_concentration = prepared.salt_concentration if prepared.run_config.get("vmmc_melting") else job.salt_concentration
         apply_edit_hardware(prepared, job, updates, specs)
+        if torque_edit:
+            prepared.max_production_retries = 0 if merged.get("torsion") else OxdnaJob.__dataclass_fields__["max_production_retries"].default
         if prepared.run_config.get("vmmc_melting"):
             prepared.backend = "CPU"
             prepared.run_config["backend"] = "CPU"
@@ -1579,11 +1673,17 @@ def _rebuild_continuation_settings(job, updates):
             prepared.run_config["stage_overrides"] = deepcopy(recorded["stage_overrides"])
         prepared.run_config["steps"] = merged.get("steps", 2_000_000)
         prepared.run_config["production_anchor_stiff"] = merged.get("production_anchor_stiff", recorded.get("anchor_stiff", DEFAULT_ANCHOR_STIFF))
+        if "torque_arrow_size" in merged:
+            prepared.run_config["torque_arrow_size"] = merged["torque_arrow_size"]
         if not oxdna_job_settings_editable(_load_job(job.job_id)):
             raise HTTPException(409, "The job started while its settings were being saved.")
         for source in Path(directory).iterdir():
             if source.is_file():
                 source.replace(jd / source.name)
+        if recorded.get("torsion") and not prepared.run_config.get("torsion"):
+            from backend.core.oxdna_torsion import FORCES_FILE, SETUP_FILE
+            for name in (FORCES_FILE, SETUP_FILE):
+                (jd / name).unlink(missing_ok=True)
         prepared.archived, prepared.archive_path = job.archived, job.archive_path
         prepared.save(ws)
     return prepared
@@ -1602,12 +1702,31 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             "Only prepared jobs that have not been submitted or started can be edited.",
         )
     recorded = dict(job.run_config or {})
+    if "torque_arrow_size" in updates:
+        size = updates["torque_arrow_size"]
+        if type(size) is not int or not 50 <= size <= 300:
+            raise HTTPException(422, "Use an arrow size from 50 to 300%.")
+        if not job.parent_job_id or recorded.get("kind") != "run":
+            raise HTTPException(422, "Arrow size is stored on an oxDNA production job.")
+        if len(updates) == 1:
+            job.run_config = {**recorded, "torque_arrow_size": size}
+            job.save(_workspace())
+            return job.to_dict()
+    if updates.get("torsion", recorded.get("torsion")):
+        from backend.core.oxdna_submodel import selected
+
+        if (updates.get("execution_target", job.execution_target) != "local"
+                or selected(job.job_dir(_workspace()))
+                or updates.get("dna_concentration_uM") is not None
+                or updates.get("surface_deposition") or updates.get("thermal_ramp") or updates.get("vmmc_melting")
+                or any(updates.get(key) for key in ("surface_anchors", "surface", "surface_strands", "field"))):
+            raise HTTPException(422, "Torque uses the local full system with optional structure anchors.")
     if "dna_concentration_uM" in updates:
         try:
             configuration_box(job.job_dir(_workspace()), updates["dna_concentration_uM"])
         except (ValueError, TypeError) as exc:
             raise HTTPException(422, str(exc)) from exc
-    force_keys = {"surface", "anchors", "surface_anchors", "surface_strands", "field"}
+    force_keys = {"surface", "anchors", "surface_anchors", "surface_strands", "field", "torsion"}
     deposition = recorded.get("surface_deposition", recorded.get("kind") == "surface_deposition")
     if "surface_deposition" in updates and not isinstance(updates["surface_deposition"], bool):
         raise HTTPException(422, "surface_deposition must be a boolean.")
@@ -1622,7 +1741,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
         job.parent_job_id and recorded.get("kind") in {"run", "surface_deposition"} and forces_changed
     ):
         # Sidebar edits are serialized separately from the protocol wizard.
-        if any(key not in force_keys | {"surface_deposition"} and value != recorded.get(key)
+        if any(key not in force_keys | {"surface_deposition", "torque_arrow_size"} and value != recorded.get(key)
                for key, value in updates.items()):
             raise HTTPException(422, "Save surface/anchor changes separately from execution or stage edits.")
         return _rebuild_continuation_settings(job, updates).to_dict()
@@ -1635,7 +1754,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             "execution_target", "kind", "partition", "runpod_budget_usd",
             "runpod_gpu_key", "runpod_quoted_rate_usd_per_hour", "runpod_volume_id",
             "salt_concentration", "seed", "slurm_resources", "stage_overrides",
-            "stages", "steps", "surface_deposition", "dna_concentration_uM",
+            "stages", "steps", "surface_deposition", "dna_concentration_uM", "torque_arrow_size",
         }
         def _frozen_value(key: str, value):
             value = deepcopy(value)
@@ -1690,6 +1809,17 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             specs = apply_stage_overrides(specs, overrides)
         except (TypeError, ValueError) as exc:
             raise HTTPException(400, f"Invalid oxDNA stage override: {exc}") from exc
+        if recorded.get("torsion"):
+            from dataclasses import replace
+            from backend.core.oxdna_protocol import print_conf_interval
+            from backend.core.oxdna_torsion import load_fixture, save_fixture
+
+            stage = specs[0]
+            if not stage.external_forces or print_conf_interval(stage) > stage.steps:
+                raise HTTPException(422, "Keep the torsion forces enabled and save at least one test frame.")
+            directory = job.job_dir(_workspace())
+            fixture = replace(load_fixture(directory), steps=stage.steps)
+            save_fixture(directory, fixture)
         seed = job.random_seed or _fresh_oxdna_seed(updates.get("seed"))
         specs = assign_stage_seeds(specs, seed)
         from backend.physics.oxdna_cpd import inherit as inherit_cpd
@@ -1934,7 +2064,9 @@ async def get_oxdna_progress(job_id: str) -> dict:
 def _submodel_preflight(job, specs):
     if (job.run_config or {}).get("vmmc_melting") and (job.execution_target != "local" or job.backend != "CPU"):
         raise HTTPException(422, "VMMC melting requires the local CPU runner.")
-    from backend.core.oxdna_submodel import preflight
+    from backend.core.oxdna_submodel import preflight, selected
+    if (job.run_config or {}).get("torsion") and selected(job.job_dir(_workspace())):
+        raise HTTPException(422, "Torsion requires the full checkpoint because the grip indices are frozen.")
     try:
         specs = preflight(job, _workspace(), specs)
         require_full_system(any(s.thermal_ramp for s in specs), job.submodel)
@@ -2310,6 +2442,68 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     return child.to_dict()
 
 
+def _resolve_torsion_fixture(parent, directory, design, checkpoint, body):
+    from numpy.linalg import LinAlgError
+    from backend.core.oxdna_submodel import selected
+    from backend.core.oxdna_torsion import resolve_fixture
+    from backend.physics.oxdna_protein import has_proteins
+
+    cfg = parent.run_config or {}
+    if (parent.execution_target != "local" or has_proteins(design) or cfg.get("mobile_gold")
+            or design.photoproduct_junctions or (cfg.get("surface_strands") or {}).get("built")
+            or cfg.get("surface") or cfg.get("surface_deposition") or cfg.get("kind") == "surface_deposition"
+            or cfg.get("interaction_type", "DNA2") != "DNA2"
+            or selected(directory) or (body.submodel and body.submodel.box)):
+        raise HTTPException(422, "Torsion tests need a local, full-system DNA-only parent in free solution.")
+    if (body.field or body.surface or body.surface_anchors or body.surface_strands
+            or body.thermal_ramp or body.vmmc_melting or body.dna_concentration_uM is not None):
+        raise HTTPException(422, "Turn off field, surface and thermal loads and use the inherited box for torque.")
+    if body.steps_per_frame > body.steps:
+        raise HTTPException(422, "Steps per frame must not exceed the test length.")
+    try:
+        request = body.torsion
+        reference = None
+        if isinstance(request.axis, TorsionAxisPose):
+            reference = _design_ref_conf(directory, design)
+            request = request.model_copy(update={"clamp": [], "clamp_anchors": body.anchors,
+                                                 "clamp_stiffness": body.anchor_stiff})
+        elif body.anchors:
+            request = request.model_copy(update={"clamp_anchors": [*request.clamp_anchors, *body.anchors]})
+        return resolve_fixture(design, checkpoint, request, body.steps, design_reference=reference)
+    except (ValueError, OSError, OverflowError, LinAlgError) as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@router.post("/oxdna/jobs/{job_id}/torsion/preview")
+def preview_oxdna_torsion(job_id: str, body: RunRequest) -> dict:
+    parent = _load_job(job_id)
+    _assert_job_current(parent)
+    workspace = _workspace()
+    directory = parent.job_dir(workspace)
+    design = _load_snapshot_design(directory)
+    if not body.torsion or design is None or not _can_seed_production(parent, workspace):
+        raise HTTPException(422, "Choose a completed or stopped oxDNA job and define both grips.")
+    checkpoint, _ = _run_checkpoint(parent, workspace, body.torsion, body.checkpoint_stage)
+    return _resolve_torsion_fixture(parent, directory, design, checkpoint, body).summary()
+
+
+@router.get("/oxdna/jobs/{job_id}/torsion/results")
+def oxdna_torsion_results(job_id: str) -> dict:
+    from backend.core.oxdna_torsion_metrics import analyze
+
+    job = _load_job(job_id)
+    if not (job.run_config or {}).get("torsion"):
+        raise HTTPException(404, "This job is not a torsion test.")
+    if job.status not in {OxdnaStatus.completed, OxdnaStatus.failed, OxdnaStatus.stopped}:
+        raise HTTPException(409, "Torsion results are available after the run stops.")
+    directory = job.job_dir(_workspace())
+    design = _load_snapshot_design(directory)
+    try:
+        return analyze(directory, job, design)
+    except (OSError, ValueError) as error:
+        raise HTTPException(422, str(error)) from error
+
+
 def _inherit_submodel_selection(pjd, cjd, selection):
     """Carry both the editable box and unchanged executed identities to a child."""
     if selection is not None:
@@ -2326,7 +2520,7 @@ def _inherit_submodel_selection(pjd, cjd, selection):
 
 
 
-def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
+def _prepare_run_job(job_id: str, body: RunRequest, *, target=None, seed_checkpoint=None):
     """Spawn a CONSOLIDATED production run as a child job branched from a relaxed
     parent.  The run is unbiased MD plus any combination of independently-enabled
     elements: an electric field, a hard surface (repulsion plane), and anchor traps.
@@ -2361,9 +2555,12 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         raise HTTPException(
             500, "design.json snapshot missing; cannot resolve anchors."
         )
-    relaxed_conf, _stage = _latest_relaxed_conf(parent, ws)
+    relaxed_conf, _stage = seed_checkpoint or _run_checkpoint(parent, ws, body.torsion, body.checkpoint_stage)
     if relaxed_conf is None:
         raise HTTPException(400, "No relaxed configuration to seed the run from.")
+
+    torsion = (_resolve_torsion_fixture(parent, pjd, design, relaxed_conf, body)
+               if body.torsion else None)
 
     from backend.core.oxdna_vmmc import validate_request as validate_vmmc
     try:
@@ -2405,7 +2602,7 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         cap_n_beads if (field_in and cap_n_beads > 0 and not subject_caps) else 0
     )
     has_forces = bool(
-        field_in or wall_in or ordinary_anchors or surface_anchors or cap_particles
+        torsion or field_in or wall_in or ordinary_anchors or surface_anchors or cap_particles
     )
 
     job_seed = _fresh_oxdna_seed(body.seed, exclude=[parent.random_seed])
@@ -2413,13 +2610,14 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         name="1_production",
         steps=body.steps,
         external_forces=has_forces,
-        forces_file="run_forces.txt" if has_forces else None,
+        forces_file="torsion_forces.txt" if torsion else ("run_forces.txt" if has_forces else None),
         efield=efield_rec,
-        forces_meta={"has_field": bool(field_in), "has_surface": bool(wall_in)},
+        forces_meta={"has_field": bool(field_in), "has_surface": bool(wall_in),
+                     **({"torsion": True} if torsion else {})},
         # repulsion plane / anchor / capture-strand traps are absolute-coordinate forces →
         # disable oxDNA's COM diffusion-fix so it doesn't shift them into the structure.
         absolute_forces=bool(
-            wall_in or ordinary_anchors or surface_anchors or cap_particles
+            torsion or wall_in or ordinary_anchors or surface_anchors or cap_particles
         ),
         backend=body.backend or parent.backend,
         device=parent.device,
@@ -2452,7 +2650,7 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
 
     stage = hybridize_stage(stage, protein=has_proteins(design))
 
-    label = (
+    label = "torque" if torsion else (
         " · ".join(
             x
             for x in (
@@ -2488,6 +2686,7 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
             "inherited_parameters": _continuation_parameters(parent, ws, _stage),
             "steps": body.steps,
             "steps_per_frame": body.steps_per_frame,
+            **({"checkpoint_stage": _stage} if body.checkpoint_stage else {}),
             "anchor_stiff": body.anchor_stiff,
             "field": field_config,
             "surface": body.surface.model_dump(exclude_none=True)
@@ -2503,12 +2702,18 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
             # Inherited spec, but stamped with the exclusion this run actually applied —
             # otherwise the card echoes back the parent's toggle, not the run's.
             "surface_strands": cap["spec"],
+            **({"torsion": body.torsion.model_dump(by_alias=True, exclude_none=True),
+                "torsion_fixture": torsion.summary()} if torsion else {}),
         },
     )
 
     from dataclasses import asdict
 
     child = _prepared_child_target(child, target)
+    if torsion:
+        if child.execution_target != "local":
+            raise HTTPException(422, "Torsion tests use the local oxDNA runner.")
+        child.max_production_retries = 0
     if target is None:
         _apply_oxdna_run_dir(child, body.run_dir)
     cjd = child.job_dir(ws)
@@ -2533,7 +2738,15 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         "field": None,
         "wall": None,
     }
-    if has_forces:
+    if torsion:
+        from hashlib import sha256
+        from backend.core.oxdna_torsion import save_fixture
+
+        if sha256((cjd / "conf.dat").read_bytes()).hexdigest() != torsion.checkpoint_sha256:
+            shutil.rmtree(cjd)
+            raise HTTPException(409, "The parent checkpoint changed. Preview the fixture again.")
+        save_fixture(cjd, torsion)
+    elif has_forces:
         try:
             info = write_run_forces(
                 cjd / "run_forces.txt",
