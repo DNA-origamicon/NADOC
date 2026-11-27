@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "postinstall": "npm --prefix trace_webgpu ci --ignore-scripts --no-audit --no-fund",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

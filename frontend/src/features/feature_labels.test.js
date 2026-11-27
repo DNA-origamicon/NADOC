@@ -1,6 +1,11 @@
 import { expect, it } from 'vitest'
 import { featureLabels } from './feature_labels.js'
 
+it('names Corners and refreshes generated parameter text after an edit', () => {
+  expect(featureLabels([{ op_kind: 'corner', label: 'Corner: 90° at 84 bp', params: { angle_deg: 75, position_bp: 91 } },
+    { op_kind: 'corner', label: 'Upper corner' }])).toEqual(['F1: Corner 1 [Corner: 75° at 91 bp]', 'F2: Corner 2 [Upper corner]'])
+})
+
 it('names recorded diagnostic stages by their actual operations', () => {
   expect(featureLabels([
     { op_kind: 'diagnostic-process', params: { action: 'assembly-add' }, label: 'Logged source' },

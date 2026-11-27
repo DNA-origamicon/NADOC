@@ -69,8 +69,8 @@ export function initAnimationCompile({ anchor, player, renderer, scene, camera, 
     const eta = seconds == null ? 'ETA estimating…' : `ETA ~${seconds < 60 ? seconds + ' s' : Math.ceil(seconds / 60) + ' min'}`
     stage.textContent = `Video ${event.index + 1} of ${event.total}: ${event.name}`
     if (event.phase === 'capture') {
-      row.bar.value = event.frames ? event.done / event.frames : 0
-      row.text.textContent = `${event.done}/${event.frames} frames · ${eta}`
+      row.bar.value = Math.max(row.bar.value, event.frames ? event.done / event.frames : 0)
+      row.text.textContent = event.detail ? `${event.detail} · ${eta}` : `${event.done}/${event.frames} frames · ${eta}`
       overall.value = (event.index + row.bar.value) / event.total
     } else if (event.phase === 'encode') row.text.textContent = 'Finalizing video · ETA estimating…'
     else if (event.phase === 'complete') { row.bar.value = 1; row.text.textContent = 'Ready'; overall.value = (event.index + 1) / event.total }

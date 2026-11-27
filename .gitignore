@@ -13,6 +13,7 @@ wheels/
 node_modules/
 frontend/dist/
 package-lock.json
+!/frontend/trace_webgpu/package-lock.json
 
 # Playwright generated output
 frontend/playwright-report/

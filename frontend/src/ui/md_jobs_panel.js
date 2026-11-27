@@ -2938,6 +2938,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
     loadProgressEl: trajLoadProgress,
     prevBtn: trajPrev, nextBtn: trajNext,
+    frameDuration: () => getMdViz?.()?.smoothFrameDuration?.(),
     interpolationToggle: document.getElementById('md-jobs-traj-interpolate'),
     preparationKey: () => `${getMdViz?.()?.trajectoryPreparationKey?.() ?? getCurrentRepr?.()}|${solvent?.preparationKey()}`,
     onBeforeInterpolate: async (from, to, neighbors) => {

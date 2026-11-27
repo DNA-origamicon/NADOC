@@ -583,7 +583,7 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
-    # Full D014 PDF composition, panel registration and pixel graph search: 5.2 s.
+    # Composition/registration for D014 and exhaustive sequence search on five sources.
     "test_d014_false_positive_spans_are_classified_as_scaffold",
     "test_five_publication_sequence_searches",
     # Full 12-tether JJ_Hinge constrained solve: 12.62 s; small fixtures stay fast.
@@ -1122,6 +1122,8 @@ AREA_MARKERS = ("oxdna", "cando", "namd", "mrdna", "atomistic", "md", "headless"
 
 
 def _slow_area_for(module: str) -> str:
+    if module in {"test_publication_staple_tracing", "test_publication_sequence_search"}:
+        return "headless"
     """Map a slow test's module (bare filename, no .py) to one area marker.
     First match wins; order matters (oxdna before headless so the oxDNA
     headless-build file lands in oxdna, not headless)."""

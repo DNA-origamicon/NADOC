@@ -127,6 +127,7 @@ from backend.api.vr_simulations import router as vr_simulations_router
 from backend.api.vr_prompts import router as vr_prompts_router
 from backend.api.vr_routing import router as vr_routing_router
 from backend.api.routes_sweep import router as sweep_router
+from backend.api.routes_corner import router as corner_router
 from backend.api.routes_part_sweep_preview import router as sweep_preview_router
 from backend.api.routes_part_transform_preview import router as transform_preview_router
 from backend.api.routes_frame_extrusion import router as frame_extrusion_router
@@ -490,6 +491,7 @@ app.include_router(vr_routing_router, prefix="/api")
 app.include_router(vr_prompts_router, prefix="/api")
 app.include_router(frame_extrusion_router, prefix="/api")
 app.include_router(sweep_router, prefix="/api")
+app.include_router(corner_router, prefix="/api")
 app.include_router(sweep_preview_router, prefix="/api")
 app.include_router(transform_preview_router, prefix="/api")
 app.include_router(display_metadata_router, prefix="/api")
@@ -557,6 +559,10 @@ app.include_router(part_inputs_router, prefix="/api")
 app.include_router(part_recipe_recovery_router, prefix="/api")
 app.include_router(photoproducts_router, prefix="/api")
 app.include_router(nanoparticles_router, prefix="/api")
+from backend.api.routes_em_analysis import router as em_analysis_router
+app.include_router(em_analysis_router, prefix="/api")
+from backend.api.routes_optix_export import router as optix_export_router
+app.include_router(optix_export_router, prefix="/api")
 from backend.api.routes_nanoparticle_attachment import router as nanoparticle_attachment_router
 app.include_router(nanoparticle_attachment_router, prefix="/api")
 from backend.api.routes_history_conversion import router as history_conversion_router

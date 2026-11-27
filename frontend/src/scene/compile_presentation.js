@@ -42,26 +42,27 @@ async function compile({ animation, player, renderer, scene, camera, resolution 
     const canvas = Object.assign(document.createElement('canvas'), { width: w, height: h })
     const ctx = canvas.getContext('2d')
     if (usePhoto) {
-      photoSession = photoRenderer.beginFrameSession(w, h, { followMotion: true })
+      photoSession = photoRenderer.beginFrameSession(w, h, { followMotion: true, signal })
       player.setLockFov?.(true)
     }
-    const render = photoSession
-      ? photoVideoFrame({ player, session: photoSession, ctx, canvas, w, h })
-      : editorVideoFrame({ player, renderer, scene, camera, ctx, canvas: renderer.domElement, w, h })
+    const editorFrame = photoSession ? null : editorVideoFrame({ player, renderer, scene, camera, ctx, canvas: renderer.domElement, w, h })
     for (const [index, keyframe] of targets.entries()) {
       signal?.throwIfAborted()
       const range = player.getKeyframeRange(keyframe.id)
       if (!range || range.end <= range.start) throw new Error(`Keyframe ${index + 1} has no playable range`)
       const name = keyframe.name || keyframe.text || `Keyframe ${index + 1}`
       const report = detail => onProgress({ index, total: targets.length, name, ...detail })
-      report({ phase: 'capture', done: 0, frames: Math.ceil((range.end - range.start) * fps) })
+      const frames=Math.ceil((range.end-range.start)*fps)+1 // encoded frames plus exact endpoint
+      const render=photoSession ? photoVideoFrame({player,session:photoSession,ctx,canvas,w,h,frames,
+        onPhase:(_,info)=>report({phase:'capture',done:info.done,frames,detail:info.detail})}) : editorFrame
+      report({ phase: 'capture', done: 0, frames })
       let first
       const blob = await encodeWebM({ canvas, fps, totalDur: range.end - range.start, signal,
         renderFrame: async t => {
           await render(range.start + t)
           if (t === 0) first = canvas.toDataURL('image/jpeg', 0.9)
         },
-        onProgress: (_, { frame, frames }) => report({ phase: 'capture', done: frame, frames }),
+        onProgress: (_, { frame }) => report({ phase: 'capture', done: frame, frames }),
         onPhase: phase => { if (phase === 'encode') report({ phase: 'encode' }) },
       })
       bytes += blob.size
@@ -89,7 +90,7 @@ async function compile({ animation, player, renderer, scene, camera, resolution 
     return blob
   } finally {
     signal?.removeEventListener('abort', cancel)
-    photoSession?.dispose()
+    await photoSession?.dispose()
     if (photoSession) player.setLockFov?.(false)
     player.stop()
     player.setBounce(saved.bounce); player.setLoopMode(saved.loop); player.setDisablePoses(saved.poses)

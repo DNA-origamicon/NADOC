@@ -1,3 +1,4 @@
+import { geometryLoads } from './geometry_loads.js'
 import { atomSelectionConnections } from './atom_selection_connections.js'
 import { strandDisplayOverrides } from './strand_representation.js'
 import { combineAtomRenderers, combineSurfaceRenderers } from './volume_render_adapter.js'
@@ -216,7 +217,9 @@ export function initAtomSurfaceDisplay({
     if (scalar) surfaceRenderer.applyNucleotideScalarColors?.(scalar)
   }
 
-  async function _applySurfaceMode(mode) {
+  function _applySurfaceMode(mode) { return geometryLoads.track(surfaceRenderer, () => _applySurfaceModeLoaded(mode)) }
+
+  async function _applySurfaceModeLoaded(mode) {
     surfaceAbort?.abort()
     surfaceAbort = new AbortController()
     const signal = surfaceAbort.signal
@@ -407,7 +410,9 @@ export function initAtomSurfaceDisplay({
     _atomLoadPromise = null
   }
 
-  async function _refetchAtomistic() {
+  function _refetchAtomistic() { return geometryLoads.track(atomisticRenderer, () => _refetchAtomisticLoaded()) }
+
+  async function _refetchAtomisticLoaded() {
     if (atomisticRenderer.getMode() === 'off') return
     try {
       const data = await _ensureAtomData()
@@ -650,7 +655,9 @@ export function initAtomSurfaceDisplay({
     return loadPromise
   }
 
-  async function _applyAtomisticMode(mode) {
+  function _applyAtomisticMode(mode) { return geometryLoads.track(atomisticRenderer, () => _applyAtomisticModeLoaded(mode)) }
+
+  async function _applyAtomisticModeLoaded(mode) {
     if (mode === 'off') {
       _atomToastToken++; dismissToast()
       const design = store.getState().currentDesign
@@ -802,7 +809,9 @@ export function initAtomSurfaceDisplay({
   const volumeBallstick = combineAtomRenderers(regionBallstickRenderer, () => volumeDisplays.atomRenderers('ballstick'))
   const volumeStick = combineAtomRenderers(regionStickRenderer, () => volumeDisplays.atomRenderers('stick'))
   const volumeSurface = combineSurfaceRenderers(regionSurfaceRenderer, volumeDisplays.surfaceRenderers)
-  async function _applyRegionAtomisticOverlays(design) {
+  function _applyRegionAtomisticOverlays(design) { return geometryLoads.track(regionVdwRenderer, () => _applyRegionAtomisticOverlaysLoaded(design)) }
+
+  async function _applyRegionAtomisticOverlaysLoaded(design) {
     const revision = ++_regionAtomRevision
     const { vdw, ballstick, stick = new Set() } = repColumnsByRep(design)
     if (!vdw.size && !ballstick.size && !stick.size) {

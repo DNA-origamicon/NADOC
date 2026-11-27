@@ -56,7 +56,7 @@ export const ART_THEMES = {
 export function themeSettings(name, defaults) {
   const theme = Object.hasOwn(ART_THEMES, name) && ART_THEMES[name]
   if (!theme) return null
-  const { exportWidth, exportHeight, ...appearance } = defaults
+  const { exportWidth, exportHeight, pathTracing, pathTraceSamples, pathTraceExportBackend, ...appearance } = defaults
   return { ...appearance, fov: 35, parallel: false, ...materialPresets(theme.material), ...theme.settings }
 }
 export function selectedTheme(settings, defaults) {

@@ -1,3 +1,4 @@
+import { geometryLoads } from './geometry_loads.js'
 import { registerPreparedAssemblyMaterial } from './prepared_assembly_instances.js'
 /**
  * Shared-instancing assembly renderer (path-to-thousands Phase 3b/3c onward).
@@ -3049,6 +3050,7 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
 
   // ── Public: dispose ───────────────────────────────────────────────────────
   function dispose() {
+    geometryLoads.cancel(_readiness)
     _readiness.reset()
     _readinessCycle = null
     _rebuildQueue.cancel()
@@ -3146,6 +3148,8 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
     _disposed = false
     _readiness.begin()
     const cycle = _rebuildQueue.request(assembly, _invalidation)
+    const loaded=geometryLoads.begin(_readiness)
+    cycle.then(loaded,loaded) // Preserve the queue's shared promise identity.
     if (cycle !== _readinessCycle) {
       _readinessCycle = cycle
       cycle.catch(error => { if (cycle === _readinessCycle) _readiness.fail(error) })

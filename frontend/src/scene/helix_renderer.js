@@ -762,14 +762,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       let straightShaft = null   // unit cylinder placeholder, only for curved helices' deform lerp
       const segments    = []     // per-domain world-space cylinder meshes (straight helices)
 
-      // Helices with multiple axis segments (bp-range gaps between strand domains
-      // on the same helix — e.g. compliant joints) need per-segment axis lines
+      // Helices with axis segments (including one cropped Corner domain)
+      // need per-segment axis lines
       // so the gap regions stay empty. The single TubeGeometry shaft built from
       // a continuous CatmullRomCurve3 ignores domain boundaries; it would draw
       // a line straight through the gap. For these helices we build the same
       // per-segment cylinder array used by non-curved helices below and skip
       // the single shaft entirely.
-      const useSegments = Boolean(axDef?.residue_transformed) || !isCurved || (axDef?.segments?.length ?? 0) > 1
+      const useSegments = Boolean(axDef?.residue_transformed) || !isCurved || (axDef?.segments?.length ?? 0) > 0
       // Native oligos have a backbone, not a duplex axis. Full uses the same
       // strand-colored direction cones as every ordinary strand. Keep the
       // axis metadata for cylinder LOD, but never overlay an axis tube.

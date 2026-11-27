@@ -22,10 +22,11 @@ function bufferSignature(attribute) {
 }
 
 /** Observe visible content and settings, excluding redundant GPU upload work. */
-export function broadcastFingerprint({ scene, view, pane }, { coordinates = true, transientPing = false, transientSelection = false } = {}) {
+export function broadcastFingerprint({ scene, view, pane }, { coordinates = true, transientPing = false, transientSelection = false, ignoreTraceLighting = false } = {}) {
   const contentView = transientSelection ? { ...view, selection: null } : transientPing && view?.selection ? { ...view, selection: { ...view.selection, ping: null } } : view
   const rows = [contentView, pane], materials = new Set()
   function visit(o) {
+    if (ignoreTraceLighting && (o.isLight || o.userData?.photoLightRig || o.userData?.photoFloor)) return
     if (!o.visible || o.isTransformControlsRoot || (transientSelection && o.userData?.presentationSelection)) return
     rows.push([o.uuid, o.layers?.mask, coordinates ? o.position?.toArray() : null, coordinates ? o.quaternion?.toArray() : null, coordinates ? o.scale?.toArray() : null,
       coordinates && o.matrixAutoUpdate === false ? o.matrix?.toArray() : null, o.renderOrder, o.count,

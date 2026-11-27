@@ -903,10 +903,13 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     ctrl.setPlaying(true)
     const requests = api.getOxdnaFramesSurface.mock.calls.length
     ctrl.showInterpolatedFrame(0,1,.5)
+    expect(ctrl.emTrajectory().transition).toMatchObject({from:0,to:1,t:.5})
+    expect(ctrl.emTrajectory().transition.frame[0]).toBeCloseTo(.5)
     expect(surf.applyDeformedFrame).toHaveBeenCalled()
     expect(surf.applyDeformedFrame.mock.lastCall[1][0]).toBeCloseTo(.5)
     expect(onHeavyApplied.mock.invocationCallOrder.at(-1)).toBeGreaterThan(setDesignVisible.mock.invocationCallOrder.at(-1))
     ctrl.showFrame(1)
+    expect(ctrl.emTrajectory().transition).toBeNull()
     await ctrl.ensureInterpolationFrames(1,2)
     ctrl.showInterpolatedFrame(1,2,.5)
     expect(surf.applyDeformedFrame.mock.lastCall[1][0]).toBeCloseTo(1.5)
@@ -2115,9 +2118,16 @@ it('prepares a bounded saved-frame playback window across the loop boundary', as
   const d = initOxdnaDisplay({ api, designRenderer: {applyFemPositions:vi.fn()}, getCurrentRepr: () => 'vdw',
     getAtomisticRenderer: () => ({ getMode: () => 'vdw', update: vi.fn(), applyPositionLerp: vi.fn() }) })
   await d.loadTrajectory('job', false, 'job')
+  expect(requested).toEqual([0]) // load builds the first exact frame once
   requested.length = 0
+  const em = d.emTrajectory()
+  expect(em.frames.length).toBe(100)
+  expect(em.frames[50]).toBeUndefined()
+  expect((await em.readFrame(50))[0]).toBe(50)
+  expect(requested).toEqual([]) // EM extraction does not reconstruct molecular meshes
+  expect(d.emTrajectory().currentIndex).toBe(0)
   expect(await d.preparePlaybackFrames(98)).toBe(true)
-  expect(requested).toEqual([98,99,0,1])
+  expect(requested).toEqual([98,99,1]) // frame zero survives the loop boundary
   d.stopAndRestore()
 })
 
@@ -2190,3 +2200,33 @@ for (const method of ['stopAndRestore','suspendToDesign']) {
     })
   }
 }
+
+it.each([6,9])('reuses loaded %i-value coordinates when preparing an interactive preview', async(stride)=>{
+ const keys=[['h',0,'FORWARD']], frames=[0,1,2].map(i=>new Float32Array([i,0,0,1,0,0,...(stride===9 ? [0,0,1] : [])]))
+ const api={getOxdnaTrajectoryMeta:async()=>({n_frames:3,markers:[]}),
+   getOxdnaTrajectory:vi.fn(async()=>({ready:true,keys,frames})),
+   getOxdnaTrajectoryBin:vi.fn()}
+ const display=initOxdnaDisplay({api,designRenderer:{applyFemPositions:vi.fn()},getCurrentRepr:()=> 'full'})
+ await display.loadTrajectory('job')
+ expect((await display.prepareInteractivePreview()).ok).toBe(true)
+ expect(api.getOxdnaTrajectoryBin).not.toHaveBeenCalled()
+ expect(api.getOxdnaTrajectory).toHaveBeenCalledTimes(1)
+ expect(display.showTrajectoryPreview(1)).toBe(true)
+ display.stopAndRestore()
+})
+
+it('joins EM endpoint readiness to interpolation and restores the original clock on detach',async()=>{
+ const renderer={applyFemPositions:vi.fn()}
+ const api={getOxdnaTrajectory:async()=>({ready:true,keys:[['h',0,'FORWARD']],frames:[[0,0,0,1,0,0],[1,0,0,1,0,0]]})}
+ const d=initOxdnaDisplay({api,designRenderer:renderer})
+ await d.loadTrajectory('job')
+ const key=d.trajectoryPreparationKey();let release
+ d.setEMPlaybackPreparation(()=>new Promise(r=>{release=r}))
+ expect(d.smoothFrameDuration()).toBe(500)
+ expect(d.trajectoryPreparationKey()).not.toBe(key)
+ let done=false;const pending=d.ensureInterpolationFrames(0,1).then(ok=>{done=true;return ok})
+ await Promise.resolve();expect(done).toBe(false)
+ release(true);expect(await pending).toBe(true)
+ d.setEMPlaybackPreparation(null);expect(d.smoothFrameDuration()).toBeUndefined()
+ d.stopAndRestore()
+})

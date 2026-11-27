@@ -85,6 +85,31 @@ CG-to-atomistic handoff. Historical phases and experiments are in
   ended; ~67MB useful evidence retained under `.development-artifacts/vmmc-precision-hour*`.
   `train_weights` and `report_benchmark` reproduce bias preparation and exports.
   FAST20994 passed/90 skipped, focused5 passed, lint passed; FULL deferred.
+- Smooth EM integration (2026-11-25): the display exposes its actual interpolation
+  endpoints, fraction and coordinates to EM. A detachable field-readiness hook
+  participates in saved-frame and interpolation preparation and invalidates the
+  player's preparation key. With EM attached, smooth segments last 500 ms; other
+  playback retains its existing rate. The shared oxDNA/NAMD player holds saved
+  endpoints until the next calculated field pair is ready, without catch-up.
+
+- EM scope (2026-11-24): trajectory readiness means playable, not all coordinate
+  pages resident. EM confirmation uses the stable selected trajectory length;
+  its reader ensures missing pages without changing the displayed frame or
+  reconstructing DNA meshes. Only optical particle inputs accumulate. The
+  100-frame sparse-loader test verifies reading frame 50 leaves display at zero
+  and issues no extra atomistic reconstruction. Scope/stride remain respected.
+
+- Trajectory load reuse (2026-11-24): streamed first-frame preparation now warms
+  the bounded heavy-frame cache once, paints CG without a second heavy launch,
+  then applies the cached exact frame. Playback preparation reuses it. Interactive
+  previews copy resident six-value or nine-value oxDNA frames into their existing
+  six-value preview layout and request only missing samples; owned copies do not
+  retain coordinate pages. Twelve-value NAMD layouts retain the existing fallback.
+  Focused coverage: 193 frontend tests; initial-frame request counts, loop-boundary
+  reuse, both coordinate layouts, memory ownership and missing-page behavior.
+  The real-backend EM/trajectory browser flow passes with current nine-value
+  pages and asserts zero extra preview-download requests for its loaded frames.
+  This removes duplicate work; no hardware-independent load-time claim is made.
 
 - Plasmonic mobile-gold startup (2026-11-22): direct CUDA MD from the CAD seed
   diverged on both `Plasmonic_test` and the existing two-attached-particle part.

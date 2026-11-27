@@ -82,6 +82,13 @@ def _native_registration():
 def _expected_slab_pose(record):
     """Evaluate the one authority for production and validation; never mutate."""
     source = record.get("placement_source")
+    if source == 'corner-seam-o5-v1':
+        # The approved fit moves the terminal backbone, not its duplex ring.
+        # Keep the slab registered to that unchanged native ring and validate
+        # both the fitted bead and the original native registration.
+        _vector(record, 'backbone_position')
+        return _expected_slab_pose({**record, 'placement_source': SOURCE,
+            'backbone_position': record.get('corner_native_backbone')})
     if not isinstance(source, str):
         raise NativePlacementError("Native Full placement source must be an explicit authority identifier.",
             details={"identity": _identity(record), "field": "placement_source", "actual": source})

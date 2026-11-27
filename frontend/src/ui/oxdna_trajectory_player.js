@@ -78,7 +78,7 @@ export function initOxdnaTrajectoryPlayer({
   loadProgressEl = null, onBeforePlay = null, onBeforeSeek = null, onPlayStateChange = null, fps = 8,
   interpolationToggle = null, onInterpolate = null, onBeforeInterpolate = null,
   previewReady = () => false, onPreview = null, onExactSeek = null,
-  preparationKey = () => '',
+  preparationKey = () => '', frameDuration = () => 1000 / fps,
 } = {}) {
   let _n = 0          // frame count
   let _i = 0          // current frame
@@ -97,7 +97,7 @@ export function initOxdnaTrajectoryPlayer({
   const readyKey = () => `${preparationKey()}|${!!interpolationToggle?.checked}|${_i}`
   const neighbors = (from, to) => interpolationNeighbors(from, to, _n, _markers)
   const interpolation = initTrajectoryInterpolationClock({
-    current: () => _i, count: () => _n, fps,
+    current: () => _i, count: () => _n, fps, frameDuration,
     ensure: async (from, to, blend) => {
       if (blend && onBeforeInterpolate) return onBeforeInterpolate(from, to, neighbors(from, to))
       return onBeforeSeek?.(to) ?? true

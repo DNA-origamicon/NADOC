@@ -1,3 +1,5 @@
+import { exportPhotoImage } from './photo_image_export.js'
+import { initPhotoPathTracing } from './photo_path_tracing.js'
 /**
  * Photo-mode panel — the controls for scene/photo_mode.js.
  *
@@ -239,7 +241,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
   let _persistTimer = null
   const factorySettings = photoMode.getSettings()
 
-  let artControls = null
+  let artControls = null, traceControls = null
 
   function _applyProfile(settings) {
     if (!settings) return
@@ -255,6 +257,12 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     if (settings.bgType !== undefined || settings.bgColor !== undefined) {
       photoMode.setBackground(settings.bgType, settings.bgColor)
     }
+    call('pathTraceDenoise', 'setTraceDenoise')
+    call('pathTracePreviewBackend', 'setPathTracePreviewBackend')
+    call('pathTraceInteractive', 'setTraceInteractive')
+    call('pathTracing', 'setPathTracing')
+    call('pathTraceSamples', 'setPathTraceSamples')
+    call('pathTraceExportBackend', 'setPathTraceExportBackend')
     call('pinLights', 'setPinLights')
     call('studioEnvironment', 'setStudioEnvironment')
     call('studioEnvironmentIntensity', 'setStudioEnvironmentIntensity')
@@ -423,7 +431,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
    *  event to hang this off. */
   function _startStatusPolling() {
     _stopStatusPolling()
-    _statusTimer = setInterval(() => { _refreshStatus(); _refreshResolution(); artControls?.sync() }, 500)
+    _statusTimer = setInterval(() => { _refreshStatus(); _refreshResolution(); artControls?.sync(); traceControls?.sync() }, 500)
     _refreshStatus()
     _refreshResolution()
   }
@@ -435,6 +443,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
 
   /** Push every control's current value into the UI from the controller. */
   function syncToState() {
+    traceControls?.sync()
     const s = photoMode.getSettings()
     if (els.pinLights) els.pinLights.checked = s.pinLights
     if (els.studioEnvironment) els.studioEnvironment.checked = s.studioEnvironment
@@ -683,6 +692,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
       setSectionCollapsed('photo', `photo-${id}-panel`, collapsed)
     })
   }
+  traceControls = initPhotoPathTracing({ mode: photoMode, changed: _schedulePersist })
   artControls = initPhotoArtControls({ mode: photoMode, defaults: factorySettings, applyProfile: _applyProfile, changed: _schedulePersist })
 
   els.outline?.addEventListener('change', () => {
@@ -773,18 +783,10 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     els.exportBtn.textContent = 'Rendering…'
     try {
       const s = photoMode.getSettings()
-      const blob = await photoMode.renderToBlob(s.exportWidth, s.exportHeight)
-      if (blob) {
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `nadoc-figure-${s.exportWidth}x${s.exportHeight}.png`
-        a.click()
-        URL.revokeObjectURL(url)
-      }
+      await exportPhotoImage(photoMode, s.exportWidth, s.exportHeight)
     } catch (err) {
       console.error('[photo] export failed:', err)
-      if (els.exportNote) els.exportNote.textContent = `Export failed: ${err.message}`
+      if (els.exportNote) els.exportNote.textContent = err?.name === 'AbortError' ? 'Cancelled.' : `Export failed: ${err.message}`
     } finally {
       els.exportBtn.disabled = false
       els.exportBtn.textContent = label
@@ -914,7 +916,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
         options: { format, fps: Number.isFinite(fpsVal) && fpsVal > 0 ? fpsVal : undefined },
         signal: cancelCtl.signal,
         onPhase: (key, info = null) => {
-          if (info?.total != null) session.tick(key, info.done, info.total)
+          if (info?.total != null) session.tick(key, info.done, info.total, info.detail)
           else session.begin(key)
         },
       })
@@ -925,7 +927,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
         if (els.videoNote) els.videoNote.textContent = 'Cancelled.'
       } else {
         console.error('[photo] video export failed:', err)
-        if (els.videoNote) els.videoNote.textContent = `Export failed: ${err.message}`
+        if (els.videoNote) els.videoNote.textContent = err?.name === 'AbortError' ? 'Cancelled.' : `Export failed: ${err.message}`
       }
     } finally {
       endExportSession()
@@ -956,6 +958,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     onExit:  () => { _stopStatusPolling() },
     dispose: () => {
       artControls?.dispose()
+      traceControls?.dispose()
       _stopStatusPolling()
       clearTimeout(_persistTimer)
       for (const eventName of ['input', 'change']) document.removeEventListener(eventName, _persistFromControl)
