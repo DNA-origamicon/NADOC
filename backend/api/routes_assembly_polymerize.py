@@ -49,6 +49,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api import assembly_state
+from backend.api.assembly_command_replay import command_params, output_id
 from backend.api.assembly import (
     _apply_assembly_mutation_with_feature_log,
     _assembly_response,
@@ -133,6 +134,12 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
     # Pure record-assembly (geometry + connector-union + pattern-mate
     # replication) lives in backend.core.assembly_polymer; this handler owns
     # only validation, lookups, and the feature-log commit.
+    outputs = {}
+
+    def allocate(slot):
+        outputs[slot] = output_id(slot)
+        return outputs[slot]
+
     existing_instances, new_instances, new_joints = build_polymer_chain(
         joint,
         inst_a,
@@ -142,6 +149,7 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
         body.direction,
         assembly.instances,
         assembly.joints,
+        identity_factory=allocate,
     )
 
     mutated = assembly.model_copy(
@@ -163,6 +171,8 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
         op_kind="assembly-polymerize",
         label=f"Polymerize {joint.name}: chain length {body.count} ({body.direction}){extra_suffix}",
         params={
+            **command_params(body),
+            "outputs": outputs,
             "joint_id": body.joint_id,
             "count": body.count,
             "direction": body.direction,
@@ -279,6 +289,12 @@ def polymerize_periodic_assembly(body: PolymerizePeriodicRequest) -> dict:
     # Pure record-assembly (chain geometry + seam-connector union + seam-joint
     # wiring) lives in backend.core.assembly_polymer; this handler owns only
     # validation, the design load, the delta derivation, and the commit.
+    outputs = {}
+
+    def allocate(slot):
+        outputs[slot] = output_id(slot)
+        return outputs[slot]
+
     existing_instances, new_instances, new_joints = build_periodic_chain(
         seed,
         delta,
@@ -287,6 +303,7 @@ def polymerize_periodic_assembly(body: PolymerizePeriodicRequest) -> dict:
         body.count,
         body.direction,
         assembly.instances,
+        identity_factory=allocate,
     )
 
     mutated = assembly.model_copy(
@@ -300,6 +317,8 @@ def polymerize_periodic_assembly(body: PolymerizePeriodicRequest) -> dict:
         op_kind="assembly-polymerize-periodic",
         label=f"Polymerize (periodic) {seed.name}: chain length {body.count} ({body.direction})",
         params={
+            **command_params(body),
+            "outputs": outputs,
             "instance_id": body.instance_id,
             "count": body.count,
             "direction": body.direction,

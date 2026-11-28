@@ -52,6 +52,10 @@ def geo_cache_key(inst: "PartInstance", workspace_dir: Path | None) -> str | Non
 
     src = inst.source
     if src.type == "file":
+        from backend.core.assembly_source_versions import pinned_design
+        if pinned_design(src) is not None:
+            from backend.core.assembly_source_identity import source_key
+            return f"{source_key(src)}:{ov_hash}"
         p = Path(src.path)
         if not p.is_absolute():
             for base in filter(None, [workspace_dir]):
@@ -66,7 +70,8 @@ def geo_cache_key(inst: "PartInstance", workspace_dir: Path | None) -> str | Non
         mtime_ns = p.stat().st_mtime_ns
         return f"f:{p}:{mtime_ns}:{ov_hash}"
     elif src.type == "inline" and src.design:
-        return f"i:{src.design.id}:{ov_hash}"
+        from backend.core.assembly_source_identity import source_key
+        return f"{source_key(src)}:{ov_hash}"
     return None
 
 

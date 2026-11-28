@@ -412,12 +412,13 @@ export async function frameAssembly(page) {
 
 /** Bounding rects of the overlays that sit above the full-width canvas. */
 async function _overlayRects(page) {
-  const rects = []
-  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel', '.tool-popup:visible']) {
-    const b = await page.locator(sel).boundingBox().catch(() => null)
-    if (b) rects.push(b)
-  }
-  return rects
+  // Optional popups may not exist. boundingBox() on an absent locator waits
+  // for the entire test timeout, preventing an otherwise ready assembly pick.
+  return page.locator('#menu-bar, #left-panel, #right-panel, #assembly-panel, .tool-popup').evaluateAll(nodes =>
+    nodes.filter(node => node.checkVisibility()).map(node => {
+      const { x, y, width, height } = node.getBoundingClientRect()
+      return { x, y, width, height }
+    }))
 }
 
 /**

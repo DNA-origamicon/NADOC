@@ -35,6 +35,8 @@ from __future__ import annotations
 import base64
 import gzip
 import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -71,6 +73,9 @@ class _AssemblySession:
 
 _lock = threading.Lock()
 _sessions: dict[str, _AssemblySession] = {}
+_evaluation_session: ContextVar[_AssemblySession | None] = ContextVar(
+    "assembly_evaluation_session", default=None
+)
 
 
 def _session() -> _AssemblySession:
@@ -78,12 +83,68 @@ def _session() -> _AssemblySession:
 
     MUST be called while holding ``_lock``.
     """
+    isolated = _evaluation_session.get()
+    if isolated is not None:
+        return isolated
     doc = get_current_doc()
     s = _sessions.get(doc)
     if s is None:
         s = _AssemblySession()
         _sessions[doc] = s
     return s
+
+
+@contextmanager
+def isolated_evaluation(assembly: Assembly):
+    """Run existing assembly commands without publishing intermediate states.
+
+    The private session is context-local, never registered for autosave, and
+    owns its undo, redo and display state. This isolates in-memory operations;
+    callers must separately prohibit commands with external write effects.
+    """
+    token = _evaluation_session.set(
+        _AssemblySession(assembly=assembly.model_copy(deep=True))
+    )
+    try:
+        yield
+    finally:
+        _evaluation_session.reset(token)
+
+
+def publish_candidate(candidate: Assembly, *, source: Assembly, expected_revision: int, record_undo: bool = True, expected_session=None, expected_source_fingerprint=None):
+    """Commit one evaluated history change only while its source is current."""
+    with _lock:
+        s = _session()
+        if expected_session is not None and s is not expected_session:
+            raise HTTPException(409, detail="Evaluation belongs to an earlier assembly session.")
+        if expected_source_fingerprint is not None:
+            from backend.core.assembly_verification_capture import capture
+            from backend.core.part_history_proof import digest
+            if s.assembly is None or digest(capture(s.assembly).model_dump(mode="json")) != expected_source_fingerprint:
+                raise HTTPException(409, detail="Assembly content changed during evaluation.")
+        # Equality also catches legacy routes that mutate the live object before
+        # incrementing the counter. Source is the independent captured copy.
+        if s.revision != expected_revision or s.assembly != source:
+            raise HTTPException(409, detail="Assembly changed during history evaluation; retry against the current assembly.")
+        if candidate.id != source.id:
+            raise HTTPException(409, detail="History candidate belongs to another assembly.")
+        from backend.core.presentation_checkpoints import restore_history_channels
+        candidate = candidate.model_copy(update=restore_history_channels(source, candidate))
+        if source.feature_log_cursor != -1 and candidate.feature_log_cursor == -1:
+            # Historical views can omit instances entirely. Restore their
+            # remembered display choices when a full-history edit brings them
+            # back, just as ordinary seek does; these fields are not authoring.
+            candidate = candidate.model_copy(update={'instances': [
+                instance.model_copy(update={key: value for key, value in s.display_state.get(instance.id, {}).items()
+                                            if key in {'visible', 'representation'}})
+                for instance in candidate.instances]})
+        if record_undo:
+            s.history.append(source.model_copy(deep=True))
+            _trim_to(s.history, _undo_cap_for(source))
+            s.redo.clear()
+        s.assembly = candidate
+        s.revision += 1
+        return candidate
 
 
 # ── Document registry helpers (multi-document) ───────────────────────────────
@@ -226,7 +287,8 @@ def get_or_create() -> Assembly:
     with _lock:
         s = _session()
         if s.assembly is None:
-            s.assembly = Assembly()
+            from backend.core.assembly_history_contract import create_empty_assembly
+            s.assembly = create_empty_assembly()
             s.revision += 1
         return s.assembly
 
@@ -814,3 +876,23 @@ def set_annotations(annotations, enabled) -> Assembly:
         s.assembly.annotations_enabled = enabled
         s.revision += 1
         return s.assembly
+
+
+def capture_for_verification():
+    """Bound capture to the actual session and its current revision under lock."""
+    from backend.core.assembly_verification_capture import capture
+    with _lock:
+        session = _session()
+        if session.assembly is None:
+            raise HTTPException(404, detail="No active assembly.")
+        return session, session.assembly, capture(session.assembly), session.revision
+
+
+def verification_source_matches(doc, session, source, revision, *, blocking=False):
+    if not _lock.acquire(blocking=blocking):
+        return None
+    try:
+        current = _sessions.get(doc)
+        return current is session and current is not None and current.assembly is source and current.revision == revision
+    finally:
+        _lock.release()

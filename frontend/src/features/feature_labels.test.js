@@ -1,6 +1,13 @@
 import { expect, it } from 'vitest'
 import { featureLabels } from './feature_labels.js'
 
+it('labels recorded gear updates and resolution in the gear family', () => {
+  expect(featureLabels([
+    { op_kind: 'assembly-create-gear' }, { op_kind: 'assembly-patch-gear' },
+    { op_kind: 'assembly-resolve-gear' }, { op_kind: 'assembly-delete-gear' },
+  ])).toEqual(['F1: Gear 1', 'F2: Gear 2', 'F3: Gear 3', 'F4: Gear 4'])
+})
+
 it('names Corners and refreshes generated parameter text after an edit', () => {
   expect(featureLabels([{ op_kind: 'corner', label: 'Corner: 90° at 84 bp', params: { angle_deg: 75, position_bp: 91 } },
     { op_kind: 'corner', label: 'Upper corner' }])).toEqual(['F1: Corner 1 [Corner: 75° at 91 bp]', 'F2: Corner 2 [Upper corner]'])
@@ -44,4 +51,26 @@ it('recomputes numbering after reorder without changing stored elaboration', () 
 it('labels recorded folding assignments separately from moves', () => {
   expect(featureLabels([{ feature_type: 'cluster_op', source: 'folding-order' },
     { feature_type: 'cluster_op' }])).toEqual(['F1: Folding Order 1', 'F2: Move/Rotate 1'])
+})
+
+it('labels recorded joint edits and mate refreshes in their tool families', () => {
+  expect(featureLabels([
+    { op_kind: 'assembly-add-joint' }, { op_kind: 'assembly-patch-joint' },
+    { op_kind: 'assembly-create-mate' }, { op_kind: 'assembly-refresh-mate' },
+  ])).toEqual(['F1: Joint 1', 'F2: Joint 2', 'F3: Mate 1', 'F4: Mate 2'])
+})
+
+it('labels recorded belt patches in the belt family', () => {
+  expect(featureLabels([{ op_kind: 'assembly-create-belt' }, { op_kind: 'assembly-patch-belt' }]))
+    .toEqual(['F1: Belt 1', 'F2: Belt 2'])
+})
+
+
+it('labels assembly source revision replacement', () => {
+  expect(featureLabels([{ op_kind: 'assembly-replace-instance-source' }])).toEqual(['F1: Source Revision 1'])
+})
+
+it('labels instance properties and kinematic propagation', () => {
+  expect(featureLabels([{ op_kind: 'assembly-patch-instance' }, { op_kind: 'assembly-propagate-fk' }]))
+    .toEqual(['F1: Instance 1', 'F2: Move/Rotate 1'])
 })

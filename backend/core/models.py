@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from backend.core.dimensions import Dimension
 from backend.core.lattice_frame_model import LatticeFrame, validate_frame_references
 from backend.core.part_history_contract import PartRecipeRoot
+from backend.core.assembly_history_contract import AssemblyRecipeRoot
 from backend.core.part_input_sources import Digest, EmbeddedInput, MAX_SOURCES
 from backend.core.part_repair_draft import RepairDraft
 from backend.core.part_group_model import GroupOrganization
@@ -2065,11 +2066,19 @@ SnapshotOpKind = Literal[
     "assembly-polymerize",
     "assembly-polymerize-periodic",
     "assembly-add-instance",
+    "assembly-replace-instance-source",
+    "assembly-instance-overhang-extrude",
+    "assembly-instance-overhang-patch",
+    "assembly-instance-history-change",
+    "assembly-patch-instance",
+    "assembly-propagate-fk",
     "assembly-delete-instance",
     "assembly-duplicate-instance",
     "assembly-add-connector",
     "assembly-delete-connector",
     "assembly-add-joint",
+    "assembly-patch-joint",
+    "assembly-refresh-mate",
     "assembly-delete-joint",
     "assembly-create-mate",
     "protein-import",
@@ -2098,8 +2107,11 @@ SnapshotOpKind = Literal[
     "assembly-transform-instance",
     "assembly-transform-instance-cluster",
     "assembly-create-gear",
+    "assembly-patch-gear",
+    "assembly-resolve-gear",
     "assembly-delete-gear",
     "assembly-create-belt",
+    "assembly-patch-belt",
     "assembly-delete-belt",
     "assembly-create-belt-rider",
     "assembly-delete-belt-rider",
@@ -3860,6 +3872,16 @@ class PartSourceFile(BaseModel):
     type: Literal["file"] = "file"
     path: str  # relative path to .nadoc file
     sha256: Optional[str] = None  # content hash for verification; None = unverified
+    revision: Optional[Design] = None  # assembly-owned pinned revision; legacy files may omit
+    revision_sha256: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_pinned_revision(self):
+        if self.revision is not None:
+            from backend.core.assembly_source_versions import design_digest
+            if self.revision_sha256 != design_digest(self.revision):
+                raise ValueError("Assembly source revision content does not match its recorded digest.")
+        return self
 
 
 PartSource = Annotated[
@@ -4322,6 +4344,7 @@ class Assembly(BaseModel):
     Each Part's own feature_log is separate and unaffected by assembly ops.
     """
 
+    recipe_root: Optional[AssemblyRecipeRoot] = None
     dimensions: List[Dimension] = Field(default_factory=list)
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
@@ -4435,18 +4458,9 @@ class Assembly(BaseModel):
 
     @staticmethod
     def _instance_src_key(inst: "PartInstance") -> str:
-        """Stable dedup key derived from a PartInstance's source.
-
-        Inline sources key off ``design.id``; file sources key off the
-        ``path`` (sha256 if present).  This is a self-contained key so the
-        v2 serializer doesn't depend on the API-layer geometry cache.
-        """
-        src = inst.source
-        if src.type == "file":
-            sha = getattr(src, "sha256", None) or ""
-            return f"f:{src.path}:{sha}"
-        # inline
-        return f"i:{src.design.id}"
+        """Identity includes the complete source revision and feature history."""
+        from backend.core.assembly_source_identity import source_key
+        return source_key(inst.source)
 
     def to_dict_v2(self) -> dict:
         """Dump in the v2 wire format only.
@@ -4463,13 +4477,8 @@ class Assembly(BaseModel):
         # — they're not affected by Phase 5.
         base = self.model_dump()
         base.pop("instances", None)
-        sources: dict[str, dict] = {}
-        instances_v2: list[dict] = []
-        for inst in self.instances:
-            key = self._instance_src_key(inst)
-            if key not in sources:
-                sources[key] = inst.source.model_dump(mode="json")
-            instances_v2.append(inst.to_compact_dict(src_key=key))
+        from backend.core.assembly_source_identity import compact_sources
+        sources, instances_v2 = compact_sources(self.instances)
         base["format_version"] = 2
         base["sources"] = sources
         base["instances_v2"] = instances_v2

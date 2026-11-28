@@ -1,5 +1,92 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-277 — Assembly autosave silently replaces recorded source revisions (2026-11-27)
+
+- **Observed:** running-app evaluation was correctly cancelled as source_changed;
+  request tracing identified POST /assembly/save during worker execution.
+- **Cause:** save converted every inline part into a new unpinned external file,
+  replaced live sources without an assembly feature, and advanced the revision.
+  This broke reproducibility/portability and made a background save an authoring edit.
+- **Fixed:** save captures and writes the .nass with its existing source revisions
+  and histories intact. It creates no implicit .nadoc side files and does not
+  mutate live source state, revision or undo. Response remains a path acknowledgement.
+- **Evidence:** focused save/reopen/independent-proof/candidate-commit regression,
+  source-version tests, and running-app evaluation/commit/undo with autosave pass.
+  All three browser scratch roots were removed and independently checked absent.
+
+
+## ISSUE-276 — Assembly smoke helper waits for absent optional popup (2026-11-27)
+
+- **Evidence:** assembly-exit smoke timed out in `scene_harness._overlayRects`
+  waiting for `.tool-popup:visible`, even though both parts were loaded. The
+  locator's `boundingBox()` auto-wait consumed the entire 60-second test budget.
+- **Correction:** inspect existing overlay nodes in one DOM evaluation and retain
+  only visible rectangles. An absent popup is an ordinary empty result. No test
+  timeout, production behavior or validation guard was relaxed. The smoke config
+  accepts an explicit `NADOC_SMOKE_GREP` for a focused failed-check rerun.
+- **Verification:** the other 28 smoke checks passed; the corrected assembly-exit
+  check passed in a focused rerun in 14.5 seconds. Both roots were cleaned.
+
+## ISSUE-275 — Delayed kinematic writes overwrite assembly history edits (2026-11-27)
+
+- **Observed in app:** changing a gear ratio from 2 to 3 left its follower at
+  -0.8 radians and reverse-drove the original 0.4-radian driver to 0.2667.
+  A queued silent follower patch was applied using the newly edited ratio.
+- **Fix:** ticker persistence carries the revision of the accepted assembly
+  response that produced its values; optimistic/unmarked copies cannot publish.
+  Revision-bound silent joint patches evaluate privately and atomically publish
+  only against that unchanged source. Stale playback returns the current state
+  without changing history, poses or revision. Ordinary playback stays silent.
+- **Evidence:** backend stale/current playback and existing gear regressions,
+  frontend response-authority/ticker tests, and the real running-app history test
+  with animation enabled pass. Earlier gear edit, history labels and undo/redo are
+  covered by `frontend/e2e/assembly_history_contract.spec.js`. Owned scratch was
+  removed and verified absent. This does not qualify other legacy silent routes
+  or solve the remaining assembly document provenance work in ISSUE-274.
+
+## ISSUE-274 — Assembly history lacks complete command contracts (2026-11-27)
+
+- **Cause:** assembly replay used live-document intermediate states and a small
+  legacy dispatcher. Mate/gear creation recorded summaries rather than complete
+  input requests; group duplication omitted generated identity maps. Gear patch
+  and resolve changed persisted state without feature rows. Earlier editing was
+  restricted to four latest-row operations.
+- **Partial correction:** isolated history evaluation and atomic revision/source
+  checked publication; versioned request contracts and stable identities for joint
+  and mate creation, gear lifecycle and group create/patch/ungroup/duplicate/delete.
+  Gear patch/resolve now use actual feature recording. Versioned earlier edits
+  regenerate their downstream operations, retain feature identities and refuse
+  missing references atomically. Legacy summaries are not retroactively certified.
+- **Evidence:** `tests/test_assembly_command_replay.py` serializes/reopens records
+  and re-executes inputs without reading recovery snapshots; it compares the full
+  normalized assembly and checks failures, references and undo. Transaction and
+  existing assembly operation tests cover the host boundary.
+- **Further progress:** explicit new-assembly roots, pinned source revisions,
+  independent replay/reference assessment, cancellable verification/evaluation
+  jobs, explicit commit, and shared desktop Suppress/Unsuppress/Move dialogs.
+  Save preserves recorded source revisions (ISSUE-277). Assembly dependency
+  inspection now shares the typed graph and desktop dialog with parts; broad
+  state-dependent operations remain explicitly conservative barriers.
+  Instance overhang extrusion/patch use native part recording and complete
+  assembly replay contracts; earlier supported input edits regenerate downstream
+  work through the shared cancellable evaluation/commit flow.
+  Historical-prefix suppression independently qualifies both the displayed
+  prefix and full recipe, returns to the tail and preserves undo to the prefix.
+- **Selected-instance progress:** native editing, suppression, reorder, deletion and
+  dependency inspection now share the part evaluator and assembly publication host.
+  Recorded changes preserve source versions and replay downstream work. Focused
+  staged-code tests and the selected-part app edit/deletion/undo workflow pass.
+- **Still open:** ordinary earlier-feature editing and complete downstream replay,
+  remaining command families and legacy source admission/update,
+  and remaining selected-instance child/prefix/input controls. Resource
+  limits and larger assemblies still require scale review. This is not a complete
+  assembly provenance/publication certificate.
+- **Priority correction (2026-11-27):** dedicated verification UI and repair
+  workflows (drafts/reference selection/comparison/repair-specific commit) are
+  deferred by the user and are not completion gates for this parity goal. Focus
+  on editing and downstream replay, including selected-instance histories.
+  Independent verification and internal test coverage remain critical.
+
 ## ISSUE-273 — Bevel repeats atomistic/display work on Apply and navigation (2026-11-27)
 
 - **Cause:** a plane deletion invalidated whole atom models and both Full/straight

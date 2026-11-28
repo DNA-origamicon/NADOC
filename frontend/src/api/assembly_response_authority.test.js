@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { recordAssemblyResponse, confirmedAssemblyRepresentations } from './assembly_response_authority.js'
+import { recordAssemblyResponse, confirmedAssemblyRepresentations, confirmedAssemblyRevision } from './assembly_response_authority.js'
 import { _syncFromAssemblyResponse, resetRevisionWatermark } from './client.js'
 import { store } from '../state/store.js'
 
@@ -35,12 +35,15 @@ describe('accepted assembly response authority', () => {
       expect(observations[0].get('a')).toBe('full')
       expect(confirmedAssemblyRepresentations(response).get('a')).toBe('full')
       const accepted = store.getState().currentAssembly
+      expect(confirmedAssemblyRevision(accepted)).toBe(10)
+      expect(confirmedAssemblyRevision({ ...accepted })).toBeUndefined()
       expect(accepted.instances[0].geometrySourceKey).toBe('f:/part.nadoc:1:')
       const stale = { id: 'assembly', instances: [{ id: 'a', representation: 'cylinders' }] }
       _syncFromAssemblyResponse({ revision: 9, assembly: stale })
       expect(store.getState().currentAssembly).toBe(accepted)
       expect(observations).toHaveLength(1)
       expect(confirmedAssemblyRepresentations(stale)).toBeNull()
+      expect(confirmedAssemblyRevision(stale)).toBeUndefined()
     } finally { unsubscribe() }
   })
 })

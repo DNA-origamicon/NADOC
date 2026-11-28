@@ -46,6 +46,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import assembly_state
+from backend.api.assembly_command_replay import command_params, output_id
 from backend.api.assembly import (
     _apply_assembly_mutation_with_feature_log,
     _apply_prismatic_joint,
@@ -142,6 +143,8 @@ class CreateMateRequest(BaseModel):
 
 
 class PatchJointRequest(BaseModel):
+    expected_revision: Optional[int] = None  # source of a background playback pose
+    expected_assembly_id: Optional[str] = None
     name: Optional[str] = None
     joint_type: Optional[str] = None  # changing type resets current_value to 0
     current_value: Optional[float] = None
@@ -176,6 +179,9 @@ def _compose_add_joint(
     ``_apply_assembly_mutation_with_feature_log``.  Shared by ``add_joint``
     and the atomic ``create_mate`` endpoint.
     """
+    # FK propagation may mutate downstream instances in place; keep the source
+    # intact so its recorded pre-state remains the actual command input.
+    assembly = assembly.model_copy(deep=True)
     _find_instance(assembly, body.instance_b_id)
     if body.instance_a_id is not None:
         _find_instance(assembly, body.instance_a_id)
@@ -246,6 +252,7 @@ def _compose_add_joint(
                 axis_origin = cb_world.tolist()
 
     joint = AssemblyJoint(
+        id=output_id("joint_id"),
         name=body.name,
         joint_type=body.joint_type,
         instance_a_id=body.instance_a_id,
@@ -370,7 +377,7 @@ def add_joint(body: AddJointRequest) -> dict:
         new_assembly,
         op_kind="assembly-add-joint",
         label=label_str,
-        params=params,
+        params={**params, **command_params(body)},
     )
     return _assembly_response(assembly_state.get_or_404())
 
@@ -459,6 +466,7 @@ def create_mate(body: CreateMateRequest) -> dict:
         op_kind="assembly-create-mate",
         label=f"Create mate: {inst_a_name} ↔ {inst_b_name}",
         params={
+            **command_params(body),
             "joint_id": joint.id,
             "joint_type": joint.joint_type,
             "instance_a_id": joint.instance_a_id,
@@ -473,6 +481,25 @@ def create_mate(body: CreateMateRequest) -> dict:
 
 @router.patch("/assembly/joints/{joint_id}", status_code=200)
 def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
+    if body.silent and body.expected_revision is not None:
+        from backend.api.assembly_playback_publication import apply_playback_update
+        candidate, stale = apply_playback_update(body.expected_revision, lambda: _patch_joint(joint_id, body),
+                                                  expected_assembly_id=body.expected_assembly_id)
+        return {**_assembly_response(candidate), "stale_playback": stale}
+    if body.silent:
+        return _patch_joint(joint_id, body)
+    from backend.api.assembly_recorded_mutation import apply_recorded_change
+    recorded = PatchJointRequest.model_validate(body.model_dump(
+        exclude_unset=True, exclude={"silent", "expected_revision", "expected_assembly_id"},
+    ))
+    candidate = apply_recorded_change(
+        lambda: _patch_joint(joint_id, body), op_kind="assembly-patch-joint",
+        label="Update joint", params=command_params(recorded, joint_id=joint_id),
+    )
+    return _assembly_response(candidate)
+
+
+def _patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
     """
     Update joint fields.  When current_value changes on a revolute joint,
     recomputes instance_b.transform from base_transform to avoid accumulation.
@@ -553,9 +580,6 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
         )  # helper sets it from the OLD value
         new_joint = joint.model_copy(update=joint_updates)
         new_joints = [new_joint if j.id == joint_id else j for j in assembly.joints]
-        silent = bool(body.silent)
-        if not silent:
-            assembly_state.snapshot()
         new_assembly = assembly.model_copy(update={"joints": new_joints})
         inst_by_id = _build_inst_by_id(new_assembly)
         target_joint = next(j for j in new_assembly.joints if j.id == joint_id)
@@ -599,10 +623,6 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
             new_inst_b if i.id == inst_b.id else i for i in assembly.instances
         ]
 
-    silent = body.silent  # True during animation playback
-    if not silent:
-        assembly_state.snapshot()
-
     new_assembly = assembly.model_copy(
         update={"instances": new_instances, "joints": new_joints}
     )
@@ -634,6 +654,15 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
 
 @router.post("/assembly/joints/{joint_id}/refresh-mate", status_code=200)
 def refresh_mate(joint_id: str) -> dict:
+    from backend.api.assembly_recorded_mutation import apply_recorded_change
+    candidate = apply_recorded_change(
+        lambda: _refresh_mate(joint_id), op_kind="assembly-refresh-mate",
+        label="Refresh mate", params=command_params(joint_id=joint_id),
+    )
+    return _assembly_response(candidate)
+
+
+def _refresh_mate(joint_id: str) -> dict:
     """Capture the mate's current relative *rotation* and snap connectors together.
 
     For a rigid mate the captured invariant is: "the two connector frames are
@@ -738,7 +767,7 @@ def refresh_mate(joint_id: str) -> dict:
     except np.linalg.LinAlgError:
         pass
 
-    assembly_state.set_assembly(mutated)
+    assembly_state.set_assembly_silent(mutated)
     return _assembly_response(mutated)
 
 
@@ -747,20 +776,12 @@ def delete_joint(joint_id: str) -> dict:
     """Remove an AssemblyJoint."""
     assembly = assembly_state.get_or_404()
     target = _find_joint(assembly, joint_id)
-    new_joints = [j for j in assembly.joints if j.id != joint_id]
-    # Cascade-drop any gear relations that referenced this joint.
-    new_gears = [
-        g
-        for g in assembly.gear_relations
-        if g.joint_a_id != joint_id and g.joint_b_id != joint_id
-    ]
-    mutated = assembly.model_copy(
-        update={"joints": new_joints, "gear_relations": new_gears}
-    )
+    from backend.core.assembly_removal import remove_members
+    mutated = remove_members(assembly, joint_ids={joint_id})
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-delete-joint",
         label=f"Delete mate: {target.name}",
-        params={"joint_id": joint_id, "name": target.name},
+        params=command_params(joint_id=joint_id, name=target.name),
     )
     return _assembly_response(assembly_state.get_or_404())

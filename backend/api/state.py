@@ -915,7 +915,9 @@ def encode_design_snapshot(design: Design) -> tuple[str, int]:
     # nearly all of gzip's size reduction while taking roughly one third of the
     # CPU time of level 6 on Voltron-scale designs; eviction is governed by the
     # uncompressed byte budget, so this does not weaken history limits.
-    gz = gzip.compress(raw, compresslevel=3)
+    # Recovery bytes are part of pinned assembly source revisions. Identical
+    # recorded inputs must not acquire different source digests from gzip time.
+    gz = gzip.compress(raw, compresslevel=3, mtime=0)
     return base64.b64encode(gz).decode("ascii"), len(raw)
 
 

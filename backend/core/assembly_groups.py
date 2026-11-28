@@ -23,7 +23,7 @@ Pure functions over ``Assembly`` (no FastAPI / I/O). Two responsibilities:
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Callable, Iterable
 import uuid as _uuid
 
 import numpy as np
@@ -154,6 +154,7 @@ def clone_group_subtree(
     *,
     offset: tuple[float, float, float] = (5.0, 0.0, 0.0),
     name_suffix: str = " (copy)",
+    identity_factory: Callable[[str], str] | None = None,
 ) -> tuple[
     list[PartInstance],  # new instances
     list[AssemblyJoint],  # new joints (internal only)
@@ -175,15 +176,16 @@ def clone_group_subtree(
     inst_ids_to_clone, group_ids_to_clone = collect_group_member_ids(assembly, group_id)
 
     # Build id_map first so internal joint/binding cloning can resolve.
-    id_map: dict[str, str] = {old: str(_uuid.uuid4()) for old in inst_ids_to_clone}
+    allocate = identity_factory or (lambda _slot: str(_uuid.uuid4()))
+    id_map: dict[str, str] = {old: allocate(f"instance:{old}") for old in sorted(inst_ids_to_clone)}
     group_id_map: dict[str, str] = {
-        old: str(_uuid.uuid4()) for old in group_ids_to_clone
+        old: allocate(f"group:{old}") for old in sorted(group_ids_to_clone)
     }
 
     # ── Instances ──
     new_instances: list[PartInstance] = []
     dx, dy, dz = (float(offset[0]), float(offset[1]), float(offset[2]))
-    for old_id in inst_ids_to_clone:
+    for old_id in sorted(inst_ids_to_clone):
         src = by_inst[old_id]
         T = src.transform.to_array().copy()
         T[0, 3] += dx
@@ -209,7 +211,7 @@ def clone_group_subtree(
             new_j = j.model_copy(
                 deep=True,
                 update={
-                    "id": str(_uuid.uuid4()),
+                    "id": allocate(f"joint:{j.id}"),
                     "instance_a_id": id_map[a],
                     "instance_b_id": id_map[b],
                 },
@@ -225,7 +227,7 @@ def clone_group_subtree(
             new_b = binding.model_copy(
                 deep=True,
                 update={
-                    "id": str(_uuid.uuid4()),
+                    "id": allocate(f"binding:{binding.id}"),
                     "instance_a_id": id_map[a],
                     "instance_b_id": id_map[b],
                 },
@@ -234,7 +236,7 @@ def clone_group_subtree(
 
     # ── Groups (preserve nesting) ──
     new_groups: list[PartGroup] = []
-    for old_gid in group_ids_to_clone:
+    for old_gid in sorted(group_ids_to_clone):
         src_g = by_group[old_gid]
         new_groups.append(
             src_g.model_copy(

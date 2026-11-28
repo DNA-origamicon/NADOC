@@ -44,7 +44,7 @@ import { repaintAssemblySourceColors } from './assembly_source_colors.js'
 import { assemblyMemberSignature, canReuseAssemblyRepresentation, applyAssemblyRepresentation,
   fullOnlyAssemblyMeshes, canPrepareFullAssemblySource } from './assembly_representation.js'
 import { initAssemblySourceReadiness } from './assembly_source_readiness.js'
-import { versionedAssemblySourceKey } from '../api/assembly_instance_design_cache.js'
+import { versionedAssemblySourceKey, assemblyRenderSourceKey } from '../api/assembly_instance_design_cache.js'
 import {
   _OVHG_SPRITE_HEIGHT_BASE, _makeOverhangNameTexture, _overhangLabelAnchorsLocal,
 } from './assembly_overhang_labels.js'
@@ -289,10 +289,7 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
 
   // ── Source-key helper (mirror of `_sourceKey` in initAssemblyRenderer) ────
   function _sharedSourceKey(inst) {
-    if (!inst?.source) return 'none'
-    const ov = JSON.stringify(inst.cluster_transform_overrides ?? [])
-    if (inst.source.type === 'file') return `file:${inst.source.path ?? ''}:ct:${ov}`
-    return `inline:${inst.source.design?.id ?? ''}:ct:${ov}`
+    return assemblyRenderSourceKey(inst)
   }
 
   // ── Transform helper: row-major 16-float → THREE.Matrix4 (column-major) ───

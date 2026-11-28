@@ -1,8 +1,22 @@
-/** Live file versions supplied by /assembly; saved/inline keys lack a revision. */
+/** Pinned revisions or a live legacy file timestamp supplied by the server. */
 export function versionedAssemblySourceKey(instance) {
+  const source = instance?.source
   const key = instance?.geometrySourceKey
-  return instance?.source?.type === 'file' && typeof key === 'string'
+  if (source?.type === 'file' && source.revision && /^[0-9a-f]{64}$/.test(source.revision_sha256 ?? '')) {
+    return `pinned:${source.path}:${source.revision_sha256}`
+  }
+  if (source?.type === 'inline' && typeof key === 'string' && /^i:.*:[0-9a-f]{64}$/.test(key)) return key
+  return source?.type === 'file' && typeof key === 'string'
     && /^f:.*:\d+:[0-9a-f]*$/.test(key) ? key : null
+}
+
+export function assemblyRenderSourceKey(instance) {
+  if (!instance?.source) return 'none'
+  const source = instance.source
+  const revision = source.type === 'file' && !source.revision
+    ? `file:${source.path ?? ''}`
+    : versionedAssemblySourceKey(instance) ?? `inline:${JSON.stringify(source.design ?? null)}`
+  return `${revision}:ct:${JSON.stringify(instance.cluster_transform_overrides ?? [])}`
 }
 
 /** Share base-source reads without borrowing overridden renderer Designs.

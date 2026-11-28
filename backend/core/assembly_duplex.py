@@ -254,7 +254,7 @@ def smallest_unused_assembly_duplex_name(assembly: Assembly) -> str:
     return f"AD{n}"
 
 
-def sync_assembly_duplexes_from_bindings(assembly: Assembly) -> Assembly:
+def sync_assembly_duplexes_from_bindings(assembly: Assembly, *, identity_factory=None) -> Assembly:
     """Idempotently ensure every legacy binding pair also has a display
     :class:`AssemblyDuplex`. Skips pairs that already carry a duplex; assigns
     fresh unique names. Mirrors ``backend.core.duplex.sync_duplexes_from_bindings``.
@@ -278,9 +278,10 @@ def sync_assembly_duplexes_from_bindings(assembly: Assembly) -> Assembly:
         probe = assembly.model_copy(
             update={"duplexes": [*assembly.duplexes, *additions]}
         )
-        additions.append(
-            dx.model_copy(update={"name": smallest_unused_assembly_duplex_name(probe)})
-        )
+        update = {"name": smallest_unused_assembly_duplex_name(probe)}
+        if identity_factory is not None:
+            update["id"] = identity_factory(dx)
+        additions.append(dx.model_copy(update=update))
     if not additions:
         return assembly
     return assembly.model_copy(update={"duplexes": [*assembly.duplexes, *additions]})

@@ -39,6 +39,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api import assembly_state
+from backend.api.assembly_command_replay import command_params, output_id
+from backend.api.assembly_history_transaction import apply_history_change
 from backend.api.assembly import (
     _apply_assembly_mutation_with_feature_log,
     _assembly_response,
@@ -116,6 +118,7 @@ def create_group(body: CreateGroupRequest) -> dict:
                 )
 
     new_group = PartGroup(
+        id=output_id("group_id"),
         name=body.name or _autogen_group_name(assembly),
         instance_ids=list(body.instance_ids),
         subgroup_ids=list(body.subgroup_ids),
@@ -127,6 +130,7 @@ def create_group(body: CreateGroupRequest) -> dict:
         op_kind="assembly-create-group",
         label=f"Group: {new_group.name}",
         params={
+            **command_params(body),
             "group_id": new_group.id,
             "name": new_group.name,
             "instance_ids": list(body.instance_ids),
@@ -154,7 +158,7 @@ def ungroup(group_id: str) -> dict:
         mutated,
         op_kind="assembly-ungroup",
         label=f"Ungroup: {target.name or group_id}",
-        params={"group_id": group_id, "name": target.name},
+        params=command_params(group_id=group_id, name=target.name),
     )
     return _assembly_response(assembly_state.get_or_404())
 
@@ -197,7 +201,7 @@ def patch_group(group_id: str, body: PatchGroupRequest) -> dict:
         mutated,
         op_kind="assembly-patch-group",
         label=f"Update group: {new_target.name or group_id}",
-        params={"group_id": group_id, "updates": updates},
+        params=command_params(body, group_id=group_id, updates=updates),
     )
     return _assembly_response(assembly_state.get_or_404())
 
@@ -221,10 +225,17 @@ def duplicate_group(
         float(body.offset[1]) if len(body.offset) > 1 else 0.0,
         float(body.offset[2]) if len(body.offset) > 2 else 0.0,
     )
+    outputs = {}
+
+    def allocate(slot):
+        outputs[slot] = output_id(slot)
+        return outputs[slot]
+
     new_insts, new_joints, new_bindings, new_groups, root_id = _ag.clone_group_subtree(
         assembly,
         group_id,
         offset=offset,
+        identity_factory=allocate,
     )
     if body.name is not None:
         new_groups = [
@@ -245,6 +256,8 @@ def duplicate_group(
         op_kind="assembly-duplicate-group",
         label="Duplicate group",
         params={
+            **command_params(body),
+            "outputs": outputs,
             "source_group_id": group_id,
             "new_group_id": root_id,
             "offset": list(body.offset),
@@ -263,32 +276,14 @@ def cascade_delete_group(group_id: str) -> dict:
     target = _find_group(assembly, group_id)
     inst_ids, group_ids = _ag.collect_group_member_ids(assembly, group_id)
 
-    new_instances = [i for i in assembly.instances if i.id not in inst_ids]
-    new_joints = [
-        j
-        for j in assembly.joints
-        if j.instance_a_id not in inst_ids and j.instance_b_id not in inst_ids
-    ]
-    new_bindings = [
-        b
-        for b in assembly.overhang_bindings
-        if b.instance_a_id not in inst_ids and b.instance_b_id not in inst_ids
-    ]
-    new_groups = _ag.filter_groups_after_group_removal(list(assembly.groups), group_ids)
-
-    mutated = assembly.model_copy(
-        update={
-            "instances": new_instances,
-            "joints": new_joints,
-            "overhang_bindings": new_bindings,
-            "groups": new_groups,
-        }
-    )
+    from backend.core.assembly_removal import remove_members
+    mutated = remove_members(assembly, instance_ids=inst_ids, group_ids=group_ids)
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-delete-group",
         label=f"Delete group: {target.name or group_id}",
         params={
+            **command_params(),
             "group_id": group_id,
             "name": target.name,
             "deleted_instance_ids": sorted(inst_ids),
@@ -317,7 +312,18 @@ class TransformGroupRequest(BaseModel):
 def transform_group(group_id: str, body: TransformGroupRequest) -> dict:
     """Apply a rigid transform to a group; rigidly-mated external partners
     follow via the joint/binding transitive closure."""
-    assembly = assembly_state.get_or_404()
+    metadata = {}
+
+    def evaluate():
+        metadata.update(_transform_group(group_id, body))
+
+    published = apply_history_change(evaluate)
+    return {**_assembly_response(published), **metadata}
+
+
+def _transform_group(group_id: str, body: TransformGroupRequest) -> dict:
+    source = assembly_state.get_or_404()
+    assembly = source.model_copy(deep=True)
     target = _find_group(assembly, group_id)
     # Snapshot pre-move base_transforms — apply_group_transform clears them
     # on every moved instance, and gear-sync below needs the originals to
@@ -351,12 +357,7 @@ def transform_group(group_id: str, body: TransformGroupRequest) -> dict:
     else:
         raise HTTPException(400, detail="One of translation or matrix is required.")
 
-    _apply_assembly_mutation_with_feature_log(
-        mutated,
-        op_kind="assembly-transform-group",
-        label=f"Move group: {target.name or group_id}",
-        params=op_params,
-    )
+    assembly_state.set_assembly_silent(mutated)
     # After the bulk transform, every mated joint touching a moved instance
     # may be out of sync (revolute/prismatic axes are stored in world space;
     # rigid/spherical mates are connector-coincident in world space). Run the
@@ -400,7 +401,14 @@ def transform_group(group_id: str, body: TransformGroupRequest) -> dict:
     if updated_joint_ids:
         assembly_state.set_assembly_silent(latest)
 
-    response = _assembly_response(assembly_state.get_or_404())
-    if solve_status is not None:
-        response["solve_status"] = solve_status
-    return response
+    # Record after every solver/gear follow-up, against the untouched source.
+    # The outer transaction publishes this complete operation in one undo step.
+    candidate = assembly_state.get_or_404()
+    assembly_state.set_assembly_silent(source)
+    _apply_assembly_mutation_with_feature_log(
+        candidate,
+        op_kind="assembly-transform-group",
+        label=f"Move group: {target.name or group_id}",
+        params={**op_params, **command_params(body, group_id=group_id)},
+    )
+    return {"solve_status": solve_status} if solve_status is not None else {}

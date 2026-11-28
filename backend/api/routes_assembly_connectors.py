@@ -31,6 +31,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api import assembly_state
+from backend.api.assembly_command_replay import command_params, output_label
 from backend.api.assembly import (
     _apply_assembly_mutation_with_feature_log,
     _assembly_response,
@@ -64,6 +65,9 @@ def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
     label = body.label or next(
         f"C{i}" for i in range(1, 999) if f"C{i}" not in existing
     )
+    label = output_label("label", label, explicit=bool(body.label))
+    if body.label and label != body.label:
+        raise HTTPException(422, detail="Recorded connector label disagrees with its explicit input.")
     if label in existing:
         raise HTTPException(
             400, detail=f"Connector label {label!r} already exists on this instance."
@@ -89,6 +93,7 @@ def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
         op_kind="assembly-add-connector",
         label=f"Add connector {label} on {inst.name}",
         params={
+            **command_params(body),
             "instance_id": instance_id,
             "label": label,
             "position": list(body.position),
@@ -127,6 +132,6 @@ def delete_connector(instance_id: str, label: str) -> dict:
         mutated,
         op_kind="assembly-delete-connector",
         label=f"Delete connector {label} on {inst.name}",
-        params={"instance_id": instance_id, "label": label},
+        params=command_params(instance_id=instance_id, label=label),
     )
     return _assembly_response(assembly_state.get_or_404())

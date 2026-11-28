@@ -86,7 +86,7 @@ def test_key_inline_source_is_stable_and_id_based():
     d = Design(id="dz")
     inst = _inst(PartSourceInline(design=d))
     key = ageo.geo_cache_key(inst, None)
-    assert key == "i:dz:"
+    assert key.startswith("i:dz:") and len(key.split(":")[2]) == 64
     # second call identical (stable)
     assert ageo.geo_cache_key(inst, None) == key
 

@@ -11,6 +11,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { initKinematicsTicker } from './kinematics_ticker.js'
+import { recordAssemblyResponse } from '../api/assembly_response_authority.js'
+
+it('binds pending playback writes to the authoritative assembly revision', () => {
+  const assembly = { id: 'a', instances: [], joints: [{ id: 'j', joint_type: 'revolute',
+    current_value: 0, angular_velocity_rpm: 1, axis_origin: [0, 0, 0], axis_direction: [0, 0, 1] }] }
+  const store = createMockStore({ currentAssembly: assembly })
+  const patchAssemblyJoint = vi.fn()
+  const ticker = initKinematicsTicker({ store, api: { patchAssemblyJoint } })
+  ticker.tick(0.01)
+  ticker.flushNow()
+  expect(patchAssemblyJoint).not.toHaveBeenCalled()
+  recordAssemblyResponse(assembly, { revision: 42 })
+  ticker.flushNow()
+  expect(patchAssemblyJoint).toHaveBeenCalledWith('j', expect.objectContaining({ silent: true,
+    expected_revision: 42, expected_assembly_id: 'a' }))
+})
 
 function makeTicker(state = {}) {
   const store = createMockStore(state)

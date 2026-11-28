@@ -55,7 +55,7 @@ def _dispose(job, worker, design_id, *, status_lock=None):
             Event().wait(POLL_SECONDS)
 
 
-def supervise(job, design, worker_factory, seconds, *, status_lock=None):
+def supervise(job, design, worker_factory, seconds, *, status_lock=None, source_matches=None):
     """Own one admitted child through reaping; return a revision-bound result."""
     deadline = monotonic() + seconds
     worker = None
@@ -65,7 +65,8 @@ def supervise(job, design, worker_factory, seconds, *, status_lock=None):
             raise Stopped("cancelled")
         if monotonic() >= deadline:
             raise Stopped("time_limit")
-        matches = state.verification_source_matches(job.doc, job.source(), job.revision, blocking=False,
+        matches = source_matches() if source_matches is not None else state.verification_source_matches(
+            job.doc, job.source(), job.revision, blocking=False,
             expected_session_identity=getattr(job, "session_identity", None),
             expected_policy_generation=getattr(job, "policy_generation", None))
         if matches is False:

@@ -1,3 +1,4 @@
+import { assemblyRenderSourceKey } from '../api/assembly_instance_design_cache.js'
 import { geometryLoads } from './geometry_loads.js'
 /**
  * Assembly renderer — adds PartInstance geometry to the Three.js scene.
@@ -821,11 +822,7 @@ export function initAssemblyRenderer(scene, store, api) {
 
   /** Cheap string key to detect source changes without deep-comparing designs. */
   function _sourceKey(inst) {
-    if (!inst?.source) return 'none'
-    const overridesKey = JSON.stringify(inst.cluster_transform_overrides ?? [])
-    if (inst.source.type === 'file') return `file:${inst.source.path ?? ''}:ct:${overridesKey}`
-    // inline: use embedded design id — changes if user swaps the design
-    return `inline:${inst.source.design?.id ?? ''}:ct:${overridesKey}`
+    return assemblyRenderSourceKey(inst)
   }
 
   /**
@@ -1192,7 +1189,7 @@ export function initAssemblyRenderer(scene, store, api) {
 
       let geoData, design
       const instError = batchGeo?.instances?.[inst.id]?.error
-      const prefetched = inst.source?.type === 'file'
+      const prefetched = inst.source?.type === 'file' && !inst.source.revision
         ? _prefetchedByPath.get(inst.source.path)
         : null
       if (prefetched) {
@@ -1588,7 +1585,7 @@ export function initAssemblyRenderer(scene, store, api) {
     const assembly = store?.getState?.()?.currentAssembly
     if (!assembly || !filePath) return
     const affected = (assembly.instances ?? []).filter(
-      i => i.source?.type === 'file' && i.source.path === filePath,
+      i => i.source?.type === 'file' && !i.source.revision && i.source.path === filePath,
     )
     if (!affected.length) return
     // Invalidate each affected instance's cache so the rebuild loop's

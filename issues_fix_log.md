@@ -1,5 +1,39 @@
 # Issues fix log
 
+## ISSUE-277 — [x] Assembly save preserves recorded source revisions
+
+Removed silent inline-to-unpinned-file conversion from save. Save now persists
+the captured .nass without authoring edits or implicit part files. Reopened proof,
+unchanged revision/history, evaluation commit across autosave, and the running-app
+workflow pass. Failed and successful browser runs all cleaned their scratch roots.
+
+## ISSUE-276 — [x] Optional popup no longer stalls assembly smoke
+
+The assembly-picking helper now reads existing visible overlay rectangles without
+waiting for an optional popup to appear. The full smoke run passed its other 28
+checks; the formerly failing assembly-exit check passed in a focused rerun (14.5 s).
+No timeout or guard changed. Both owned scratch roots were verified removed.
+
+## ISSUE-275 — [x] Reject stale kinematic writes after history changes
+
+Playback pose writes now carry their authoritative source revision. The backend
+evaluates them privately and applies them atomically only against that source,
+preserving silent playback and undo/redo semantics. A running-app regression with
+animation enabled now preserves the driver, regenerates the edited gear pose,
+and restores the complete operation on undo/redo. Backend and frontend focused
+tests pass; test scratch cleanup was independently verified.
+
+## ISSUE-274 — [ ] Assembly feature-log parity
+
+History edit/delete evaluation now runs in an isolated session and publishes one
+revision-checked undo step. Joint/mate creation, gear lifecycle and five group
+operations record complete versioned inputs and stable output identities; gear
+patch and resolve no longer mutate silently. Earlier versioned edits regenerate
+downstream operations with failure attribution and rollback. Focused saved/reopened
+command replay and existing group/gear/history tests pass. Remaining operation
+families, source-version ownership, verification/jobs/repair and editor controls
+remain part of the active parity goal; no aggregate completion claimed.
+
 ## ISSUE-273 — [ ] Cold Bevel and history actions below one second
 
 Removed speculative UI preparation. Exact dependency/geometry reuse eliminates
@@ -4026,3 +4060,272 @@ Experimental checkpoint: user stopped work due to ongoing interference with norm
 PC operations. Hidden graphics is not accepted as resolved desktop isolation.
 Curved 6HB build/export/reopen passed including preserved tolerance; complete
 independent replay and curved 3×6 remain unverified. No further native runs.
+
+## ISSUE-274 continuation — Group post-state and polymer identity contracts (2026-11-27)
+
+Group moves now complete joint resolution and gear synchronization inside a
+private evaluation before recording/publishing one undoable operation. Both
+polymerization routes record full request inputs and stable output identities
+by source, direction and repeat step. Explicit edits retain surviving outputs,
+record new ones through the real command and reject dangling downstream selections
+atomically. Strict replay never allocates missing recorded IDs. Summary-only
+legacy polymer rows cannot acquire a complete replay contract from snapshots.
+
+Validation: 123 focused group/polymer/command tests passed; expanded command,
+history and transaction checks passed after replacing an obsolete latest-only
+edit assertion (26 command, 39 history, five transaction cases). Periodic tests
+construct and independently verify the source part through bundle/nick/seam
+commands. App gear/group edit and undo flow passed; its disposable root was
+verified removed. Lint passes. ISSUE-274 stays open for remaining command families,
+source revisions and full assembly/instance history parity. Molecular placement
+and polymerization simulation handling were not changed.
+
+
+## ISSUE-274 continuation — Joint patches, mate refresh and limit semantics (2026-11-27)
+
+Recorded complete normal joint patches and mate refreshes as atomic operations;
+versioned joint deletion replays its gear cascade. Full request values now carry
+supplied-field metadata so replay preserves omitted versus explicit-null limits.
+Earlier input edits preserve this contract; playback transport cannot be promoted
+into authored history. New feature kinds render as Joint/Mate rows.
+
+169 focused backend tests, eight frontend label tests, lint and the isolated
+running-app gear/group/joint history-edit/undo flow passed. Browser scratch root
+was independently verified removed. Remaining assembly/instance dependency,
+repair, proof/jobs, source ownership and UI parity keep ISSUE-274 open.
+
+
+## ISSUE-274 continuation — Connector and belt command replay (2026-11-27)
+
+Recorded full connector and belt/rider inputs, stable generated outputs, belt
+patches and belt polymer placement inputs. Automatic connector labels survive
+surgical prefix deletion; explicit renames fail safely if later commands still
+select the old label. Belt deletion detaches rider records without deleting cargo.
+App validation exposed and fixed a stale patch response that omitted the new
+feature row; the route now returns the actual recorded state.
+
+172 focused backend checks initially passed; the expanded 32 command cases and
+25 belt-route tests pass, including corrected response/undo expectations. Nine
+frontend label tests, lint, and the isolated app gear/group/joint/belt edit/undo
+flow pass. Both browser roots were verified absent. ISSUE-274 remains open for
+remaining commands, source ownership, dependency/repair/proof/job and UI parity.
+
+
+## ISSUE-274 continuation — Overhang command contracts and source revision identity (2026-11-27)
+
+Added full binding/connection/duplex/Relax command inputs, stable generated IDs,
+and replayed creation times. Saved/reopened tests use independently verified
+bundle/extrusion source recipes and compare materialized linker topology and
+complete source histories. Geometry/register algorithms are unchanged.
+
+Tests exposed same-document-ID revisions collapsing in compact assembly sources.
+Source deduplication now uses full content identity (including history), shared
+between disk serialization and API responses; inline geometry keys distinguish
+those revisions too. Shared source objects hash once per serialization call.
+External source pinning/recoverable writes and geometry-key scaling remain work.
+
+201 focused tests, lint and app source-transport/history checks passed. Browser
+scratch was independently verified absent. Remaining full history parity keeps
+ISSUE-274 and the persistent goal open.
+
+
+## ISSUE-274 continuation — Pinned instance source revisions (2026-11-27)
+
+New file instances preserve resolved source content and part history with a
+validated digest. Source replacement now records an atomic assembly operation
+and updates only the instance revision, without overwriting its external part
+file or auto-writing an inline source. API/core readers, cache identity,
+readiness, simulation facts, polymer matching and renderer source reuse handle
+pinned revisions separately. Existing source paths remain recorded.
+
+179 focused backend checks passed; source integrity/replay/undo checks passed
+after final changes. Relevant frontend cache/reuse checks pass after retaining
+legacy file grouping, including two pinned revisions sharing one path. App
+source replacement, unchanged sibling and undo passed; scratch cleanup verified.
+Lint passes. Legacy admission, explicit reload/update controls, other editor
+save paths, selected-instance native command history and the full five-item
+parity goal remain open.
+
+
+## ISSUE-274 continuation — Complete instance property and transform inputs (2026-11-27)
+
+Recorded authored instance properties and complete combined property/pose inputs,
+cluster transforms with propagated deltas, stable duplicate outputs, and explicit
+FK propagation through its own command contract. Display-only updates remain
+lightweight; failed combined requests no longer leak remembered display changes.
+
+174 focused backend checks, an additional cluster replay check, eleven frontend
+label checks, lint and the app instance-property history/edit/undo flow pass.
+Browser scratch was independently verified absent. Full dependency, source,
+selected-instance native command, repair/proof/job and editor UI parity remain open.
+
+## ISSUE-274 continuation — Shared deletion dependency closure (2026-11-27)
+
+Instance/group deletion now removes dependent gears, belts/riders, cross-part
+bindings/linkers/duplexes and owned linker topology. Joint deletion also removes
+belts and riders; connection deletion removes its duplex references. Surviving
+parts retain their poses/source histories. Instance deletion records a full
+versioned command and replays downstream of surgical history deletion.
+
+160 focused backend checks, lint and running-app deletion/complete undo pass.
+Disposable browser root independently verified absent. Broader history parity
+remains open; this increment does not supply suppression, repair or proof/jobs.
+
+## ISSUE-274 continuation — Shared cancellable history regeneration (2026-11-27)
+
+Versioned edits and surgical deletion now use one suffix executor. Authored row
+IDs, timestamps and group tags survive regeneration; proposed suppression/order
+and command-boundary cancellation are supported internally. Reference failures
+identify the downstream feature and never publish partial state. Removed the
+unused manual replay allowlist and reject surgical deletion from a history prefix.
+
+83 existing focused checks plus four new regeneration checks, lint and the app
+history workflow pass; browser scratch independently verified absent. Public
+suppression/reorder controls and independent proof/jobs remain unfinished.
+
+## ISSUE-274 continuation — Explicit assembly origin and independent replay (2026-11-27)
+
+New assemblies now retain their actual empty-document creation inputs. An
+internal verifier replays versioned commands without recovery snapshots,
+checks upstream part histories and pinned revisions, and compares complete
+classified authoring state. Missing roots, unsupported definitions, mutable
+file sources and unrecorded changes fail verification. Legacy files do not gain
+an inferred origin. Cancellation does not publish a result.
+
+165 focused checks passed, then all 12 proof checks after strict-version and
+portable-source additions. Lint and running-app creation/history flows pass;
+scratch cleanup independently verified. Public jobs/UI, reference validity,
+dependencies, suppression/reorder and repair remain open.
+
+## ISSUE-274 continuation — Bounded assembly reference assessment (2026-11-27)
+
+Independent replay now checks intermediate and final assembly relation references,
+with exact failing feature attribution. Checks cover instance/joint, gear/belt,
+group, cross-part overhang/duplex and protein selections plus source-qualified
+cluster/internal-joint refs. Limits/cancellation fail closed; no flattening or
+external file reads. A later deletion cannot conceal an invalid intermediate
+joint selection. Molecular geometry is outside this reference assessment.
+
+20 unique focused proof/reference checks pass across the final runs, plus lint.
+No frontend behavior changed. The underlying add-joint missing-cluster input gap
+is now detected by proof but still needs authoring validation/repair integration.
+Public jobs, dependency controls, suppression/reorder and repair remain open.
+
+## ISSUE-274 continuation — Revision-bound assembly verification jobs (2026-11-27)
+
+Added assembly verification start/poll/cancel routes using the existing bounded
+spawned-worker transport and cleanup supervisor. Results bind document/session/
+revision; stale, cancelled or expired work cannot present a verified result.
+Shared admission remains held until the child and shared buffers are gone.
+Capture preserves source provenance and enforces explicit resource bounds.
+
+48 unique focused job/worker checks passed across two runs, including actual
+spawn/shared-memory cleanup and existing part consumers. Lint and running-app
+HTTP verification lifecycle pass; browser scratch absence independently checked.
+Verification UI, evaluation candidate jobs, suppress/reorder, dependency/repair
+controls and selected-instance parity remain open.
+
+## ISSUE-274 continuation — Private history evaluation and explicit commit (2026-11-27)
+
+Added verified candidate jobs for suppression, reordering, input edits and surgical
+deletion. Full regeneration and proof run privately; explicit commit checks source
+content/session/revision and candidate integrity, then publishes one undo step.
+Polling hides candidate documents. Cancelled/stale work cannot commit; repeated
+commit is idempotent. Backend routes and actual spawned/HTTP paths are covered.
+
+56 focused checks passed, then 16 evaluation/source checks after the discovered
+ISSUE-277 autosave fix (60 unique). Lint and app evaluation/commit/undo pass;
+all scratch roots independently verified absent. Menu/progress wiring, dependency
+inspection, repair comparison and selected-instance parity remain unfinished.
+
+## ISSUE-274 continuation — Shared desktop history controls (2026-11-27)
+
+Assembly rows now offer the same Suppress/Unsuppress and Move dialogs as parts,
+with private evaluation, progress/cancel, checked commit/refresh and suppression
+badges. Captured feature IDs and confirmed assembly revisions bind the requests;
+stale source responses cannot be adopted. Idempotent receipts retain assembly ID.
+
+31 frontend and 13 backend checks, actual right-click dialog flows and undo,
+seven focused boot/assembly-exit smoke checks, lint and cleanup verification pass.
+No main.js edits. Historical-prefix suppression, verification UI, dependency/
+repair controls, general input editing and selected-instance parity remain open.
+
+## ISSUE-274 continuation — Assembly dependency inspection (2026-11-27)
+
+Added reviewed command dependencies through the shared typed graph, bounded
+read-only inspection API, and shared View dependencies dialog. Document/revision
+checks prevent stale results. State-dependent operations are explicitly
+conservative; unknown commands cannot silently qualify for independent proof.
+
+31 backend and 14 frontend checks, actual dependency/suppress/move/undo app flows,
+one assembly-exit smoke check, lint and scratch cleanup verification pass. No
+main.js edits. Verification UI, historical-prefix suppression, repair workflows,
+general input editing and selected-instance history parity remain open.
+
+## ISSUE-274 continuation — Earlier assembly input editing (2026-11-27)
+
+Exposed earlier recorded-input editing through shared forms and the cancellable
+history evaluation/commit flow. Added gear/joint/name fields alongside existing
+polymerization/linker fields. UI loads recorded inputs; stale sources and failed
+downstream regeneration cannot publish. Legacy rows retain their existing limits.
+
+22 focused frontend tests and actual earlier gear edit/downstream pose/undo/redo
+flows pass. Exit smoke passed on retry after an initial fixture fetch failure;
+scratch cleanup independently verified. Lint/diff pass; no main.js edits. Broader
+field coverage and selected-instance editing/replay remain unfinished. Dedicated
+verification UI and repair workflows are deferred per the user's revised scope.
+
+## ISSUE-274 continuation — Native selected-instance recording (2026-11-27)
+
+Instance overhang extrusion and patch now use the shared part recorder plus
+complete replayable assembly commands, replacing payload-free assembly rows.
+Source revisions, generated identities and timestamps survive replay; assembly
+publication is atomic and the open part document is unchanged. Ordinary history
+editing exposes extrusion length and recorded sequence/label fields.
+
+87 unique focused backend checks,15 frontend checks, real app earlier instance
+edit/downstream patch/undo, existing gear history flow and assembly-exit smoke
+pass. Serialized assembly and nested part histories independently verify. Initial
+browser fixture tab-switching failures were corrected through separate source
+document setup. All scratch roots independently confirmed absent; lint/diff pass.
+General selected-instance history controls and broader replay parity remain open.
+
+## ISSUE-274 continuation — Suppression from historical assembly positions (2026-11-27)
+
+Suppression/unsuppression now independently checks the displayed prefix and
+rebuilds/verifies the full recipe before evaluating the toggle. Recovery snapshots
+are not proof inputs. Commit returns to the tail in one undo step; undo restores
+the original historical position. Remembered display settings survive F0.
+
+35 focused backend and 17 frontend checks pass, including corrupt prefix/unseen
+tail refusals, saved replay and undo. Real app F0 suppression/undo/redo and one
+assembly-exit smoke check pass. Scratch absence verified; lint/diff pass. General
+selected-instance controls and broader input/replay qualification remain open.
+
+
+## ISSUE-274 continuation — Selected-instance editing checkpoint (2026-11-27)
+ordinary selected-part edit, suppression,
+reorder and deletion now use native part evaluation inside an isolated assembly
+transaction. A recorded assembly-instance-history-change preserves the original
+source revisions and regenerates the part suffix and dependent assembly constraints;
+later assembly history edits can replay this command. Publication remains revision
+bound, independently verified and one undo step. The selected-part menu shares the
+existing dialogs, including dependency inspection; supported native snapshot inputs
+use the ordinary field editor. Removed the unreachable metadata-only deletion branch
+in the assembly target handler. No main.js task changes (LOC delta 0).
+
+Checkpoint validation: 52 focused backend tests pass against an isolated export of
+the staged commit (including native selected-instance changes, evaluation and
+verification jobs, shared part dependencies). This check caught an initially omitted
+shared supervisor adapter; it was included and the complete selection passed.
+Running-app selected-part edit/downstream label, dependency view, delete and two
+undos pass (50.2s body). Assembly-exit smoke passes (17.6s body). Scratch roots
+/tmp/__e2e__history-oiwrggms and /tmp/__e2e__smoke-qjmvoiee independently absent.
+All 38 focused frontend tests also pass against the staged export.
+Lint passes. Full-suite watermark unchanged.
+
+Still unfinished: broader typed/reference/optional input forms, selected-part
+historical-prefix and child controls, legacy embedded part-context paths, remaining
+silent recording/source admission/update paths, scale qualification and complete
+replay coverage. Dedicated verification UI and repair workflows remain deferred;
+internal verification remains critical. Persistent goal is paused, not complete.

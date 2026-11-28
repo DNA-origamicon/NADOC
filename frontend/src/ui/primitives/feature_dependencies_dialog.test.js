@@ -42,3 +42,17 @@ it('aggregates routing children without showing their internal edges as external
   expect(document.querySelector('[aria-label="Dependents"]').textContent).toBe('DependentsNone')
   modal.close()
 })
+
+it('keeps assembly dependencies open across unrelated part updates and closes on assembly replacement', () => {
+  const source = { id: 'assembly', feature_log: [
+    { op_kind: 'assembly-add-instance' }, { op_kind: 'assembly-patch-instance' },
+    { op_kind: 'assembly-duplicate-instance' },
+  ] }
+  const store = createMockStore({ assemblyActive: true, currentAssembly: source })
+  const modal = showFeatureDependencies({ graph, rowIndex: 1, store, source, assembly: true })
+  expect(document.querySelector('[aria-label="Parents"]').textContent).toContain('F1: Part')
+  store.setState({ currentDesign: { id: 'unrelated' } })
+  expect(modal.isOpen()).toBe(true)
+  store.setState({ currentAssembly: { ...source } })
+  expect(modal.isOpen()).toBe(false)
+})

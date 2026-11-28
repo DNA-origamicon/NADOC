@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { initAssemblyInstanceDesignCache, versionedAssemblySourceKey } from './assembly_instance_design_cache.js'
+import { initAssemblyInstanceDesignCache, versionedAssemblySourceKey, assemblyRenderSourceKey } from './assembly_instance_design_cache.js'
 
 const instance = (id, version = '100', path = '/part.nadoc') => ({
   id, name: `Part ${id}`, source: { type: 'file', path }, geometrySourceKey: `f:${path}:${version}:`,
@@ -86,4 +86,22 @@ describe('assembly base-design reads', () => {
     expect((await f.cache.get('a')).design.id).toBe('source')
     expect(f.fetchDesign).toHaveBeenCalledTimes(2)
   })
+})
+
+
+it('keeps pinned revisions of the same file separate in design and render caches', async () => {
+  const a = instance('a'), b = instance('b')
+  a.source = { ...a.source, revision: { id: 'same' }, revision_sha256: 'a'.repeat(64) }
+  b.source = { ...b.source, revision: { id: 'same' }, revision_sha256: 'b'.repeat(64) }
+  expect(versionedAssemblySourceKey(a)).not.toBe(versionedAssemblySourceKey(b))
+  expect(assemblyRenderSourceKey(a)).not.toBe(assemblyRenderSourceKey(b))
+  const f = fixture([a, b])
+  await Promise.all([f.cache.get('a'), f.cache.get('b')])
+  expect(f.fetchDesign).toHaveBeenCalledTimes(2)
+})
+
+it('distinguishes inline revisions that retain the same document ID', () => {
+  const a = { source: { type: 'inline', design: { id: 'same', metadata: { name: 'old' } } } }
+  const b = { source: { type: 'inline', design: { id: 'same', metadata: { name: 'new' } } } }
+  expect(assemblyRenderSourceKey(a)).not.toBe(assemblyRenderSourceKey(b))
 })

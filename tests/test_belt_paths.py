@@ -223,7 +223,7 @@ def test_create_belt_path_missing_joint_404():
     assert r.status_code == 404, r.text
 
 
-def test_patch_belt_path_is_silent():
+def test_patch_belt_path_returns_recorded_history_and_one_undo():
     ids, _ = _two_pulley_assembly()
     body = _create_belt(ids)
     belt_id = body["assembly"]["belt_paths"][0]["id"]
@@ -233,8 +233,13 @@ def test_patch_belt_path_is_silent():
     assert r.status_code == 200, r.text
     after = r.json()["assembly"]
     assert after["belt_paths"][0]["name"] == "Renamed"
-    # Silent patch must NOT append a feature-log entry.
-    assert len(after["feature_log"]) == log_len_before
+    assert len(after["feature_log"]) == log_len_before + 1
+    assert after["feature_log"][-1]["op_kind"] == "assembly-patch-belt"
+    assert after["feature_log"][-1]["id"] == assembly_state.get_or_404().feature_log[-1].id
+    assert after["feature_log"][-1]["params"]["inputs"]["name"] == "Renamed"
+    restored = assembly_state.undo()
+    assert restored.belt_paths[0].name == "Belt"
+    assert len(restored.feature_log) == log_len_before
 
 
 def test_delete_belt_path_logs_op():

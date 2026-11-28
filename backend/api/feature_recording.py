@@ -46,7 +46,7 @@ def _run(session, before, fn, state, *, retry=True, command=None):
     preserve_topology = command is not None and (
         metadata_policy(*command) or command[0] == "extension-delete"
         or command[0] in NUCLEOTIDE_KINDS
-        or command[0] in {"annotations-state", "view-volumes-state", "flexible-relax", "corner", "bevel"})
+        or command[0] in {"staple-groups-set", "annotations-state", "view-volumes-state", "flexible-relax", "corner", "bevel"})
     result = fn(session.design)
     report = None
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):
@@ -89,7 +89,7 @@ def _publish(session, before, parent_id, state):
     return validation
 
 
-def record_feature(session, op_kind, label, params, fn):
+def record_feature(session, op_kind, label, params, fn, *, entry_id=None, timestamp=None):
     # Local import keeps state the lock-owning composition root and preserves
     # its existing injected encode/reconcile/validation hooks.
     from backend.api import state
@@ -132,8 +132,9 @@ def record_feature(session, op_kind, label, params, fn):
                 session.design.recipe_root = before.recipe_root
         post, post_size = state.encode_design_snapshot(session.design)
         entry = SnapshotLogEntry(
+            **({"id": entry_id} if entry_id is not None else {}),
             op_kind=op_kind, label=label, params=params,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=timestamp or datetime.now(timezone.utc).isoformat(),
             design_snapshot_gz_b64=pre, snapshot_size_bytes=pre_size,
             post_state_gz_b64=post, post_state_size_bytes=post_size,
         )

@@ -77,6 +77,8 @@ export function isEditable(opKind) {
   return Object.prototype.hasOwnProperty.call(OP_SCHEMAS, opKind)
 }
 
+export function featureEditFields(opKind) { return OP_SCHEMAS[opKind] ?? [] }
+
 /**
  * Open the popover and resolve with a new params object, or null on cancel.
  */

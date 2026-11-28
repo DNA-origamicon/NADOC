@@ -66,10 +66,8 @@ from backend.core.models import (
     InterfacePoint,
     Mat4x4,
     PartInstance,
-    PartSourceFile,
     Vec3,
 )
-from backend.core import assembly_groups as _ag
 from backend.core import workspace as _ws
 
 router = APIRouter()
@@ -113,9 +111,8 @@ def _assembly_response(assembly: Assembly) -> dict:
       ``assembly`` dict:
         - ``format_version: 2``
         - ``sources``: ``{src_key: PartSource dict}`` — deduplicated by
-          ``_geo_cache_key`` when available so the response matches the
-          dedup key used by ``/assembly/geometry``.  Falls back to
-          ``Assembly._instance_src_key`` for inline/uncacheable sources.
+          complete source content, preserving distinct revisions and histories.
+          Geometry cache keys are separate and include placement overrides.
         - ``instances_v2``: sparse-override compact dicts.  Each carries
           ``id``, ``src_key``, ``t12`` (12 floats — top 3 rows of the
           transform), plus only the fields whose value differs from its
@@ -130,13 +127,8 @@ def _assembly_response(assembly: Assembly) -> dict:
     # information in the compact form.  Other v1 fields on the Assembly
     # (joints, assembly_helices, camera_poses, …) survive unchanged.
     full.pop("instances", None)
-    sources: dict[str, dict] = {}
-    instances_v2: list[dict] = []
-    for inst in assembly.instances:
-        key = _geo_cache_key(inst) or Assembly._instance_src_key(inst)
-        if key not in sources:
-            sources[key] = inst.source.model_dump(mode="json")
-        instances_v2.append(inst.to_compact_dict(src_key=key))
+    from backend.core.assembly_source_identity import compact_sources
+    sources, instances_v2 = compact_sources(assembly.instances)
     full["format_version"] = 2
     full["sources"] = sources
     full["instances_v2"] = instances_v2
@@ -163,6 +155,13 @@ def _load_design_from_source(source, assembly_path: str | None = None):
 
     if source.type == "inline":
         return source.design
+    from backend.core.assembly_source_versions import pinned_design
+    try:
+        revision = pinned_design(source)
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    if revision is not None:
+        return revision
     # File source: resolve relative path against workspace, assembly parent, then project root
     p = Path(source.path)
     if not p.is_absolute():
@@ -480,7 +479,8 @@ def get_assembly() -> dict:
 def create_assembly(body: CreateAssemblyRequest = None) -> dict:
     """Create a new empty assembly, replacing any existing one."""
     name = body.name if body else "Untitled"
-    a = Assembly(metadata=DesignMetadata(name=name))
+    from backend.core.assembly_history_contract import create_empty_assembly
+    a = create_empty_assembly(name)
     assembly_state.load_assembly(a)
     return _assembly_response(a)
 
@@ -598,9 +598,14 @@ def add_instance(body: AddInstanceRequest) -> dict:
         raise HTTPException(400, detail=f"Invalid source: {exc}") from exc
 
     transform = Mat4x4.model_validate(body.transform) if body.transform else Mat4x4()
-    inst = PartInstance(name=body.name, source=source, transform=transform)
-
+    from backend.api.assembly_command_replay import command_params, output_id
+    from backend.core.assembly_source_versions import pin_source
     assembly = assembly_state.get_or_create()
+    if source.type == "file":
+        source = pin_source(source, _load_design_from_source(source, _assembly_source_path(assembly)))
+    recorded = body.model_copy(update={"source": source.model_dump(mode="json")})
+    inst = PartInstance(id=output_id("instance_id"), name=body.name, source=source, transform=transform)
+
     new_instances = list(assembly.instances) + [inst]
     mutated = assembly.model_copy(update={"instances": new_instances})
     src_label = (
@@ -613,9 +618,11 @@ def add_instance(body: AddInstanceRequest) -> dict:
         op_kind="assembly-add-instance",
         label=f"Add part: {inst.name}",
         params={
+            **command_params(recorded),
+            "requested_source": body.source,
             "instance_id": inst.id,
             "name": inst.name,
-            "source": body.source,
+            "source": source.model_dump(mode="json"),
             "transform": transform.model_dump(mode="json"),
             "source_label": src_label,
         },
@@ -683,6 +690,7 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
     the same delta, so joint values remain visually unchanged.
     Joint axes along the propagation path are also updated.
     """
+    from backend.api.assembly_command_replay import command_params
     assembly = assembly_state.get_or_404().model_copy(deep=True)
     inst_by_id = _build_inst_by_id(assembly)
     inst = inst_by_id.get(body.instance_id)
@@ -697,9 +705,9 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
     )
     updated = _apply_assembly_mutation_with_feature_log(
         assembly,
-        op_kind="assembly-transform-instance",
+        op_kind="assembly-propagate-fk",
         label=f"Move/rotate part: {inst.name or body.instance_id}",
-        params={"instance_id": body.instance_id, "transform": body.transform},
+        params={**command_params(body), "instance_id": body.instance_id, "transform": body.transform},
     )
     return _assembly_response(updated)
 
@@ -1221,17 +1229,34 @@ def patch_instance_transforms(body: TransformPatchBody) -> dict:
 
 @router.patch("/assembly/instances/{instance_id}", status_code=200)
 def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
+    """Record authored fields and poses together; keep display-only changes cheap."""
+    if all(value is None for value in body.model_dump().values()):
+        return _assembly_response(assembly_state.get_or_404())
+    from backend.api.assembly_command_replay import command_params
+    from backend.api.assembly_recorded_mutation import apply_recorded_change
+    from backend.api.assembly_history_transaction import apply_history_change
+    authored = any(value is not None for key, value in body.model_dump().items()
+                   if key not in {"visible", "representation"})
+    if authored:
+        candidate = apply_recorded_change(
+            lambda: _patch_instance(instance_id, body),
+            op_kind="assembly-transform-instance" if body.transform is not None else "assembly-patch-instance",
+            label="Move/rotate part" if body.transform is not None else "Update part instance",
+            params=command_params(body, instance_id=instance_id),
+        )
+    else:
+        candidate = apply_history_change(lambda: _patch_instance(instance_id, body))
+    assembly_state.remember_instance_display(instance_id, representation=body.representation, visible=body.visible)
+    return _assembly_response(candidate)
+
+
+def _patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
     """Update fields on a PartInstance.
 
     When transform changes, FK is propagated and connector coincidence is enforced so that
     revolute/rigid joints are never violated by a direct transform patch.
     """
-    assembly = assembly_state.get_or_404()
-    # Transform commits need an immutable post-state so the assembly feature-log
-    # helper can snapshot the still-live pre-state. Metadata-only patches retain
-    # their established lightweight undo path below.
-    if body.transform is not None:
-        assembly = assembly.model_copy(deep=True)
+    assembly = assembly_state.get_or_404().model_copy(deep=True)
     inst = _find_instance(assembly, instance_id)
 
     # ── Non-transform fields: use immutable model_copy ────────────────────────
@@ -1244,8 +1269,6 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
         meta_updates["mode"] = body.mode
     if body.visible is not None:
         meta_updates["visible"] = body.visible
-        # Remember outside the snapshot so feature-log scrubbing preserves it.
-        assembly_state.remember_instance_display(instance_id, visible=body.visible)
     if body.fixed is not None:
         meta_updates["fixed"] = body.fixed
     if body.representation is not None:
@@ -1254,9 +1277,6 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
                 400, detail=f"representation must be one of {_VALID_REPRESENTATIONS}"
             )
         meta_updates["representation"] = body.representation
-        assembly_state.remember_instance_display(
-            instance_id, representation=body.representation
-        )
     if body.allow_part_joints is not None:
         meta_updates["allow_part_joints"] = body.allow_part_joints
     if body.joint_states is not None:
@@ -1268,9 +1288,6 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
 
     if not meta_updates and body.transform is None:
         return _assembly_response(assembly)
-
-    if body.transform is None:
-        assembly_state.snapshot()
 
     if meta_updates:
         new_inst = inst.model_copy(update=meta_updates)
@@ -1330,14 +1347,6 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
         # Now safe to clear base_transform — gear sync has already used it.
         inst.base_transform = None
 
-    if body.transform is not None:
-        updated = _apply_assembly_mutation_with_feature_log(
-            assembly,
-            op_kind="assembly-transform-instance",
-            label=f"Move/rotate part: {inst.name or instance_id}",
-            params={"instance_id": instance_id, "transform": body.transform},
-        )
-        return _assembly_response(updated)
     assembly_state.set_assembly_silent(assembly)
     return _assembly_response(assembly_state.get_or_404())
 
@@ -1355,6 +1364,7 @@ def patch_instance_cluster_transform(
     assembly = assembly_state.get_or_404().model_copy(deep=True)
     inst = _find_instance(assembly, instance_id)
 
+    from backend.api.assembly_command_replay import command_params
     override = ClusterRigidTransform(**body.cluster_transform)
     overrides = list(inst.cluster_transform_overrides)
     replaced = False
@@ -1388,11 +1398,7 @@ def patch_instance_cluster_transform(
         assembly,
         op_kind="assembly-transform-instance-cluster",
         label=f"Move/rotate part cluster: {inst.name or instance_id}",
-        params={
-            "instance_id": instance_id,
-            "cluster_id": body.cluster_id,
-            "joint_id": body.joint_id,
-        },
+        params=command_params(body, instance_id=instance_id),
     )
     return _assembly_response(updated)
 
@@ -1400,23 +1406,9 @@ def patch_instance_cluster_transform(
 def _replace_instance_design(
     assembly: Assembly, inst: PartInstance, design
 ) -> tuple[Assembly, PartInstance]:
-    """Persist a resolved instance design and return the updated assembly/instance."""
-    if inst.source.type == "file":
-        # Write back to the existing workspace file
-        dest = _safe_workspace_path(inst.source.path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(design.to_json(), encoding="utf-8")
-        new_source = inst.source  # path unchanged; watchdog fires SSE
-    else:
-        # Save inline design to workspace and switch to file-backed
-        safe_stem = "".join(
-            c if c.isalnum() or c in "-_ " else "_"
-            for c in (design.metadata.name or inst.name or "part")
-        )
-        filename = _dedup_filename(safe_stem, ".nadoc")
-        dest = _WORKSPACE_DIR / filename
-        dest.write_text(design.to_json(), encoding="utf-8")
-        new_source = PartSourceFile(path=filename)
+    """Replace this instance's revision without writing another document."""
+    from backend.core.assembly_source_versions import pin_source
+    new_source = pin_source(inst.source, design)
 
     new_inst = inst.model_copy(update={"source": new_source})
     new_instances = [new_inst if i.id == inst.id else i for i in assembly.instances]
@@ -1429,13 +1421,18 @@ def _replace_instance_design(
 
 @router.patch("/assembly/instances/{instance_id}/design", status_code=200)
 def patch_instance_design(instance_id: str, body: PatchInstanceDesignRequest) -> dict:
-    """Replace the design of a PartInstance.
+    """Replace this instance's source revision in one recorded assembly operation."""
+    from backend.api.assembly_recorded_mutation import apply_recorded_change
+    from backend.api.assembly_command_replay import command_params
+    candidate = apply_recorded_change(
+        lambda: _patch_instance_design(instance_id, body),
+        op_kind="assembly-replace-instance-source", label="Update part source revision",
+        params=command_params(body, instance_id=instance_id),
+    )
+    return _assembly_response(candidate)
 
-    File-backed instances: writes JSON back to the workspace file (watchdog then
-    fires an SSE event to connected browsers).
-    Inline instances: auto-saves the design as a new .nadoc file in the workspace
-    and converts the source to PartSourceFile.
-    """
+
+def _patch_instance_design(instance_id: str, body: PatchInstanceDesignRequest) -> dict:
     from backend.core.models import Design
 
     assembly = assembly_state.get_or_404()
@@ -1468,84 +1465,6 @@ def patch_instance_design(instance_id: str, body: PatchInstanceDesignRequest) ->
         updated_assembly = assembly_state.get_or_404()
 
     return _assembly_response(updated_assembly)
-
-
-def _apply_part_mutation_with_feature_log(
-    assembly: Assembly,
-    inst: PartInstance,
-    before: "Design",
-    mutated: "Design",
-    *,
-    op_kind: str,
-    part_label: str,
-    assembly_label: str,
-    params: dict,
-):
-    """Shared post-mutation pipeline for assembly-level edits to a part design.
-
-    Steps (mirrors state.mutate_with_feature_log for design-mode):
-
-    1. Cluster reconcile + pending-ligation retry on the mutated design.
-    2. Snapshot pre (``before``) and post (after reconcile/retry) states.
-    3. Append a full ``SnapshotLogEntry`` to the part design's ``feature_log``
-       so the part-edit window can revert / seek.
-    4. Persist the part via ``_replace_instance_design`` (takes the
-       assembly-level deque snapshot, clears geo cache, writes the file).
-    5. Append a metadata-only ``SnapshotLogEntry`` to the assembly's
-       ``feature_log`` identifying which instance was touched.
-
-    Returns ``(updated_assembly, updated_design)``.
-    """
-    from backend.core.models import SnapshotLogEntry
-    from backend.core.cluster_reconcile import reconcile_cluster_membership
-    from backend.core.lattice import retry_pending_ligations as _retry_pending_ligations
-    from backend.api.state import (
-        encode_design_snapshot,
-        _evict_oldest_payloads_if_over_budget,
-    )
-
-    pre_b64, pre_size = encode_design_snapshot(before)
-
-    reconciled = reconcile_cluster_membership(before, mutated, None)
-    updated_design = _retry_pending_ligations(before, reconciled)
-
-    post_b64, post_size = encode_design_snapshot(updated_design)
-
-    timestamp = _dt.now(_tz.utc).isoformat()
-
-    part_entry = SnapshotLogEntry(
-        op_kind=op_kind,
-        label=part_label,
-        timestamp=timestamp,
-        params=params,
-        design_snapshot_gz_b64=pre_b64,
-        snapshot_size_bytes=pre_size,
-        post_state_gz_b64=post_b64,
-        post_state_size_bytes=post_size,
-    )
-    updated_design.feature_log.append(part_entry)
-    _evict_oldest_payloads_if_over_budget(updated_design)
-
-    asm_entry = SnapshotLogEntry(
-        op_kind=op_kind,
-        label=assembly_label,
-        timestamp=timestamp,
-        params={**params, "instance_id": inst.id, "instance_name": inst.name},
-        # No payloads — assembly-level undo rides on assembly_state's deque.
-        # evicted=True keeps revert/seek paths from trying to decode emptiness.
-        design_snapshot_gz_b64="",
-        snapshot_size_bytes=0,
-        post_state_gz_b64="",
-        post_state_size_bytes=0,
-        evicted=True,
-    )
-
-    _replace_instance_design(assembly, inst, updated_design)
-    cur_assembly = assembly_state.get_or_404()
-    cur_assembly.feature_log.append(asm_entry)
-    assembly_state.set_assembly_silent(cur_assembly)
-
-    return assembly_state.get_or_404(), updated_design
 
 
 def _apply_assembly_mutation_with_feature_log(
@@ -1670,6 +1589,8 @@ _DIFF_SNAPSHOT_RATIO = 0.10
 
 
 class InstanceOverhangExtrudeRequest(BaseModel):
+    history_seed: str | None = None
+    reuse_existing_helix: bool = True
     helix_id: str
     bp_index: int
     direction: Direction
@@ -1683,47 +1604,9 @@ class InstanceOverhangExtrudeRequest(BaseModel):
 def extrude_instance_overhang(
     instance_id: str, body: InstanceOverhangExtrudeRequest
 ) -> dict:
-    """Create a single-stranded overhang on a PartInstance's design.
-
-    Mirrors POST /design/overhang/extrude but operates on the instance's resolved
-    design. See ``_apply_part_mutation_with_feature_log`` for the bookkeeping
-    (snapshots on the part design + a metadata entry on the assembly).
-    """
-    from backend.core.lattice import make_overhang_extrude
-
-    assembly = assembly_state.get_or_404()
-    inst = _find_instance(assembly, instance_id)
-    design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
-    before = design.model_copy(deep=True)
-
-    try:
-        mutated = make_overhang_extrude(
-            design,
-            body.helix_id,
-            body.bp_index,
-            body.direction,
-            body.is_five_prime,
-            body.neighbor_row,
-            body.neighbor_col,
-            body.length_bp,
-        )
-    except ValueError as exc:
-        raise HTTPException(400, detail=str(exc)) from exc
-
-    updated_assembly, updated_design = _apply_part_mutation_with_feature_log(
-        assembly,
-        inst,
-        before,
-        mutated,
-        op_kind="overhang-extrude",
-        part_label=f"Overhang extrude: {body.length_bp} bp",
-        assembly_label=f"{inst.name}: overhang extrude ({body.length_bp} bp)",
-        params=body.model_dump(mode="json"),
-    )
-    return {
-        **_assembly_response(updated_assembly),
-        "design": updated_design.model_dump(mode="json"),
-    }
+    """Record native part extrusion and a replayable assembly command atomically."""
+    from backend.api.assembly_instance_recording import record_overhang
+    return record_overhang(instance_id, body)
 
 
 class InstanceOverhangPatchRequest(BaseModel):
@@ -1738,58 +1621,9 @@ class InstanceOverhangPatchRequest(BaseModel):
 def patch_instance_overhang(
     instance_id: str, overhang_id: str, body: InstanceOverhangPatchRequest
 ) -> dict:
-    """Patch sequence / label / rotation on an overhang inside a PartInstance.
-
-    Mirrors PATCH /design/overhang/{id} but operates on the instance's design.
-    Writes feature-log entries at both levels — see
-    ``_apply_part_mutation_with_feature_log`` for the shape.
-
-    Note: the design-mode endpoint also appends an ``OverhangRotationLogEntry``
-    inline when ``rotation`` changes. The assembly-mode entry is a wrapper
-    ``SnapshotLogEntry`` that captures the full delta, so we don't duplicate
-    the rotation-specific entry — one entry per assembly-mode patch.
-    """
-    from backend.api.crud import OverhangPatchRequest, _build_overhang_patch
-
-    assembly = assembly_state.get_or_404()
-    inst = _find_instance(assembly, instance_id)
-    design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
-    before = design.model_copy(deep=True)
-
-    # Reuse the design-mode pure builder. It validates inputs and raises
-    # HTTPException 404 / 409 / 422 on bad data; we let those propagate.
-    crud_body = OverhangPatchRequest(**body.model_dump(exclude_unset=True))
-    mutated, _spec_updates, _new_spec = _build_overhang_patch(
-        design, overhang_id, crud_body
-    )
-
-    # Build a human-readable label describing what changed.
-    changes = []
-    if "sequence" in body.model_fields_set:
-        changes.append("sequence")
-    if body.label is not None:
-        changes.append("label")
-    if body.rotation is not None:
-        changes.append("rotation")
-    delta = ", ".join(changes) or "no-op"
-
-    updated_assembly, updated_design = _apply_part_mutation_with_feature_log(
-        assembly,
-        inst,
-        before,
-        mutated,
-        op_kind="overhang-bulk",
-        part_label=f"Overhang patch: {delta}",
-        assembly_label=f"{inst.name}: overhang patch ({delta})",
-        params={
-            **body.model_dump(mode="json", exclude_unset=True),
-            "overhang_id": overhang_id,
-        },
-    )
-    return {
-        **_assembly_response(updated_assembly),
-        "design": updated_design.model_dump(mode="json"),
-    }
+    """Record the native overhang patch on the instance-owned source revision."""
+    from backend.api.assembly_instance_recording import record_overhang
+    return record_overhang(instance_id, body, overhang_id=overhang_id)
 
 
 def _cluster_transforms_signature(design) -> tuple:
@@ -2102,36 +1936,12 @@ _EDITABLE_OP_KINDS: set[str] = {
     "assembly-overhang-connection-patch",
 }
 
-# Replayable op kinds: surgical mid-history delete can re-apply these to
-# rebuild the trailing log.  Larger than _EDITABLE_OP_KINDS — adds/deletes
-# of instances / connectors / joints don't have a useful Edit UI but they
-# CAN be replayed using their stored ids.
-_REPLAYABLE_OP_KINDS: set[str] = _EDITABLE_OP_KINDS | {
-    "annotations-state", "view-volumes-state",
-    "assembly-transform-instance",
-    "assembly-add-instance",
-    "assembly-delete-instance",
-    "assembly-duplicate-instance",
-    "assembly-add-connector",
-    "assembly-delete-connector",
-    "assembly-add-joint",
-    "assembly-delete-joint",
-    # Existing overhang-binding ops already use _apply_assembly_mutation;
-    # replay just re-runs the binding logic via the routes themselves.
-    "assembly-overhang-bind",
-    "assembly-overhang-bind-patch",
-    "assembly-overhang-unbind",
-    "assembly-overhang-connection-delete",
-}
-
-
 class EditAssemblyFeatureRequest(BaseModel):
     """New parameters for the targeted feature.
 
-    Shape is op-kind dependent — the dispatcher pulls only the fields it
-    understands. Unknown fields are ignored. Identifiers (joint_id,
-    connection_id, etc.) are taken from the entry's stored params so the
-    user only needs to pass what they want to change.
+    Versioned commands validate supplied fields against their request model.
+    Output identities remain recorded; only command inputs can be edited.
+    Legacy editable rows retain their original supported field subset.
     """
 
     params: dict
@@ -2140,10 +1950,13 @@ class EditAssemblyFeatureRequest(BaseModel):
 def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assembly:
     """Re-run a known op_kind against *assembly* and return the new state.
 
-    Used by Edit (and could be used by future surgical-delete-with-replay).
+    Used by shared history regeneration for editing and surgical deletion.
     Raises HTTPException with a specific message when the op kind isn't
     replayable or its params are malformed.
     """
+    from backend.api.assembly_command_replay import COMMANDS, replay
+    if op_kind in COMMANDS and (params.get("command_version") is not None or op_kind not in {"assembly-add-joint", "assembly-transform-instance", "assembly-duplicate-instance", "assembly-delete-instance"}):
+        return replay(assembly, op_kind, params)
     if op_kind in {"annotations-state", "view-volumes-state"}:
         from backend.core.presentation_checkpoints import apply
         return apply(assembly, op_kind, params)
@@ -2533,6 +2346,11 @@ def revert_assembly_to_before_feature(index: int) -> dict:
 
 @router.delete("/assembly/features/{index}", status_code=200)
 def delete_assembly_feature(index: int) -> dict:
+    from backend.api.assembly_history_transaction import apply_history_change
+    return _assembly_response(apply_history_change(lambda: _delete_assembly_feature(index)))
+
+
+def _delete_assembly_feature(index: int) -> None:
     """Surgically remove entry *index* and replay later entries.
 
     For the latest entry this is equivalent to revert. For mid-history
@@ -2543,73 +2361,36 @@ def delete_assembly_feature(index: int) -> dict:
     assembly = assembly_state.get_or_404()
     if index < 0 or index >= len(assembly.feature_log):
         raise HTTPException(404, detail=f"feature index {index} out of range.")
+    if assembly.feature_log_cursor != -1:
+        raise HTTPException(409, detail="Return to the latest assembly history position before deleting.")
     pre_assembly = _decode_entry_pre_state(assembly.feature_log, index)
     later_entries = list(assembly.feature_log[index + 1 :])
 
-    # Verify every later entry is replayable before we touch state.
-    for j, ent in enumerate(later_entries):
-        if ent.op_kind not in _REPLAYABLE_OP_KINDS:
-            raise HTTPException(
-                422,
-                detail=(
-                    f"Cannot surgically delete entry {index}: "
-                    f"later entry {index + 1 + j} ({ent.op_kind}) is not "
-                    f"replayable. Use Revert to truncate from index {index} instead."
-                ),
-            )
-
-    # Replay each later entry against the rebuilt state and re-record the log.
-    new_log: list = []
-    base_log = list(assembly.feature_log[:index])
-    prev_state = pre_assembly.model_copy(
-        update={
-            "feature_log": base_log,
-            "feature_log_cursor": -1,
-        }
-    )
-    for ent in later_entries:
-        replayed = _replay_assembly_op(prev_state, ent.op_kind, ent.params)
-        # Pre-state for this re-recorded entry = the state immediately
-        # before re-applying the op (= prev_state); post-state = result of
-        # the replay. Encode each so the new entry still supports per-entry
-        # actions later.
-        pre_b64, pre_size = assembly_state.encode_assembly_snapshot(prev_state)
-        post_b64, post_size = assembly_state.encode_assembly_snapshot(replayed)
-        replayed_entry = ent.model_copy(
-            update={
-                "design_snapshot_gz_b64": pre_b64,
-                "snapshot_size_bytes": pre_size,
-                "post_state_gz_b64": post_b64,
-                "post_state_size_bytes": post_size,
-                "evicted": False,
-                # Re-recorded as legacy full-snapshot — clear any diff / skip-pre
-                # flags inherited from the original entry so navigation reads it
-                # as the full snapshot it now is.
-                "diff_added_b64": "",
-                "diff_removed_ids": [],
-                "diff_modified_b64": "",
-                "pre_state_from_previous": False,
-            }
-        )
-        new_log.append(replayed_entry)
-        prev_state = replayed.model_copy(update={"feature_log": base_log + new_log})
-
-    final = prev_state.model_copy(update={"feature_log_cursor": -1})
-    assembly_state.set_assembly(final)
-    return _assembly_response(assembly_state.get_or_404())
+    from backend.api.assembly_history_regeneration import regenerate
+    base = pre_assembly.model_copy(update={
+        "feature_log": list(assembly.feature_log[:index]), "feature_log_cursor": -1,
+    })
+    regenerate(base, later_entries)
+    return None
 
 
 @router.post("/assembly/features/{index}/edit", status_code=200)
 def edit_assembly_feature(index: int, body: EditAssemblyFeatureRequest) -> dict:
-    """Re-run entry *index* with new params, replacing it (and only it).
+    from backend.api.assembly_history_transaction import apply_history_change
+    return _assembly_response(apply_history_change(lambda: _edit_assembly_feature(index, body)))
 
-    v1 supports editing only the latest entry — replaying later entries on
-    top of a changed earlier op is not yet wired (would need careful
-    handling for entries that reference the original entry's outputs).
+
+def _edit_assembly_feature(index: int, body: EditAssemblyFeatureRequest) -> None:
+    """Edit versioned inputs and regenerate downstream commands atomically.
+
+    Legacy summary-only editing remains limited to the latest entry.
     """
     assembly = assembly_state.get_or_404()
     if index < 0 or index >= len(assembly.feature_log):
         raise HTTPException(404, detail=f"feature index {index} out of range.")
+    if assembly.feature_log[index].params.get("command_version") == 1:
+        from backend.api.assembly_history_edit import edit_recorded_feature
+        return edit_recorded_feature(index, body.params)
     if index != len(assembly.feature_log) - 1:
         raise HTTPException(
             422,
@@ -2644,7 +2425,7 @@ def edit_assembly_feature(index: int, body: EditAssemblyFeatureRequest) -> dict:
         label=label,
         params=new_params,
     )
-    return _assembly_response(assembly_state.get_or_404())
+    return None
 
 
 class DuplicateInstanceRequest(BaseModel):
@@ -2669,6 +2450,7 @@ def duplicate_instance(
     Connectors are deep-copied so the clone is immediately mateable on the
     same labels as the source.
     """
+    from backend.api.assembly_command_replay import command_params, output_id
     assembly = assembly_state.get_or_404()
     src = _find_instance(assembly, instance_id)
 
@@ -2681,7 +2463,7 @@ def duplicate_instance(
     new_inst = src.model_copy(
         deep=True,
         update={
-            "id": str(_uuid.uuid4()),
+            "id": output_id("new_instance_id"),
             "name": body.name or f"{src.name} (copy)",
             "transform": Mat4x4.from_array(new_T_arr),
             "base_transform": None,
@@ -2694,6 +2476,7 @@ def duplicate_instance(
         op_kind="assembly-duplicate-instance",
         label=f"Duplicate part: {src.name} → {new_inst.name}",
         params={
+            **command_params(body),
             "source_instance_id": instance_id,
             "new_instance_id": new_inst.id,
             "offset": list(body.offset),
@@ -2705,33 +2488,19 @@ def duplicate_instance(
 
 @router.delete("/assembly/instances/{instance_id}", status_code=200)
 def delete_instance(instance_id: str) -> dict:
-    """Remove a PartInstance and any joints that reference it."""
+    """Remove a part and its dependent assembly constraints/connections."""
+    from backend.api.assembly_command_replay import command_params
     assembly = assembly_state.get_or_404()
     target = _find_instance(assembly, instance_id)
 
-    new_instances = [i for i in assembly.instances if i.id != instance_id]
-    new_joints = [
-        j
-        for j in assembly.joints
-        if j.instance_a_id != instance_id and j.instance_b_id != instance_id
-    ]
-    new_groups = _ag.filter_groups_after_instance_removal(
-        list(assembly.groups),
-        {instance_id},
-    )
-    mutated = assembly.model_copy(
-        update={
-            "instances": new_instances,
-            "joints": new_joints,
-            "groups": new_groups,
-        }
-    )
+    from backend.core.assembly_removal import remove_members
+    mutated = remove_members(assembly, instance_ids={instance_id})
 
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-delete-instance",
         label=f"Delete part: {target.name}",
-        params={"instance_id": instance_id, "name": target.name},
+        params=command_params(instance_id=instance_id, name=target.name),
     )
     assembly_state.forget_instance_display(instance_id)
     return _assembly_response(assembly_state.get_or_404())

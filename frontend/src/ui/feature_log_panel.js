@@ -38,6 +38,8 @@ import { showConfirm } from './primitives/confirm.js'
 import { showDependentsDecision } from './primitives/dependents_dialog.js'
 import { createFeatureLogContextMenu } from './feature_log_context_menu.js'
 import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover.js'
+import { assemblyFeatureFields, editAssemblyHistoryFeature } from './assembly_feature_editor.js'
+import { showFeatureDeletion } from './primitives/feature_reorder_dialog.js'
 import { generatedFeatureSchema, canReplayGenerated } from './generated_feature_fields.js'
 import { canonicalSelection } from '../scene/selection_model.js'
 import { initPartRepairPanel, focusPartRepairRow } from './part_repair_panel.js'
@@ -502,13 +504,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
 
   async function _selectAssemblyPart(instanceId) {
     if (!instanceId) return
+    const capturedAssembly = store.getState().currentAssembly
     _assemblyPartInstanceId = instanceId
     _latestDesign = null
     _refreshTitle()
     list.innerHTML = '<div style="color:#484f58;font-size:11px;padding:3px 6px">Loading part feature log…</div>'
     try {
       const result = await api.getInstanceDesign?.(instanceId)
-      if (_assemblyPartInstanceId !== instanceId) return
+      if (_assemblyPartInstanceId !== instanceId || store.getState().currentAssembly !== capturedAssembly) return
       _latestDesign = result?.design ?? null
       _refreshTitle()
       if (!_collapsed) _rebuild(_latestDesign)
@@ -983,6 +986,10 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         row.append(badge)
       }
       if (!_partInstanceId && !_isAssemblyPartMode()) historyMenu.bind(row, design, i)
+      else if (_isAssemblyPartMode()) historyMenu.bind(row, design, i, {
+        instanceId: _assemblyPartInstanceId, assemblySource: store.getState().currentAssembly,
+        isTargetCurrent: () => _isAssemblyPartMode() && _latestDesign === design,
+      })
     }
 
     const displayLabels = featureLabels(log)
@@ -1033,6 +1040,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
       ].join(';')
       delBtn.addEventListener('click', async e => {
         e.stopPropagation()
+        if (_isAssemblyPartMode()) {
+          try { showFeatureDeletion({ store, api, source: design, rowIndex: i, instanceId: _assemblyPartInstanceId,
+            assemblySource: store.getState().currentAssembly, isTargetCurrent: () => _isAssemblyPartMode() && _latestDesign === design }) }
+          catch (error) { showPersistentToast(error.message) }
+          return
+        }
         // Safeguard: a Fine Routing cluster row collapses many minor ops into
         // one log entry — deleting a big one (e.g. 200+ nick/ligate/colors) is
         // easy to misclick. Confirm above the threshold; small clusters and
@@ -1052,17 +1065,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
             if (!ok) return
           }
         }
-        if (_isAssemblyPartMode() && _latestDesign && api.patchInstanceDesign) {
-          const design = JSON.parse(JSON.stringify(_latestDesign))
-          design.feature_log?.splice(i, 1)
-          api.patchInstanceDesign(_assemblyPartInstanceId, JSON.stringify(design))
-            .then(result => {
-              if (result) {
-                _latestDesign = design
-                _rebuild(_latestDesign)
-              }
-            })
-        } else if (_partInstanceId && _partPatchFn) {
+        if (_partInstanceId && _partPatchFn) {
           _partPatchFn(d => { d.feature_log?.splice(i, 1) })
         } else {
           // Active-design delete: roll back this op's geometry. If later
@@ -1891,6 +1894,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
       label.title = displayLabels[i]
 
       row.append(icon, label)
+      historyMenu.bind(row, assembly, i, { assembly: true })
 
       // ── Revert button — restore pre-state + truncate from i onward ────
       const revertBtn = document.createElement('button')
@@ -1918,8 +1922,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         }
       })
 
-      // ── Edit button — supported op kinds, latest entry only ──────────
-      if (editableOpKinds.has(entry.op_kind) && isLatest(i) && !suppressed) {
+      // Recorded commands regenerate downstream; legacy summaries stay latest-only.
+      const recordedEditable = assemblyFeatureFields(entry).length > 0
+      if (!suppressed && (recordedEditable || (editableOpKinds.has(entry.op_kind) && isLatest(i)))) {
         const editBtn = document.createElement('button')
         editBtn.textContent = '✎'
         editBtn.title = `Edit F${i + 1}`
@@ -1930,6 +1935,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         ].join(';')
         editBtn.addEventListener('click', async e => {
           e.stopPropagation()
+          if (recordedEditable) {
+            try { await editAssemblyHistoryFeature({ store, api, source: assembly, rowIndex: i }) }
+            catch (error) { showPersistentToast(error.message) }
+            return
+          }
           const newParams = await _promptEditAssemblyEntry(entry)
           if (!newParams) return
           const resp = await api.editAssemblyFeature(i, newParams)

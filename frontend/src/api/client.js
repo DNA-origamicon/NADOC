@@ -103,6 +103,11 @@ const LS_ASSEMBLY_KEY = () => docKey('nadoc:assembly')
 const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (sessionStorage, tab-isolated)
 
 import { createDesignRevisionTracker } from './design_revisions.js'
+import { createAssemblyHistoryEndpoints } from './assembly_history_endpoints.js'
+
+export const assemblyHistoryAPI = createAssemblyHistoryEndpoints({ request: _request, apply: _syncFromAssemblyResponse })
+export const getAssemblyFeatureDependencies = () => assemblyHistoryAPI.dependencies({ context: { docId: getDocId() } })
+export const getAssemblyInstanceFeatureDependencies = instanceId => assemblyHistoryAPI.dependencies({ context: { docId: getDocId(), instanceId } })
 
 const _designRevisions = createDesignRevisionTracker()
 const _assetSaves = createAssetSaveCoordination()

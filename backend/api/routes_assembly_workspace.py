@@ -65,7 +65,7 @@ from backend.core.job_cleanup import (
     reassign_job_snapshot_identity,
     remap_design_source_paths,
 )
-from backend.core.models import Design, PartSourceFile
+from backend.core.models import Design
 
 # Shared back-imports (count toward B):
 #   _safe_workspace_path  — api-layer ValueError→HTTPException wrapper, also used
@@ -76,7 +76,7 @@ from backend.core.models import Design, PartSourceFile
 # The workspace directory is read live via ``_asm._WORKSPACE_DIR`` (module-attribute
 # access) so that tests monkeypatching ``assembly._WORKSPACE_DIR`` redirect these
 # routes too — preserving the original handlers' read-the-live-global behavior.
-from backend.api.assembly import _safe_workspace_path, _assembly_response
+from backend.api.assembly import _safe_workspace_path
 
 router = APIRouter()
 
@@ -903,6 +903,17 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     from backend.core.design_identity import prepare_workspace_save
     from backend.core.validator import validate_design
 
+    from backend.core.design_loadout_storage import prepare_save_loadouts
+    from backend.core.project_revisions import BranchConflict, ProjectRevisionStore, refresh_active_revision
+    try:
+        # Resolve original-project revision pointers before Save As changes ID.
+        design = prepare_save_loadouts(design, ProjectRevisionStore(_asm._WORKSPACE_DIR), known_heads)
+    except BranchConflict as exc:
+        raise HTTPException(409, detail={"kind": "branch_diverged", "loadout_id": exc.loadout_id,
+            "expected_head": exc.expected, "current_head": exc.current}) from exc
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+
     saved, disposition, previous = prepare_workspace_save(design, body.path)
     if saved.id != design.id and saved.loadouts:
         migrated_loadouts = []
@@ -933,20 +944,6 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     # Mirror embedded loadout snapshots into immutable project revisions before
     # publishing the compatibility .nadoc.  A stale branch pointer is a real
     # multi-server conflict and must never degrade to last-writer-wins.
-    from backend.core.project_revisions import BranchConflict, ProjectRevisionStore, refresh_active_revision
-
-    # Undo and feature-history restores rewind content, but must not rewind the
-    # save cursor. Adopt only a head this SAME session has observed; an unknown
-    # head from another document/server must still produce a real conflict.
-    if saved.id == design.id:
-        revisions = ProjectRevisionStore(_asm._WORKSPACE_DIR)
-        loadouts = []
-        for loadout in saved.loadouts:
-            head = revisions.branch_head(saved.id, loadout.id)
-            if head and head in known_heads.get(loadout.id, set()):
-                loadout = loadout.model_copy(update={"head_revision_id": head})
-            loadouts.append(loadout)
-        saved = saved.model_copy(update={"loadouts": loadouts})
 
     try:
         saved = refresh_active_revision(_asm._WORKSPACE_DIR, saved)
@@ -989,37 +986,11 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
 
 @router.post("/assembly/save", status_code=200)
 def save_assembly(body: SaveAssemblyRequest = None) -> dict:
-    """Save the active assembly to the workspace as a .nass file.
-
-    Inline PartInstances are auto-converted: their designs are saved as individual
-    .nadoc files in the workspace and the instance source is updated to PartSourceFile.
-    Returns the updated assembly (with file-backed sources) and the saved path.
-    """
-    assembly = assembly_state.get_or_404()
+    """Persist the assembly and its recorded source revisions without authoring changes."""
+    assembly, _revision = assembly_state.copy_for_persist()
+    if assembly is None:
+        assembly_state.get_or_404()
     _asm._WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Convert any inline instances to file-backed
-    new_instances = list(assembly.instances)
-    changed = False
-    for idx, inst in enumerate(new_instances):
-        if inst.source.type == "inline":
-            design = inst.source.design
-            safe_stem = "".join(
-                c if c.isalnum() or c in "-_ " else "_"
-                for c in (design.metadata.name or inst.name or "part")
-            )
-            filename = _ws.dedup_filename(safe_stem, ".nadoc", _asm._WORKSPACE_DIR)
-            (_asm._WORKSPACE_DIR / filename).write_text(
-                design.to_json(), encoding="utf-8"
-            )
-            new_instances[idx] = inst.model_copy(
-                update={"source": PartSourceFile(path=filename)}
-            )
-            changed = True
-
-    if changed:
-        assembly = assembly.model_copy(update={"instances": new_instances})
-        assembly_state.set_assembly_silent(assembly)
 
     # Determine output path
     if body and body.path:
@@ -1041,15 +1012,7 @@ def save_assembly(body: SaveAssemblyRequest = None) -> dict:
         dest = _asm._WORKSPACE_DIR / out_rel
 
     dest.write_text(assembly.to_json(), encoding="utf-8")
-    # Only return the full assembly payload when the in-memory state actually
-    # changed (inline → file-backed conversion).  A pure persist-to-disk has
-    # no client-visible state delta, so omitting the payload prevents the
-    # frontend's _syncFromAssemblyResponse from re-storing currentAssembly,
-    # which would otherwise fire the renderer's currentAssembly subscriber
-    # and trigger a full geometry-refetch rebuild — observed as a multi-
-    # second freeze on every Save of a large assembly.
-    if changed:
-        return {"path": out_rel, **_assembly_response(assembly)}
+    # A save is an acknowledgement, not a source mutation or renderer refresh.
     return {"path": out_rel}
 
 

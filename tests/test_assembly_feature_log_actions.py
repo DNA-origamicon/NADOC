@@ -232,12 +232,56 @@ def test_edit_polymerize_changes_direction():
     assert zs2 == pytest.approx([-20, -10, 0, 10])
 
 
-def test_edit_rejects_non_latest_entry_422():
+def test_failed_edit_leaves_document_and_history_untouched():
+    _, jid = _seed()
+    _polymerize(jid, count=4)
+    source, revision = assembly_state.copy_for_persist()
+    depths = assembly_state.undo_depth(), assembly_state.redo_depth()
+    response = client.post("/api/assembly/features/0/edit", json={"params": {"count": 0}})
+    assert response.status_code == 400, response.text
+    assert assembly_state.get_or_404() == source
+    assert assembly_state.revision() == revision
+    assert (assembly_state.undo_depth(), assembly_state.redo_depth()) == depths
+
+
+def test_successful_edit_is_one_undo_step_back_to_complete_source():
+    _, jid = _seed()
+    _polymerize(jid, count=3)
+    source, revision = assembly_state.copy_for_persist()
+    depth = assembly_state.undo_depth()
+    response = client.post("/api/assembly/features/0/edit", json={"params": {"count": 5}})
+    assert response.status_code == 200, response.text
+    assert assembly_state.revision() == revision + 1
+    assert assembly_state.undo_depth() == depth + 1
+    assert assembly_state.undo() == source
+
+
+def test_surgical_delete_is_one_undo_step_back_to_complete_source():
+    _, jid = _seed()
+    _polymerize(jid, count=3)
+    _polymerize(jid, count=4)
+    source, revision = assembly_state.copy_for_persist()
+    depth = assembly_state.undo_depth()
+    response = client.delete("/api/assembly/features/0")
+    assert response.status_code == 200, response.text
+    assert assembly_state.revision() == revision + 1
+    assert assembly_state.undo_depth() == depth + 1
+    assert assembly_state.undo() == source
+
+
+def test_edit_versioned_non_latest_polymer_regenerates_suffix():
     _, jid = _seed()
     _polymerize(jid, count=3)
     _polymerize(jid, count=3)
+    before = assembly_state.get_or_404().model_copy(deep=True)
     r = client.post("/api/assembly/features/0/edit", json={"params": {"count": 4}})
-    assert r.status_code == 422
+    assert r.status_code == 200, r.text
+    after = assembly_state.get_or_404()
+    assert len(after.instances) == len(before.instances) + 1
+    assert [row.id for row in after.feature_log] == [row.id for row in before.feature_log]
+    assert after.feature_log[1].params == before.feature_log[1].params
+    assert {i.id for i in before.instances} <= {i.id for i in after.instances}
+    assert assembly_state.undo() == before
 
 
 def test_edit_rejects_non_editable_op_kind_422():

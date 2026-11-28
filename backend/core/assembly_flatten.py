@@ -55,6 +55,10 @@ def _load_design(source) -> Design:
     if isinstance(source, PartSourceInline):
         return source.design
     if isinstance(source, PartSourceFile):
+        from backend.core.assembly_source_versions import pinned_design
+        revision = pinned_design(source)
+        if revision is not None:
+            return revision
         # Match the assembly API's source semantics: ordinary .nass files store
         # workspace-relative part paths (for example ``BigO.nadoc``).  The old
         # flatten path omitted workspace and silently produced an empty Design.

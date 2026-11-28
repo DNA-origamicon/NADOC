@@ -34,6 +34,7 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
+  grep: process.env.NADOC_SMOKE_GREP ? new RegExp(process.env.NADOC_SMOKE_GREP) : undefined,
 
   outputDir: scratch ? path.join(scratch, 'playwright') : (process.env.NADOC_E2E_OUTPUT_DIR || 'test-results'),
   reporter: scratch ? [['list']] : [['list'], ['./e2e/artifact-cleanup-reporter.js']],

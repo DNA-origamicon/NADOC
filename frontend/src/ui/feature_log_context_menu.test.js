@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { createFeatureLogContextMenu } from './feature_log_context_menu.js'
 import { initFeatureLogPanel } from './feature_log_panel.js'
 import { showFeatureReorder, showFeatureSuppression } from './primitives/feature_reorder_dialog.js'
 import { showFeatureDependencies } from './primitives/feature_dependencies_dialog.js'
@@ -73,4 +74,40 @@ it('closes the menu on rebuild and prevents stale actions', () => {
   f.open()
   f.subscriptions.design({ currentDesign: { ...f.source } }, { currentDesign: f.source })
   expect(document.querySelector('[role="menu"]')).toBeNull()
+})
+
+it('offers assembly suppression and move using the shared dialogs', () => {
+  const source = { id: 'assembly', feature_log: [{ id: 'a', suppressed: true }, { id: 'b' }] }
+  const row = document.createElement('div'); document.body.append(row)
+  const store = { getState: () => ({ assemblyActive: true, currentAssembly: source }) }
+  const api = { assemblyHistoryAPI: {} }
+  const menu = createFeatureLogContextMenu({ store, api })
+  menu.bind(row, source, 0, { assembly: true })
+  expect(row.querySelector('[data-history-status="suppressed"]').textContent).toBe('Suppressed')
+  row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+  vi.runAllTimers()
+  item('Unsuppress').click()
+  expect(showFeatureSuppression).toHaveBeenCalledWith({ store, api, source, rowIndex: 0, assembly: true })
+  menu.close()
+})
+
+it('rejects a dependency response from another assembly revision', async () => {
+  const { recordAssemblyResponse } = await import('../api/assembly_response_authority.js')
+  const source = { id: 'assembly', feature_log: [{ id: 'a' }] }
+  recordAssemblyResponse(source, { revision: 3 })
+  const row = document.createElement('div'); document.body.append(row)
+  const store = { getState: () => ({ assemblyActive: true, currentAssembly: source }) }
+  const api = { getAssemblyFeatureDependencies: vi.fn(async () => ({ assembly_id: 'assembly', revision: 4, features: [] })) }
+  const menu = createFeatureLogContextMenu({ store, api })
+  menu.bind(row, source, 0, { assembly: true })
+  row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); vi.runAllTimers()
+  item('View dependencies').click()
+  for (let i = 0; i < 10; ++i) await Promise.resolve()
+  expect(showFeatureDependencies).not.toHaveBeenCalled()
+  api.getAssemblyFeatureDependencies.mockResolvedValue({ assembly_id: 'assembly', revision: 3, features: [] })
+  row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); vi.runAllTimers()
+  item('View dependencies').click()
+  for (let i = 0; i < 10; ++i) await Promise.resolve()
+  expect(showFeatureDependencies).toHaveBeenCalledWith(expect.objectContaining({ assembly: true, source }))
+  menu.close()
 })

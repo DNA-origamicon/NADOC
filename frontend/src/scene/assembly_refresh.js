@@ -83,7 +83,7 @@ export function initAssemblyRefresh({
     const cur     = store.getState().currentAssembly
     const srcInst = cur?.instances?.find(i => i.id === instanceId)
     const srcPath = srcInst?.source?.type === 'file' ? srcInst.source.path : null
-    const affected = srcPath
+    const affected = srcPath && !srcInst.source.revision
       ? (cur?.instances ?? []).filter(i => i.source?.type === 'file' && i.source.path === srcPath)
       : (srcInst ? [srcInst] : [])
     for (const instance of affected) assemblyRenderer.invalidateInstance?.(instance.id)
@@ -91,7 +91,7 @@ export function initAssemblyRefresh({
     // The part-editor save also writes the .nadoc file, which fires a watchdog
     // SSE `file-changed`. Mark the path self-saved so `_handleLibraryEvent`
     // doesn't schedule a second (coalesced-but-still-extra) refresh for it.
-    if (srcPath) {
+    if (srcPath && !srcInst.source.revision) {
       selfSavedPaths.add(srcPath)
       setTimeout(() => selfSavedPaths.delete(srcPath), 5000)
     }

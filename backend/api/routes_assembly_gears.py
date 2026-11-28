@@ -41,6 +41,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import assembly_state
+from backend.api.assembly_command_replay import command_params, output_id
 from backend.api.assembly import (
     _apply_assembly_mutation_with_feature_log,
     _assembly_response,
@@ -134,6 +135,7 @@ def create_gear_relation(body: CreateGearRelationRequest) -> dict:
     anchor_a = joint_a.current_value if body.capture_anchors_from_current else 0.0
     anchor_b = joint_b.current_value if body.capture_anchors_from_current else 0.0
     relation = GearRelation(
+        id=output_id("relation_id"),
         name=body.name,
         joint_a_id=body.joint_a_id,
         joint_b_id=body.joint_b_id,
@@ -152,7 +154,7 @@ def create_gear_relation(body: CreateGearRelationRequest) -> dict:
         mutated,
         op_kind="assembly-create-gear",
         label=f"Add gear relation: {relation.name}",
-        params={"relation_id": relation.id, "name": relation.name},
+        params=command_params(body, relation_id=relation.id, name=relation.name),
     )
     return _assembly_response(assembly_state.get_or_404())
 
@@ -180,8 +182,11 @@ def patch_gear_relation(rel_id: str, body: PatchGearRelationRequest) -> dict:
     new_rel = rel.model_copy(update=updates)
     new_gears = [new_rel if g.id == rel_id else g for g in assembly.gear_relations]
     mutated = assembly.model_copy(update={"gear_relations": new_gears})
-    assembly_state.set_assembly_silent(mutated)
-    return _assembly_response(mutated)
+    _apply_assembly_mutation_with_feature_log(
+        mutated, op_kind="assembly-patch-gear", label=f"Update gear relation: {new_rel.name}",
+        params=command_params(body, relation_id=rel_id),
+    )
+    return _assembly_response(assembly_state.get_or_404())
 
 
 @router.delete("/assembly/gear-relations/{rel_id}", status_code=200)
@@ -194,7 +199,7 @@ def delete_gear_relation(rel_id: str) -> dict:
         mutated,
         op_kind="assembly-delete-gear",
         label=f"Delete gear relation: {rel.name}",
-        params={"relation_id": rel_id, "name": rel.name},
+        params=command_params(relation_id=rel_id, name=rel.name),
     )
     return _assembly_response(assembly_state.get_or_404())
 
@@ -206,7 +211,7 @@ def resolve_gear_relation(rel_id: str) -> dict:
     Used by the frontend on configuration restore + when the user explicitly
     asks the relation to be re-satisfied at the current pose.
     """
-    assembly = assembly_state.get_or_404()
+    assembly = assembly_state.get_or_404().model_copy(deep=True)
     rel = _find_gear_relation(assembly, rel_id)
     joint_a = next((j for j in assembly.joints if j.id == rel.joint_a_id), None)
     joint_b = next((j for j in assembly.joints if j.id == rel.joint_b_id), None)
@@ -223,5 +228,8 @@ def resolve_gear_relation(rel_id: str) -> dict:
         assembly, joint_b, endpoint_side, new_value, inst_by_id
     ):
         raise HTTPException(400, detail="Gear endpoint cannot be moved.")
-    assembly_state.set_assembly_silent(assembly)
-    return _assembly_response(assembly)
+    _apply_assembly_mutation_with_feature_log(
+        assembly, op_kind="assembly-resolve-gear", label=f"Resolve gear relation: {rel.name}",
+        params=command_params(relation_id=rel_id),
+    )
+    return _assembly_response(assembly_state.get_or_404())

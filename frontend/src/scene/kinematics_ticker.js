@@ -34,6 +34,7 @@
 import { computeRevoluteTransform } from './assembly_revolute_math.js'
 import { getRigidBodyGroup }         from './assembly_constraint_graph.js'
 import { beltCouplingRelations, applyBeltRiders } from './belt_geometry.js'
+import { confirmedAssemblyRevision } from '../api/assembly_response_authority.js'
 
 const FLUSH_INTERVAL_SEC = 0.2   // ~5 Hz persistence to backend
 const MAX_DT_SEC         = 1 / 15 // cap on a single integration step (background-tab return)
@@ -273,13 +274,17 @@ export function initKinematicsTicker({
 
   function _flushNow() {
     if (!_pendingFlush.size) return
+    const revision = confirmedAssemblyRevision(_lastAssembly)
+    // A local/optimistic clone has no authority to overwrite server poses.
+    if (revision == null) return
     const ids = [..._pendingFlush]
     _pendingFlush.clear()
     for (const id of ids) {
       const v = _shadow.get(id)
       if (v == null) continue
       try {
-        api?.patchAssemblyJoint?.(id, { current_value: v, silent: true })
+        api?.patchAssemblyJoint?.(id, { current_value: v, silent: true,
+          expected_revision: revision, expected_assembly_id: _lastAssembly.id })
       } catch {
         // network errors are non-fatal for spin persistence
       }

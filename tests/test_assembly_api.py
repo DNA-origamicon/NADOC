@@ -484,14 +484,14 @@ def test_propagate_fk_records_move_rotate_feature():
     })
     assert moved.status_code == 200
     entry = moved.json()["assembly"]["feature_log"][-1]
-    assert entry["op_kind"] == "assembly-transform-instance"
+    assert entry["op_kind"] == "assembly-propagate-fk"
     assert entry["params"]["instance_id"] == instance_id
     undone = client.post("/api/assembly/undo")
     assert v1_instances(undone.json())[0]["transform"]["values"][3] == pytest.approx(0.0)
     assert undone.json()["assembly"]["feature_log"] == created.json()["assembly"]["feature_log"]
     redone = client.post("/api/assembly/redo")
     assert v1_instances(redone.json())[0]["transform"]["values"][3] == pytest.approx(3.0)
-    assert redone.json()["assembly"]["feature_log"][-1]["op_kind"] == "assembly-transform-instance"
+    assert redone.json()["assembly"]["feature_log"][-1]["op_kind"] == "assembly-propagate-fk"
 
 
 def test_direct_instance_gizmo_patch_records_move_rotate_feature():
@@ -2099,7 +2099,7 @@ def test_assembly_mutations_do_not_affect_design_state():
 def test_extrude_instance_overhang_writes_feature_log_on_both_levels():
     """An assembly-mode extrude appends:
     (1) a full SnapshotLogEntry (with pre+post snapshots) on the instance design
-    (2) a metadata-only SnapshotLogEntry on the assembly identifying the instance.
+    (2) a replayable SnapshotLogEntry on the assembly identifying the instance.
     """
     from backend.api import state as design_state
     from backend.api import assembly_state as asm_state
@@ -2109,99 +2109,8 @@ def test_extrude_instance_overhang_writes_feature_log_on_both_levels():
     cells = [(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]
     seed = make_bundle_design(cells, length_bp=42)
 
-    # Enumerate a valid overhang site so the call doesn't 400.
-    # Inline this rather than importing from test_overhang_geometry to avoid
-    # cross-test module coupling.
-    import re
-    from backend.core.constants import (
-        HONEYCOMB_HELIX_SPACING,
-        BDNA_RISE_PER_BP,
-    )
-    import math
-    from backend.core.models import StrandType
-
-    _ID_RE = re.compile(r"^h_\w+_(-?\d+)_(-?\d+)$")
-
-    def _row_col(hid):
-        m = _ID_RE.match(hid)
-        return (int(m.group(1)), int(m.group(2))) if m else (None, None)
-
-    def _hc_xy(r, c):
-        # Same formula as overhang_locations.js _hcCellXY.
-        LATTICE_R = 1.125
-        COL_PITCH = LATTICE_R * math.sqrt(3)
-        ROW_PITCH = 3.0 * LATTICE_R
-        odd = ((r + c) % 2 + 2) % 2
-        return c * COL_PITCH, r * ROW_PITCH + (LATTICE_R if odd else 0)
-
-    helix_by_id = {h.id: h for h in seed.helices}
-    cell_z = {}
-    for h in seed.helices:
-        rr, cc = _row_col(h.id)
-        if rr is None:
-            continue
-        cell_z.setdefault((rr, cc), []).append(
-            (min(h.axis_start.z, h.axis_end.z), max(h.axis_start.z, h.axis_end.z))
-        )
-
-    def _occupied(nr, nc, z, eps=0.25):
-        return any(
-            z >= zmin - eps and z <= zmax + eps
-            for zmin, zmax in cell_z.get((nr, nc), [])
-        )
-
-    site = None
-    for strand in seed.strands:
-        if strand.strand_type != StrandType.STAPLE or not strand.domains:
-            continue
-        for is_5p, dom, bp in [
-            (True, strand.domains[0], strand.domains[0].start_bp),
-            (False, strand.domains[-1], strand.domains[-1].end_bp),
-        ]:
-            h = helix_by_id.get(dom.helix_id)
-            if h is None:
-                continue
-            row, col = _row_col(h.id)
-            if row is None:
-                continue
-            local_i = bp - h.bp_start
-            rise = (
-                BDNA_RISE_PER_BP
-                if h.axis_end.z >= h.axis_start.z
-                else -BDNA_RISE_PER_BP
-            )
-            z = h.axis_start.z + local_i * rise
-            ox, oy = _hc_xy(row, col)
-            for dr in (-1, 0, 1):
-                for dc in (-1, 0, 1):
-                    if dr == 0 and dc == 0:
-                        continue
-                    nr, nc = row + dr, col + dc
-                    nx, ny = _hc_xy(nr, nc)
-                    if (
-                        abs(math.hypot(nx - ox, ny - oy) - HONEYCOMB_HELIX_SPACING)
-                        > 0.05
-                    ):
-                        continue
-                    if _occupied(nr, nc, z):
-                        continue
-                    site = {
-                        "helix_id": dom.helix_id,
-                        "bp_index": bp,
-                        "direction": dom.direction.value,
-                        "is_five_prime": is_5p,
-                        "neighbor_row": nr,
-                        "neighbor_col": nc,
-                    }
-                    break
-                if site:
-                    break
-            if site:
-                break
-        if site:
-            break
-
-    assert site, "could not find a valid overhang site on the 6HB fixture"
+    from tests.conftest import valid_overhang_sites
+    site = valid_overhang_sites(seed)[0]
 
     # Set up the assembly with the bundle as an inline part.
     design_state.close_session()
@@ -2236,19 +2145,18 @@ def test_extrude_instance_overhang_writes_feature_log_on_both_levels():
     assert last_part["post_state_gz_b64"], "post-state snapshot must be populated"
     assert last_part["evicted"] is False
 
-    # (2) Assembly-level: metadata-only SnapshotLogEntry tagging the instance.
+    # (2) Assembly-level: replayable SnapshotLogEntry tagging the instance.
     asm_log = body["assembly"]["feature_log"]
     assert asm_log, "assembly must have at least one feature log entry"
     last_asm = asm_log[-1]
     assert last_asm["feature_type"] == "snapshot"
-    assert last_asm["op_kind"] == "overhang-extrude"
+    assert last_asm["op_kind"] == "assembly-instance-overhang-extrude"
     assert last_asm["params"]["instance_id"] == inst_id
-    assert last_asm["params"]["instance_name"] == "Bundle-A"
-    assert last_asm["params"]["length_bp"] == 8
-    # Lightweight: no payload, evicted=True so revert paths skip it.
-    assert last_asm["design_snapshot_gz_b64"] == ""
-    assert last_asm["post_state_gz_b64"] == ""
-    assert last_asm["evicted"] is True
+    assert last_asm["params"]["inputs"]["length_bp"] == 8
+    # Real recovery history may reuse the previous post-state as its pre-state.
+    assert last_asm["design_snapshot_gz_b64"] or last_asm["pre_state_from_previous"]
+    assert last_asm["post_state_gz_b64"]
+    assert last_asm["evicted"] is False
 
     # Cleanup
     asm_state.close_session()
@@ -2258,103 +2166,19 @@ def test_extrude_instance_overhang_writes_feature_log_on_both_levels():
 def test_patch_instance_overhang_writes_feature_log_on_both_levels():
     """An assembly-mode overhang patch (sequence + label) appends:
     (1) a full SnapshotLogEntry on the instance design
-    (2) a metadata-only SnapshotLogEntry on the assembly identifying the instance.
+    (2) a replayable SnapshotLogEntry on the assembly identifying the instance.
     """
     from backend.api import state as design_state
     from backend.api import assembly_state as asm_state
     from backend.core.lattice import make_bundle_design
-    from backend.core.models import StrandType
-    import math, re
-    from backend.core.constants import (
-        HONEYCOMB_HELIX_SPACING,
-        BDNA_RISE_PER_BP,
-    )
 
     # Use the same 6HB-fixture site-finder as the extrude test so we get a
     # known-good overhang on the instance before we patch it.
     cells = [(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]
     seed = make_bundle_design(cells, length_bp=42)
 
-    _ID_RE = re.compile(r"^h_\w+_(-?\d+)_(-?\d+)$")
-
-    def _row_col(hid):
-        m = _ID_RE.match(hid)
-        return (int(m.group(1)), int(m.group(2))) if m else (None, None)
-
-    def _hc_xy(r, c):
-        LATTICE_R = 1.125
-        COL_PITCH = LATTICE_R * math.sqrt(3)
-        ROW_PITCH = 3.0 * LATTICE_R
-        odd = ((r + c) % 2 + 2) % 2
-        return c * COL_PITCH, r * ROW_PITCH + (LATTICE_R if odd else 0)
-
-    helix_by_id = {h.id: h for h in seed.helices}
-    cell_z = {}
-    for h in seed.helices:
-        rr, cc = _row_col(h.id)
-        if rr is None:
-            continue
-        cell_z.setdefault((rr, cc), []).append(
-            (min(h.axis_start.z, h.axis_end.z), max(h.axis_start.z, h.axis_end.z))
-        )
-
-    def _occupied(nr, nc, z, eps=0.25):
-        return any(
-            z >= zmin - eps and z <= zmax + eps
-            for zmin, zmax in cell_z.get((nr, nc), [])
-        )
-
-    site = None
-    for strand in seed.strands:
-        if strand.strand_type != StrandType.STAPLE or not strand.domains:
-            continue
-        for is_5p, dom, bp in [
-            (True, strand.domains[0], strand.domains[0].start_bp),
-            (False, strand.domains[-1], strand.domains[-1].end_bp),
-        ]:
-            h = helix_by_id.get(dom.helix_id)
-            if h is None:
-                continue
-            row, col = _row_col(h.id)
-            if row is None:
-                continue
-            local_i = bp - h.bp_start
-            rise = (
-                BDNA_RISE_PER_BP
-                if h.axis_end.z >= h.axis_start.z
-                else -BDNA_RISE_PER_BP
-            )
-            z = h.axis_start.z + local_i * rise
-            ox, oy = _hc_xy(row, col)
-            for dr in (-1, 0, 1):
-                for dc in (-1, 0, 1):
-                    if dr == 0 and dc == 0:
-                        continue
-                    nr, nc = row + dr, col + dc
-                    nx, ny = _hc_xy(nr, nc)
-                    if (
-                        abs(math.hypot(nx - ox, ny - oy) - HONEYCOMB_HELIX_SPACING)
-                        > 0.05
-                    ):
-                        continue
-                    if _occupied(nr, nc, z):
-                        continue
-                    site = {
-                        "helix_id": dom.helix_id,
-                        "bp_index": bp,
-                        "direction": dom.direction.value,
-                        "is_five_prime": is_5p,
-                        "neighbor_row": nr,
-                        "neighbor_col": nc,
-                    }
-                    break
-                if site:
-                    break
-            if site:
-                break
-        if site:
-            break
-    assert site, "could not find a valid overhang site on the 6HB fixture"
+    from tests.conftest import valid_overhang_sites
+    site = valid_overhang_sites(seed)[0]
 
     design_state.close_session()
     asm_state.close_session()
@@ -2394,7 +2218,7 @@ def test_patch_instance_overhang_writes_feature_log_on_both_levels():
     assert len(part_log) >= 2, f"expected ≥2 part entries, got {len(part_log)}"
     last_part = part_log[-1]
     assert last_part["feature_type"] == "snapshot"
-    assert last_part["op_kind"] == "overhang-bulk"
+    assert last_part["op_kind"] == "overhang-sequence"
     assert last_part["params"]["overhang_id"] == overhang_id
     assert last_part["params"]["sequence"] == "ACGTACGT"
     assert last_part["params"]["label"] == "user-named"
@@ -2402,17 +2226,16 @@ def test_patch_instance_overhang_writes_feature_log_on_both_levels():
     assert last_part["post_state_gz_b64"], "post-state must be populated"
     assert last_part["evicted"] is False
 
-    # (2) Assembly-level: metadata-only entry tagging the instance.
+    # (2) Assembly-level: replayable entry tagging the instance.
     asm_log = body["assembly"]["feature_log"]
     assert len(asm_log) >= 2, f"expected ≥2 assembly entries, got {len(asm_log)}"
     last_asm = asm_log[-1]
     assert last_asm["feature_type"] == "snapshot"
-    assert last_asm["op_kind"] == "overhang-bulk"
+    assert last_asm["op_kind"] == "assembly-instance-overhang-patch"
     assert last_asm["params"]["instance_id"] == inst_id
-    assert last_asm["params"]["instance_name"] == "Bundle-P"
     assert last_asm["params"]["overhang_id"] == overhang_id
-    assert last_asm["design_snapshot_gz_b64"] == ""
-    assert last_asm["evicted"] is True
+    assert last_asm["design_snapshot_gz_b64"] or last_asm["pre_state_from_previous"]
+    assert last_asm["evicted"] is False
 
     # Sanity: the patched overhang reflects the new label/sequence.
     patched = next(o for o in body["design"]["overhangs"] if o["id"] == overhang_id)

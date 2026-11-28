@@ -18,7 +18,7 @@ def assembly_simulation_facts(assembly, load_source):
         if not instance.visible:
             continue
         source = instance.source
-        key = source.path if source.type == "file" else id(source.design)
+        key = (source.path, source.revision_sha256) if source.type == "file" else id(source.design)
         if key not in sources:
             sources[key] = simulation_facts(load_source(source))
         source_proteins, source_count = sources[key]

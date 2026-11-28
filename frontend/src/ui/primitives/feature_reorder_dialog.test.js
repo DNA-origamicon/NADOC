@@ -64,8 +64,8 @@ it('keeps the dialog open while publication is pending', async () => {
   expect(modal.isOpen()).toBe(false)
 })
 
-it.each([false, true])('publishes suppression state %s with the existing transaction', async suppressed => {
-  const source = { id: 'part', feature_log: [{ id: 'a', suppressed }] }
+it.each([[false, -1], [true, -1], [false, -2], [true, 0]])('publishes suppression state %s at cursor %s', async (suppressed, cursor) => {
+  const source = { id: 'part', feature_log_cursor: cursor, feature_log: [{ id: 'a', suppressed }] }
   const store = createMockStore({ currentDesign: source })
   const transport = { start: vi.fn(async () => ({ job_id: 'job' })),
     poll: vi.fn(async () => ({ status: 'complete', result: { status: 'ready' } })),
@@ -80,4 +80,33 @@ it.each([false, true])('publishes suppression state %s with the existing transac
   expect(transport.start).toHaveBeenCalledWith({ operation: 'suppress', index: 0,
     suppressed: !suppressed, expected_revision: 4 }, expect.anything())
   expect(transport.apply).toHaveBeenCalledOnce()
+})
+
+it.each([-1, -2, 0])('uses assembly suppression at cursor %s and retires on a source change', async cursor => {
+  const { recordAssemblyResponse } = await import('../../api/assembly_response_authority.js')
+  const source = { id: 'assembly', feature_log_cursor: cursor, feature_log: [{ id: 'feature', suppressed: false }] }
+  recordAssemblyResponse(source, { revision: 3 })
+  const store = createMockStore({ assemblyActive: true, currentAssembly: source })
+  let finish
+  const transport = { start: vi.fn(async () => ({ job_id: 'job' })),
+    poll: vi.fn(() => new Promise(resolve => { finish = resolve })),
+    commit: vi.fn(), cancel: vi.fn(async () => ({})) }
+  const modal = showFeatureSuppression({ source, store, rowIndex: 0, assembly: true,
+    getDocumentId: () => 'doc', api: { assemblyHistoryAPI: transport } })
+  const button = [...document.querySelectorAll('button')].find(b => b.textContent === 'Suppress')
+  button.click(); await flush()
+  expect(transport.start).toHaveBeenCalledWith({ operation: 'suppress', index: 0, suppressed: true,
+    expected_revision: 3 }, { context: { docId: 'doc', assemblyId: 'assembly', revision: 3, featureIds: ['feature'] } })
+  store.setState({ currentAssembly: { ...source } })
+  finish({ status: 'complete', result: { status: 'ready' } }); await flush()
+  expect(modal.isOpen()).toBe(false)
+  expect(transport.cancel).toHaveBeenCalled()
+  expect(transport.commit).not.toHaveBeenCalled()
+})
+
+it('requires an authoritative assembly snapshot before opening an edit dialog', () => {
+  const source = { id: 'assembly', feature_log: [{ id: 'feature' }] }
+  const store = createMockStore({ assemblyActive: true, currentAssembly: source })
+  expect(() => showFeatureSuppression({ store, source, rowIndex: 0, assembly: true,
+    getDocumentId: () => 'doc', api: { assemblyHistoryAPI: {} } })).toThrow('Refresh the assembly')
 })

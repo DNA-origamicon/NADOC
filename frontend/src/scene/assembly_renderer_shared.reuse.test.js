@@ -290,3 +290,15 @@ describe('shared assembly source reuse', () => {
     f.renderer.dispose()
   })
 })
+
+it('renders distinct pinned revisions of one source path as separate shared sources', async () => {
+  const f = fixture()
+  f.update(i => ({ ...i, source: { type: 'file', path: 'shared.nadoc', revision: { id: 'same' },
+    revision_sha256: (i.id === 'b' ? 'b' : 'a').repeat(64) } }))
+  await f.renderer.rebuild(f.assembly())
+  const keys = f.scene.children.map(o => o.userData.sharedSource).filter(Boolean)
+  expect(keys).toHaveLength(2)
+  expect(new Set(keys).size).toBe(2)
+  await expect(f.renderer.whenReady(f.assembly())).resolves.toBeUndefined()
+  f.renderer.dispose()
+})

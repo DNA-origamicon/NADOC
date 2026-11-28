@@ -39,13 +39,13 @@ URLs are unchanged from their previous home in assembly.py. Mounting is done in
 from __future__ import annotations
 
 import math
-import uuid as _uuid
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import assembly_state
+from backend.api.assembly_command_replay import command_params, output_id
 from backend.api.assembly import (
     _apply_assembly_mutation_with_feature_log,
     _assembly_response,
@@ -138,6 +138,7 @@ def create_belt_path(body: CreateBeltPathRequest) -> dict:
     pulley_b = _resolve_belt_pulley(assembly, body.pulley_b, "pulley_b")
     joint_by_id = {j.id: j for j in assembly.joints}
     belt = BeltPath(
+        id=output_id("belt_id"),
         name=body.name,
         pulley_a=pulley_a,
         pulley_b=pulley_b,
@@ -150,7 +151,7 @@ def create_belt_path(body: CreateBeltPathRequest) -> dict:
         mutated,
         op_kind="assembly-create-belt",
         label=f"Add belt path: {belt.name}",
-        params={"belt_id": belt.id, "name": belt.name},
+        params=command_params(body, belt_id=belt.id, name=belt.name),
     )
     return _assembly_response(assembly_state.get_or_404())
 
@@ -181,8 +182,11 @@ def patch_belt_path(belt_id: str, body: PatchBeltPathRequest) -> dict:
         )
     new_belts = [new_belt if b.id == belt_id else b for b in assembly.belt_paths]
     mutated = assembly.model_copy(update={"belt_paths": new_belts})
-    assembly_state.set_assembly_silent(mutated)
-    return _assembly_response(mutated)
+    _apply_assembly_mutation_with_feature_log(
+        mutated, op_kind="assembly-patch-belt", label=f"Update belt path: {new_belt.name}",
+        params=command_params(body, belt_id=belt_id),
+    )
+    return _assembly_response(assembly_state.get_or_404())
 
 
 @router.delete("/assembly/belt-paths/{belt_id}", status_code=200)
@@ -190,12 +194,15 @@ def delete_belt_path(belt_id: str) -> dict:
     assembly = assembly_state.get_or_404()
     belt = _find_belt_path(assembly, belt_id)
     new_belts = [b for b in assembly.belt_paths if b.id != belt_id]
-    mutated = assembly.model_copy(update={"belt_paths": new_belts})
+    mutated = assembly.model_copy(update={
+        "belt_paths": new_belts,
+        "belt_riders": [r for r in assembly.belt_riders if r.belt_path_id != belt_id],
+    })
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-delete-belt",
         label=f"Delete belt path: {belt.name}",
-        params={"belt_id": belt_id, "name": belt.name},
+        params=command_params(belt_id=belt_id, name=belt.name),
     )
     return _assembly_response(assembly_state.get_or_404())
 
@@ -248,6 +255,7 @@ def create_belt_rider(body: CreateBeltRiderRequest) -> dict:
         )
         new_instances = [new_inst if i.id == inst.id else i for i in assembly.instances]
     rider = BeltRider(
+        id=output_id("rider_id"),
         belt_path_id=body.belt_path_id,
         instance_id=body.instance_id,
         connector_label=body.connector_label,
@@ -265,7 +273,7 @@ def create_belt_rider(body: CreateBeltRiderRequest) -> dict:
         mutated,
         op_kind="assembly-create-belt-rider",
         label=f"Attach {inst.name} to belt: {belt.name}",
-        params={"rider_id": rider.id, "belt_id": belt.id, "instance_id": inst.id},
+        params=command_params(body, rider_id=rider.id, belt_id=belt.id, instance_id=inst.id),
     )
     return _assembly_response(assembly_state.get_or_404())
 
@@ -285,7 +293,7 @@ def delete_belt_rider(rider_id: str) -> dict:
         mutated,
         op_kind="assembly-delete-belt-rider",
         label="Detach part from belt",
-        params={"rider_id": rider_id},
+        params=command_params(rider_id=rider_id),
     )
     return _assembly_response(assembly_state.get_or_404())
 
@@ -326,6 +334,12 @@ def polymerize_belt(body: PolymerizeBeltRequest) -> dict:
     new_riders = list(assembly.belt_riders)
     new_instance_ids: list[str] = []
     new_rider_ids: list[str] = []
+    outputs = {}
+
+    def allocate(slot):
+        outputs[slot] = output_id(slot)
+        return outputs[slot]
+
     for k, copy in enumerate(body.copies, start=1):
         vals = (
             copy.transform.get("values") if isinstance(copy.transform, dict) else None
@@ -334,7 +348,7 @@ def polymerize_belt(body: PolymerizeBeltRequest) -> dict:
             raise HTTPException(
                 400, detail="each copy transform must be {'values': [16 floats]}."
             )
-        new_id = str(_uuid.uuid4())
+        new_id = allocate(f"instance:{seed.instance_id}:{k}")
         clone = seed_inst.model_copy(
             deep=True,
             update={
@@ -346,6 +360,7 @@ def polymerize_belt(body: PolymerizeBeltRequest) -> dict:
         )
         new_instances.append(clone)
         rider = BeltRider(
+            id=allocate(f"rider:{seed.id}:{k}"),
             belt_path_id=seed.belt_path_id,
             instance_id=new_id,
             connector_label=seed.connector_label,
@@ -365,6 +380,8 @@ def polymerize_belt(body: PolymerizeBeltRequest) -> dict:
         op_kind="assembly-polymerize-belt",
         label=f"Polymerize {seed_inst.name} around belt: {len(body.copies) + 1} copies",
         params={
+            **command_params(body),
+            "outputs": outputs,
             "rider_id": seed.id,
             "belt_id": seed.belt_path_id,
             "new_instance_ids": new_instance_ids,

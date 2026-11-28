@@ -23,7 +23,7 @@ exactly between the two new instances it bridges. No FastAPI imports here
 from __future__ import annotations
 
 import uuid as _uuid
-from typing import Literal, Optional, Tuple
+from typing import Callable, Literal, Optional, Tuple
 
 import numpy as np
 
@@ -73,14 +73,18 @@ def _design_dump_for_identity(design) -> dict:
 def _sources_match(a: PartSource, b: PartSource) -> bool:
     """True when two PartInstances are 'identical parts'.
 
-    File-backed: identical .path string. (sha256 may legitimately differ
-    between instances if one was loaded before a file edit; the path is
-    the authoritative identity.)
+    Pinned file revisions compare their resolved structures; unpinned legacy
+    sources retain their same-path behavior. Mixed pinned/legacy sources do
+    not silently equate unknown external state with a recorded revision.
     Inline: same Design object identity OR equal structural dump
     (ignores auto-generated id + metadata so two separately-loaded copies
     of the same Part match).
     """
     if isinstance(a, PartSourceFile) and isinstance(b, PartSourceFile):
+        if a.revision is not None or b.revision is not None:
+            from backend.core.assembly_source_versions import pinned_design
+            left, right = pinned_design(a), pinned_design(b)
+            return left is not None and right is not None and _design_dump_for_identity(left) == _design_dump_for_identity(right)
         return a.path == b.path
     if isinstance(a, PartSourceInline) and isinstance(b, PartSourceInline):
         if a.design is b.design:
@@ -328,6 +332,8 @@ def build_polymer_chain(
     direction: Direction,
     all_instances: list[PartInstance],
     all_joints: list[AssemblyJoint],
+    *,
+    identity_factory: Callable[[str], str] | None = None,
 ) -> Tuple[list[PartInstance], list[PartInstance], list[AssemblyJoint]]:
     """Build the PartInstance + AssemblyJoint records for a polymer chain.
 
@@ -344,6 +350,8 @@ def build_polymer_chain(
     (:func:`compute_chain_transforms` &c.); this function spends new ids,
     deep-copies per-instance state, and shifts replicated joint axes.
     """
+    allocate = identity_factory or (lambda _slot: str(_uuid.uuid4()))
+
     seed_pair_ids: set[str] = {joint.instance_a_id, joint.instance_b_id}
 
     forward_T, backward_T = compute_chain_transforms(
@@ -502,7 +510,7 @@ def build_polymer_chain(
     prev_inst_id = inst_b_updated.id
     for i, T_arr in enumerate(forward_T):
         T_mat = Mat4x4.from_array(T_arr)
-        new_id = str(_uuid.uuid4())
+        new_id = allocate(f"instance:forward:{inst_b.id}:{i + 1}")
         new_inst = _make_clone(
             inst_b,
             new_id=new_id,
@@ -514,6 +522,7 @@ def build_polymer_chain(
         forward_primary_ids.append(new_id)
         axis_origin, axis_direction = forward_axes[i]
         new_jt = AssemblyJoint(
+            id=allocate(f"joint:forward:{joint.id}:{i + 1}"),
             name=f"{joint.name} +{i + 1}",
             joint_type=joint.joint_type,
             instance_a_id=prev_inst_id,
@@ -544,7 +553,7 @@ def build_polymer_chain(
         ip_seed = list(add_inst.interface_points)
         for i, T_add in enumerate(add_forward_transforms[add_inst.id]):
             T_mat = Mat4x4.from_array(T_add)
-            new_id = str(_uuid.uuid4())
+            new_id = allocate(f"instance:forward:{add_inst.id}:{i + 1}")
             new_inst = _make_clone(
                 add_inst,
                 new_id=new_id,
@@ -565,7 +574,7 @@ def build_polymer_chain(
     prev_inst_id = inst_a_updated.id
     for i, T_arr in enumerate(backward_T):
         T_mat = Mat4x4.from_array(T_arr)
-        new_id = str(_uuid.uuid4())
+        new_id = allocate(f"instance:backward:{inst_a.id}:{i + 1}")
         new_inst = _make_clone(
             inst_a,
             new_id=new_id,
@@ -584,6 +593,7 @@ def build_polymer_chain(
         # lands on the freshly-added part and connector_b on the existing
         # one — same labels as the seed mate.
         new_jt = AssemblyJoint(
+            id=allocate(f"joint:backward:{joint.id}:{i + 1}"),
             name=f"{joint.name} -{i + 1}",
             joint_type=joint.joint_type,
             instance_a_id=new_id,
@@ -614,7 +624,7 @@ def build_polymer_chain(
         ip_seed = list(add_inst.interface_points)
         for i, T_add in enumerate(add_backward_transforms[add_inst.id]):
             T_mat = Mat4x4.from_array(T_add)
-            new_id = str(_uuid.uuid4())
+            new_id = allocate(f"instance:backward:{add_inst.id}:{i + 1}")
             new_inst = _make_clone(
                 add_inst,
                 new_id=new_id,
@@ -707,6 +717,7 @@ def build_polymer_chain(
             )
             new_joints.append(
                 AssemblyJoint(
+                    id=allocate(f"joint:forward:{pm.id}:{step_idx}"),
                     name=f"{pm.name} +{step_idx}",
                     joint_type=pm.joint_type,
                     instance_a_id=new_a_id,
@@ -737,6 +748,7 @@ def build_polymer_chain(
             )
             new_joints.append(
                 AssemblyJoint(
+                    id=allocate(f"joint:backward:{pm.id}:{step_idx}"),
                     name=f"{pm.name} -{step_idx}",
                     joint_type=pm.joint_type,
                     instance_a_id=new_a_id,
@@ -771,6 +783,8 @@ def build_periodic_chain(
     count: int,
     direction: Direction,
     all_instances: list[PartInstance],
+    *,
+    identity_factory: Callable[[str], str] | None = None,
 ) -> Tuple[list[PartInstance], list[PartInstance], list[AssemblyJoint]]:
     """Build the PartInstance + AssemblyJoint records for a *periodic* polymer.
 
@@ -792,6 +806,7 @@ def build_periodic_chain(
     """
     from backend.core.assembly_connectors import _get_connector_world_frame
 
+    allocate = identity_factory or (lambda _slot: str(_uuid.uuid4()))
     (p5, n5), (p3, n3) = specs
 
     # ── Chain split: count-1 NEW copies beyond the single seed ────────────────
@@ -858,11 +873,11 @@ def build_periodic_chain(
     forward_ids: list[str] = []
     backward_ids: list[str] = []
     for k, T_arr in enumerate(forward_T, start=1):
-        nid = str(_uuid.uuid4())
+        nid = allocate(f"instance:forward:{seed.id}:{k}")
         new_instances.append(_clone(nid, f"{seed.name} +{k}", T_arr))
         forward_ids.append(nid)
     for k, T_arr in enumerate(backward_T, start=1):
-        nid = str(_uuid.uuid4())
+        nid = allocate(f"instance:backward:{seed.id}:{k}")
         new_instances.append(_clone(nid, f"{seed.name} -{k}", T_arr))
         backward_ids.append(nid)
 
@@ -884,11 +899,12 @@ def build_periodic_chain(
         except np.linalg.LinAlgError:
             mate_M = None
 
-    def _seam_joint(name: str, a_id: str, b_id: str) -> AssemblyJoint:
+    def _seam_joint(slot: str, name: str, a_id: str, b_id: str) -> AssemblyJoint:
         Fa = _get_connector_world_frame(inst_lookup[a_id], "seam0:3p", None)
         axis_o = Fa[:3, 3].tolist() if Fa is not None else [0.0, 0.0, 0.0]
         axis_d = Fa[:3, 2].tolist() if Fa is not None else [0.0, 0.0, 1.0]
         return AssemblyJoint(
+            id=allocate(slot),
             name=name,
             joint_type="rigid",
             instance_a_id=a_id,
@@ -905,12 +921,12 @@ def build_periodic_chain(
     # Forward: seed(3p) → f1(5p), f1(3p) → f2(5p), …
     prev_id = seed_updated.id
     for k, nid in enumerate(forward_ids, start=1):
-        new_joints.append(_seam_joint(f"Seam +{k}", prev_id, nid))
+        new_joints.append(_seam_joint(f"joint:forward:{seed.id}:{k}", f"Seam +{k}", prev_id, nid))
         prev_id = nid
     # Backward: b1(3p) → seed(5p), b2(3p) → b1(5p), …
     prev_id = seed_updated.id
     for k, nid in enumerate(backward_ids, start=1):
-        new_joints.append(_seam_joint(f"Seam -{k}", nid, prev_id))
+        new_joints.append(_seam_joint(f"joint:backward:{seed.id}:{k}", f"Seam -{k}", nid, prev_id))
         prev_id = nid
 
     return existing_instances, new_instances, new_joints

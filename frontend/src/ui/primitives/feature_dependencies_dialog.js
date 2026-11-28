@@ -3,8 +3,8 @@ import { createModal } from './modal.js'
 import { createButton } from './button.js'
 import { el } from './dom.js'
 
-/** Inspect saved-input relationships without replaying or changing the part. */
-export function showFeatureDependencies({ graph, rowIndex, store, source }) {
+/** Inspect saved-input relationships without replaying or changing the document. */
+export function showFeatureDependencies({ graph, rowIndex, store, source, assembly = false, isCurrent }) {
   const selected = graph.features.filter(feature => feature.row_index === rowIndex)
   if (!selected.length) throw new Error('This feature has no dependency information.')
   const ids = new Set(selected.map(feature => feature.id))
@@ -30,7 +30,8 @@ export function showFeatureDependencies({ graph, rowIndex, store, source }) {
   modal.root.setAttribute('aria-label', `F${rowIndex + 1} dependencies`)
   modal.open()
   unsubscribe = store.subscribe?.(next => {
-    if (next.currentDesign !== source || next.assemblyActive) modal.close()
+    if (isCurrent ? !isCurrent() : assembly ? !next.assemblyActive || next.currentAssembly !== source
+      : next.currentDesign !== source || next.assemblyActive) modal.close()
   })
   return modal
 }

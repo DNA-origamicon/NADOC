@@ -56,12 +56,14 @@ URLs are unchanged from their previous home in assembly.py. Mounting is done in
 from __future__ import annotations
 
 from typing import Optional
+import json
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import assembly_state
+from backend.api.assembly_command_replay import command_params, output_id, output_created_at
 from backend.api.assembly import (
     _apply_assembly_mutation_with_feature_log,
     _assembly_response,
@@ -160,7 +162,7 @@ def create_assembly_overhang_binding(
         binding_kwargs["binding_mode"] = body.binding_mode
     if body.allow_n_wildcard is not None:
         binding_kwargs["allow_n_wildcard"] = body.allow_n_wildcard
-    new_binding = AssemblyOverhangBinding(**binding_kwargs)
+    new_binding = AssemblyOverhangBinding(id=output_id("binding_id"), created_at=output_created_at(), **binding_kwargs)
 
     new_bindings = list(assembly.overhang_bindings) + [new_binding]
     mutated = assembly.model_copy(update={"overhang_bindings": new_bindings})
@@ -181,6 +183,8 @@ def create_assembly_overhang_binding(
         label=label,
         params={
             **body.model_dump(mode="json"),
+            **command_params(body),
+            "created_at": new_binding.created_at,
             "binding_id": new_binding.id,
             "name": new_binding.name,
         },
@@ -212,7 +216,7 @@ def patch_assembly_overhang_binding(
         mutated,
         op_kind="assembly-overhang-bind-patch",
         label=f"{bindings[idx].name}: patch ({changes})",
-        params={**fields, "binding_id": binding_id},
+        params={**fields, **command_params(body, binding_id=binding_id)},
     )
     return _assembly_response(updated)
 
@@ -233,7 +237,7 @@ def delete_assembly_overhang_binding(binding_id: str) -> dict:
         mutated,
         op_kind="assembly-overhang-unbind",
         label=f"{target.name}: unbind",
-        params={"binding_id": binding_id, "name": target.name},
+        params=command_params(binding_id=binding_id, name=target.name),
     )
     return _assembly_response(updated)
 
@@ -373,6 +377,7 @@ def create_assembly_overhang_connection(
 
     next_n = len(assembly.overhang_connections) + 1
     new_conn = AssemblyOverhangConnection(
+        id=output_id("connection_id"), created_at=output_created_at(),
         name=body.name or f"AL{next_n}",
         instance_a_id=body.instance_a_id,
         overhang_a_id=body.overhang_a_id,
@@ -424,6 +429,8 @@ def create_assembly_overhang_connection(
         label=label,
         params={
             **body.model_dump(mode="json"),
+            **command_params(body),
+            "created_at": new_conn.created_at,
             "connection_id": new_conn.id,
             "name": new_conn.name,
         },
@@ -547,7 +554,7 @@ def patch_assembly_overhang_connection(
         mutated,
         op_kind="assembly-overhang-connection-patch",
         label=f"{conns[idx].name}: patch ({changes})",
-        params={**fields, "connection_id": connection_id},
+        params={**fields, **command_params(body, connection_id=connection_id)},
     )
     return _assembly_response(updated)
 
@@ -563,28 +570,14 @@ def delete_assembly_overhang_connection(connection_id: str) -> dict:
         raise HTTPException(
             404, detail=f"AssemblyOverhangConnection {connection_id!r} not found."
         )
-    new_list = [c for c in assembly.overhang_connections if c.id != connection_id]
-
-    from backend.core.assembly_linker import remove_assembly_linker_topology
-
-    new_helices, new_strands = remove_assembly_linker_topology(
-        list(assembly.assembly_helices),
-        list(assembly.assembly_strands),
-        connection_id,
-    )
-    mutated = assembly.model_copy(
-        update={
-            "overhang_connections": new_list,
-            "assembly_helices": new_helices,
-            "assembly_strands": new_strands,
-        }
-    )
+    from backend.core.assembly_removal import remove_members
+    mutated = remove_members(assembly, connection_ids={connection_id})
 
     updated = _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-overhang-connection-delete",
         label=f"{target.name}: delete linker",
-        params={"connection_id": connection_id, "name": target.name},
+        params=command_params(connection_id=connection_id, name=target.name),
     )
     return _assembly_response(updated)
 
@@ -674,7 +667,7 @@ def relax_assembly_overhang_connection(
             working,
             op_kind="assembly-overhang-connection-relax",
             label=f"{conn.name}: relax linker",
-            params={"connection_id": connection_id, **info},
+            params={**info, **command_params(body or RelaxAssemblyLinkerRequest(), connection_id=connection_id)},
         )
         payload = _assembly_response(updated)
         payload["relax_info"] = info
@@ -759,7 +752,7 @@ def relax_assembly_overhang_connection(
         mutated,
         op_kind="assembly-overhang-connection-relax",
         label=f"{conn.name}: relax linker",
-        params={"connection_id": connection_id, **info},
+        params={**info, **command_params(body or RelaxAssemblyLinkerRequest(), connection_id=connection_id)},
     )
     payload = _assembly_response(updated)
     payload["relax_info"] = info
@@ -917,6 +910,7 @@ def create_assembly_duplex(body: CreateAssemblyDuplexBody) -> dict:
     _find_instance(assembly, body.right.instance_id)
     try:
         dx = AssemblyDuplex(
+            id=output_id("duplex_id"), created_at=output_created_at(),
             name=smallest_unused_assembly_duplex_name(assembly),
             left=_asm_duplex_end(body.left),
             right=_asm_duplex_end(body.right),
@@ -935,7 +929,7 @@ def create_assembly_duplex(body: CreateAssemblyDuplexBody) -> dict:
         mutated,
         op_kind="assembly-duplex-add",
         label=f"{dx.name}: bind {dx.left.overhang_id} ↔ {dx.right.overhang_id}",
-        params={**body.model_dump(mode="json"), "duplex_id": dx.id, "name": dx.name},
+        params={**body.model_dump(mode="json"), **command_params(body, duplex_id=dx.id, name=dx.name, created_at=dx.created_at)},
     )
     resp = _assembly_response(updated)
     resp["duplex_id"] = dx.id
@@ -1007,6 +1001,7 @@ def connect_assembly_duplex(body: ConnectAssemblyDuplexBody) -> dict:
     driver = body.driver or assembly_longest_driver(assembly, inst_map, left, right)
     try:
         dx = AssemblyDuplex(
+            id=output_id("duplex_id"), created_at=output_created_at(),
             name=smallest_unused_assembly_duplex_name(assembly),
             left=left,
             right=right,
@@ -1022,7 +1017,7 @@ def connect_assembly_duplex(body: ConnectAssemblyDuplexBody) -> dict:
         mutated,
         op_kind="assembly-duplex-connect",
         label=f"{dx.name}: connect {dx.left.overhang_id} ↔ {dx.right.overhang_id}",
-        params={**body.model_dump(mode="json"), "duplex_id": dx.id, "name": dx.name},
+        params={**body.model_dump(mode="json"), **command_params(body, duplex_id=dx.id, name=dx.name, created_at=dx.created_at)},
     )
     resp = _assembly_response(updated)
     resp["duplex_id"] = dx.id
@@ -1037,7 +1032,15 @@ def sync_assembly_duplexes() -> dict:
     from backend.core.assembly_duplex import sync_assembly_duplexes_from_bindings
 
     assembly = assembly_state.get_or_404()
-    mutated = sync_assembly_duplexes_from_bindings(assembly)
+    outputs = {}
+
+    def allocate(dx):
+        pair = sorted([(dx.left.instance_id, dx.left.overhang_id), (dx.right.instance_id, dx.right.overhang_id)])
+        slot = "duplex:" + json.dumps(pair, separators=(",", ":"))
+        outputs[slot] = output_id(slot)
+        return outputs[slot]
+
+    mutated = sync_assembly_duplexes_from_bindings(assembly, identity_factory=allocate)
     if len(mutated.duplexes) == len(assembly.duplexes):
         return _assembly_response(assembly)  # nothing new — no undo entry
     added = len(mutated.duplexes) - len(assembly.duplexes)
@@ -1045,7 +1048,7 @@ def sync_assembly_duplexes() -> dict:
         mutated,
         op_kind="assembly-duplex-sync",
         label=f"Sync duplexes from bindings (+{added})",
-        params={"added": added},
+        params=command_params(added=added, outputs=outputs),
     )
     return _assembly_response(updated)
 
@@ -1094,7 +1097,7 @@ def patch_assembly_duplex(duplex_id: str, body: PatchAssemblyDuplexBody) -> dict
         mutated,
         op_kind="assembly-duplex-patch",
         label=f"{candidate.name}: patch ({changes})",
-        params={**patch, "duplex_id": duplex_id},
+        params={**patch, **command_params(body, duplex_id=duplex_id)},
     )
     return _assembly_response(updated)
 
@@ -1110,7 +1113,7 @@ def delete_assembly_duplex(duplex_id: str) -> dict:
         mutated,
         op_kind="assembly-duplex-delete",
         label=f"{target.name}: delete duplex",
-        params={"duplex_id": duplex_id, "name": target.name},
+        params=command_params(duplex_id=duplex_id, name=target.name),
     )
     return _assembly_response(updated)
 
