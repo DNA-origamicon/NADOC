@@ -66,6 +66,7 @@ import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap, CG_LOD } from './helix_renderer.js'
 import { buildCrossoverConnections, updateExtraBaseInstances, setExtraBaseSlabConnectors } from './crossover_connections.js'
 import { crossoverControlPoint as arcControlPoint } from './crossover_extra_placement.js'
+import { applyInstanceAtomColors } from './assembly_atom_colors.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { initSurfaceRenderer } from './surface_renderer.js'
 import { initProteinTraceRenderer } from './protein_trace_renderer.js'
@@ -727,10 +728,11 @@ export function initAssemblyRenderer(scene, store, api) {
 
       // Create a per-instance atomistic renderer that adds meshes to the
       // instance group, so they inherit the group's placement transform.
-      const ar = initAtomisticRenderer(entry.group)
+      const ar = initAtomisticRenderer(entry.group, { independentColors: true })
       ar.update(atomData)
       ar.setMode(repr)
       entry.atomisticRenderer = ar
+      applyInstanceAtomColors(entry, store.getState().coloringMode)
     }
   }
 
@@ -758,7 +760,9 @@ export function initAssemblyRenderer(scene, store, api) {
    * a swap when you also need to repaint back to strand explicitly.
    */
   function _applyColoringToEntry(entry, { force = false } = {}) {
-    if (!entry?.helixCtrl?.applyColoring) return
+    if (!entry) return
+    applyInstanceAtomColors(entry, store.getState().coloringMode)
+    if (!entry.helixCtrl?.applyColoring) return
     const mode = store.getState().coloringMode || 'strand'
     if (!force && mode === 'strand') return
     const customColors = _buildCustomColors(entry.design)
@@ -1726,6 +1730,7 @@ export function initAssemblyRenderer(scene, store, api) {
       entries:     entry.helixCtrl?.backboneEntries ?? [],
       nucleotides: entry.nucleotides,
       extraBaseGeometry: entry.xoverResult,
+      helixAxes: entry.helixAxes,
       matrixWorld: entry.group.matrixWorld.clone(),
     }
   }

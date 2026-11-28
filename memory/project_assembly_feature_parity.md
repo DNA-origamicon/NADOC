@@ -9,6 +9,19 @@ review_after: 2027-02-28
 
 # Assembly Feature Parity
 
+## Ownership correction and input editor work — November 27, 2026
+
+[Source-part ownership](feedback_assembly_part_ownership.md) supersedes the
+embedded-part editing goals below. Assemblies position, connect and repeat whole
+parts; source definitions are edited separately and all instances updated.
+
+Input editor work combines HEAD 662fc1fd with the pattern implementation from
+75d33dac in `/home/joshua/NADOC-assembly-editors`, on branch
+`codex/assembly-editors-and-colors`. No merge into the shared branch is included. See [the input inventory](../docs/audits/assembly_feature_inputs_20261127.md)
+for current capabilities and verification. New assembly patterns use versioned
+command inputs and the independent evaluation/replay host. Old pattern logs keep
+their explicitly legacy recovery-based path; they are not silently certified.
+
 ## Binding product rule
 
 Assembly mode is a different host and scaling regime, **not a reduced product tier**. Unless the user
@@ -51,23 +64,12 @@ memory statement means **unported work by default**, not a durable product restr
 the guard when implementing parity. Historical project notes yield to this canonical rule unless they
 record a still-valid concrete exception.
 
-## Mutation ownership: decide explicitly
+## Mutation ownership
 
-For features that mutate `Design` data, use the same mutation logic as the part editor. Assembly wiring
-must make the target semantics explicit:
-
-1. **Shared-source edit** — update the source `.nadoc`; refresh every instance referencing that source.
-   This is the default when assembly parts intentionally share a reusable definition.
-2. **Instance-only edit** — fork the source or use a true `.nass` instance override when the capability
-   has defined override semantics. Never pretend an instance-local change exists by mutating a shared
-   source invisibly.
-3. **Assembly-owned edit** — transforms, joints, groups, configurations, cross-part relationships, and
-   other genuinely assembly-level state belong in `.nass` and use assembly undo/history/persistence.
-
-If user intent does not distinguish shared-source from instance-only and the choice would materially
-change other instances, surface that choice. This is an ownership question, not a reason to omit the
-feature. Existing infrastructure already supports resolving an instance `Design`, replacing it through
-`PATCH /assembly/instances/{id}/design`, invalidating geometry, and re-resolving affected mates.
+Edit part definitions only in their source part editor, then update all source
+instances. Assembly-owned changes include whole-part transforms, joints,
+connections, groups, patterns and configurations. The historical instance-edit
+infrastructure described below is not an approved assembly authoring workflow.
 
 ## Permitted differences and required handling
 

@@ -54,12 +54,12 @@ export function coloringOptionStates(repr, assemblyActive, activeMode) {
 
 /**
  * Coloring modes available for `repr`, accounting for the assembly atomistic path
- * (per-atom cpk/strand/cluster + per-source tint; no 'base').
+ * (part color modes plus per-source tint).
  */
 export function supportedColoringSet(repr, assemblyActive = false) {
   const isAtom = repr === 'vdw' || repr === 'ballstick' || repr === 'stick'
   if (assemblyActive) {
-    if (isAtom)             return new Set(['cpk', 'strand', 'cluster', 'source'])
+    if (isAtom)             return new Set(['cpk', 'strand', 'base', 'cluster', 'source'])
     if (repr === 'surface' || repr === 'surface-detail') return new Set(['strand', 'cluster', 'source'])
   }
   return COLORING_SUPPORT[repr] ?? new Set(['strand', 'base', 'cluster'])

@@ -22,6 +22,18 @@ or authorization; current user instructions and `CLAUDE.md` take precedence.
 
 This file is the single source of truth for all subagents working on this refactor. Subagents must read this entire file before starting and update the relevant phase section when their chunk is done.
 
+## Atomistic assembly coloring — 2026-11-27
+
+In `/home/joshua/NADOC-assembly-editors`, `assembly_atom_colors.js` adapts the
+part color resolver to each source's design, nucleotide sequence and explicit
+colors. VDW/Ball-and-Stick/Stick support CPK, strand, base, per-nucleotide cluster
+and source modes. Shared atom and bond textures use linear RGB and repaint
+in place; bonds match the part renderer's first-endpoint convention. Legacy
+instance renderers receive independent color state and assembly mode updates.
+This supersedes older no-base and immutable-bond-color behavior. It does not
+change molecular geometry or edit source parts. See ISSUE-279 for validation;
+large-design visual review remains MV-ATOM-ASSEMBLY-20261127.
+
 ## Assembly rebuild performance correction — 2026-10-13
 
 The shared renderer now retains unchanged source meshes and decoded nucleotide

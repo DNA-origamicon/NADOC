@@ -14,9 +14,9 @@ describe('supportedColoringSet', () => {
     expect([...supportedColoringSet('full', false)]).toEqual([...COLORING_SUPPORT.full])
     expect([...supportedColoringSet('surface', false)]).toEqual(['strand', 'cluster'])
   })
-  it('atom reprs in assembly mode swap to cpk/strand/cluster/source (no base)', () => {
-    expect([...supportedColoringSet('vdw', true)]).toEqual(['cpk', 'strand', 'cluster', 'source'])
-    expect(supportedColoringSet('ballstick', true).has('base')).toBe(false)
+  it('atom reprs in assembly mode support part color modes plus source', () => {
+    expect([...supportedColoringSet('vdw', true)]).toEqual(['cpk', 'strand', 'base', 'cluster', 'source'])
+    expect(supportedColoringSet('ballstick', true).has('base')).toBe(true)
   })
   it('surface in assembly mode adds source', () => {
     expect([...supportedColoringSet('surface', true)]).toEqual(['strand', 'cluster', 'source'])

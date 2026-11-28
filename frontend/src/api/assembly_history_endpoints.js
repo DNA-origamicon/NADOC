@@ -14,6 +14,11 @@ export function createAssemblyHistoryEndpoints({ request, apply }) {
   }
   const path = id => `${base}/${encodeURIComponent(id)}`
   return {
+    inputs(index, options) {
+      const { context } = options
+      const query = new URLSearchParams({ expected_revision: context.revision, expected_feature_id: context.featureIds[index] })
+      return json('GET', `/assembly/features/${index}/inputs?${query}`, undefined, options)
+    },
     dependencies: options => json('GET', options.context.instanceId
       ? `/assembly/instances/${encodeURIComponent(options.context.instanceId)}/features/dependencies`
       : '/assembly/features/dependencies', undefined, options),

@@ -20,6 +20,8 @@ from backend.api import assembly_state
 
 # module, operation, request model, path parameter, generated output slot
 COMMANDS = {
+    "assembly-linear-pattern": ("routes_assembly_patterns", "record_linear_pattern", "RecordedPatternRequest", None, "id_seed"),
+    "assembly-circular-pattern": ("routes_assembly_patterns", "record_circular_pattern", "RecordedPatternRequest", None, "id_seed"),
     "assembly-instance-history-change": ("assembly_instance_history", "record_change", "InstanceHistoryChange", "instance_id", None),
     "assembly-instance-overhang-extrude": ("assembly", "extrude_instance_overhang", "InstanceOverhangExtrudeRequest", "instance_id", "part_feature_id"),
     "assembly-instance-overhang-patch": ("assembly", "patch_instance_overhang", "InstanceOverhangPatchRequest", ("instance_id", "overhang_id"), "part_feature_id"),

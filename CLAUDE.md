@@ -132,6 +132,13 @@ Detailed extraction verification lives in the path-scoped [main-init rule](.clau
 
 ### Part/assembly feature parity
 
+**Ownership boundary (November 27, 2026): assemblies must not edit parts.**
+Open the source part separately, then update all referencing assembly instances.
+Assembly authoring owns whole-part placement, repetition and connections.
+Part-defined periodic seams may drive assembly polymerization. This overrides
+older embedded-part editing goals; see
+[assembly ownership](memory/feedback_assembly_part_ownership.md).
+
 Assembly mode is a different host and scaling regime, **not a reduced product tier**. When the user
 asks to port, match, or make an assembly feature the same as individual-part editing, interpret that
 as comprehensive behavioral parity: controls, defaults, validation, status/progress, errors, undo,

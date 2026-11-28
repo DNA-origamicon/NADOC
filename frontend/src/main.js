@@ -2360,8 +2360,8 @@ async function main() {
   const extrudeHistoryEditor = createExtrudeHistoryEditor({ store, api, slicePlane, panel: _extrudePanel, getCamera: getRenderCamera, getControls: getActiveControls, setPreviewHelices: ids => { designRenderer.setPreviewHelices(ids); unfoldView.setPreviewHelices(ids) }, showToast })
   initSavedSweepWarnings(scene,store,{canvas,getCamera:getRenderCamera,addFrameCallback,removeFrameCallback,getHelixCtrl:()=>designRenderer.getHelixCtrl()})
   const sweepPanel = initSweepPanel({ beginAuthoringDisplay, setPreviewHelices: ids => { designRenderer.setPreviewHelices(ids); unfoldView.setPreviewHelices(ids) }, store, api, slicePlane, scene, extrudePanel: _extrudePanel, expandedSpacing, showToast, getDocId, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
-  initLinearPatternPanel({ store, showToast, selectionManager, scene })
-  initCircularPatternPanel({ store, showToast, selectionManager, scene, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
+  initLinearPatternPanel({ store, showToast, selectionManager, scene, getAssemblyRenderer: () => assemblyRenderer })
+  initCircularPatternPanel({ store, showToast, selectionManager, scene, getAssemblyRenderer: () => assemblyRenderer, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
 
   // ── Primitives library (right-sidebar panel) → ui/primitive_library.js ──
   // Owns #primitives-panel; revealed by Tools → Add Primitive. Lists pre-validated

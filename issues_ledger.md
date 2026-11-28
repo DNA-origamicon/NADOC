@@ -1,5 +1,39 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-279 — Assembly atomistic colors diverge from parts (2026-11-27)
+
+- Shared atoms uploaded sRGB channel fractions as linear colors, ignored explicit
+  cluster colors and per-nucleotide cluster ownership, and disallowed base mode.
+  Bond colors were averaged once during construction and never repainted; Stick
+  therefore ignored color switches. Legacy instance renderers inherited module
+  color state from other renderers and did not receive assembly color changes.
+- Fixed in the isolated assembly-editors worktree: source-local adapter reuses
+  part maps/resolver, converts through Three.Color, retains bond endpoint ownership
+  for repaint, enables base mode, and isolates legacy renderer color state.
+  Bond color uses the first endpoint, matching the existing part renderer.
+- No molecular coordinates, connectivity, source definitions or histories change.
+  Focused renderer tests and isolated app evidence are recorded in the fix log.
+
+
+## ISSUE-278 — Assembly input editors omit recorded controls and pattern integration (2026-11-27)
+
+- Review: scalar-only forms hid nullable inputs, booleans, references, vectors,
+  nested endpoints and transforms; master patterns lacked this branch's native
+  command/evaluation integration. Ownership clarification excludes part edits.
+- Correction in isolated assembly-editors worktree: request-derived typed forms,
+  historical target selectors, omission/null preservation, loading cancellation,
+  stale-response rejection and shared private regeneration/commit. Patterns retain
+  stable seed identities and source histories. Full field inventory and test
+  evidence: `docs/audits/assembly_feature_inputs_20261127.md`.
+- During development, the input GET re-entered the non-reentrant state lock;
+  corrected to `copy_for_persist` and covered by a non-mutating endpoint test.
+  An existing save import was absent from the committed base; its already-existing
+  shared-worktree module is included unchanged and identified in the audit.
+- Scale qualification and legacy embedded-part ownership cleanup are separate;
+  no blanket full-product parity claim. One capture-budget timing failure passed
+  alone without changing its limit.
+
+
 ## ISSUE-277 — Assembly autosave silently replaces recorded source revisions (2026-11-27)
 
 - **Observed:** running-app evaluation was correctly cancelled as source_changed;

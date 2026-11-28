@@ -1,3 +1,4 @@
+import { assemblyAtomColorContext, assemblyAtomRGB, repaintAssemblyAtoms } from './assembly_atom_colors.js'
 import { geometryLoads } from './geometry_loads.js'
 import { registerPreparedAssemblyMaterial } from './prepared_assembly_instances.js'
 /**
@@ -659,62 +660,11 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
   }
 
   // ── Atomistic coloring ──────────────────────────────────────────────────────
-  // Modes supported for atomistic on the shared path. Anything else → 'cpk'.
-  const _ATOM_COLOR_MODES = new Set(['cpk', 'strand', 'cluster', 'source'])
-  const _atomColorMode = (m) => (_ATOM_COLOR_MODES.has(m) ? m : 'cpk')
-
   // Deterministic per-source tint (order-independent) for 'source' coloring.
   function _srcColorHex(srcKey) {
     let h = 0
     for (let i = 0; i < (srcKey || '').length; i++) h = (h * 31 + srcKey.charCodeAt(i)) | 0
     return STAPLE_PALETTE[Math.abs(h) % STAPLE_PALETTE.length]
-  }
-
-  // One atom's color (hex int) for a mode — mirrors helix_renderer.applyColoring
-  // so atoms match the CG bead/cylinder colors.  ctx: { stapleColorMap, customColors,
-  // clusterFn, strandType: Map<strand_id,type>, sourceColor }.
-  function _atomColorHex(atom, mode, ctx) {
-    if (mode === 'source') return ctx.sourceColor
-    if (mode === 'cpk')    return ELEMENTS[atom.element]?.color ?? DEFAULT_ELEMENT.color
-    const sid = atom.strand_id
-    const strandHex = () => {
-      if (!sid) return C.unassigned
-      if (ctx.strandType.get(sid) === 'scaffold') return C.scaffold_backbone
-      if (ctx.customColors[sid] != null) return ctx.customColors[sid]
-      return ctx.stapleColorMap.get(sid) ?? C.unassigned
-    }
-    if (mode === 'cluster') {
-      const ci = ctx.clusterFn({ helix_id: atom.helix_id, strand_id: sid })
-      return ci != null ? STAPLE_PALETTE[ci % STAPLE_PALETTE.length] : strandHex()
-    }
-    return strandHex()   // 'strand'
-  }
-
-  function _computeAtomColorRGB(atomList, mode, ctx) {
-    const out = new Float32Array(atomList.length * 3)
-    for (let i = 0; i < atomList.length; i++) {
-      const hex = _atomColorHex(atomList[i], mode, ctx)
-      out[i * 3 + 0] = ((hex >> 16) & 255) / 255
-      out[i * 3 + 1] = ((hex >> 8) & 255) / 255
-      out[i * 3 + 2] = (hex & 255) / 255
-    }
-    return out
-  }
-
-  // Recompute + re-upload an atomistic source's per-atom color textures in place.
-  function _recolorAtomBatch(srcEntry, mode) {
-    if (!srcEntry?.atomBatch || !srcEntry._atomCtx) return
-    const m = _atomColorMode(mode)
-    for (const b of srcEntry.atomBatch) {
-      const rgb = _computeAtomColorRGB(b.atomList, m, srcEntry._atomCtx)
-      const data = b.colorTex.image.data
-      for (let i = 0; i < b.atomList.length; i++) {
-        data[i * 4 + 0] = rgb[i * 3 + 0]
-        data[i * 4 + 1] = rgb[i * 3 + 1]
-        data[i * 4 + 2] = rgb[i * 3 + 2]
-      }
-      b.colorTex.needsUpdate = true
-    }
   }
 
   // ── Surface coloring (assembly) ─────────────────────────────────────────────
@@ -883,19 +833,8 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
       byEl.get(el).push(a)
     }
 
-    // Coloring context (reused by _recolorAtomBatch on mode change) — resolves
-    // the same colors the CG path uses so atoms match beads/cylinders.
-    const design = srcEntry.design
-    const strandType = new Map((design?.strands ?? []).map(s => [s.id, s.strand_type]))
-    const ctx = {
-      stapleColorMap: buildStapleColorMap(srcEntry.nucleotides, design),
-      customColors:   srcEntry.customColors,
-      clusterFn:      buildClusterLookup(design),
-      strandType,
-      sourceColor:    _srcColorHex(srcEntry.group.userData.sharedSource),
-    }
-    srcEntry._atomCtx = ctx
-    const mode = _atomColorMode(store.getState().coloringMode)
+    // Use the part atom color resolver with this source's own design/sequence.
+    const ctx = assemblyAtomColorContext(srcEntry, store.getState().coloringMode)
 
     const batch = []
     for (const [el, list] of byEl) {
@@ -908,7 +847,7 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
         posFlat[i * 3 + 2] = list[i].z
       }
       const { tex: atomPosTex } = _makeAtomPosTexture(posFlat, numAtoms)
-      const { tex: atomColorTex } = _makeAtomColorTexture(_computeAtomColorRGB(list, mode, ctx), numAtoms)
+      const { tex: atomColorTex } = _makeAtomColorTexture(assemblyAtomRGB(list, ctx), numAtoms)
       const elDef = ELEMENTS[el] || DEFAULT_ELEMENT
       // VDW = per-element van-der-Waals radius (space-fill); ball-and-stick = a
       // fixed small ball radius (matches the design-view atomistic renderer).
@@ -948,9 +887,10 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
     // no bonds. The 1 nm cutoff mirrors the individual atomistic renderer's
     // pathological-bond guard.
     if (atomRep !== 'vdw' && atomData?.bonds?.length) {
-      const atomColors = _computeAtomColorRGB(atoms, mode, ctx)
+      const atomColors = assemblyAtomRGB(atoms, ctx)
       const matrices = []
       const colors = []
+      const colorAtoms = []
       const yAxis = new THREE.Vector3(0, 1, 0)
       const start = new THREE.Vector3(), end = new THREE.Vector3()
       const dir = new THREE.Vector3(), mid = new THREE.Vector3()
@@ -969,11 +909,9 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
         scale.set(BOND_RADIUS, length, BOND_RADIUS)
         matrix.compose(mid, quat, scale)
         matrices.push(...matrix.elements)
-        colors.push(
-          (atomColors[ai * 3] + atomColors[bi * 3]) * 0.5,
-          (atomColors[ai * 3 + 1] + atomColors[bi * 3 + 1]) * 0.5,
-          (atomColors[ai * 3 + 2] + atomColors[bi * 3 + 2]) * 0.5,
-        )
+        // Match the part renderer: each bond uses its first endpoint color.
+        colors.push(...atomColors.subarray(ai * 3, ai * 3 + 3))
+        colorAtoms.push(a)
       }
       const numBonds = matrices.length / 16
       const bondLod = _buildSegmentLodMesh({
@@ -998,6 +936,7 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
             }
           }
         }
+        bondLod.colorAtoms = colorAtoms
         srcEntry.atomBondLod = bondLod
       }
     }
@@ -3693,14 +3632,15 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
     if (strandId == null || hexColor == null) return
     for (const srcEntry of _sources.values()) {
       srcEntry.customColors[strandId] = hexColor
-      _applyColorsToSource(srcEntry, null)  // null = pick current mode from store
+      if (srcEntry.isAtomistic) repaintAssemblyAtoms(srcEntry, store.getState().coloringMode)
+      else _applyColorsToSource(srcEntry, null)  // null = pick current mode from store
     }
   }
 
   function updateColoringMode(mode) {
     if (mode == null) return
     for (const srcEntry of _sources.values()) {
-      if (srcEntry.isAtomistic)    _recolorAtomBatch(srcEntry, mode)
+      if (srcEntry.isAtomistic)    repaintAssemblyAtoms(srcEntry, mode)
       else if (srcEntry.isSurface) _recolorSurface(srcEntry, mode)
       else _applyColorsToSource(srcEntry, mode)
     }
@@ -3907,7 +3847,7 @@ export function _createSharedInstancingRenderer({ scene, store, api, prepareFull
     const srcEntry = srcKey ? _sources.get(srcKey) : null
     if (!srcEntry) return empty
     const mw = getLiveTransform(instanceId) ?? new THREE.Matrix4()
-    return { entries: srcEntry.helixCtrl?.backboneEntries ?? [], nucleotides: srcEntry.nucleotides, matrixWorld: mw }
+    return { entries: srcEntry.helixCtrl?.backboneEntries ?? [], nucleotides: srcEntry.nucleotides, helixAxes: srcEntry.helixAxes, matrixWorld: mw }
   }
 
   // Render data for overhang-locations: the design + source-local nucleotides

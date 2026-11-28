@@ -21,10 +21,13 @@ test('create a linear grid, edit both pattern types through history, and undo/re
   })
   const helixCount = () => page.evaluate(async () => (await import('/src/state/store.js')).store.getState().currentDesign.helices.length)
   async function openTool(kind) {
+    // Finish the fixture's autosave before capturing a source-bound draft.
+    await expect(page.locator('#sync-status-text')).toContainText('saved')
     await page.locator('#right-tab-strip [data-tab=clustering]').click()
     await page.getByRole('button', { name: 'Tools', exact: true }).hover()
     await page.locator(`#menu-tools-${kind}-pattern`).click()
-    await page.locator(`#cluster-list [data-cluster-id="${source}"]`).click()
+    // Click the row selection area; its center can contain the colour button.
+    await page.locator(`#cluster-list [data-cluster-id="${source}"]`).click({ position: { x: 10, y: 12 } })
     await expect(page.locator(`#${kind}-pattern-panel .cp-panel-body`)).toBeVisible()
   }
   await openTool('linear')
@@ -86,14 +89,14 @@ test('create a linear grid, edit both pattern types through history, and undo/re
   await page.evaluate(async () => { await (await import('/src/api/client.js')).redo() })
   await expect.poll(helixCount).toBe(5)
   expect(await page.evaluate(async () => (await import('/src/state/store.js')).store.getState().currentDesign.feature_log.filter(e => e.op_kind?.endsWith('-pattern')).length)).toBe(2)
-  await page.evaluate(async () => {
+  await page.evaluate(async workspace => {
     const api = await import('/src/api/client.js')
     const { store } = await import('/src/state/store.js')
     const path = store.getState().currentDesign.metadata.identity_last_known_path
     if (!path?.startsWith('__e2e__')) throw new Error('Expected a disposable test design path')
     if (!await api.saveDesignToWorkspace(path)) throw new Error('Save failed')
-    if (!await api.loadDesign(`workspace/${path}`)) throw new Error('Reload failed')
-  })
+    if (!await api.loadDesign(`${workspace}/${path}`)) throw new Error('Reload failed')
+  }, process.env.NADOC_WORKSPACE || 'workspace')
   await expect.poll(helixCount).toBe(5)
   await page.evaluate(() => window.__nadocTest.applyCameraPoseForTest({ target: [0, 10, 34], position: [160, 140, 190], up: [0, 1, 0] }))
   await page.screenshot({ path: testInfo.outputPath('linear-reloaded.png') })

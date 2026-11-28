@@ -1,5 +1,31 @@
 # Issues fix log
 
+## ISSUE-279 — [x] Assembly atomistic coloring follows part semantics
+
+Shared source adapters use the part strand/base/cluster maps and atom resolver,
+with Three.Color linear conversion. Bonds retain their first endpoint for live
+recoloring, including Stick. Explicit scaffold/cluster colors and base mode are
+honored. Legacy renderers isolate color state and receive mode changes.
+
+164 focused frontend checks pass (color adapter, shared GPU texture contracts,
+color resolver/options, atomistic renderer and representation switcher). Running
+app CPK/strand/base/cluster/source switching and Stick restoration pass (10.2s),
+with unchanged source definitions and no shader/page errors. Two initial browser
+attempts failed during fixture setup (reload and an unsupported add-instance
+representation parameter); the fixture now uses native add then patch commands.
+All 29 smoke checks pass (4.1 minutes). All four owned browser roots were
+independently checked absent, including failed attempts. Lint and diff checks pass;
+workspace status has no test-created files. Full-suite debt remains unchanged.
+No new main.js lines; no molecular coordinate/connectivity changes.
+
+
+## ISSUE-278 — [x] Complete assembly-owned recorded input forms
+
+Typed fields, historical references/targets, optional values and pattern history
+integration replace the limited scalar editor. Source-part mutations are excluded.
+See `docs/audits/assembly_feature_inputs_20261127.md` for exact scope and validation.
+
+
 ## ISSUE-277 — [x] Assembly save preserves recorded source revisions
 
 Removed silent inline-to-unpinned-file conversion from save. Save now persists

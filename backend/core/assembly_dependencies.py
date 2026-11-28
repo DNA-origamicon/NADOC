@@ -8,6 +8,7 @@ Unknown/legacy commands stay unknown barriers, never independent operations.
 from backend.core.part_dependencies import Dependencies, Resource
 
 GLOBAL_COMMANDS = frozenset('''
+assembly-linear-pattern assembly-circular-pattern
 assembly-delete-instance assembly-propagate-fk assembly-transform-instance
 assembly-instance-overhang-extrude assembly-instance-overhang-patch
 assembly-instance-history-change

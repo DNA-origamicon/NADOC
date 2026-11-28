@@ -1930,6 +1930,7 @@ def seek_assembly_features(body: SeekAssemblyFeaturesRequest) -> dict:
 # Editable op kinds: backend allows the Edit button to re-run them with new
 # params.  Subset of replayable.
 _EDITABLE_OP_KINDS: set[str] = {
+    "assembly-linear-pattern", "assembly-circular-pattern",
     "assembly-polymerize",
     "assembly-polymerize-periodic",
     "assembly-overhang-connection-add",
@@ -1957,6 +1958,12 @@ def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assem
     from backend.api.assembly_command_replay import COMMANDS, replay
     if op_kind in COMMANDS and (params.get("command_version") is not None or op_kind not in {"assembly-add-joint", "assembly-transform-instance", "assembly-duplicate-instance", "assembly-delete-instance"}):
         return replay(assembly, op_kind, params)
+    if op_kind in {"assembly-linear-pattern", "assembly-circular-pattern"}:
+        from backend.core.assembly_patterns import pattern_assembly
+        try:
+            return pattern_assembly(assembly, op_kind, params)
+        except (ValueError, KeyError) as error:
+            raise HTTPException(422, str(error)) from error
     if op_kind in {"annotations-state", "view-volumes-state"}:
         from backend.core.presentation_checkpoints import apply
         return apply(assembly, op_kind, params)
@@ -2391,6 +2398,9 @@ def _edit_assembly_feature(index: int, body: EditAssemblyFeatureRequest) -> None
     if assembly.feature_log[index].params.get("command_version") == 1:
         from backend.api.assembly_history_edit import edit_recorded_feature
         return edit_recorded_feature(index, body.params)
+    if assembly.feature_log[index].op_kind in {"assembly-linear-pattern", "assembly-circular-pattern"}:
+        from backend.api.routes_assembly_patterns import edit_pattern
+        return edit_pattern(assembly, index, body.params)
     if index != len(assembly.feature_log) - 1:
         raise HTTPException(
             422,

@@ -10,7 +10,7 @@ const extraMeshes = [
   'xoverExtraConnectors', 'xoverExtraSlabConnectors',
 ]
 
-function fixture() {
+function fixture(representation = 'full') {
   const strands = [], nucleotides = [], crossovers = []
   for (let i = 0; i < 3; i++) {
     const domains = ['a', 'b'].map((end, domain_index) => {
@@ -40,15 +40,16 @@ function fixture() {
     ] }
   const assembly = { instances: [{ id: 'part',
     source: { type: 'file', path: 'color-fixture.nadoc' },
-    geometrySourceKey: 'f:/color-fixture.nadoc:1:', representation: 'full', visible: true,
+    geometrySourceKey: 'f:/color-fixture.nadoc:1:', representation, visible: true,
     transform: { values: new THREE.Matrix4().elements } }] }
   const scene = new THREE.Scene()
-  const api = { getAssemblyGeometry: vi.fn(async () => ({
+  const atoms = nucleotides.slice(0, 3).map((n, i) => ({ ...n, element: i === 1 ? 'N' : 'C', x: i * .1, y: 0, z: 0 }))
+  const api = { getInstanceAtomisticGeometry: vi.fn(async () => ({ atoms, bonds: [[99, 0], [0, 1], [1, 2]] })), getAssemblyGeometry: vi.fn(async () => ({
     instances: { part: { design, nucleotides, helix_axes: {} } },
   })) }
   const store = { getState: () => ({ currentAssembly: assembly, coloringMode: 'strand' }), subscribe: vi.fn() }
   const renderer = _createSharedInstancingRenderer({ scene, store, api })
-  return { scene, renderer, assembly, api }
+  return { scene, renderer, assembly, api, atoms, design, nucleotides }
 }
 
 // Read the texture the actual patched material will upload, without a WebGL
@@ -131,6 +132,45 @@ describe('shared assembly crossover color repaint', () => {
         expect(colorTexture(mesh)).toBe(snapshot.texture)
         expect(mesh.instanceColor).toBeNull()
       }
+    } finally { f.renderer.dispose() }
+  })
+})
+
+
+describe('assembly atomistic colors', () => {
+  it.each(['vdw', 'ballstick', 'stick'])('%s repaints atoms and bonds in linear space without refetching', async representation => {
+    const f = fixture(representation)
+    const sourceBefore = JSON.stringify(f.design)
+    try {
+      await f.renderer.rebuild(f.assembly)
+      const spheres = f.scene.getObjectByName('atomImpostor_C')
+      const bonds = f.scene.getObjectByName('atomBond_shared')
+      expect(!!spheres).toBe(representation !== 'stick')
+      expect(!!bonds).toBe(representation !== 'vdw')
+      const texture = mesh => {
+        const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.phong.vertexShader,
+          fragmentShader: THREE.ShaderLib.phong.fragmentShader }
+        mesh.material.onBeforeCompile(shader)
+        return shader.uniforms.u_atomColor?.value ?? shader.uniforms.u_segColor.value
+      }
+      const sphereTex = spheres && texture(spheres), bondTex = bonds && texture(bonds)
+      const cases = [
+        ['cluster', [0xff2200, 0x0044ff]],
+        ['base', [0x44dd88, 0xff5555]],
+        ['strand', [0x0070bb, 0x0070bb]],
+        ['cpk', [0x505050, 0x3050f8]],
+      ]
+      for (const [mode, expected] of cases) {
+        f.renderer.updateColoringMode(mode)
+        if (sphereTex) expectRgb(sphereTex.image.data, 0, expected[0])
+        if (bondTex) {
+          expectRgb(bondTex.image.data, 0, expected[0])
+          expectRgb(bondTex.image.data, 4, expected[1])
+          expect(texture(bonds)).toBe(bondTex)
+        }
+      }
+      expect(f.api.getInstanceAtomisticGeometry).toHaveBeenCalledOnce()
+      expect(JSON.stringify(f.design)).toBe(sourceBefore)
     } finally { f.renderer.dispose() }
   })
 })

@@ -1863,6 +1863,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
     // Op kinds the backend's /assembly/features/{i}/edit route knows how to
     // re-run. Stays in sync with _EDITABLE_OP_KINDS in backend/api/assembly.py.
     const editableOpKinds = new Set([
+      'assembly-linear-pattern', 'assembly-circular-pattern',
       'assembly-polymerize',
       'assembly-polymerize-periodic',
       'assembly-overhang-connection-add',
@@ -1924,7 +1925,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
 
       // Recorded commands regenerate downstream; legacy summaries stay latest-only.
       const recordedEditable = assemblyFeatureFields(entry).length > 0
-      if (!suppressed && (recordedEditable || (editableOpKinds.has(entry.op_kind) && isLatest(i)))) {
+      if (!suppressed && (recordedEditable || (editableOpKinds.has(entry.op_kind) && (isLatest(i) || entry.op_kind.endsWith('-pattern'))))) {
         const editBtn = document.createElement('button')
         editBtn.textContent = '✎'
         editBtn.title = `Edit F${i + 1}`
@@ -1938,6 +1939,13 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           if (recordedEditable) {
             try { await editAssemblyHistoryFeature({ store, api, source: assembly, rowIndex: i }) }
             catch (error) { showPersistentToast(error.message) }
+            return
+          }
+          if (entry.op_kind === 'assembly-linear-pattern' || entry.op_kind === 'assembly-circular-pattern') {
+            await editPatternFeature({ ...entry, op_kind: entry.op_kind.replace('assembly-', '') }, {
+              onSave: params => api.editAssemblyFeature(i, params),
+              isCurrent: () => store.getState().currentAssembly === assembly,
+            })
             return
           }
           const newParams = await _promptEditAssemblyEntry(entry)

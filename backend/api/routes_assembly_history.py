@@ -69,3 +69,9 @@ def inspect_instance_dependencies(instance_id: str):
         if source is None:
             raise HTTPException(409, detail='Pin this instance source revision before inspecting history')
         return {**dependencies_for(source, session.revision), 'assembly_id': assembly.id, 'instance_id': instance_id}
+
+
+@router.get('/assembly/features/{index}/inputs')
+def inspect_feature_inputs(index: int, expected_revision: int, expected_feature_id: str):
+    from backend.api.assembly_input_schema import input_editor
+    return input_editor(index, expected_revision, expected_feature_id)

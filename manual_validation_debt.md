@@ -1,5 +1,11 @@
 # Manual Validation Debt — shift register
 
+- **MV-ATOM-ASSEMBLY-20261127 — PENDING:** Compare part/assembly atomistic colors
+  visually on the user's large mixed-source designs under their lighting/photo
+  settings. Automated tests check linear color buffers, all atomistic modes and
+  live app switching; they do not certify subjective image/lighting equivalence.
+
+
 - **MV-EM-CONTROLS-20261127 — PENDING:** Review the shorter EM panel and native
   label hover-tooltip readability at normal sidebar width. Automated browser
   checks cover control placement, conditional fields, and all four rendering

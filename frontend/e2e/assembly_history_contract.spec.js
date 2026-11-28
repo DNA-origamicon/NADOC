@@ -77,8 +77,8 @@ test('assembly recorded gear edits render and undo as one complete operation', a
     expect(before.angle).toBeCloseTo(-1.2)
     await page.getByTitle('Edit F6', { exact: true }).click()
     const editDialog = page.getByRole('dialog').filter({ hasText: 'Edit F6' })
-    await expect(editDialog.locator('input')).toHaveValue('3')
-    await editDialog.locator('input').fill('4')
+    await expect(editDialog.getByRole('spinbutton', { name: 'Ratio', exact: true })).toHaveValue('3')
+    await editDialog.getByRole('spinbutton', { name: 'Ratio', exact: true }).fill('4')
     await editDialog.getByRole('button', { name: 'Save', exact: true }).click()
     const applyEdit = page.getByRole('dialog', { name: 'Apply edit F6', exact: true })
     await applyEdit.getByRole('button', { name: 'Apply edit', exact: true }).click()
@@ -256,89 +256,35 @@ test('assembly recorded gear edits render and undo as one complete operation', a
   }
 })
 
-test('instance overhang edits regenerate downstream part and assembly histories', async ({ page, request }) => {
-  const doc = '__e2e__history-instance-command'
-  const errors = []
-  page.on('pageerror', error => errors.push(error.message))
-  try {
-    await page.goto(`/?doc=${doc}`, { waitUntil: 'domcontentloaded' })
-    await page.waitForFunction(() => !!window.__nadocTest)
-    const sourceResponse = await request.post('http://127.0.0.1:8004/api/design/bundle', {
-      headers: { 'X-NADOC-Doc': `${doc}-source` }, data: {
-        cells: [[0, 1], [0, 2], [0, 3], [1, 1], [1, 2], [1, 3]], length_bp: 42,
-      },
-    })
-    expect(sourceResponse.ok()).toBe(true)
-    const source = (await sourceResponse.json()).design
-    page.once('dialog', dialog => dialog.accept(doc))
-    await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
-    await page.locator('#menu-file-new-assembly').click()
-    await page.mouse.click(900, 450)
-    await page.waitForFunction(async () => (await import('/src/state/store.js')).store.getState().assemblyActive)
-    await page.evaluate(async design => {
-      const api = await import('/src/api/client.js')
-      const { store } = await import('/src/state/store.js')
-      if (!await api.addInstance({ name: 'Native instance', source: { type: 'inline', design } })) throw new Error('Add failed')
-      const id = store.getState().currentAssembly.instances[0].id
-      // Native 6HB fixture's valid phase-matched boundary site. Endpoint applies
-      // the same candidate gate as the ordinary part extrusion tool.
-      const helixId = design.helices.find(h => h.id.endsWith('_0_3')).id
-      const response = await api.extrudeInstanceOverhang(id, { helixId, bpIndex: 0, direction: 'FORWARD',
-        isFivePrime: true, neighborRow: 0, neighborCol: 4, lengthBp: 8 })
-      if (!response) throw new Error('Instance extrusion failed')
-      if (!await api.patchInstanceOverhang(id, response.design.overhangs.at(-1).id, { label: 'Downstream label' })) throw new Error('Patch failed')
-    }, source)
-    await page.getByTitle('Select assembly or part feature log').selectOption('__assembly__')
-    await page.getByTitle('Edit F2', { exact: true }).click()
-    const edit = page.getByRole('dialog').filter({ hasText: 'Edit F2' })
-    await expect(edit.locator('input')).toHaveValue('8')
-    await edit.locator('input').fill('10')
-    await edit.getByRole('button', { name: 'Save', exact: true }).click()
-    const apply = page.getByRole('dialog', { name: 'Apply edit F2', exact: true })
-    await apply.getByRole('button', { name: 'Apply edit', exact: true }).click()
-    await expect(apply).not.toBeVisible({ timeout: 30000 })
-    const read = () => page.evaluate(async () => {
-      const a = (await import('/src/state/store.js')).store.getState().currentAssembly
-      const d = a.instances[0].source.design
-      return [a.feature_log[1].params.inputs.length_bp, d.feature_log.at(-2).params.length_bp, d.overhangs.at(-1).label]
-    })
-    await expect.poll(read).toEqual([10, 10, 'Downstream label'])
-    await page.evaluate(async () => (await import('/src/api/client.js')).undoAssembly())
-    await expect.poll(read).toEqual([8, 8, 'Downstream label'])
-    const instanceId = await page.evaluate(async () => (await import('/src/state/store.js')).store.getState().currentAssembly.instances[0].id)
-    await page.getByTitle('Select assembly or part feature log').selectOption(instanceId)
-    await page.locator('#fl-list [data-fl-row="2"]').click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'Edit inputs…', exact: true }).click()
-    const partEdit = page.getByRole('dialog').filter({ hasText: 'Edit F2' })
-    await expect(partEdit.locator('input')).toHaveValue('8')
-    await partEdit.locator('input').fill('10')
-    await partEdit.getByRole('button', { name: 'Save', exact: true }).click()
-    const partApply = page.getByRole('dialog', { name: 'Apply edit F2', exact: true })
-    await partApply.getByRole('button', { name: 'Apply edit', exact: true }).click()
-    await expect(partApply).not.toBeVisible({ timeout: 30000 })
-    await expect.poll(read).toEqual([8, 10, 'Downstream label'])
-    await page.locator('#fl-list [data-fl-row="3"]').click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'View dependencies', exact: true }).click()
-    const partDependencies = page.getByRole('dialog', { name: 'F3 dependencies', exact: true })
-    await expect(partDependencies).toBeVisible()
-    await partDependencies.getByRole('button', { name: 'Close', exact: true }).last().click()
-    await page.locator('#fl-list [data-fl-row="3"]').click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'Delete…', exact: true }).click()
-    const partDelete = page.getByRole('dialog', { name: 'Delete F3', exact: true })
-    await partDelete.getByRole('button', { name: 'Delete', exact: true }).click()
-    await expect(partDelete).not.toBeVisible({ timeout: 30000 })
-    await expect.poll(async () => page.evaluate(async () => (await import('/src/state/store.js')).store.getState()
-      .currentAssembly.instances[0].source.design.feature_log.length)).toBe(2)
-    await page.evaluate(async () => (await import('/src/api/client.js')).undoAssembly())
-    await expect.poll(read).toEqual([8, 10, 'Downstream label'])
-    await page.evaluate(async () => (await import('/src/api/client.js')).undoAssembly())
-    await expect.poll(read).toEqual([8, 8, 'Downstream label'])
-    expect(errors).toEqual([])
-  } finally {
-    await page.close()
-    await request.delete(`http://127.0.0.1:8004/api/documents/${doc}`, { timeout: 5000 }).catch(() => {})
-    await request.delete(`http://127.0.0.1:8004/api/documents/${doc}-source`, { timeout: 5000 }).catch(() => {})
-  }
+test('assembly input editors exclude source definitions', async ({ page, request }) => {
+  const doc = '__e2e__history-source-ownership'
+  await page.goto(`/?doc=${doc}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => !!window.__nadocTest)
+  const response = await request.post('http://127.0.0.1:8004/api/design/bundle', {
+    headers: { 'X-NADOC-Doc': `${doc}-source` }, data: { cells: [[0, 0]], length_bp: 21 },
+  })
+  expect(response.ok()).toBe(true)
+  const source = (await response.json()).design
+  page.once('dialog', dialog => dialog.accept(doc))
+  await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
+  await page.locator('#menu-file-new-assembly').click()
+  await page.mouse.click(900, 450)
+  await page.waitForFunction(async () => (await import('/src/state/store.js')).store.getState().assemblyActive)
+  await page.evaluate(async design => {
+    const api = await import('/src/api/client.js')
+    if (!await api.addInstance({ name: 'Source instance', source: { type: 'inline', design } })) throw new Error('Add failed')
+  }, source)
+  const readSource = () => page.evaluate(async () => (await import('/src/state/store.js')).store.getState()
+    .currentAssembly.instances[0].source.design)
+  const admittedSource = await readSource()
+  await page.getByTitle('Select assembly or part feature log').selectOption('__assembly__')
+  await page.getByTitle('Edit F1', { exact: true }).click()
+  const edit = page.getByRole('dialog').filter({ hasText: 'Edit F1' })
+  await expect(edit.getByLabel('Name', { exact: true })).toBeVisible()
+  await expect(edit.getByLabel('Source', { exact: true })).toHaveCount(0)
+  await expect(edit.getByLabel('Length bp', { exact: true })).toHaveCount(0)
+  await edit.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(await readSource()).toEqual(admittedSource)
 })
 
 test('assembly suppression from F0 rebuilds the tail and undo restores F0', async ({ page, request }) => {
