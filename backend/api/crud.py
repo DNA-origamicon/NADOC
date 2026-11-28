@@ -1727,6 +1727,10 @@ def get_geometry(
         design = design_state.get_or_404()
     ids: frozenset[str] | None = frozenset(helix_ids.split(",")) if helix_ids else None
     if apply_deformations:
+        if ids is None and (design.deformations or design.cluster_transforms):
+            from backend.api.corner_projection_worker import prepare_corner_display_pair
+            with trace.step("corner_projection_pair"):
+                prepare_corner_display_pair(design)
         with trace.step("helix_axes"):
             axes = deformed_helix_axes(design)
         with trace.step("nucleotides"):

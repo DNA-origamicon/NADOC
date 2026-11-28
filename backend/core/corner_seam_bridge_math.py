@@ -22,6 +22,29 @@ def _norm(value):
 
 
 @njit(cache=True)
+def _cos_angle(A, B, C):
+    u, v = A - B, C - B
+    nu, nv = float(_norm(u)), float(_norm(v))
+    if nu < 1e-12 or nv < 1e-12:
+        return 1.0
+    return float(_np.dot(u, v) / (nu * nv))
+
+
+@njit(cache=True)
+def _bridge_cost_terms(c3, o3, p, o5, c5):
+    """The same seven residuals without allocating unused analytic gradients."""
+    return (
+        float(_norm(o3 - c3)) - _CANON_C3O3,
+        float(_norm(p - o3)) - _CANON_O3P,
+        float(_norm(o5 - p)) - _CANON_PO5,
+        float(_norm(c5 - o5)) - _CANON_O5C5,
+        _cos_angle(c3, o3, p) - _COS_C3O3P,
+        _cos_angle(o3, p, o5) - _COS_O3PO5,
+        _cos_angle(p, o5, c5) - _COS_PO5C5,
+    )
+
+
+@njit(cache=True)
 def _cos_angle_grad(
     A: _np.ndarray,
     B: _np.ndarray,
@@ -137,7 +160,7 @@ def bridge_cost(c3, o3, p, o5, c5):
     Its scalar types differ from the analytic-gradient closure above; keeping
     those types is necessary to retain the approved starting conformation.
     """
-    terms = _bridge_terms(c3, o3, p, o5, c5)[0]
+    terms = _bridge_cost_terms(c3, o3, p, o5, c5)
     a, b, c, d = map(_np.float64, terms[:4])
     e, f, g = terms[4:]
     return float((a**2 + b**2 + c**2 + d**2) + 0.1*(e**2 + f**2 + g**2))
@@ -159,7 +182,13 @@ def minimize_bridge(atoms, source, destination):
     key = hashlib.sha256(b'corner-seed-bridge-v1' + repr(membership).encode() + xyz.tobytes()).digest()
     cached = get_fit(key)
     if cached is None:
-        _minimize_backbone_bridge(atoms, source, destination, cost_fn=bridge_cost)
+        from backend.core.corner_closure_math import seed_costs
+
+        def batch(c3, points, c5):
+            return seed_costs(c3, points, c5, 2.)
+
+        _minimize_backbone_bridge(atoms, source, destination,
+                                 cost_fn=bridge_cost, cost_batch_fn=batch)
         put_fit(key, _np.array([[atoms[i].x, atoms[i].y, atoms[i].z] for i in ids]), {})
     else:
         for serial, position in zip(ids, cached[0]):

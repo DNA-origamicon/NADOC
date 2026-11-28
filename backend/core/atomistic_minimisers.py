@@ -157,6 +157,7 @@ def _minimize_backbone_bridge(
     dst_s: dict[str, int],
     *,
     cost_fn=None,
+    cost_batch_fn=None,
 ) -> None:
     """
     Place O3′(src), P(dst), O5′(dst) so that the C3′(src)→C5′(dst) bridge has
@@ -225,11 +226,20 @@ def _minimize_backbone_bridge(
         ]
     )
 
+    options = {"ftol": 1e-14, "gtol": 1e-9, "maxiter": 200}
+    if cost_batch_fn is not None:
+        # SciPy still chooses finite-difference points, steps, evaluation
+        # counts and stopping conditions. Only their scalar evaluation is
+        # batched; no alternate derivative or optimizer is introduced.
+        def evaluate_batch(_fun, points):
+            return cost_batch_fn(c3, _np.asarray(list(points)), c5)
+        options["workers"] = evaluate_batch
+
     res = _scipy_minimize(
         objective,
         x0,
         method="L-BFGS-B",
-        options={"ftol": 1e-14, "gtol": 1e-9, "maxiter": 200},
+        options=options,
     )
     o3_new = res.x[0:3]
     p_new = res.x[3:6]

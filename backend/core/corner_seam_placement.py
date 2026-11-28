@@ -136,17 +136,7 @@ def _place_corner_seams(design, model, links):
     # Membership is immutable during fitting. Reuse it and a dense coordinate
     # buffer instead of rebuilding all atom dictionaries/lists for each seam.
     positions = np.array([[a.x, a.y, a.z] for a in model.atoms])
-    components = []
-    for link in links:
-        endpoints = set(_endpoints(link))
-        ids = [a.serial for a in model.atoms if a.crossover_id == link.id
-               or (not a.crossover_id and not a.extension_id and not a.copy_k
-                   and (a.helix_id, a.bp_index, a.direction) in endpoints)]
-        mapping = {serial: i for i, serial in enumerate(ids)}
-        bonds = [(mapping[i], mapping[j]) for i, j in model.bonds if i in mapping and j in mapping]
-        mask = np.ones(len(model.atoms), dtype=bool)
-        mask[ids] = False
-        components.append((ids, bonds, mask))
+    components = _closure_components(model, links)
     for _ in range(2):
         for ids, bonds, mask in components:
             local = atomistic.AtomisticModel(
@@ -161,3 +151,25 @@ def _place_corner_seams(design, model, links):
                 observer(completed, total)
     if not np.isfinite([[model.atoms[i].x, model.atoms[i].y, model.atoms[i].z] for i in flexible]).all():
         raise ValueError('Corner seam placement produced nonfinite coordinates.')
+
+
+def _closure_components(model, links):
+    """Index once; preserve the original atom and bond traversal of every seam."""
+    residues, inserts = defaultdict(list), defaultdict(list)
+    for atom in model.atoms:
+        if atom.crossover_id:
+            inserts[atom.crossover_id].append(atom.serial)
+        elif not atom.extension_id and not atom.copy_k:
+            residues[(atom.helix_id, atom.bp_index, atom.direction)].append(atom.serial)
+    edges = np.asarray(model.bonds, dtype=np.int64).reshape(-1, 2)
+    components = []
+    for link in links:
+        ids = sorted(set(inserts[link.id]).union(*(residues[key] for key in _endpoints(link))))
+        mapping = np.full(len(model.atoms), -1, dtype=np.int64)
+        mapping[ids] = np.arange(len(ids))
+        local = mapping[edges]
+        bonds = [tuple(edge) for edge in local[np.all(local >= 0, axis=1)].tolist()]
+        mask = np.ones(len(model.atoms), dtype=bool)
+        mask[ids] = False
+        components.append((ids, bonds, mask))
+    return components

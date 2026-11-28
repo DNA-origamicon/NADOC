@@ -8,23 +8,15 @@ not a molecular dynamics relaxation or a statement of physical stability.
 import numpy as np
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation
-from scipy.spatial import cKDTree
+from numba.typed import List
 
-from backend.core.corner_seam_bridge_math import bridge_cost_grad as _backbone_bridge_cost_grad
-from backend.core.corner_seam_math import cross, scatter_add, clearance_gradient
+from backend.core.corner_local_environment import LocalEnvironment
+from backend.core import corner_closure_math as compiled
+
 
 
 def _key(atom):
     return atom.helix_id, atom.bp_index, atom.direction, atom.crossover_id, atom.extra_base_k
-
-
-def _right_jacobian(vector):
-    theta = np.linalg.norm(vector)
-    x, y, z = vector
-    skew = np.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
-    if theta < 1e-7:
-        return np.eye(3) - skew/2 + skew@skew/6
-    return np.eye(3) - (1-np.cos(theta))/theta**2*skew + (theta-np.sin(theta))/theta**3*(skew@skew)
 
 
 class ComponentClosure:
@@ -65,73 +57,52 @@ class ComponentClosure:
                                for p, o in self.branches]
         self.body_branches = [[(o, offset) for _, o, offset, owner in self.branch_offsets if owner == body]
                               for body in range(len(self.bodies))]
-        adjacent = {i: set() for i in range(len(model.atoms))}
+        adjacent = np.zeros((len(model.atoms), len(model.atoms)), dtype=bool)
         for i, j in model.bonds:
-            adjacent[i].add(j)
-            adjacent[j].add(i)
+            adjacent[i, j] = adjacent[j, i] = True
         movable = free_set | set(self.owners)
         self.movable = np.array(sorted(movable), dtype=int)
-        self.environment = (None if environment is None else
-                            cKDTree(np.asarray(environment, dtype=float).reshape(-1, 3)))
+        self.environment = None if environment is None else LocalEnvironment(environment)
         self.query_bounds = None
-        pairs = [(i, j) for i in range(len(model.atoms)) for j in range(i+1, len(model.atoms))
-                 if (i in movable or j in movable) and j not in adjacent[i]
-                 and not adjacent[i].intersection(adjacent[j])]
-        self.pairs = np.asarray(pairs, dtype=int)
+        moving = np.zeros(len(model.atoms), dtype=bool)
+        moving[self.movable] = True
+        self.pairs = compiled.eligible_pairs(adjacent, moving)
+        self.compiled_rigid = List(self.rigid)
+        self.compiled_offsets = List(self.rigid_offsets)
+        self.compiled_branches = List([
+            np.array([b[0] for b in row], dtype=np.int64) for row in self.body_branches])
+        self.compiled_branch_offsets = List([
+            np.array([b[1] for b in row], dtype=float).reshape(-1, 3) for row in self.body_branches])
+        self.branch_array = np.array(self.branches, dtype=np.int64).reshape(-1, 2)
+        self.compiled_bodies = List(self.bodies)
+        self.compiled_body_offsets = List(self.body_offsets)
+        self.compiled_pivots = np.asarray(self.pivots)
+        self.all_branch_offsets = np.asarray([b[2] for b in self.branch_offsets]).reshape(-1, 3)
+        self.all_branch_owners = np.asarray([
+            b[3] if b[3] is not None else -1 for b in self.branch_offsets], dtype=np.int64)
 
     def coordinates(self, x):
         poses = x[:self.variable_start].reshape(-1, 6)
         rotations = Rotation.from_rotvec(poses[:, 3:]).as_matrix()
-        xyz = self.original.copy()
-        for body, offset, pivot, pose, rotation in zip(self.bodies, self.body_offsets, self.pivots, poses, rotations):
-            xyz[body] = offset@rotation.T + pivot + pose[:3]
-        xyz[self.free] = x[self.variable_start:].reshape(-1, 3)
-        for phosphorus, oxygen, offset, owner in self.branch_offsets:
-            xyz[oxygen] = xyz[phosphorus] + (rotations[owner]@offset if owner is not None else offset)
+        xyz = compiled.coordinates(
+            x, self.original, self.variable_start, self.compiled_bodies,
+            self.compiled_body_offsets, self.compiled_pivots, self.free,
+            self.branch_array, self.all_branch_offsets, self.all_branch_owners, rotations)
         return xyz, rotations
 
     def objective(self, x):
         xyz, rotations = self.coordinates(x)
-        gradient = np.zeros_like(xyz)
-        cost = 0.
-        for ids in self.bridges:
-            value, *g = _backbone_bridge_cost_grad(*xyz[ids])
-            cost += 10*value
-            scatter_add(gradient, ids, 10*np.asarray(g))
-        # A bounded local clearance penalty, not a physical simulation or a
-        # chemical-validity oracle. Independent clash/piercing checks still run.
-        penetration = clearance_gradient(xyz, self.pairs, gradient)
-        cost += float(penetration@penetration)
+        cost, gradient = compiled.local_gradient(xyz, self.bridges, self.pairs, 2.)
         if self.environment is not None:
-            queries = xyz[self.movable]
-            bounds = np.array([queries.min(axis=0), queries.max(axis=0)])
-            self.query_bounds = bounds if self.query_bounds is None else np.array([
-                np.minimum(self.query_bounds[0], bounds[0]), np.maximum(self.query_bounds[1], bounds[1])])
-        if self.environment is not None and self.environment.n:
-            neighbours = self.environment.query_ball_point(queries, .20)
-            counts = np.array([len(row) for row in neighbours])
-            if counts.sum():
-                own = np.repeat(self.movable, counts)
-                other = np.concatenate(neighbours).astype(int)
-                delta = xyz[own]-self.environment.data[other]
-                distance = np.linalg.norm(delta, axis=1)
-                penetration = distance-.20
-                cost += float(penetration@penetration)
-                scatter_add(gradient, own, (2*penetration/np.maximum(distance, 1e-12))[:, None]*delta)
-        pose_gradient = np.zeros((len(self.bodies), 6))
-        poses = x[:self.variable_start].reshape(-1, 6)
-        for body, (ids, offset, rotation) in enumerate(zip(self.rigid, self.rigid_offsets, rotations)):
-            pose_gradient[body, :3] = gradient[ids].sum(axis=0)
-            torque = cross(offset, gradient[ids]@rotation).sum(axis=0)
-            for oxygen, branch_offset in self.body_branches[body]:
-                torque += cross(branch_offset, gradient[oxygen]@rotation)
-            pose_gradient[body, 3:] = _right_jacobian(poses[body, 3:]).T@torque
-        for phosphorus, oxygen in self.branches:
-            gradient[phosphorus] += gradient[oxygen]
-        # Select a nearby solution among underdetermined chain conformations.
-        deviation = x-self.x0
-        cost += 1e-5*float(deviation@deviation)
-        return cost, np.r_[pose_gradient.ravel(), gradient[self.free].ravel()] + 2e-5*deviation
+            if self.query_bounds is None:
+                self.query_bounds = np.array([[np.inf] * 3, [-np.inf] * 3])
+            compiled.extend_query_bounds(xyz, self.movable, self.query_bounds)
+            cost += self.environment.accumulate(xyz, self.movable, gradient)
+        penalty, gradient = compiled.pose_gradient(
+            x, self.x0, self.variable_start, self.compiled_rigid, self.compiled_offsets,
+            rotations, self.compiled_branches, self.compiled_branch_offsets,
+            self.branch_array, self.free, gradient, 2.)
+        return cost+penalty, gradient
 
 
 def close_component(model, *, max_iterations=400, environment=None):

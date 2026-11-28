@@ -9,6 +9,32 @@ metadata:
 
 # Corner tool — November 23, 2026
 
+## Cold opening investigation — November 27, 2026
+
+Opening `corner_test.nadoc` spends its time generating both posed and straight
+Corner projections, not parsing the file. Exact compiled closure arithmetic,
+expanding local environment/candidate lists, batched finite-difference seed
+evaluations and indexed seam components reduce unprofiled combined generation
+from 43.94 s to 20.6–22.3 s serially on the measured source. Bounded two-process
+posed/straight projection in the file-load route lowers fresh-process generation
+to 13.40 s (14.23 s including imports/setup), with vectorized clash cell indexing.
+Warm requests spawn no workers; worker transport limits fall back to local
+geometry. The follow-up worker/clash/approved-atom selection passes 12 tests.
+The subsequent compiled atom-stamping, candidate-only bond exclusion, solver
+bookkeeping and cost-only seed pass measures 13.21 s (14.24 s with imports/setup)
+from isolated staged source: no material further end-to-end gain is established.
+30 focused tests pass both in the worktree and without unrelated workspace edits.
+Both complete display outputs
+compare exactly with the captured original provider. 21 focused tests pass,
+including approved atoms, exact numerical contracts and dependency/cache reuse.
+The five-second cold target remains unmet; first-ever machine-code compilation
+adds latency. Truncating to 100 iterations changed sampled posed atoms by up to
+0.120 nm and was not adopted. MagicDNA's oxDNA-calibrated vertex model is a
+potential separate model; retrieved supplementary Data S1 contains sequences,
+not a relaxed atomistic seam library. No placement constants, authoring history,
+saved designs or physical simulation paths were changed. See the
+[cold-load evidence and reproduction](../docs/corner_cold_load_performance.md).
+
 ## Bevel tool — November 27, 2026
 
 User scope: remove material beyond a plane, leaving mismatched/open scaffold and

@@ -2336,6 +2336,10 @@ def build_atomistic_model(
                     # silently left them on 1ZEW geometry while everything else moved.
                     _mt = _native_local_defs(residue, dir_str)
                     _sugar_defs, _base_defs = _mt[: len(_SUGAR)], _mt[len(_SUGAR) :]
+                    corner_world = None
+                    if corner_links:
+                        from backend.core.corner_atom_stamp import local_coordinates, stamp
+                        corner_world = stamp(origin, R, local_coordinates(residue, dir_str))
 
                     # Record the per-nucleotide rigid frame (UNDEFORMED — the
                     # deformation/cluster post-pass below runs after this loop) so a
@@ -2353,9 +2357,12 @@ def build_atomistic_model(
                     # geometry swings on crossover/skip designs. Keep it per-atom
                     # so the display stays byte-identical (test_atomistic_batch_stamp).
                     sugar_name_to_serial: dict[str, int] = {}
-                    for atom_name, element, n, y, z_local in _sugar_defs:
-                        local = _np.array([n, y, z_local])
-                        world = origin + R @ local
+                    for atom_index, (atom_name, element, n, y, z_local) in enumerate(_sugar_defs):
+                        if corner_world is None:
+                            local = _np.array([n, y, z_local])
+                            world = origin + R @ local
+                        else:
+                            world = corner_world[atom_index]
                         atoms.append(
                             Atom(
                                 serial=serial,
@@ -2386,9 +2393,12 @@ def build_atomistic_model(
                     _, base_bond_defs = tmpl_dict[residue]
                     base_atoms_def = _base_defs
                     base_name_to_serial: dict[str, int] = {**sugar_name_to_serial}
-                    for atom_name, element, n, y, z_local in base_atoms_def:
-                        local = _np.array([n, y, z_local])
-                        world = origin + R @ local
+                    for atom_index, (atom_name, element, n, y, z_local) in enumerate(base_atoms_def):
+                        if corner_world is None:
+                            local = _np.array([n, y, z_local])
+                            world = origin + R @ local
+                        else:
+                            world = corner_world[len(_SUGAR) + atom_index]
                         atoms.append(
                             Atom(
                                 serial=serial,
