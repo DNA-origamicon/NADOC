@@ -110,22 +110,30 @@ def test_backbone_strain_skips_nucleotides_absent_from_the_frame(
     assert _emitted(res) == {("H", 0), ("H", 1), ("H", 5)}
 
 
-def test_backbone_strain_broadcasts_to_loop_copies(identity_site, monkeypatch):
-    """4-tuple loop-copy keys share their base bp's strain, so every loop bead colours."""
-    a, b = ("H", 0, "FORWARD"), ("H", 1, "FORWARD")
-    monkeypatch.setattr(health, "backbone_bond_pairs", lambda design: [(a, b)])
-    full_map = {
-        ("H", 0, "FORWARD", 0): _nt([0.0, 0, 0]),
-        ("H", 1, "FORWARD", 0): _nt([0.95 * U, 0, 0]),
-        ("H", 1, "FORWARD", 1): _nt([1.05 * U, 0, 0]),  # loop copy of bp 1
-    }
-    res = health.strain_map(object(), full_map, metric="backbone")
+def test_backbone_strain_keeps_insertion_bonds_and_coordinates(identity_site, monkeypatch):
+    from backend.physics import oxdna_interface as interface
+
+    a, b, c = ("H", 0, "FORWARD"), ("H", 1, "FORWARD", 0), ("H", 1, "FORWARD", 1)
+    monkeypatch.setattr(interface, "_backbone_adjacency_pairs", lambda design: [(a, b), (b, c)])
+    # a→c would be impossible if copies were collapsed; the actual bonds are valid.
+    full_map = {a: _nt([0, 0, 0]), b: _nt([R0 * U, 0, 0]),
+                c: _nt([(R0 + 0.95) * U, 0, 0])}
+    res = health.strain_map(object(), full_map)
     assert len(res["positions"]) == 3
-    assert {p["copy"] for p in res["positions"]} == {0, 1}
-    assert all(
-        p["strain"] == pytest.approx(0.95 / R0 - 1.0, abs=1e-9)
-        for p in res["positions"]
-    )
+    assert [p["strain"] for p in res["positions"]] == pytest.approx([0, 0.95 / R0 - 1, 0.95 / R0 - 1])
+    assert res["positions"][2]["backbone_position"] == pytest.approx(full_map[c]["backbone_position"])
+
+
+def test_wc_pairs_insertion_copies_independently(identity_site):
+    f, r = ("H", 1, "FORWARD"), ("H", 1, "REVERSE")
+    frame = {(*f, 0): _nt([0, 0, 0]), (*r, 0): _nt([HR0 * U, 0, 0]),
+             (*f, 1): _nt([0, 2, 0]), (*r, 1): _nt([HR0 * U * 1.2, 2, 0]),
+             (*f, 2): _nt([0, 4, 0])}
+    field = health.strain_field(object(), frame, metric="wc")
+    assert field[(*f, 0)] == pytest.approx(0)
+    assert field[(*f, 1)] == pytest.approx(.2)
+    assert (*f, 2) not in field
+    assert health.designed_ssdna_flags(frame)((*f, 2))
 
 
 def test_wc_strain_measures_base_site_separation(identity_site):
@@ -354,8 +362,8 @@ def test_designed_ssdna_flags_are_topological():
     assert ss(("H", 2, "REVERSE")) is True
     assert ss(("__ext_7", 0, "FORWARD")) is True
     assert ss(("__xb__", "xo-1", 0)) is True
-    # A loop-insertion copy inherits its base column's classification.
-    assert ss(("H", 0, "FORWARD", 1)) is False
+    # An unmatched insertion copy is single-stranded.
+    assert ss(("H", 0, "FORWARD", 1)) is True
 
 
 def test_synthetic_keys_cannot_fake_a_duplex_column():
@@ -490,3 +498,99 @@ def test_even_indices_spans_the_range_and_never_over_samples():
         idx = health._even_indices(n, keep)
         assert len(idx) <= min(n, keep) and idx == sorted(set(idx))
         assert all(0 <= i < n for i in idx)
+
+
+@pytest.mark.parametrize("aggregation, expected", [("mean", .025), ("peak", .20)])
+def test_production_strain_preserves_copies_and_peak_sign(identity_site, monkeypatch, aggregation, expected):
+    from backend.physics import oxdna_interface as interface
+    a, b = ("H", 0, "FORWARD", 0), ("H", 0, "FORWARD", 1)
+    frames = {i: {a: _nt([0, 0, 0]), b: _nt([R0 * U * (1 + strain), 0, 0])}
+              for i, strain in enumerate([-.15, .20])}
+    monkeypatch.setattr(interface, "read_configuration_full", lambda *a, **kw: frames[0])
+    monkeypatch.setattr(interface, "read_trajectory_frames_at", lambda *a, **kw: frames)
+    monkeypatch.setattr(interface, "_parse_box_nm", lambda *a: None)
+    monkeypatch.setattr(interface, "_backbone_adjacency_pairs", lambda design: [(a, b)])
+    monkeypatch.setattr(health, "count_trajectory_frames", lambda *a: 2)
+    result = health.production_strain_field(object(), "unused", "unused", aggregation=aggregation)
+    assert result["n_frames"] == 2 and result["n_frames_torn"] == 0
+    assert set(result["frame"]) == {a, b}
+    assert list(result["field"].values()) == pytest.approx([expected, expected])
+    assert result["frame"][b]["backbone_position"][0] == pytest.approx(R0 * U * 1.025)
+
+
+def test_strain_route_forwards_peak_and_reports_rejected_frames(tmp_path, monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from backend.api import routes_oxdna as routes
+    from backend.core.models import Design
+
+    stage = SimpleNamespace(kind="production", name="1_production", status="done")
+    job = SimpleNamespace(stages=[stage], job_dir=lambda _: tmp_path,
+                          stage_dir=lambda *_: tmp_path)
+    (tmp_path / "design.json").write_text("{}")
+    monkeypatch.setattr(routes, "_load_job", lambda _: job)
+    monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
+    monkeypatch.setattr(routes, "_stage_trajectories", lambda _: [tmp_path / "trajectory.dat"])
+    monkeypatch.setattr(Design, "from_json", lambda _: object())
+    monkeypatch.setattr(routes, "_design_ref_conf", lambda *_: tmp_path / "ref.dat")
+    monkeypatch.setattr(routes, "_capture_bead_count", lambda _: 0)
+    monkeypatch.setattr(routes, "_capture_strand_length", lambda _: 0)
+    seen = []
+
+    def compute(*args, **kwargs):
+        seen.append(kwargs)
+        return {"field": {}, "n_frames": 0, "n_frames_torn": 60}
+
+    monkeypatch.setattr(health, "production_strain_field_cached", compute)
+    reply = asyncio.run(routes.get_oxdna_strain("job", aggregation="peak"))
+    assert seen[0]["aggregation"] == "peak" and seen[0]["copies"] is True
+    assert not reply["ready"]
+    assert "60 sampled frames failed" in reply["reason"]
+    assert "no frames yet" not in reply["reason"]
+
+
+def test_strain_cache_separates_mean_and_peak(tmp_path, monkeypatch):
+    conf, traj = tmp_path / "conf.dat", tmp_path / "traj.dat"
+    conf.write_text("reference")
+    traj.write_text("trajectory")
+    calls = []
+    monkeypatch.setattr(health, "_PRODUCTION_STRAIN_CACHE", None)
+
+    def compute(*args, **kwargs):
+        calls.append(kwargs["aggregation"])
+        return {"aggregation": kwargs["aggregation"]}
+
+    monkeypatch.setattr(health, "production_strain_field", compute)
+    for mode in ("mean", "peak", "mean", "peak"):
+        assert health.production_strain_field_cached(object(), traj, conf, aggregation=mode)["aggregation"] == mode
+    assert calls == ["mean", "peak"]
+
+
+def test_periodic_strain_uses_raw_minimum_image_sites(identity_site):
+    cm = np.array([[0., 0, 0], [10 - R0 * U, 0, 0]])
+    a1 = np.tile([1., 0, 0], (2, 1)); a3 = np.tile([0., 0, 1], (2, 1))
+    ia, ib = np.array([0]), np.array([1])
+    values, attempted, rejected = health._strain_values(cm, a1, a3, ia, ib, metric="backbone", box_nm=np.array([10., 10., 10.]))
+    assert values == pytest.approx([0, 0], abs=1e-12)
+    assert (attempted, rejected) == (1, 0)
+
+
+def test_valid_physical_frame_survives_torn_wc_display_tree(identity_site, monkeypatch):
+    from backend.physics import oxdna_interface as interface
+    from backend.core import oxdna_strain_geometry as geometry
+    a, b = ("H", 0, "FORWARD"), ("H", 1, "FORWARD")
+    raw = {a: _nt([0, 0, 0]), b: _nt([R0 * U, 0, 0])}
+    torn = {a: raw[a], b: _nt([20 + R0 * U, 0, 0])}
+    monkeypatch.setattr(interface, "read_configuration_full", lambda *a, **kw: raw)
+    monkeypatch.setattr(interface, "read_trajectory_frames_at", lambda *a, **kw: {0: raw})
+    monkeypatch.setattr(interface, "_parse_box_nm", lambda *a: np.array([20., 20., 20.]))
+    monkeypatch.setattr(interface, "_build_unwrap_plan", lambda *a: "wc-tree")
+    monkeypatch.setattr(geometry, "backbone_unwrap_plan", lambda *a: "backbone-tree")
+    monkeypatch.setattr(interface, "unwrap_align_to_reference", lambda *a, **kw: raw if kw["plan"] == "backbone-tree" else torn)
+    monkeypatch.setattr(health, "backbone_bond_pairs", lambda _: [(a, b)])
+    monkeypatch.setattr(health, "count_trajectory_frames", lambda *a: 1)
+    result = health.production_strain_field(object(), "unused", "unused", aggregation="peak")
+    assert result["n_frames"] == result["n_frames_repaired"] == 1
+    assert result["n_frames_torn"] == 0
+    assert list(result["field"].values()) == pytest.approx([0, 0])
+    assert result["frame"][b]["backbone_position"] == pytest.approx(raw[b]["backbone_position"])

@@ -1,5 +1,22 @@
 # Issues & bugs ledger — "fix next issue" loop
 
+## ISSUE-272 — Flexible strands remain magenta under strain maps (2026-11-27, FIXED)
+
+- **Observed:** marked flexible segments have backend strain values but their separate renderer ignores the scalar map.
+- **Fix:** flexible bead/slab instances consume exact particle colors, and tubes interpolate colors along nucleotide intervals. Scalar repaint uses the existing simulation subscription, survives geometry and cluster-display refreshes, and clears back to native colors. Missing values and dsDNA-only exclusions remain native.
+- **Scope:** scalar display only; no geometry, topology or source design changes.
+- **Validation:** 43 focused renderer tests and five real-job app flows passed. Exact flexible bead/slab colors match their measured map values with zero mismatches; screenshots reviewed. Original hashes unchanged; temporary workspaces/captures removed.
+
+
+## ISSUE-271 — oxDNA strain maps lose insertion particles and reject valid torsion frames (2026-11-27, FIXED)
+
+- **Observed:** Rim reinforced returned “no frames yet” despite a saved torsion trajectory.
+- **Cause:** the strain kernel collapsed insertion copies and measured phantom bonds across them. Separately, the WC-assisted periodic display tree tore real backbone bonds in two Hub and spokes frames whose raw periodic bonds were valid.
+- **Fix:** retain exact insertion keys; measure scalar strain from raw minimum-image sites; retry torn display frames using covalent-chain unwrapping. Report all-rejected frames explicitly. Signed sampled peaks expose deformation that signed time means can cancel.
+- **Scope:** analysis/display only; source topology, saved structures and simulation inputs are unchanged.
+- **Validation:** 35 backend tests, 317 frontend tests, and five real-job browser flows passed. All ten rendered maps use 60 accepted samples. Independent raw-topology recomputation agrees within 6e-13; two Hub and spokes frames are recovered without discarding them.
+
+
 ## ISSUE-269 — Autoscaffold replay changes joined-cluster identities and tether order (2026-11-27, FIXED)
 
 - **Observed** — A wheel built with Sweep, Join Clusters and Autoscaffold replayed the same scaffold paths but failed publication verification on crossover IDs and flexible-connection ordering.

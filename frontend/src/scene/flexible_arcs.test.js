@@ -249,3 +249,38 @@ describe('flexible arcs — per-cluster display', () => {
     expect(mats(arcs.group)[0].opacity).toBe(1)
   })
 })
+
+describe('flexible segments share simulation scalar colors', () => {
+  it('colors beads, slabs and tubes by exact nucleotide; recolors and restores without moving them', () => {
+    let colors = null, notify
+    const renderer = { ...makeRenderer(), getScalarColors: () => colors,
+      subscribeSimulation: fn => { notify = fn; return () => { notify = null } } }
+    const arcs = initFlexibleArcs(new THREE.Scene(), renderer)
+    arcs.rebuild(makeDesign())
+    const before = beadTranslations(arcs.group).map(v => v.toArray())
+    colors = { 'h_a:0:FORWARD:0': 0x000000, 'h_b:0:FORWARD:0': 0x00ff00 }
+    notify()
+    const c = new THREE.Color()
+    for (const mesh of arcs.group.children.filter(m => m.isInstancedMesh)) {
+      mesh.getColorAt(0, c); expect(c.getHex()).toBe(0x000000)
+      mesh.getColorAt(1, c); expect(c.getHex()).toBe(0x00ff00)
+      expect(mesh.material.color.getHex()).toBe(0xffffff)
+    }
+    const tube = arcs.group.children.find(m => !m.isInstancedMesh)
+    expect(tube.material.vertexColors).toBe(true)
+    expect(new Set(tube.geometry.getAttribute('color').array).size).toBeGreaterThan(3)
+    expect(beadTranslations(arcs.group).map(v => v.toArray())).toEqual(before)
+    // A filtered or unmeasured site returns to native magenta immediately.
+    colors = new Map([['h_b:0:FORWARD', 0x0000ff]])
+    notify()
+    beadMesh(arcs.group).getColorAt(0, c); expect(c.getHex()).toBe(0xff33cc)
+    beadMesh(arcs.group).getColorAt(1, c); expect(c.getHex()).toBe(0x0000ff)
+    // Geometry rebuilds must retain the active map too.
+    arcs.setRepresentation('beads')
+    beadMesh(arcs.group).getColorAt(1, c); expect(c.getHex()).toBe(0x0000ff)
+    colors = null; notify()
+    expect(beadMesh(arcs.group).material.color.getHex()).toBe(0xff33cc)
+    expect(arcs.group.children.find(m => !m.isInstancedMesh).material.vertexColors).toBe(false)
+    arcs.dispose(); expect(notify).toBe(null)
+  })
+})

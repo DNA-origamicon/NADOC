@@ -1,3 +1,4 @@
+import { applyFlexibleScalarColors, setFlexibleTubeColorCoordinates } from './flexible_scalar_colors.js'
 import { createDisplayGeometry, displayKey } from './display_geometry.js'
 /**
  * Flexible ssDNA segment arcs.
@@ -270,6 +271,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     const pts = [pA, ...beads, pB]
     const curve = new THREE.CatmullRomCurve3(pts)
     const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, TUBE_SEGS, TUBE_RADIUS, 6, false), mats.tube)
+    setFlexibleTubeColorCoordinates(tube.geometry, curve, pts.length)
     tube.userData.connectionId = connId
     group.add(tube)
     if (!beads.length) return
@@ -329,6 +331,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     const pts = [pA, ...beads, pB]
     const curve = new THREE.CatmullRomCurve3(pts)
     const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, TUBE_SEGS, TUBE_RADIUS, 6, false), mats.tube)
+    setFlexibleTubeColorCoordinates(tube.geometry, curve, pts.length)
     tube.userData.connectionId = connId
     group.add(tube)
     const inst = new THREE.InstancedMesh(beadGeometry, mats.bead, beads.length)
@@ -396,6 +399,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
                _makeMats(_connDisplay(_design, c)))
     }
     displayGeometry.publishDerived('flexible-segments', published)
+    refreshScalarColors()
   }
 
   function rebuild(design) { if (disposed) return; if (ownsDisplay) { displayGeometry.beginGeneration(); displayGeometry.bind(designRenderer.getBackboneEntries?.()) } _design = design; if (!design?.flexible_connections?.length) _lastBow.clear(); _render(null) }
@@ -411,7 +415,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
   }
   function dispose() {
     if (disposed) return
-    disposed = true; unsubscribe?.(); releaseDisplayLayer(); if (ownsDisplay) displayGeometry.dispose(); _design = null; _lastBow.clear()
+    disposed = true; unsubscribe?.(); unsubscribeScalar?.(); releaseDisplayLayer(); if (ownsDisplay) displayGeometry.dispose(); _design = null; _lastBow.clear()
     // _clear() disposes the per-connection materials; only the shared geometries
     // are left to release here.
     _clear(); group.removeFromParent()
@@ -442,7 +446,15 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
       mat.transparent = disp.alpha < 1
       mat.needsUpdate = true
     }
+    refreshScalarColors()
   }
+
+  function refreshScalarColors() {
+    if (disposed || !_design) return
+    applyFlexibleScalarColors(group, _design, _helixResolver(_design),
+      designRenderer.getScalarColors?.(), c => _connDisplay(_design, c))
+  }
+  const unsubscribeScalar = designRenderer.subscribeSimulation?.(refreshScalarColors)
 
   // Entering or leaving cluster-coloring mode changes nothing about the design, so
   // the design subscriber that drives rebuild() never fires for it.

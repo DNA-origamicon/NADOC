@@ -3203,14 +3203,17 @@ export const getOxdnaDeviation = (id, opts) => {
 }
 /** Per-nucleotide LOCAL STRAIN map of a job's production mean structure.
  *  `opts.metric`: 'backbone' (FENE backbone-bond strain, default) or 'wc' (Watson–Crick
- *  base-pair stretch).  Values are SIGNED oxDNA length units: + stretched, − compressed. */
+ *  base-pair stretch). Values are SIGNED dimensionless fractions: + stretched, − compressed.
+ *  `opts.aggregation`: signed time mean (default) or signed peak magnitude over sampled frames. */
 export const getOxdnaStrain = (id, opts) => {
   const { align, signal } = _vizOpts(opts, 'getOxdnaStrain')
   const metric = opts?.metric ?? 'backbone'
   if (metric !== 'backbone' && metric !== 'wc') {
     throw new TypeError(`getOxdnaStrain: opts.metric must be 'backbone' or 'wc', got ${JSON.stringify(metric)}.`)
   }
-  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/strain?align=${align}&metric=${metric}`,
+  const aggregation = opts?.aggregation ?? 'mean'
+  if (!['mean', 'peak'].includes(aggregation)) throw new TypeError('Strain aggregation must be mean or peak')
+  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/strain?align=${align}&metric=${metric}&aggregation=${aggregation}`,
                     undefined, { signal })
 }
 /** Graphs & Metrics card: start a background twist/curvature/base-pairing compute for a

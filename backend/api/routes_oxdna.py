@@ -3331,7 +3331,7 @@ async def get_oxdna_deviation(job_id: str, align: bool = True) -> dict:
 
 @router.get("/oxdna/jobs/{job_id}/strain")
 async def get_oxdna_strain(
-    job_id: str, metric: str = "backbone", align: bool = True
+    job_id: str, metric: str = "backbone", align: bool = True, aggregation: str = "mean"
 ) -> dict:
     """Per-nucleotide LOCAL STRAIN map: the production mean structure recoloured by each
     base's time-averaged signed deviation from oxDNA2's equilibrium geometry, as a
@@ -3342,7 +3342,9 @@ async def get_oxdna_strain(
     The strain is measured per frame and THEN averaged (over up to
     ``oxdna_health._STRAIN_MAX_FRAMES`` evenly-sampled frames, reported as
     ``n_strain_frames``); straining the mean structure instead would collapse every
-    bond.  Only the DISPLAY positions come from the mean structure.
+    bond. Only the DISPLAY positions come from the mean structure.
+    ``aggregation=peak`` retains signed maximum magnitude among sampled frames;
+    per-base peaks need not occur at the same time and are not exhaustive maxima.
 
     ``metric=backbone`` (default) — FENE backbone-bond strain: crossovers, skip/loop
     sites, forced connections and 5′/3′ extension tails the relaxation could not absorb.
@@ -3367,6 +3369,8 @@ async def get_oxdna_strain(
         raise HTTPException(
             400, f"unknown strain metric {metric!r} (expected 'backbone' or 'wc')"
         )
+    if aggregation not in ("mean", "peak"):
+        raise HTTPException(400, "strain aggregation must be mean or peak")
     job = _load_job(job_id)
     prod_stages = [s for s in job.stages if s.kind in ("production", "field")]
     if not prod_stages:
@@ -3397,6 +3401,7 @@ async def get_oxdna_strain(
             trajs,
             ref_conf,
             metric=metric,
+            aggregation=aggregation,
             copies=True,
             align=align,
             n_trailing_extra=_capture_bead_count(job),
@@ -3414,18 +3419,22 @@ async def get_oxdna_strain(
         return {
             "ready": False,
             "reason": (
-                "no frames yet"
+                f"all {avg.get('n_frames_torn', 0)} sampled frames failed backbone reconstruction checks"
+                if avg.get("n_frames_torn", 0) and not n_strain_frames
+                else "no frames yet"
                 if not n_strain_frames
                 else "no paired bases to measure"
                 if metric == "wc"
                 else "no backbone bonds to measure"
             ),
         }
+    strain["aggregation"] = aggregation
     strain["confidence"] = rmsf_confidence(n_strain_frames)
     strain["n_strain_frames"] = n_strain_frames
     strain["rejected_fraction"] = rejected
     strain["n_rejected"] = n_rejected
     strain["n_frames_torn"] = int(avg.get("n_frames_torn", 0))
+    strain["n_frames_repaired"] = int(avg.get("n_frames_repaired", 0))
     strain["production_running"] = any(s.status == "running" for s in prod_stages)
     return {"ready": True, "n_frames": n_strain_frames, **strain}
 

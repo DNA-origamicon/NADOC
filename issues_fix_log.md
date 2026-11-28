@@ -1,5 +1,23 @@
 # Issues fix log
 
+## ISSUE-272 — Flexible segment scalar colors (2026-11-27)
+
+[x] Flexible beads/slabs now share per-nucleotide scalar colors, and tubes
+interpolate them. Recolor, filter, rebuild and clear preserve native fallback and
+opacity. 43 focused tests and five real-job app flows passed, with zero measured
+flexible-instance color mismatches. Original designs remain unchanged.
+
+
+## ISSUE-271 — oxDNA strain and torsion peak maps (2026-11-27)
+
+[x] Preserve insertion identities, measure minimum-image physical strain, and
+recover periodic display tears using covalent-chain reconstruction. Add sampled
+signed peak magnitude alongside the existing mean. Five real-job browser flows
+and independent raw-topology comparisons passed; all ten maps retain 60 frames.
+35 backend and 317 frontend focused tests passed. Original source hashes are
+unchanged and isolated review workspaces are removed.
+
+
 ## ISSUE-269 — Autoscaffold replay changes joined-cluster identities and tether order (2026-11-27)
 
 [x] Joined-cluster crossovers use the recorded Autoscaffold routing namespace.

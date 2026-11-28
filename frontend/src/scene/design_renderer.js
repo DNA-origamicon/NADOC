@@ -1813,6 +1813,7 @@ export function initDesignRenderer(scene, storeRef, { addFrameCallback, removeFr
     },
     clearScalarColors() {
       _activeScalarColors = null
+      notifySimulation()
       _scalarSerial = -1
       _helixCtrl?.clearScalarColors()
       _scalarArcUpdater?.(null)

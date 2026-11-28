@@ -21,6 +21,15 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- oxDNA strain maps (2026-11-27): insertion copies now retain their actual bonds,
+  coordinates and scalar values. Raw minimum-image site distances supply strain;
+  covalent-only unwrapping recovers display frames torn by assumed WC edges.
+  Over time → Auto selects sampled signed peak magnitude for torsion jobs and
+  signed mean for ordinary runs. Both use mean display geometry; the legend,
+  status and export title identify aggregation. Flexible segment beads, slabs and
+  tubes share the active per-nucleotide scalar map instead of remaining magenta;
+  unmeasured/filter-excluded sites retain native colors. See [definitions](../docs/oxdna_strain_maps.md).
+
 - Occupancy clouds archived (2026-11-22): removed from both engine cards, startup,
   saved-scope handling and API registration. Historical algorithms and tests remain
   archived; see [archive record](../docs/archived/occupancy_clouds.md).

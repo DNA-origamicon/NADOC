@@ -610,6 +610,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
   const strainStatus  = document.getElementById('oxdna-jobs-strain-status')
   const strainBar     = document.getElementById('oxdna-jobs-strain-bar')
   const strainMetricSel = document.getElementById('oxdna-jobs-strain-metric')
+  const strainAggregationSel = document.getElementById('oxdna-jobs-strain-aggregation')
   const strainDsOnlyToggle = document.getElementById('oxdna-jobs-strain-dsdna-only')
   let _strainBusy = false
   let _autorefineRunning = false
@@ -1112,7 +1113,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     const r = _strainLast
     if (!r) return
     const dsOnly = !!strainDsOnlyToggle?.checked
-    const what = (r.metric === 'wc' ? 'WC pair stretch' : 'Backbone stretch')
+    const what = (r.aggregation === 'peak' ? 'Sampled peak · ' : 'Time mean · ') + (r.metric === 'wc' ? 'WC pair stretch' : 'Backbone stretch')
       + (dsOnly ? ' (dsDNA only)' : '')
     // The colour scale is the ROBUST symmetric range, which is NOT the data range when some
     // pairs are melted — report both, or the legend and the quoted extremes silently disagree.
@@ -1122,8 +1123,10 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // evidence, so say so rather than presenting it with the same confidence.
     const rej = r.rejectedFraction || 0
     const torn = r.framesTorn || 0
+    const repaired = r.framesRepaired || 0
     const rejNote = (rej > 0.005 ? ` · ${(rej * 100).toFixed(1)}% of bond samples discarded` : '')
-      + (torn ? ` · ${torn} frame${torn === 1 ? '' : 's'} skipped (torn PBC reconstruction)` : '')
+      + (torn ? ` · ${torn} frame${torn === 1 ? '' : 's'} skipped (invalid backbone reconstruction)` : '')
+      + (repaired ? ` · ${repaired} frames recovered with covalent-chain unwrapping` : '')
     // `n` = coloured bases; `nMoved` = bases deformed to the simulated mean.  They differ by
     // the unmeasured/ssDNA ones, which move with the structure but take no colour — worth
     // stating, or "1023 bases" on a 16168-bead model reads like most of it was dropped.
@@ -1131,13 +1134,13 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     _setStrainStatus(`${what} — scale ${_fmtPct(r.min)} (blue) → ${_fmtPct(r.max)} (red), `
       + `mean ${_fmtPct(r.mean)}, range ${_fmtPct(r.dataMin)}…${_fmtPct(r.dataMax)}`
       + `${clipped ? ' (outliers clipped)' : ''}, ${r.n} bases coloured${moved}, `
-      + `${r.nFrames ?? '?'} frames${rejNote}`,
+      + `${r.nFrames ?? '?'} sampled frames${r.aggregation === 'peak' ? ' · peaks may occur at different times; mean geometry' : ''}${rejNote}`,
       (rej > 0.05 || torn > (r.nFrames || 0)) ? _C.warn : '#3fb950')
     // Bounds are the SYMMETRIC range the controller coloured with, so the legend's
     // midpoint is exactly 0 = relaxed.  Recolour keeps whatever the user drags to.
     _flexScale.show({
       title: (r.metric === 'wc' ? 'WC strain (Δ/r₀)' : 'Backbone strain (Δ/r₀)')
-        + (dsOnly ? ' · dsDNA' : ''),
+        + (r.aggregation === 'peak' ? ' · sampled peak' : ' · mean') + (dsOnly ? ' · dsDNA' : ''),
       min: r.min, max: r.max, mapType: 'strain',
       onRecolor: (lo, hi, cmap) => oxdnaDisplay?.recolorStrain?.(lo, hi, cmap) })
   }
@@ -1164,10 +1167,12 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     const metric = strainMetricSel?.value === 'wc' ? 'wc' : 'backbone'
     _setStrainBar('computing')
     _setStrainStatus(metric === 'wc'
-      ? 'Averaging Watson–Crick pair stretch over the trajectory…'
-      : 'Averaging backbone bond strain over the trajectory…', _C.accent)
+      ? 'Measuring Watson–Crick pair stretch over the trajectory…'
+      : 'Measuring backbone bond strain over the trajectory…', _C.accent)
+    const aggregation = strainAggregationSel?.value === 'auto' || !strainAggregationSel?.value
+      ? (_selectedJob()?.run_config?.torsion ? 'peak' : 'mean') : strainAggregationSel.value
     const resp = await api.getOxdnaStrain(_selectedId,
-      { align: alignToggle ? alignToggle.checked : true, metric, signal: abort.signal })
+      { align: alignToggle ? alignToggle.checked : true, metric, aggregation, signal: abort.signal })
     if (abort.signal.aborted) return
     if (_strainAbort === abort) _strainAbort = null
     _strainBusy = false; _updateButtons(_selectedJob())
@@ -1207,6 +1212,9 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
   })
 
   // Switching metric while the map is up re-fetches it in place (backbone ⇄ WC).
+  strainAggregationSel?.addEventListener('change', async () => {
+    if (strainToggle?.checked) await _refreshStrain()
+  })
   strainMetricSel?.addEventListener('change', async () => {
     if (strainToggle?.checked) await _refreshStrain()
   })
@@ -2299,7 +2307,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
     // run's own viewability) — skip the oxDNA sampling/trajectory gates below so a poll
     // can't re-disable them.
     if (_lammpsMode) return
-    if (gateStorageVisualization(job, [displayToggle, flexToggle, autorefineDevToggle, strainToggle, strainMetricSel, trajToggle, trajFullToggle])) return
+    if (gateStorageVisualization(job, [displayToggle, flexToggle, autorefineDevToggle, strainToggle, strainMetricSel, strainAggregationSel, trajToggle, trajFullToggle])) return
 
     // Flexibility map (RMSF) — unlocks as soon as a production run has STARTED
     // (done OR running).  A mid-run map is preliminary; the confidence readout
@@ -2340,6 +2348,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
         && (samplingState(job) === 'done' || samplingState(job) === 'running')
       strainToggle.disabled = !ok
       if (strainMetricSel) strainMetricSel.disabled = !ok
+      if (strainAggregationSel) strainAggregationSel.disabled = !ok
       const lab = strainToggle.closest('label')
       if (lab) {
         lab.style.opacity = ok ? '1' : '0.5'
@@ -3151,6 +3160,7 @@ export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammp
       strainToggle.checked = false
       strainToggle.disabled = true
       if (strainMetricSel) strainMetricSel.disabled = true
+      if (strainAggregationSel) strainAggregationSel.disabled = true
       const lab = strainToggle.closest('label')
       if (lab) {
         lab.style.opacity = '0.5'; lab.style.cursor = 'not-allowed'

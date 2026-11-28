@@ -5011,6 +5011,15 @@
                       <option value="wc">Base pairing (Watson–Crick stretch)</option>
                     </select>
                   </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px"
+                         title="Peak retains the signed largest absolute strain at each base among sampled frames, so opposite strains cannot cancel. Peaks need not occur simultaneously. Colours are shown on the mean structure; this is geometric strain, not torque or stress.">
+                    Over time:
+                    <select id="oxdna-jobs-strain-aggregation" style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;color:#c9d1d9">
+                      <option value="auto">Auto (peak for torsion)</option>
+                      <option value="mean">Signed mean</option>
+                      <option value="peak">Signed peak magnitude</option>
+                    </select>
+                  </label>
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px;cursor:pointer"
                          title="Colour only the bases the design intends to be double-stranded, so a disrupted duplex stands out instead of competing with ssDNA that is floppy by design. Single-stranded overhangs, unstapled scaffold loops, 5'/3' extension tails and crossover extra bases still move to their simulated positions — they just keep their normal colour. The colour scale rescales to the duplex.">
                     <input id="oxdna-jobs-strain-dsdna-only" type="checkbox"> dsDNA only (leave ssDNA uncoloured)

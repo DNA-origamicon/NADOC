@@ -1877,12 +1877,13 @@ export function initOxdnaDisplay({
       ok: true, n: map.nColored, nMoved: map.updates.length, min: map.min, max: map.max,
       // mean / data range follow whichever population is coloured (see strainStats).
       ...strainStats(resp, _strainDsOnly),
-      absMax: resp.abs_max_strain, metric: resp.metric,
+      absMax: resp.abs_max_strain, metric: resp.metric, aggregation: resp.aggregation ?? 'mean',
       // Fraction of bond samples discarded as outside the FENE window — a PBC-unwrap
       // artifact in late frames of long/resumed runs, not physics.  Surfaced so a map
       // built from a poorly-reconstructed trajectory can't look as solid as a clean one.
       rejectedFraction: resp.rejected_fraction ?? 0,
       framesTorn: resp.n_frames_torn ?? 0,
+      framesRepaired: resp.n_frames_repaired ?? 0,
       // n_strain_frames = frames the strain was averaged over (its own bounded walk);
       // n_frames = frames behind the mean structure the beads are drawn at.
       nFrames: resp.n_strain_frames ?? resp.n_frames,
@@ -2674,7 +2675,8 @@ export function initOxdnaDisplay({
         value: p => p.deviation,
       } : {
         attribute: 'strain',
-        title: resp.metric === 'wc' ? 'WC pair strain' : 'Backbone strain',
+        title: (resp.metric === 'wc' ? 'WC pair strain' : 'Backbone strain')
+          + (resp.aggregation === 'peak' ? ' · sampled peak' : ' · mean'),
         // Dimensionless (Δ/L0), not a length — export consumers scale it as a fraction.
         unit: 'fraction', colormap: _strainCmap,
         bounds: _strainBounds || strainBounds(resp, _strainDsOnly),
