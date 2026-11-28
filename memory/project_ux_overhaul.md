@@ -47,6 +47,15 @@ library name now records a `document-metadata` rename when the name differs.
 This fixes independent replay after Save As/reopen; identical-name opens add no
 operation. The molecular recipe and source document remain unchanged.
 
+**Nanoparticle EM sidebar (2026-11-27):** EM Analysis stays on the rail while
+the current part or an assembly source contains nanoparticles; closing its column
+does not hide the tab. Removing the last nanoparticle closes EM columns and hides
+the tab. First addition shows an anchored OK callout, dismissed once per browser;
+loading an already populated document does not show it. Menu/gear entry remains
+available as a temporary tab without particles. Assembly source reads use the
+shared API cache; unresolved reads do not imply particle removal. Closing retains
+optical settings and calculated overlays. The panel initializes on first open.
+
 **Welcome rename (2026-11-20):** Inline rename keeps its DOM input through
 background listing/disk-usage refreshes. Input and action-button events no longer
 open/select the containing row; submissions are serialized. Failed requests retain

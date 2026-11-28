@@ -90,13 +90,32 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
 
   const disposeCards = initVisualizationCards({ document })
   const changeListeners = new Set()
+  const emButton = strip.querySelector('[data-tab="em"]')
+  let emAvailable = false
+  // Availability is resolved from the current document, not saved layouts.
+  if (emButton) emButton.hidden = true
   const stack = initSidebarStack({
     side: 'right', document, storage, getAvailableWidth,
     labels: { assembly: 'Assembly', properties: 'Properties', visualization: 'Visualization', clustering: 'Clustering', overhangs: 'Overhangs', annotations: 'Annotations', em: 'EM Analysis' },
     panePrefix: 'right-tab-content-', defaultTab: 'properties',
     storageKey: 'nadoc.rightSidebar.v2', legacyKeys: ['nadoc.rightSidebar.v1'],
-    onChange(detail) { for (const listener of changeListeners) listener(detail) },
+    onChange(detail) {
+      if (emButton) emButton.hidden = !emAvailable && !detail.openPanels.includes('em')
+      for (const listener of changeListeners) listener(detail)
+    },
   })
+  function open(type) {
+    if (type === 'em' && emButton) emButton.hidden = false
+    const opened = stack.selectTab(type)
+    if (emButton) emButton.hidden = !emAvailable && !stack.getOpenPanels().includes('em')
+    return opened
+  }
+  function setEMAvailable(available) {
+    const removed = emAvailable && !available
+    emAvailable = available
+    if (removed) for (const item of stack.getInstances()) if (item.type === 'em') stack.close(item.id)
+    if (emButton) emButton.hidden = !emAvailable && !stack.getOpenPanels().includes('em')
+  }
   function setAssemblyMode(enabled) {
     const button = strip.querySelector('[data-tab="assembly"]')
     if (button) button.hidden = !enabled
@@ -136,7 +155,7 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
   updateRepresentation()
 
   return {
-    ...stack, select: stack.setActiveTab, open: stack.selectTab, setAssemblyMode, render: stack.refresh,
+    ...stack, select: stack.setActiveTab, open, setAssemblyMode, setEMAvailable, render: stack.refresh,
     onChange(listener) {
       changeListeners.add(listener)
       return () => changeListeners.delete(listener)

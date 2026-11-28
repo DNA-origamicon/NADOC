@@ -168,6 +168,8 @@ it('restores standalone actions on a rail open after simulation settings',()=>{
 it('puts calculation and wavelength first, hides irrelevant controls, and carries wavelength to the solver',async()=>{
  const request=vi.fn().mockResolvedValue({...result,wavelength_nm:650})
  feature=initEMAnalysis({scene:{},store:createMockStore({}),nanoparticleSubsystem:np,api:{_request:request},overlayFactory:()=>({show:vi.fn(),clear:vi.fn(),dispose:vi.fn()})})
+ expect(document.querySelector('#em-analysis-panel')).toBeNull()
+ feature.open()
  const panel=document.querySelector('#em-analysis-panel'),input=key=>panel.querySelector(`[data-${key}]`)
  expect(input('run').compareDocumentPosition(input('wavelength'))&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
  expect(input('wavelength').closest('label').title).toContain('Johnson–Christy')

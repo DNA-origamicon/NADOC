@@ -101,6 +101,7 @@ test('520 nm EM map on the existing plasmonic design, slices and cleanup', async
     await page.locator('.sidebar-column[data-panel-type="em"] .sidebar-close').click()
     await expect(panel).not.toBeVisible();await expect(legend).toBeVisible()
     expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('nadoc.em.colors.v1')))).toMatchObject({maximum:150,colormap:'magma'})
+    await expect(page.locator('.right-tab-btn[data-tab="em"]')).toBeVisible()
     await page.locator('.right-tab-btn[data-tab="em"]').click()
     await expect(panel).toBeVisible();await expect(page.locator('#em-scale-max')).toHaveValue('150.00')
     await panel.locator('[data-mode]').selectOption('volume')

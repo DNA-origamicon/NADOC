@@ -1,6 +1,8 @@
 # EM analysis
 
-Open **EM Analysis** on the right sidebar rail (or **Tools → Nanoparticles → EM Analysis…**), then use **Calculate 520 nm map** at the top. The wavelength input directly below
+When a design contains nanoparticles, open **EM Analysis** on the right sidebar
+rail (or **Tools → Nanoparticles → EM Analysis…**), then use **Calculate 520 nm map**
+at the top. Simulation visualization gear buttons open the same panel's settings. The wavelength input directly below
 changes both the calculation and button label; the default remains 520 nm.
 The analysis reads the current scene's gold sphere positions (including hidden
 particles and live particle poses); it never edits the design, DNA, history or
@@ -39,6 +41,14 @@ from Appearance with a field present gives the same choices.
 
 EM Analysis is a docked right-sidebar column. The right-sidebar toggle hides or
 shows it with the other columns; its header × closes that column independently.
+Its rail tab stays available while the current part or any assembly instance
+contains nanoparticles, even after closing the column. Removing the last
+nanoparticle closes EM columns and hides the tab. On the first addition, a callout
+beside the tab explains it; **OK** dismisses the callout and remembers that choice
+in this browser. Loading an already populated document does not show the callout.
+Without nanoparticles, menu/gear commands can still open a temporary EM tab,
+which disappears when its last column closes. Saved layouts do not reopen EM
+automatically. This behavior is shared by the part and assembly editors.
 Closing the column retains the calculated field and viewport legend. **Clear
 field** removes a standalone field; simulation EM remains controlled by its own
 visualization checkbox. Particle/optical changes still invalidate stale results.

@@ -1,0 +1,13 @@
+.em-tab-intro {
+  position: fixed; z-index: 9998; width: 260px; box-sizing: border-box;
+  padding: 14px; border: 1px solid #70a4d4; border-radius: 8px;
+  background: #161b22; color: #e7edf7; box-shadow: 0 6px 20px #0008;
+  font-size: 13px; line-height: 1.5;
+}
+.em-tab-intro p { margin: 8px 0 12px; }
+.em-tab-intro::after {
+  content: ''; position: absolute; right: -7px; top: var(--em-intro-arrow-top, 20px);
+  width: 12px; height: 12px; background: #161b22;
+  border-top: 1px solid #70a4d4; border-right: 1px solid #70a4d4;
+  transform: translateY(-50%) rotate(45deg);
+}

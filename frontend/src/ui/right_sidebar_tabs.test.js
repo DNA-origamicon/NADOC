@@ -12,14 +12,14 @@ describe('right sidebar tabs', () => {
         <button class="right-tab-btn" data-tab="properties"></button>
         <button class="right-tab-btn" data-tab="visualization"></button>
         <button class="right-tab-btn" data-tab="clustering"></button>
-        <button class="right-tab-btn" data-tab="overhangs"></button>
+        <button class="right-tab-btn" data-tab="overhangs"></button><button data-tab="em"></button>
       </div>
       <div id="right-panel">
         <div id="right-tab-content-assembly"></div>
         <div id="right-tab-content-properties"></div>
         <div id="right-tab-content-visualization"></div>
         <div id="right-tab-content-clustering"></div>
-        <div id="right-tab-content-overhangs"></div>
+        <div id="right-tab-content-overhangs"></div><div id="right-tab-content-em"></div>
         <div class="panel-section" id="move-rotate-panel"></div>
         <div class="panel-section" id="properties-section"></div>
         <div class="panel-section" id="blunt-panel-actions" style="display:none"></div>
@@ -46,6 +46,51 @@ describe('right sidebar tabs', () => {
     globalThis.MutationObserver = dom.window.MutationObserver
     globalThis.requestAnimationFrame = fn => setTimeout(fn, 16)
     globalThis.cancelAnimationFrame = clearTimeout
+  })
+
+  it.each([false, true])('keeps EM contextual in assembly mode %s', assembly => {
+    const storage = { getItem: () => JSON.stringify({ activeTab: 'em', instances: [
+      { type: 'properties', width: 280 }, { type: 'em', width: 280 },
+    ] }), setItem: vi.fn() }
+    const tabs = initRightSidebarTabs({ document, storage, getAvailableWidth: () => 1600 })
+    const button = document.querySelector('[data-tab="em"]')
+    tabs.setAssemblyMode(assembly)
+    expect(button.hidden).toBe(true)
+    expect(tabs.getOpenPanels()).not.toContain('em')
+    expect(tabs.open('em')).toBe(true)
+    expect(button.hidden).toBe(false)
+    button.click()
+    const copies = tabs.getInstances().filter(item => item.type === 'em')
+    expect(copies).toHaveLength(2)
+    tabs.close(copies[0].id)
+    expect(button.hidden).toBe(false)
+    tabs.close(copies[1].id)
+    expect(button.hidden).toBe(true)
+    tabs.render()
+    expect(button.hidden).toBe(true)
+    expect(tabs.open('em')).toBe(true)
+    expect(button.hidden).toBe(false)
+  })
+
+  it.each([false, true])('keeps the nanoparticle tab after closing in assembly mode %s', assembly => {
+    const tabs = initRightSidebarTabs({ document, storage: null, getAvailableWidth: () => 1600 })
+    tabs.setAssemblyMode(assembly)
+    tabs.setEMAvailable(true)
+    const button = document.querySelector('[data-tab="em"]')
+    expect(button.hidden).toBe(false)
+    button.click()
+    tabs.close(tabs.getInstances().find(item => item.type === 'em').id)
+    expect(button.hidden).toBe(false)
+    button.click()
+    tabs.setEMAvailable(false)
+    expect(button.hidden).toBe(true)
+    expect(tabs.getOpenPanels()).not.toContain('em')
+  })
+
+  it('does not leave an EM tab when there is no room to open it', () => {
+    const tabs = initRightSidebarTabs({ document, storage: null, getAvailableWidth: () => 280 })
+    expect(tabs.open('em')).toBe(false)
+    expect(document.querySelector('[data-tab="em"]').hidden).toBe(true)
   })
 
   it('groups the requested sections and switches panes', () => {

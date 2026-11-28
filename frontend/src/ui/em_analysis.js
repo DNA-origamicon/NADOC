@@ -9,6 +9,7 @@ import { nanoparticlePoseMatrix } from '../scene/nanoparticle_display.js'
 import {EM_PANEL_HTML, updateEMPanel, prepareEMPanel} from './em_analysis_panel.js'
 import {registerEMClear} from '../scene/em_export.js'
 import './em_analysis.css'
+import { initEMTabAvailability } from './em_tab_availability.js'
 
 /** Capture optical inputs in the actual scene frame, including hidden particles. */
 export function captureEMParticles({ state, nanoparticleSubsystem, assemblyRenderer }) {
@@ -40,7 +41,8 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
   const legend=initEMLegend(scene)
   const button = document.getElementById('menu-tools-em-analysis')
   const railButton=document.querySelector('#right-tab-strip [data-tab="em"]')
-  const standalone=()=>configure(false)
+  const standalone=()=>open(false)
+  const availability = initEMTabAvailability({ store, rightSidebar, api })
   const capture = () => captureEMParticles({ state: store.getState(), nanoparticleSubsystem, assemblyRenderer })
   const fingerprint = () => JSON.stringify([store.getState().currentDesign?.id, store.getState().currentAssembly?.id,
     store.getState().assemblyActive, capture()])
@@ -198,12 +200,11 @@ export function initEMAnalysis({ scene, store, nanoparticleSubsystem, assemblyRe
     addFrameCallback?.(check)
     if(reveal)panel.querySelector('[data-run]').focus()
   }
-  open(false,false)
   window.addEventListener('nadoc:em-colors',redraw)
   const simulation = simulationDisplays ? initEMSimulation({ scene, api, store, capture, openSettings:() => open(true),
     displays:simulationDisplays, addFrameCallback, removeFrameCallback,
     captureSimulation:() => captureEMParticles({ state:{}, nanoparticleSubsystem }) }) : null
   railButton?.addEventListener('click',standalone)
   button?.addEventListener('click', open)
-  return { open, close, dispose() { unregisterClear(); unregisterExport(); simulation?.dispose(); cancel(); removeFrameCallback?.(check); overlay?.dispose(); panel?.remove(); panel=null; legend.dispose(); railButton?.removeEventListener('click',standalone); window.removeEventListener('nadoc:em-colors',redraw); button?.removeEventListener('click', open) } }
+  return { open, close, dispose() { availability.dispose(); unregisterClear(); unregisterExport(); simulation?.dispose(); cancel(); removeFrameCallback?.(check); overlay?.dispose(); panel?.remove(); panel=null; legend.dispose(); railButton?.removeEventListener('click',standalone); window.removeEventListener('nadoc:em-colors',redraw); button?.removeEventListener('click', open) } }
 }
