@@ -43,6 +43,7 @@ export function initTorqueAxisGizmo(scene, getCamera, canvas, getOrbit, addFrame
   let orbitWasEnabled = false
   let consumed = false
   let sizePercent = 100
+  let editable = true
   const viewPoint = new THREE.Vector3()
   const cameraRotation = new THREE.Quaternion()
   const axisRotation = new THREE.Quaternion()
@@ -78,7 +79,7 @@ export function initTorqueAxisGizmo(scene, getCamera, canvas, getOrbit, addFrame
     updateVisual()
   }
   function select() {
-    if (target.visible) {
+    if (editable && target.visible) {
       transform.enabled = true
       transform.attach(target)
     }
@@ -105,7 +106,7 @@ export function initTorqueAxisGizmo(scene, getCamera, canvas, getOrbit, addFrame
   })
   canvas.addEventListener('pointerdown', event => {
     consumed = false
-    if (!target.visible || event.button !== 0 || (transform.object && transform.axis)) return
+    if (!editable || !target.visible || event.button !== 0 || (transform.object && transform.axis)) return
     const rect = canvas.getBoundingClientRect()
     ray.setFromCamera({ x: 2 * (event.clientX - rect.left) / rect.width - 1,
       y: 1 - 2 * (event.clientY - rect.top) / rect.height }, getCamera())
@@ -133,6 +134,7 @@ export function initTorqueAxisGizmo(scene, getCamera, canvas, getOrbit, addFrame
   })
   deselect()
   return { show, select, setPose, setOnChange(handler) { changed = handler },
+    setEditable(value) { editable = value; if (!editable) deselect() },
     setSize(percent) { sizePercent = percent; updateVisual() },
     ownsPointer: () => !!transform.object && (transform.dragging || !!transform.axis) }
 }

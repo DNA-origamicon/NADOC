@@ -1,5 +1,5 @@
 import '../styles/oxdna_torsion.css'
-import { addAnchors, anchorKey, makeAnchorLabeller, resolveSelectionAnchors } from '../scene/efield_math.js'
+import { initTorqueDriveSites } from './torque_drive_sites.js'
 import { el } from './primitives/dom.js'
 import { createButton } from './primitives/button.js'
 import { downloadHref, downloadText, openMetricExportModal } from './metric_export_modal.js'
@@ -154,7 +154,8 @@ function renderResults(container, result) {
 export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter, getDefaultCenter, onChange }) {
   if (!mount) return { apply() {}, refresh() {}, settings: () => null, arrowSize: () => DEFAULT_TORQUE_ARROW_SIZE, valid: () => true }
   let jobId = null, axis = null, drive = [], editable = false, visible = true, engine = 'oxdna'
-  let legacy = null
+  let legacy = null, fixed = []
+  const previewSizes = new Map()
   const enabled = el('input', { attrs: { type: 'checkbox' } })
   const mode = select(modes)
   const target = number('10')
@@ -165,8 +166,7 @@ export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter
   const position = ['X', 'Y', 'Z'].map(() => number('0'))
   const rotation = ['X', 'Y', 'Z'].map(() => number('0'))
   const status = el('p', { attrs: { role: 'status' } })
-  const driveList = el('div', { className: 'oxdna-torsion-sites' })
-  const add = createButton({ label: 'Add selection to drive', size: 'sm' })
+  const driveMount = el('div', { className: 'oxdna-torsion-grip', attrs: { id: 'oxdna-torque-drive' } })
   const center = createButton({ label: 'Center on Selection', size: 'sm' })
   const editAxis = createButton({ label: 'Select axis in viewport', size: 'sm' })
   const size = el('input', { attrs: { type: 'range', min: 50, max: 300, step: 1, value: DEFAULT_TORQUE_ARROW_SIZE,
@@ -189,7 +189,7 @@ export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter
   ] })
   const setup = el('div', { className: 'oxdna-torsion-setup', children: [
     modeField, el('label', { children: [targetLabel, target] }), stiffnessField,
-    el('div', { className: 'oxdna-torsion-grip', children: [el('strong', { text: 'Driven sites' }), add, driveList] }),
+    driveMount,
     el('strong', { text: 'Axis of Rotation' }), sizeField, editAxis,
     el('p', { text: 'Select the arrow and press Tab to switch between move and rotate.' }),
     axisFields, center,
@@ -214,29 +214,21 @@ export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter
     }
     if (updateViewport) gizmo?.setPose(value)
   }
-  function paintDrive() {
-    const design = getSelection?.()?.currentDesign
-    const label = makeAnchorLabeller(design)
-    const names = new Map((design?.cluster_transforms || []).map(c => [c.id, c.name]))
-    driveList.replaceChildren(...drive.map(ref => {
-      const name = (ref.kind === 'cluster' ? names.get(ref.id) : null) || label(ref)
-      const remove = createButton({ label: '×', size: 'sm' })
-      remove.disabled = !editable
-      remove.setAttribute('aria-label', 'Remove ' + name + ' from drive')
-      remove.addEventListener('click', () => {
-        drive = drive.filter(r => anchorKey(r) !== anchorKey(ref))
-        paintDrive()
-        commit()
-      })
-      return el('div', { children: [el('span', { text: name }), remove] })
-    }))
-    if (!drive.length) driveList.textContent = 'All unanchored particles'
-  }
+  const drivePicker = initTorqueDriveSites({ mount: driveMount, getSelection,
+    canEdit: () => editable,
+    onChange: refs => { drive = refs; commit() },
+  })
+  function paintDrive() { drivePicker.apply(drive) }
   function paint() {
     enabled.disabled = !editable
-    setup.hidden = !enabled.checked || !editable
+    setup.hidden = !enabled.checked
+    for (const control of setup.querySelectorAll('input, select, button')) control.disabled = !editable
+    size.disabled = false
+    drivePicker.refresh()
     targetLabel.textContent = mode.value === 'rotation' ? 'Grip rotation (°)' : 'Nominal torque (pN·nm)'
     stiffnessField.hidden = mode.value !== 'rotation'
+    window.dispatchEvent(new CustomEvent('nadoc:torque-display', { detail: { enabled: enabled.checked, fixed } }))
+    gizmo?.setEditable?.(editable)
     gizmo?.show(visible && engine === 'oxdna' && mount.open && !setup.hidden)
   }
   function paintSize() {
@@ -245,7 +237,7 @@ export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter
   }
   function selectAxis() {
     paint()
-    gizmo?.select()
+    if (editable) gizmo?.select()
   }
   function valid() {
     return !enabled.checked || (Number.isFinite(target.valueAsNumber)
@@ -260,7 +252,7 @@ export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter
   function commit() {
     legacy = null
     status.textContent = valid() ? '' : 'Enter finite axis, load and stiffness values.'
-    if (valid()) onChange?.()
+    if (editable && valid()) onChange?.()
   }
   enabled.addEventListener('change', () => {
     if (enabled.checked && !axis) setAxis(defaultAxis())
@@ -277,7 +269,8 @@ export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter
   size.addEventListener('input', () => {
     paintSize()
     selectAxis()
-    if (valid()) onChange?.()
+    if (!editable && jobId) previewSizes.set(jobId, size.valueAsNumber)
+    if (editable && valid()) onChange?.()
   })
   for (const input of [...position, ...rotation]) input.addEventListener('input', () => {
     if ([...position, ...rotation].every(n => Number.isFinite(n.valueAsNumber))) setAxis({ kind: 'pose', position_nm: position.map(n => n.valueAsNumber),
@@ -301,13 +294,6 @@ export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter
   axisFields.addEventListener('toggle', () => {
     if (axisFields.open) selectAxis()
   })
-  add.addEventListener('click', () => {
-    const picked = resolveSelectionAnchors(getSelection?.())
-    if (!picked.length) { status.textContent = 'Select bases, domains, strands or clusters to drive.'; return }
-    drive = addAnchors(drive, picked)
-    paintDrive()
-    commit()
-  })
   mount.addEventListener('toggle', paint)
   window.addEventListener('nadoc:left-tab-change', ({ detail }) => {
     visible = (detail?.openPanels?.includes('dynamics') ?? detail?.activeTab === 'dynamics') && !detail?.collapsed
@@ -319,7 +305,7 @@ export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter
     editable = canEdit
     if (!editable || job?.job_id !== jobId) {
       status.textContent = job?.run_config?.torsion
-        ? 'See Graphs and Metrics for this run.'
+        ? 'Saved job settings (read-only). See Graphs and Metrics for results.'
         : 'Create and select a local production job to set up torque.'
     }
     paint()
@@ -335,9 +321,10 @@ export function initOxdnaTorque({ mount, gizmo, getSelection, getSelectionCenter
     mode.value = config?.mode || 'rotation'
     target.value = String(config?.target ?? 10)
     driveStiffness.value = String(config?.drive_stiffness ?? 5)
-    size.value = String(job?.run_config?.torque_arrow_size ?? DEFAULT_TORQUE_ARROW_SIZE)
+    size.value = String((!editable && previewSizes.get(jobId)) || job?.run_config?.torque_arrow_size || DEFAULT_TORQUE_ARROW_SIZE)
     paintSize()
     drive = config?.drive || []
+    fixed = [...(config?.clamp || []), ...(config?.clamp_anchors || [])]
     if (savedAxis || !sameJob || !axis) setAxis(savedAxis || defaultAxis())
     paintDrive()
     status.textContent = ''

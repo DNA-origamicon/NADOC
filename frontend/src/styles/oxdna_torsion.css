@@ -71,3 +71,11 @@
   cursor: pointer;
 }
 .oxdna-torque-metric button:disabled { color: #484f58; cursor: not-allowed; }
+
+.oxdna-driven-sites-actions { display: flex; gap: 5px; }
+.oxdna-driven-sites-actions button:first-child { flex: 1; }
+.oxdna-driven-sites-list { max-height: 110px; overflow-y: auto; border: 1px solid #21262d; border-radius: 3px; background: #010409; padding: 3px; margin-top: 5px; }
+.oxdna-torsion .oxdna-driven-sites-highlight { display: flex; align-items: center; gap: 6px; cursor: pointer; margin-top: 6px; }
+.oxdna-driven-sites-highlight input { min-height: 0; accent-color: #35d9ef; }
+.oxdna-driven-sites-status { margin-top: 4px; min-height: 14px; }
+.oxdna-driven-sites-list [aria-disabled=true] { cursor: default !important; opacity: .45; }

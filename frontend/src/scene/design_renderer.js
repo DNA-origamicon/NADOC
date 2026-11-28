@@ -97,6 +97,7 @@ export function initDesignRenderer(scene, storeRef, { addFrameCallback, removeFr
   // oxDNA anchor highlight: purple, distinct from the green selection glow — marks the
   // strands/clusters pinned as FIXED during an E-field (or other) run.
   const _anchorGlowLayer    = createGlowLayer(scene, 0xb14aff, 3.6, 'anchorGlow')
+  const _torqueDriveGlowLayer = createGlowLayer(scene, 0x35d9ef, 3.6, 'torqueDriveGlow')
   // Steric-clash highlight: bright red, marks backbone beads that collide once the
   // design is posed (clash_overlay drives it). Named so gesture e2e can detect it.
   const _clashGlowLayer     = createGlowLayer(scene, 0xff2b2b, 5.6, 'clashGlow')
@@ -590,6 +591,7 @@ export function initDesignRenderer(scene, storeRef, { addFrameCallback, removeFr
     _glowLayer.clear()          // stale entries after rebuild; selection_manager re-applies if needed
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
     _anchorGlowLayer.clear()    // caller (anchor_glow) re-applies after a rebuild
+    _torqueDriveGlowLayer.clear()
     _clashGlowLayer.clear()     // caller (clash_overlay) re-applies after a rebuild
     _piercingMarkers.clear()
     _captureGlowLayer.clear()   // re-applied below via _applyCaptureGlow after the build
@@ -1514,6 +1516,9 @@ export function initDesignRenderer(scene, storeRef, { addFrameCallback, removeFr
 
     /** Show purple glow over the backbone entries of oxDNA anchor (fixed) elements. */
     setAnchorGlow(entries) { _anchorGlowLayer.setEntries(entries) },
+    setTorqueDriveGlow(entries) { _torqueDriveGlowLayer.setEntries(entries) },
+    clearTorqueDriveGlow() { _torqueDriveGlowLayer.clear() },
+    torqueDriveGlowCount() { return _torqueDriveGlowLayer.count() },
     clearAnchorGlow()      { _anchorGlowLayer.clear() },
     /** Active anchor glow-sprite count (e2e/console use it to confirm the purple halo
      *  actually rendered — mirrors clashGlowCount/fluoroGlowCount). */
@@ -1552,6 +1557,7 @@ export function initDesignRenderer(scene, storeRef, { addFrameCallback, removeFr
       _glowLayer.refresh()
       _undefinedGlowLayer.refresh()
       _anchorGlowLayer.refresh()
+      _torqueDriveGlowLayer.refresh()
       _clashGlowLayer.refresh()
       _piercingMarkers.refresh()
       _captureGlowLayer.refresh()

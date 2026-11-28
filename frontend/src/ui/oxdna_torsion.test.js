@@ -43,6 +43,53 @@ it('centers a selected domain on the helical axis rather than on the backbone', 
   expect(torqueSelectionCenter(state)).toEqual([1, 1, 0])
 })
 
+it('shows saved torque settings read-only and restores editability when switching jobs', () => {
+  document.body.innerHTML = '<details id="torque" open></details>'
+  const mount = document.querySelector('#torque')
+  const gizmo = { show: vi.fn(), select: vi.fn(), setPose: vi.fn(), setOnChange: vi.fn(), setSize: vi.fn(), setEditable: vi.fn() }
+  const onChange = vi.fn()
+  const panel = initOxdnaTorque({ mount, gizmo, onChange })
+  const torsion = { mode: 'tangential', target: 3000, drive_stiffness: 7,
+    axis: { kind: 'pose', position_nm: [1, 2, 3], rotation_deg: [-90, 0, 0] },
+    drive: [{ kind: 'cluster', id: 'rim' }],
+  }
+  const job = { job_id: 'finished', status: 'completed', run_config: { torsion, torque_arrow_size: 175 } }
+  panel.apply(job, false)
+  const setup = mount.querySelector('.oxdna-torsion-setup')
+  expect(setup.hidden).toBe(false)
+  expect(mount.querySelector('select').value).toBe('tangential')
+  expect(mount.querySelector('[aria-label="Axis position X"]').valueAsNumber).toBe(1)
+  expect(mount.querySelector('[aria-label="Axis rotation X"]').valueAsNumber).toBe(-90)
+  expect(panel.settings()).toEqual(torsion)
+  expect(panel.arrowSize()).toBe(175)
+  expect([...setup.querySelectorAll('input:not([type=range]):not(#oxdna-torque-drive-glow), select, button')].every(control => control.disabled)).toBe(true)
+  expect(mount.querySelector('.oxdna-driven-sites-list').textContent).toContain('rim')
+  expect(gizmo.show).toHaveBeenLastCalledWith(true)
+  expect(gizmo.setEditable).toHaveBeenLastCalledWith(false)
+  const slider = setup.querySelector('input[type=range]')
+  expect(slider.disabled).toBe(false)
+  slider.value = '250'
+  slider.dispatchEvent(new Event('input'))
+  expect(gizmo.setSize).toHaveBeenLastCalledWith(250)
+  expect(gizmo.select).not.toHaveBeenCalled()
+  expect(panel.settings()).toEqual(torsion)
+  expect(job.run_config.torque_arrow_size).toBe(175)
+  expect(onChange).not.toHaveBeenCalled()
+
+  panel.apply({ ...job, job_id: 'queued', status: 'queued' }, true)
+  expect([...setup.querySelectorAll('input, select, button')].every(control => !control.disabled)).toBe(true)
+  panel.refresh({ ...job, job_id: 'queued', status: 'running' }, false)
+  expect(setup.hidden).toBe(false)
+  expect([...setup.querySelectorAll('input:not([type=range]):not(#oxdna-torque-drive-glow), select, button')].every(control => control.disabled)).toBe(true)
+  panel.apply({ job_id: 'relax', run_config: {} }, false)
+  expect(setup.hidden).toBe(true)
+  expect(panel.settings()).toBeNull()
+  panel.apply(job, false)
+  expect(setup.hidden).toBe(false)
+  expect(panel.settings()).toEqual(torsion)
+  expect(panel.arrowSize()).toBe(250)
+})
+
 it('restores arrow size and keeps the axis visible while another open sidebar has focus', () => {
   document.body.innerHTML = '<details id="torque" open></details>'
   const mount = document.querySelector('#torque')

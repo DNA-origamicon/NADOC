@@ -12,6 +12,18 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
+- Torque job selection restores the saved card settings for running and finished
+  jobs as well as queued jobs. Non-editable jobs keep the values visible with
+  disabled simulation controls. The saved axis arrow remains visible and its size
+  slider stays active as a per-job session display preference; completed-job size
+  changes never write simulation settings. Axis manipulation remains limited to editable jobs.
+  Driven sites reuse the anchor scope picker and halo renderer with cyan instead
+  of purple. Highlight-all defaults on; row focus and empty-space reset remain
+  display-only and usable on finished jobs. The independent layer follows geometry
+  rebuilds and playback. Empty drive sets highlight all unanchored particles.
+  Real-app evidence: `.development-artifacts/torque-driven-glow/` (completed job
+  and a queued managed copy, deleted after validation).
+
 - Hybrid research closed out (2026-11-21): experimental prototype only, no
   production Tm feature or precision certification. User-authorized cleanup
   removed `.development-artifacts/oxdna-hybrid/` (554,338,810 logical bytes).

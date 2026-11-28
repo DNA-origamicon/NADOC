@@ -308,6 +308,7 @@ import { initClusterConnection } from './ui/cluster_connection.js'
 import { standardizeSimulationCardOrder } from './ui/simulation_card_order.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
+import { initTorqueDriveGlow } from './scene/torque_drive_glow.js'
 import { anchorSelectionState } from './scene/efield_math.js'
 import { initClashOverlay } from './scene/clash_overlay.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
@@ -1315,6 +1316,7 @@ async function main() {
     ctrlBeadNucs: (selectionManager?.getCtrlBeads?.() || []).map(b => b.nuc),
     clusterMemberStrandIds: id => selectionManager?.clusterMemberStrandIds?.(id) || [],
   })
+  const torqueDriveGlow = initTorqueDriveGlow({ designRenderer, store })
   const torqueGizmo = initTorqueAxisGizmo(scene, getRenderCamera, canvas, getActiveControls, addFrameCallback)
   const torqueExternalTargets = createExternalTargets({
     getDesign: () => store.getState().currentDesign,
@@ -1866,6 +1868,7 @@ async function main() {
   let _sceneVisualEngine = null
   const _resetSimulationSceneVisuals = () => {
     anchorGlow.clear?.()
+    torqueDriveGlow.clear()
     _viewToolButtons?.setSurfaceGrid?.({ enabled: false })
     grapheneNanoporeOverlay.clear?.()
     surfaceStrandsOverlay?.clear?.()

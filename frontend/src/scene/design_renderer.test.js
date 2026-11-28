@@ -35,11 +35,12 @@ function refreshAllGlowBody(src) {
 }
 
 describe('design_renderer glow layers', () => {
-  it('creates the seven glow layers the renderer is documented to own', () => {
+  it('creates the eight glow layers the renderer is documented to own', () => {
     expect(createdGlowLayers(SRC)).toEqual([
       '_glowLayer',
       '_undefinedGlowLayer',
       '_anchorGlowLayer',
+      '_torqueDriveGlowLayer',
       '_clashGlowLayer',
       '_captureGlowLayer',
       '_previewGlowLayer',

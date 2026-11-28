@@ -122,7 +122,9 @@ export function initAnchorTransferControls({
   return { move, setSurfaceEnabled }
 }
 
-export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, ids = {}, engine = 'oxdna' } = {}) {
+export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, ids = {}, engine = 'oxdna',
+  collapsible = true, rowPalette = _ROW, canEdit = () => true, terminology = {},
+} = {}) {
   const id = { ..._DEFAULT_IDS, ...ids }
   const toggle = document.getElementById(id.toggle)
   const arrow  = document.getElementById(id.arrow)
@@ -131,7 +133,7 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
     getAnchors: () => [], addSelectedAnchors: () => 0, clear: () => {}, refresh: () => {},
     applyConfig: () => {}, isGlowOn: () => true, getFocusKey: () => null, getHighlighted: () => [],
   }
-  if (!toggle || !bodyEl) return noop
+  if ((collapsible && !toggle) || !bodyEl) return noop
 
   const addBtn   = document.getElementById(id.add)
   const clearBtn = document.getElementById(id.clear)
@@ -192,8 +194,8 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
       // "strands" was accurate when overhangs/strands/domains were the only scopes; an
       // anchor set can now be entirely individual bases, so name what is actually held.
       const noun = _anchors.every(a => a?.kind === 'base') ? 'base' : 'anchor'
-      _setStatus(n ? `${n} fixed ${noun}${n === 1 ? '' : 's'}.`
-                   : 'No anchors — runs are free unless you add fixed strands.')
+      _setStatus(n ? (terminology.count?.(n) ?? `${n} fixed ${noun}${n === 1 ? '' : 's'}.`)
+                   : (terminology.empty ?? 'No anchors — runs are free unless you add fixed strands.'))
     }
     if (!listEl) return
     const lit = new Set(getHighlighted().map(anchorKey))
@@ -230,8 +232,9 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
       row.dataset.key = key
       if (isLit) row.dataset.hl = '1'                     // e2e/console handle
       if (_focusKey === key) row.dataset.focused = '1'
-      row.style.cssText = _ROW_BASE + (isLit ? _ROW.on : _ROW.off)
-      row.title = _focusKey === key ? 'Click again to show all anchors' : 'Click to show only this anchor'
+      row.style.cssText = _ROW_BASE + (isLit ? rowPalette.on : rowPalette.off)
+      row.title = _focusKey === key ? (terminology.unfocus ?? 'Click again to show all anchors')
+        : (terminology.focus ?? 'Click to show only this anchor')
       // Click = focus this one (rest go dark); click the focused one again = back to the
       // toggle.  Clicks inside the atoms <select> are the user opening a dropdown, not
       // choosing a row — let them through untouched.
@@ -256,8 +259,10 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
       const x = document.createElement('span')
       x.dataset.role = 'remove'
       x.textContent = '×'; x.style.cssText = 'cursor:pointer;color:#8b949e;font-weight:700'
+      x.setAttribute('aria-disabled', String(!canEdit()))
       x.addEventListener('click', (e) => {
         e.stopPropagation()                                // don't let × also focus the row
+        if (!canEdit()) return
         _anchors = removeAnchor(_anchors, key)
         if (_focusKey === key) _focusKey = null            // never keep focus on a deleted anchor
         _renderAnchors()
@@ -323,6 +328,7 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
   }
 
   function addSelectedAnchors() {
+    if (!canEdit()) return 0
     const sel = getSelection ? getSelection() : null
     const found = resolveSelectionAnchors(sel)
     // Picked bases that resolve to nothing — a key whose helix was deleted, or an
@@ -393,11 +399,13 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
     bodyEl.style.display = 'none'
     if (arrow) arrow.classList.add('is-collapsed')
   }
-  toggle.addEventListener('click', () => { _open ? _close_() : _open_() })
-  _close_()
+  if (collapsible) {
+    toggle.addEventListener('click', () => { _open ? _close_() : _open_() })
+    _close_()
+  }
 
   addBtn?.addEventListener('click', addSelectedAnchors)
-  clearBtn?.addEventListener('click', clear)
+  clearBtn?.addEventListener('click', () => { if (canEdit()) clear() })
   // Display-only: _dispatch (repaint the halo), NOT _emit — onChange would recompose a
   // running live session over a change that doesn't touch the anchor set.
   glowEl?.addEventListener('change', () => { _glow = glowEl.checked; _renderAnchors(); _dispatch() })

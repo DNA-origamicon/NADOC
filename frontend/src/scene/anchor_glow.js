@@ -191,7 +191,9 @@ export function anchorAtomGlowScale(mode) {
   return 3.6
 }
 
-export function initAnchorGlow({ designRenderer, store, atomisticRenderer = null } = {}) {
+export function initAnchorGlow({ designRenderer, store, atomisticRenderer = null,
+  resolveEntries = resolveAnchorEntries,
+} = {}) {
   let _anchors = []
   let _lastGeometry = null
 
@@ -217,7 +219,7 @@ export function initAnchorGlow({ designRenderer, store, atomisticRenderer = null
     const beadAnchors = atomEntries ? _anchors.filter(a => !hasAnchorAtoms(a)) : _anchors
     const entries = [
       ...(atomEntries ?? []),
-      ...resolveAnchorEntries(beadAnchors, designRenderer?.getBackboneEntries?.() || [], design),
+      ...resolveEntries(beadAnchors, designRenderer?.getBackboneEntries?.() || [], design),
     ]
     if (entries.length) designRenderer?.setAnchorGlow?.(entries)
     else designRenderer?.clearAnchorGlow?.()
